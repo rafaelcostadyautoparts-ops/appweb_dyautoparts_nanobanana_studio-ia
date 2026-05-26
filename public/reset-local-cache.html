@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DY Auto Parts - Reset Local</title>
+  <style>
+    body {
+      min-height: 100dvh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: #101018;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    main {
+      width: min(100% - 40px, 420px);
+    }
+
+    h1 {
+      font-size: 24px;
+      margin: 0 0 12px;
+    }
+
+    p {
+      color: rgba(255, 255, 255, 0.68);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Limpando cache local</h1>
+    <p>Aguarde. O app sera recarregado sem service worker antigo.</p>
+  </main>
+
+  <script>
+    (async () => {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(registration => registration.unregister()));
+        }
+
+        if (window.caches) {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+        }
+
+        localStorage.removeItem('app_load_error');
+        sessionStorage.setItem('dy_local_sw_reset_done', '1');
+      } finally {
+        window.location.replace('/?reset=' + Date.now());
+      }
+    })();
+  </script>
+</body>
+</html>

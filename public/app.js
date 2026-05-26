@@ -1,0 +1,20012 @@
+﻿window.onerror = function (msg, url, lineNo, columnNo, error) {
+    console.error('Global Error:', msg, error);
+    const app = document.getElementById('app');
+    if (app) {
+        app.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: white; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <span class="material-symbols-rounded" style="font-size: 48px; color: var(--danger); margin-bottom: 20px;">error</span>
+                        <h2 style="margin-bottom: 10px;">Ops! Algo deu errado.</h2>
+                        <p style="color: var(--muted); font-size: 0.8rem; margin-bottom: 30px;">${msg}</p>
+                        <button onclick="location.reload()" class="btn-action" style="background: var(--primary); padding: 12px 24px;">RECARREGAR APP</button>
+                    </div>
+                `;
+    }
+    return false;
+};
+
+const app = document.getElementById('app');
+const toast = document.getElementById('toast');
+
+// ==== AUXILIARY FUNCTIONS ====
+function normalizeText(text) {
+    if (!text) return "";
+    return text.toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeProductSearchTerm(text) {
+    if (!text) return "";
+    return text.toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// ==== INTELLIGENT SCANNING & INPUT CLASSIFICATION ====
+function classifyProductInput(rawValue) {
+    const value = String(rawValue || '').trim();
+    const clean = value.replace(/\s+/g, '');
+
+    if (!clean) return { type: 'empty', value: '' };
+
+    const idNorm = clean.toUpperCase();
+
+    // ID Interno: DY-000.000 ou DY-000000
+    if (/^DY[-.]?\d{3}[.]?\d{3}$/.test(idNorm) || /^DY\d{6}$/.test(idNorm)) {
+        return {
+            type: 'id_interno',
+            value: normalizeDyId(idNorm)
+        };
+    }
+
+    // EAN: 8, 12, 13, 14 dígitos
+    if (/^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(clean)) {
+        return {
+            type: 'ean',
+            value: clean
+        };
+    }
+
+    // Code 128 / SKU Fornecedor (Alfanumérico com números)
+    if (/^[A-Z0-9\-_.]{4,}$/i.test(clean) && /\d/.test(clean)) {
+        return {
+            type: 'code128',
+            value: clean.toUpperCase()
+        };
+    }
+
+    // Texto Comum (Qualquer coisa com letras)
+    if (/[A-Za-z\u00C0-\u00FF]/.test(value)) {
+        return {
+            type: 'text',
+            value
+        };
+    }
+
+    return { type: 'invalid', value };
+}
+
+function normalizeDyId(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.length !== 6) return String(value || '').toUpperCase();
+    return `DY-${digits.slice(0, 3)}.${digits.slice(3)}`;
+}
+
+function playFeedbackSound(type) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const patterns = {
+            success: [
+                { f: 880, t: 0, d: 0.07, type: 'sine' },
+                { f: 1174.66, t: 0.085, d: 0.08, type: 'sine' }
+            ],
+            warning: [
+                { f: 523.25, t: 0, d: 0.11, type: 'triangle' },
+                { f: 392, t: 0.14, d: 0.13, type: 'triangle' }
+            ],
+            error: [
+                { f: 220, t: 0, d: 0.18, type: 'square' },
+                { f: 196, t: 0.2, d: 0.22, type: 'square' }
+            ]
+        };
+
+        (patterns[type] || patterns.warning).forEach(note => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = note.type;
+            osc.frequency.setValueAtTime(note.f, ctx.currentTime + note.t);
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + note.t);
+            gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + note.t + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + note.t + note.d);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + note.t);
+            osc.stop(ctx.currentTime + note.t + note.d + 0.02);
+        });
+    } catch (err) {
+        console.warn('[AUDIO] feedback indisponível', err);
+    }
+}
+
+function showScanFeedback(type, message) {
+    // Remover feedbacks antigos
+    document.querySelectorAll('.scan-feedback').forEach(el => el.remove());
+    showPageSearchSignal(type);
+
+    const feedback = document.createElement('div');
+    feedback.className = `scan-feedback ${type}`;
+
+    let iconName = 'check_circle';
+    if (type === 'warning') iconName = 'warning';
+    if (type === 'error') iconName = 'error';
+
+    feedback.innerHTML = `
+        <span class="material-symbols-rounded icon">${iconName}</span>
+        <span class="msg">${message}</span>
+    `;
+
+    document.body.appendChild(feedback);
+
+    playFeedbackSound(type);
+
+    setTimeout(() => {
+        feedback.classList.add('fade-out');
+        setTimeout(() => feedback.remove(), 400);
+    }, 2000);
+}
+
+function showPageSearchSignal(type) {
+    const className = type === 'success' ? 'search-signal-success' : type === 'warning' ? 'search-signal-warning' : 'search-signal-error';
+    document.body.classList.remove('search-signal-success', 'search-signal-warning', 'search-signal-error');
+    document.body.classList.add(className);
+    clearTimeout(window.searchSignalTimer);
+    window.searchSignalTimer = setTimeout(() => {
+        document.body.classList.remove('search-signal-success', 'search-signal-warning', 'search-signal-error');
+    }, 1400);
+}
+
+async function handleProductScan(rawValue, context = 'search') {
+    const classification = classifyProductInput(rawValue);
+    console.log(`[SCAN] Classificação:`, classification);
+
+    if (classification.type === 'text') {
+        // Se for texto na busca, apenas performSearch normal
+        if (context === 'search') {
+            const input = document.getElementById('search-input');
+            if (input) {
+                input.value = rawValue;
+                performSearch();
+            }
+        }
+        return;
+    }
+
+    if (classification.type === 'invalid' || classification.type === 'empty') {
+        showScanFeedback('error', 'Código Inválido');
+        return;
+    }
+
+    // Buscar match exato
+    await ensureProdutosLoaded();
+    const val = classification.value;
+
+    const product = appData.products.find(p => {
+        const pEan = String(p.ean || '').trim();
+        const pId = normalizeDyId(p.id_interno);
+        const pSku = String(p.sku_fornecedor || '').toUpperCase().trim();
+
+        if (classification.type === 'ean') return pEan === val;
+        if (classification.type === 'id_interno') return pId === val;
+        if (classification.type === 'code128') {
+            return pEan === val || pSku === val || pId === val;
+        }
+        return false;
+    });
+
+    if (product) {
+        showScanFeedback('success', 'Produto Encontrado');
+        
+        // Se estiver na busca, abre detalhes
+        if (context === 'search') {
+            const input = document.getElementById('search-input');
+            if (input) input.value = '';
+            
+            // Pequeno delay para o usuário ver o feedback verde antes do modal
+            setTimeout(() => {
+                stopScanner();
+                renderProductDetails(product);
+            }, 600);
+        } else if (context === 'garantia') {
+            const input = document.getElementById('garantia-search-input');
+            if (input) input.value = '';
+            
+            setTimeout(() => {
+                stopScanner();
+                if (typeof window.selectGarantiaProduct === 'function') {
+                    window.selectGarantiaProduct(product);
+                }
+            }, 600);
+        } else if (context === 'edit') {
+            const input = document.getElementById('edit-search-input');
+            if (input) input.value = '';
+            
+            setTimeout(() => {
+                stopScanner();
+                renderEditProductForm(product);
+            }, 600);
+        }
+        
+        return product;
+    } else {
+        // Mostrar alerta apenas se a leitura for real (scanner/câmera).
+        // Não mostrar enquanto o usuário estiver digitando (context === 'search')
+        if (context !== 'search') {
+            showScanFeedback('warning', 'Produto não cadastrado');
+        }
+        return null;
+    }
+}
+
+
+// Global App State
+let currentScreen = 'loading';
+let initialized = false;
+let currentPackSession = null;
+let currentPickSession = null;
+let currentSessionItems = [];
+let isModoRapido = false;
+
+// ==== NAVIGATION MANAGEMENT ====
+// Permite que o botão voltar do navegador (e do Android) funcione corretamente
+window.addEventListener('popstate', (event) => {
+    if (event.state && event.state.screen) {
+        console.log('[NAV] Popstate para:', event.state.screen);
+        renderScreenByName(event.state.screen, false);
+    } else if (initialized) {
+        renderMenu(false);
+    }
+});
+
+function pushNav(screen) {
+    if (!screen) return;
+    // Evita duplicar o mesmo estado no topo do histórico
+    if (history.state && history.state.screen === screen) return;
+    console.log('[NAV] PushState:', screen);
+    history.pushState({ screen }, '', '');
+}
+
+function goBack() {
+    // Se tivermos um estado no histórico, usamos a navegação do navegador
+    if (history.state && history.state.screen && history.state.screen !== 'login') {
+        console.log('[NAV] history.back()');
+        history.back();
+    } else {
+        // Fallback lógico para garantir que o usuário nunca fique preso
+        if (currentScreen === 'search') renderMenu();
+        else if (currentScreen === 'menu') renderLogin();
+        else renderMenu();
+    }
+}
+
+function renderScreenByName(name, push = true) {
+    switch (name) {
+        case 'menu': renderMenu(push); break;
+        case 'search': renderSearchScreen(push); break;
+        case 'login': renderLogin(push); break;
+        case 'client-quotes': renderClientQuotesList(false); break;
+        case 'config': renderConfigSubMenu(push); break;
+        default: renderMenu(push);
+    }
+}
+
+// ==== MODO TELA LIMPA (LÓGICA OPERACIONAL) ====
+window.handleUserClick = function(e) {
+    if(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    console.log('CLICK USUARIO OK');
+    showToast('CLICK USUARIO OK', 'success'); // Opcional, feedback no sistema do app
+    
+    // Ação real solicitada pela interface
+    if (typeof renderConfigSubMenu === 'function') {
+        renderConfigSubMenu();
+    } else {
+        alert('CLICK USUARIO OK');
+    }
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+    [
+        'loginBackgroundImage',
+        'loginBackgroundDesktop',
+        'loginBackgroundMobile',
+        'loginBgImage'
+    ].forEach(key => {
+        try { localStorage.removeItem(key); } catch (err) {}
+    });
+    window.loginCustomBgImage = null;
+
+
+    // Fullscreen controls removed: Handled by getTopBarHTML and CSS toggles
+
+    // Footer logic simplified: CSS will handle the layout
+    const footer = document.querySelector('.menu-footer');
+    if (footer) {
+        const menuScreen = document.querySelector('.dashboard-screen.menu-screen');
+        if (menuScreen) {
+            menuScreen.classList.add('menu-footer-visible'); // Default to visible for now, CSS Grid will handle scaling
+        }
+    }
+
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (document.body.classList.contains('fullscreen-mode')) {
+                toggleFullscreen();
+            }
+        }
+    });
+
+});
+
+// goBack centralizado acima
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.warn(`[FULLSCREEN] Erro ao entrar: ${err.message}`);
+            });
+        }
+        document.body.classList.add('fullscreen-mode');
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(err => {
+                console.warn(`[FULLSCREEN] Erro ao sair: ${err.message}`);
+            });
+        }
+        document.body.classList.remove('fullscreen-mode');
+    }
+    
+    if (typeof removeLegacyLoginFullscreenControls === 'function') {
+        removeLegacyLoginFullscreenControls();
+        setTimeout(removeLegacyLoginFullscreenControls, 100);
+    }
+}
+
+// Listener para sincronizar classe CSS se sair pelo ESC nativo
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+        document.body.classList.remove('fullscreen-mode');
+    } else {
+        document.body.classList.add('fullscreen-mode');
+    }
+    if (typeof removeLegacyLoginFullscreenControls === 'function') {
+        removeLegacyLoginFullscreenControls();
+    }
+});
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        const isLocalDevHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
+        if (isLocalDevHost) {
+            const cleanupServiceWorker = async () => {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(registrations.map(registration => registration.unregister()));
+
+                    if (window.caches) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+                    }
+
+                    if (navigator.serviceWorker.controller && !sessionStorage.getItem('dy_local_sw_reset_done')) {
+                        sessionStorage.setItem('dy_local_sw_reset_done', '1');
+                        window.location.reload();
+                    }
+                } catch (err) {
+                    console.warn('[SW] Falha ao limpar service worker local:', err);
+                }
+            };
+
+            cleanupServiceWorker();
+            return;
+        }
+
+        if (localStorage.getItem('app_load_error')) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+                for (let registration of registrations) {
+                    registration.unregister();
+                }
+            });
+            localStorage.removeItem('app_load_error');
+            localStorage.removeItem('loginBackgroundImage');
+            window.loginCustomBgImage = null;
+        }
+
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        if (confirm('Nova versão disponível. Atualizar?')) {
+                            newWorker.postMessage({action: 'skipWaiting'});
+                            window.location.reload();
+                        }
+                    }
+                });
+            });
+        }).catch(err => {
+            console.log('SW error:', err);
+        });
+    });
+}
+// ========================================================
+
+let isFinalizing = false;
+let isSyncing = false;
+let isAppLoading = false;
+
+const SYNC_TRACE_ENABLED = true;
+const syncTraceLog = [];
+
+function addSyncTrace(origin, action, details = '') {
+    if (!SYNC_TRACE_ENABLED) return;
+    const entry = {
+        time: new Date().toISOString().substr(11, 12),
+        origin,
+        action,
+        details,
+        stack: new Error().stack.split('\n').slice(2, 5).join(' | ')
+    };
+    syncTraceLog.unshift(entry);
+    if (syncTraceLog.length > 50) syncTraceLog.pop();
+    console.log(`[SYNC TRACE] ${entry.time} | ${origin} -> ${action} | ${details}`);
+}
+
+function dumpSyncTrace() {
+    console.log('=== SYNC TRACE DUMP ===');
+    syncTraceLog.forEach((e, i) => console.log(`${i+1}. ${e.time} | ${e.origin} -> ${e.action} | ${e.details} | ${e.stack}`));
+    console.log('=======================');
+}
+
+function generateUniqueId(prefix) {
+    const now = new Date();
+    const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
+    const random = Math.random().toString(36).substr(2, 4).toUpperCase();
+    return `${prefix}-${ddmm}-${random}`;
+}
+
+async function copyToClipboard(text, elementId = null) {
+    try {
+        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            showToast("Copiado: " + text);
+        } else {
+            showToast("Copiado: " + text);
+        }
+        
+        if (elementId) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                const originalContent = el.innerHTML;
+                el.innerHTML = '<span class="material-symbols-rounded" style="font-size: 14px;">check</span>';
+                el.style.color = "#4ade80";
+                setTimeout(() => {
+                    el.innerHTML = originalContent;
+                    el.style.color = "";
+                }, 2000);
+            }
+        }
+    } catch (err) {
+        console.error("Erro ao copiar:", err);
+        showToast("Erro ao copiar para a área de transferência.");
+    }
+}
+
+function toggleAllStock() {
+    const grid = document.querySelector('.location-distribution-grid');
+    const btn = document.getElementById('btn-toggle-stock');
+    if (grid && btn) {
+        const isShowingAll = grid.classList.toggle('show-all');
+        btn.innerHTML = isShowingAll ? 
+            '<span class="material-symbols-rounded">expand_less</span> VER MENOS' : 
+            '<span class="material-symbols-rounded">expand_more</span> VER TODOS';
+    }
+}
+
+// ==== API & CONNECTION UTILS ====
+
+
+
+/**
+ * Realce de texto para busca
+ */
+function highlightText(text, term) {
+    if (!term) return text;
+    const cleanTerm = normalizar(term);
+    if (!cleanTerm) return text;
+    
+    // Regex para encontrar o termo ignorando acentos e caixa
+    // Nota: Para manter o texto original mas com tags, usamos uma abordagem mais simplificada
+    const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<b>$1</b>');
+}
+
+/**
+ * Realiza uma requisição GET para a API_BASE com parâmetros
+ */
+async function dyGet(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            query.append(key, value);
+        }
+    });
+
+    try {
+        const response = await fetch(`${API_BASE}?${query.toString()}`);
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        return await response.json();
+    } catch (err) {
+        console.error("dyGet Error:", err);
+        return { ok: false, error: err.message };
+    }
+}
+
+// Alias for backwards compatibility or specific usage
+async function safeGet(queryString) {
+    let params;
+    if (typeof queryString === 'string') {
+        // Parse query string properly
+        params = Object.fromEntries(new URLSearchParams(queryString));
+    } else {
+        params = queryString;
+    }
+    console.log("[safeGet] params:", params);
+    return dyGet(params);
+}
+
+/**
+ * Verifica a conexão com a planilha
+ */
+async function verificarConexao() {
+    try {
+        const res = await dyGet({ action: "ping" });
+        if (res.ok) {
+            console.log("Planilha conectada");
+            return true;
+        } else {
+            console.error("Erro ao conectar com a planilha:", res.error);
+            return false;
+        }
+    } catch (err) {
+        console.error("Erro fatal ao verificar conexão:", err);
+        return false;
+    }
+}
+
+/**
+ * Normaliza textos para busca (minúsculas, sem acentos, sem espaços extras)
+ */
+function normalizar(texto) {
+    return (texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+}
+
+/**
+ * Busca Kit Lâmpada na API com os parâmetros informados
+ */
+async function buscarKitLampada(termo, ano, montadora) {
+    return dyGet({
+        action: "kit_lampada",
+        termo: normalizar(termo),
+        ano: normalizar(ano),
+        montadora: normalizar(montadora)
+    });
+}
+
+// Auxiliar para gerar ID de execução técnica (idempotência)
+function generateExecutionId() {
+    return 'exec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+}
+
+/**
+ * Camada de Normalização Contextual: Garante que valores respeitem as validações da ABA específica
+ */
+function normalizeSheetValue(sheet, field, value) {
+    if (value === null || value === undefined) return '';
+    const str = String(value).trim();
+    const lower = str.toLowerCase();
+
+    // Regras por ABA e CAMPO (Explícitas)
+    
+    // ABA: Produtos
+    if (sheet === 'produtos' && field === 'status') {
+        return (lower === 'inativo') ? 'inativo' : 'ativo';
+    }
+
+    // ABA: Usuarios / Canais
+    if ((sheet === 'usuarios' || sheet === 'canais_envio') && field === 'ativo') {
+        return (lower === 'sim' || lower === 's' || lower === 'true') ? 'sim' : 'nao';
+    }
+
+    // ABA: Estoque Atual (Locais)
+    if (sheet === 'estoque_atual' && field === 'local') {
+        if (lower.includes('terr') || lower === 'trreo') return 'terreo';
+        if (lower.includes('mostru') || lower === 'mostrurio') return 'mostruario';
+        if (lower.includes('1') && lower.includes('andar')) return '1andar';
+        if (lower === 'defeito') return 'defeito';
+        if (lower === 'full_ml' || lower === 'full ml' || lower === 'fullml') return 'full_ml';
+        return lower;
+    }
+
+    // ABA: Movimentos
+    if (sheet === 'movimentos') {
+        if (field === 'tipo') {
+            const valid = ['entrada', 'saida', 'transferencia', 'reserva', 'confirmacao_saida', 'ajuste_inventario', 'ajuste_estoque'];
+            return valid.includes(lower) ? lower : 'saida'; // fallback seguro
+        }
+        if (field === 'local_origem' || field === 'local_destino' || field === 'local') {
+            if (lower.includes('terr') || lower === 'trreo') return 'terreo';
+            if (lower.includes('mostru') || lower === 'mostrurio') return 'mostruario';
+            if (lower.includes('1') && lower.includes('andar')) return '1andar';
+            if (lower === 'full_ml' || lower === 'full ml' || lower === 'fullml') return 'full_ml';
+            return lower;
+        }
+    }
+
+    // ABA: Separacao
+    if (sheet === 'separacao' && field === 'status') {
+        const valid = ['rascunho', 'aberta', 'em_separacao', 'separado', 'finalizada', 'cancelada'];
+        if (lower === 'aberto') return 'aberta';
+        return valid.includes(lower) ? lower : 'rascunho';
+    }
+
+    // ABA: Conferencia
+    if (sheet === 'conferencia' && field === 'status') {
+        const valid = ['rascunho', 'em_conferencia', 'conferido', 'finalizada', 'cancelada'];
+        return valid.includes(lower) ? lower : 'rascunho';
+    }
+
+    // ABA: Inventarios
+    if (sheet === 'inventarios') {
+        if (field === 'tipo') {
+            const valid = ['inicial', 'geral', 'parcial', 'ajuste'];
+            return valid.includes(lower) ? lower : 'geral';
+        }
+        if (field === 'status') {
+            return (lower === 'finalizada' || lower === 'concluido') ? 'finalizada' : 'aberta';
+        }
+    }
+
+    return str;
+}
+
+function normalizePayloadForSheet(payload) {
+    if (!payload || typeof payload !== 'object') return payload;
+    const normalized = { ...payload };
+
+    // Determinar o contexto da aba
+    let sheetContext = payload.sheet || payload.action || '';
+    if (sheetContext === 'movimento') sheetContext = 'movimentos';
+
+    // Lista de campos que PODEM precisar de normalização
+    const fieldsToCheck = [
+        'status', 'tipo', 'local', 'local_origem', 'local_destino', 
+        'ativo', 'perfil'
+    ];
+
+    Object.keys(normalized).forEach(key => {
+        if (fieldsToCheck.includes(key)) {
+            normalized[key] = normalizeSheetValue(sheetContext, key, normalized[key]);
+        }
+    });
+
+    // Normalizar também campos aninhados em 'data'
+    if (normalized.data && typeof normalized.data === 'object') {
+        const dataNormalized = { ...normalized.data };
+        Object.keys(dataNormalized).forEach(key => {
+            if (fieldsToCheck.includes(key)) {
+                dataNormalized[key] = normalizeSheetValue(sheetContext, key, dataNormalized[key]);
+            }
+        });
+        normalized.data = dataNormalized;
+    }
+
+    // Tratamento especial para KIT_LAMPADA (apenas 10 campos permitidos)
+    if (sheetContext === 'kit_lampada') {
+        const allowed = [
+            'kit_lampada_id', 'montadora', 'modelo', 'ano_inicio', 'ano_fim',
+            'lampada_baixo', 'lampada_alto', 'lampada_neblina', 'url', 'observacao',
+            'action', 'sheet', 'executionId'
+        ];
+        Object.keys(normalized).forEach(key => {
+            if (!allowed.includes(key)) delete normalized[key];
+        });
+    }
+
+    return normalized;
+}
+
+async function revertStockMovement(sessionId, row, operatorId) {
+    try {
+        showToast(`Iniciando estorno para ${row.descricao}...`);
+        const now = new Date().toISOString();
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(normalizePayloadForSheet({
+                action: 'movimento',
+                tipo: 'saida', // Normalizado para 'saida' (estorno é uma saída de correção)
+                id_interno: row.id_interno,
+                local: '1andar', // Canonical 1andar
+                quantidade: row.qtd_conferida, 
+                data_hora: now,
+                usuario: operatorId,
+                origem: `REVERSAO-${sessionId}`,
+                observacao: `Correção de erro operacional da sessao ${sessionId}`
+            }))
+        });
+        showToast(`Estorno concluído (sincronizado).`);
+    } catch (err) {
+        console.error("Estorno Falhou:", err);
+        showToast("Erro ao processar estorno!");
+    }
+}
+
+function criarStatusConexao() {
+
+    const status = document.createElement("div")
+    status.id = "statusConexao"
+
+    status.style.fontSize = "13px"
+    status.style.fontWeight = "600"
+    status.style.marginRight = "10px"
+
+    function atualizar() {
+
+        if (navigator.onLine) {
+            status.innerHTML = "Online"
+            status.style.color = "#4ade80"
+        } else {
+            status.innerHTML = "Offline"
+            status.style.color = "#4ade80"
+        }
+
+    }
+
+    window.addEventListener("online", atualizar)
+    window.addEventListener("offline", atualizar)
+
+    atualizar()
+
+    return status
+}
+
+// ==== CONFIGURACAO APP (GLOBAL) ====
+const DEFAULT_APP_CONFIG = {
+    permitir_saida_estoque_zero: false,
+    modo_rapido: false
+};
+
+const DY_THEME_STORAGE_KEY = 'dyTheme';
+const DY_THEME_OPTIONS = ['auto', 'light', 'dark'];
+
+function getStoredTheme() {
+    try {
+        const theme = localStorage.getItem(DY_THEME_STORAGE_KEY) || 'light';
+        return DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
+    } catch (error) {
+        return 'light';
+    }
+}
+
+function getResolvedTheme(theme = getStoredTheme()) {
+    if (theme !== 'auto') return theme;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme = getStoredTheme()) {
+    const safeTheme = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
+    const resolvedTheme = getResolvedTheme(safeTheme);
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+    document.documentElement.setAttribute('data-theme-mode', safeTheme);
+}
+
+function setAppTheme(theme) {
+    const safeTheme = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
+    localStorage.setItem(DY_THEME_STORAGE_KEY, safeTheme);
+    applyTheme(safeTheme);
+    updateThemeControlsUI(safeTheme);
+    updateLoginThemeBackground();
+}
+
+function cycleLoginTheme() {
+    const current = getResolvedTheme(getStoredTheme());
+    const nextTheme = current === 'dark' ? 'light' : 'dark';
+    setAppTheme(nextTheme);
+}
+
+function getThemeLabel(theme) {
+    return theme === 'auto' ? 'Automático' : theme === 'light' ? 'Claro' : 'Escuro';
+}
+
+function updateThemeControlsUI(theme = getStoredTheme()) {
+    const current = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
+    document.querySelectorAll('[data-theme-option]').forEach((button) => {
+        const active = button.dataset.themeOption === current;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    const loginButton = document.getElementById('btn-theme-login');
+    if (loginButton) {
+        loginButton.removeAttribute('title');
+        loginButton.setAttribute('aria-label', `Alternar tema. Atual: ${getThemeLabel(current)}`);
+        const icon = loginButton.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = current === 'light' ? 'dark_mode' : current === 'dark' ? 'light_mode' : 'lightbulb';
+    }
+
+    document.querySelectorAll('.login-theme-toggle[data-login-theme]').forEach((button) => {
+        const active = button.dataset.loginTheme === getResolvedTheme(current);
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
+
+function getLoginBackgroundStyleValue() {
+    const loginTheme = getResolvedTheme(getStoredTheme());
+    const isMobileLogin = window.innerWidth < 768;
+    const bg = loginTheme === 'light'
+        ? (isMobileLogin ? '/assets/images/login-bg-mobile-claro.png?v=20260524-stable' : '/assets/images/login-bg-desktop-claro.png?v=20260524-stable')
+        : (isMobileLogin ? '/assets/images/login-bg-mobile-escuro.png?v=20260524-stable-dark' : '/assets/images/login-bg-desktop-escuro.png?v=20260524-stable-dark');
+    const fixed = isMobileLogin ? '' : ' fixed';
+    return loginTheme === 'light'
+        ? `linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.18)), url('${bg}') center/cover no-repeat${fixed}, linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)`
+        : `linear-gradient(rgba(0,0,0,0.58), rgba(0,0,0,0.74)), url('${bg}') center/cover no-repeat${fixed}, linear-gradient(135deg, #050505 0%, #151515 100%)`;
+}
+
+function updateLoginThemeBackground() {
+    const loginScreen = document.getElementById('login-screen');
+    if (!loginScreen) return;
+    loginScreen.style.background = getLoginBackgroundStyleValue();
+    loginScreen.style.backgroundSize = 'cover';
+    loginScreen.style.backgroundPosition = 'center';
+    loginScreen.style.backgroundRepeat = 'no-repeat';
+    const logo = loginScreen.querySelector('.login-logo');
+    if (logo) logo.src = getLoginLogoSrc();
+}
+
+applyTheme();
+
+if (window.matchMedia) {
+    const themeMedia = window.matchMedia('(prefers-color-scheme: light)');
+    const syncAutoTheme = () => {
+        if (getStoredTheme() === 'auto') applyTheme('auto');
+    };
+    if (themeMedia.addEventListener) themeMedia.addEventListener('change', syncAutoTheme);
+    else if (themeMedia.addListener) themeMedia.addListener(syncAutoTheme);
+}
+
+function getAppConfig() {
+    try {
+        const config = localStorage.getItem('app_config');
+        if (!config) {
+            setAppConfig(DEFAULT_APP_CONFIG);
+            return { ...DEFAULT_APP_CONFIG };
+        }
+
+        return {
+            ...DEFAULT_APP_CONFIG,
+            ...JSON.parse(config)
+        };
+    } catch (error) {
+        console.warn('[CONFIG] app_config invalido. Restaurando padrao.', error);
+        setAppConfig(DEFAULT_APP_CONFIG);
+        return { ...DEFAULT_APP_CONFIG };
+    }
+}
+
+function setAppConfig(config) {
+    localStorage.setItem('app_config', JSON.stringify({
+        ...DEFAULT_APP_CONFIG,
+        ...(config || {})
+    }));
+}
+
+function isModoRapidoAtivo() {
+    return getAppConfig().modo_rapido === true;
+}
+
+function isSaidaEstoqueZeroPermitida() {
+    return getAppConfig().permitir_saida_estoque_zero === true;
+}
+
+function canAllowStockExit(produto, quantidade) {
+    const estoqueAtual = parseFloat(produto.estoque_atual || 0);
+    if (estoqueAtual >= quantidade) return true;
+    return isSaidaEstoqueZeroPermitida();
+}
+
+window.getAppConfig = getAppConfig;
+window.setAppConfig = setAppConfig;
+window.isModoRapidoAtivo = isModoRapidoAtivo;
+window.isSaidaEstoqueZeroPermitida = isSaidaEstoqueZeroPermitida;
+window.canAllowStockExit = canAllowStockExit;
+
+// URLs das imagens locais
+const LOGO_DARK_BG = '/assets/images/logo/icon-512-black.png';
+const LOGO_LIGHT_BG = '/assets/images/logo/icon-512-white.png';
+const LOGO_URL = LOGO_DARK_BG;
+const LOGO_SMALL_URL = LOGO_DARK_BG;
+const LOGO_BLACK = LOGO_DARK_BG;
+const LOGO_WHITE = LOGO_LIGHT_BG;
+
+// Função para selecionar o logo baseado na cor do topo/header (REALIDADE VISUAL)
+// Fundo PRETO/ESCURO -> logo icon-512-black.png (contém texto BRANCO)
+// Fundo BRANCO/CLARO -> logo icon-512-white.png (contém texto PRETO)
+function getLogoForHeader(headerBgColor) {
+    if (!headerBgColor) {
+        return LOGO_WHITE; // Padrão agora é o white (que é dark) para fundo claro
+    }
+    
+    const bg = headerBgColor.toLowerCase().trim();
+    
+    // Fundo escuro (preto) -> usar asset 'black' (pois ele é a versão Light/texto branco)
+    if (bg === '#101018' || bg === '#000000' || bg === 'transparent' || bg.startsWith('rgba(16,')) {
+        return LOGO_BLACK;
+    }
+    
+    // Fundo claro (branco) -> usar asset 'white' (pois ele é a versão Dark/texto preto)
+    if (bg === '#ffffff' || bg === '#fff' || bg.startsWith('rgba(255,')) {
+        return LOGO_WHITE;
+    }
+    
+    // Padrão
+    return LOGO_WHITE;
+}
+
+
+
+
+// Função para garantir que links do Drive funcionem como imagem direta
+function formatImageUrl(url) {
+    if (!url) return '';
+    
+    // Se for um path do Supabase (não é URL completa), gerar URL pública
+    if (url.startsWith('produtos/') || url.startsWith('branding/')) {
+        try {
+            const publicUrl = getPublicUrl(url);
+            if (publicUrl) return publicUrl;
+        } catch (e) {
+            console.log('[formatImageUrl] Erro ao gerar URL pública:', e);
+        }
+    }
+    
+    if (url.includes('drive.google.com')) {
+        // Handle various Drive link formats (preview, file, view, id=, etc)
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || 
+                      url.match(/id=([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            return `https://drive.google.com/uc?id=${match[1]}`;
+        }
+    }
+    return url;
+}
+
+const attributeNameMap = {
+    voltagem: "Voltagem",
+    potencia: "Potência",
+    tipo_lampada: "Tipo da lâmpada",
+    temperatura_cor: "Temperatura de cor",
+    lumens: "Lumens",
+    encaixe: "Encaixe",
+    codigo_equivalente: "Código equivalente",
+    linha: "Linha",
+    ip_rate: "IP Rate",
+    chip_led: "Chip LED",
+    dissipador: "Dissipador",
+    cooler: "Cooler",
+    driver: "Driver",
+    material_lente: "Material da lente",
+    textura_lente: "Textura da lente",
+    material_carcaca: "Material da carcaça",
+    regulagem: "Regulagem",
+    modelo_botao: "Modelo do botão",
+    cor_botao: "Cor do botão",
+    veiculo: "Veículo",
+    ano_aplicacao: "Ano de aplicação"
+};
+
+const attributeValueReplacements = [
+    [/(\d+)v/gi, '$1V'],
+    [/(\d+)w/gi, '$1W'],
+    [/(\d+)k/gi, '$1K'],
+    [/(\d+)lm/gi, '$1LM'],
+    [/_/g, ' / '],
+    [/(\d+)_(\d+)/g, '$1 a $2'],
+    [/^com_/i, 'Com '],
+    [/^sem_/i, 'Sem '],
+    [/^a_prova_d/i, 'À prova d'],
+    [/_/g, ' / ']
+];
+
+function safeParseAtributos(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function formatAttributeName(key) {
+    if (!key) return '';
+    const k = String(key).toLowerCase().trim();
+    return attributeNameMap[k] || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function formatAttributeValue(value) {
+    if (!value) return '';
+    let formatted = String(value).trim();
+    attributeValueReplacements.forEach(([regex, replacement]) => {
+        formatted = formatted.replace(regex, replacement);
+    });
+    return formatted;
+}
+
+function isValidUrl(value) {
+    if (!value) return false;
+    const s = String(value).trim();
+    const low = s.toLowerCase();
+    
+    // Bloqueio de valores vazios ou placeholders comuns vindos de bancos de dados
+    if (!s || low === 'null' || low === 'undefined' || low === 'n/a' || low === 'vazio') return false;
+    
+    try {
+        // Aceita URLs absolutas HTTP/HTTPS
+        const url = new URL(s);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch (e) {
+        // Aceita caminhos relativos internos (começando com /)
+        return s.startsWith('/');
+    }
+}
+
+function formatPrice(value, prefix = 'R$ ') {
+    if (!value && value !== 0) return 'R$ 0,00';
+    const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'));
+    if (isNaN(num)) return 'R$ 0,00';
+    return prefix + num.toFixed(2).replace('.', ',');
+}
+
+function formatUnityWithQty(unidade, qtdEmbalagem) {
+    const u = unidade || 'UN';
+    const q = parseInt(qtdEmbalagem) || 1;
+    return q === 1 ? u : `${u} / ${q}`;
+}
+
+function handleImageError(img, fallbackIcon = 'directions_car') {
+    img.onerror = null; // Prevent infinite loops
+    img.src = LOGO_DARK_BG; // Use logo as immediate fallback
+    // Or if you want to replace with an icon:
+    const parent = img.parentElement;
+    if (parent) {
+        parent.innerHTML = `<span class="material-symbols-rounded" style="color: var(--muted)">${fallbackIcon}</span>`;
+    }
+}
+
+let toastTimeout;
+let hasCriticalStock = false;
+let cameraStream = null;
+
+const SPREADSHEET_ID = '1NK_rmdEfZYQPnFEil5pDWF1rIt9adajd1GpkcObSkv0';
+const CACHE_NAME = 'dy-autoparts-v9';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznHLTXr_--3PrR8GAz4-TrtX4jttC5cg7CH8cPa7KzoRQPQMZrmtEPBAMWE5KqMTUXwA/exec'; // URL do Google Apps Script para salvar dados
+const API_BASE = "https://script.google.com/macros/s/AKfycbznHLTXr_--3PrR8GAz4-TrtX4jttC5cg7CH8cPa7KzoRQPQMZrmtEPBAMWE5KqMTUXwA/exec";
+
+let appData;
+try {
+    appData = JSON.parse(localStorage.getItem('appData')) || {
+        users: [],
+        products: [],
+        channels: [],
+        separacao: [],
+        conferencia: [],
+        estoque: [],
+        movimentacoes: [],
+        inventario: [],
+        isLoading: false,
+        lastSyncTime: null,
+        lastSyncTimestamp: 0,
+        currentInventory: null,
+        kit_lampada: []
+    };
+} catch (e) {
+    console.error("[Bootstrap] Erro ao carregar appData do localStorage:", e);
+    appData = {
+        users: [],
+        products: [],
+        channels: [],
+        separacao: [],
+        conferencia: [],
+        estoque: [],
+        movimentacoes: [],
+        inventario: [],
+        isLoading: false,
+        lastSyncTime: null,
+        lastSyncTimestamp: 0,
+        currentInventory: null,
+        kit_lampada: []
+    };
+}
+
+
+// Diagnóstico inicial e Limpeza de cache de produtos legado
+const emergencyProductsCache = Array.isArray(appData.products) ? [...appData.products] : [];
+if (appData.products && appData.products.length > 0) {
+    console.log(`[Cache] Detectados ${appData.products.length} produtos no localStorage. Limpando para garantir carga fresca do Supabase.`);
+    appData.products = []; // Força a limpeza para evitar uso de dados legados das planilhas
+}
+
+console.log("[DIAGNOSTICO] appData inicial:", {
+    productsCount: appData.products ? appData.products.length : 0,
+    lastSync: appData.lastSyncTime
+});
+
+const DATA_MAX_AGE_MS = 5 * 60 * 1000; // 5 Minutos de validade para processos críticos
+
+function isDataFresh() {
+    if (!appData.lastSyncTimestamp) return false;
+    const age = Date.now() - appData.lastSyncTimestamp;
+    return age < DATA_MAX_AGE_MS;
+}
+
+/**
+ * Interceptor para garantir dados novos em processos críticos
+ */
+async function ensureFreshData(callback) {
+    if (isDataFresh()) {
+        addTechnicalLog('SYNC_CHECK', 'FRESH', 'Dados dentro da janela de 5min');
+        return callback();
+    }
+
+    addTechnicalLog('SYNC_CHECK', 'STALE', 'Dados antigos. Disparando sync obrigatória...');
+    
+    // Mostra loader somente nos casos críticos
+    const success = await loadAllData(false); 
+    
+    if (success) {
+        callback();
+    } else {
+        showToast("Falha na sincronização. Verifique sua conexão.");
+    }
+}
+
+/**
+ * Log Técnico Interno (Background)
+ */
+function addTechnicalLog(action, status, details = "") {
+    const logs = JSON.parse(localStorage.getItem('tech_logs') || '[]');
+    logs.unshift({
+        timestamp: new Date().toISOString(),
+        action,
+        status,
+        details
+    });
+    // Manter apenas os últimos 100 logs
+    localStorage.setItem('tech_logs', JSON.stringify(logs.slice(0, 100)));
+    console.log(`[TECH-LOG] ${action}: ${status} ${details}`);
+}
+
+let operacoesPendentes = 0;
+
+function atualizarPendentes() {
+    const el = document.getElementById("pendentesSync");
+    if (!el) return;
+    el.innerHTML = `${operacoesPendentes}`;
+}
+
+function adicionarPendencia() {
+    operacoesPendentes++;
+    atualizarPendentes();
+}
+
+function atualizarStatusConexao() {
+    const status = document.getElementById("statusConexao");
+    if (!status) return;
+
+    if (navigator.onLine) {
+        status.innerHTML = "Online";
+        status.style.color = "#4ade80";
+    } else {
+        status.innerHTML = "Offline";
+        status.style.color = "#ef4444";
+    }
+}
+
+window.addEventListener("online", atualizarStatusConexao);
+window.addEventListener("offline", atualizarStatusConexao);
+
+// ==========================================
+// BOOTSTRAP RESILIENTE COM TIMEOUT E FALLBACK CONTROLADO
+// ==========================================
+
+const BOOT_CONFIG = {
+    TIMEOUT_MS: 10000,        // 10s timeout por etapa
+    MAX_RETRIES: 1,          // máximo 1 retry
+    BOOT_TIMEOUT_MS: 30000    // 30s timeout total do bootstrap
+};
+
+let bootstrapState = {
+    running: false,
+    completed: false,
+    abortController: null,
+    startTime: null
+};
+
+function hideSplash() {
+    const splash = document.querySelector('.splash-preloader');
+    if (splash) {
+        splash.style.display = 'none';
+        console.log('[BOOT] Splash ocultado');
+    }
+}
+
+function showBootstrapError(message) {
+    console.error('[BOOT] Erro:', message);
+    hideSplash();
+    if (typeof renderLogin === 'function') {
+        renderLogin();
+    }
+}
+
+function withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error(`[BOOT] Timeout em ${label} (${ms}ms)`));
+        }, ms);
+        promise
+            .then(result => {
+                clearTimeout(timeout);
+                resolve(result);
+            })
+            .catch(err => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+    });
+}
+
+async function initApp() {
+    applyAppFont();
+    window.loginCustomBgImage = null;
+    
+    try {
+        loadFromIndexedDB('loginBgImage', function(data) {
+            if (data && typeof data === 'string' && data.startsWith('data:image')) {
+                window.loginCustomBgImage = data;
+            }
+        });
+    } catch (e) {
+        console.log('[INIT] Error loading custom bg, using default');
+    }
+    
+    // 1. GUARDA DE REENTRADA - impedir múltiplas inicializações
+    if (bootstrapState.running) {
+        console.log('[BOOT] Reentrada bloqueada - bootstrap já em execução');
+        addSyncTrace('initApp', 'BLOCK', 'reentrada');
+        return;
+    }
+    if (bootstrapState.completed) {
+        console.log('[BOOT] Reentrada bloqueada - bootstrap já concluído');
+        addSyncTrace('initApp', 'BLOCK', 'já completado');
+        return;
+    }
+
+    // 2. INICIAR BOOTSTRAP
+    bootstrapState.running = true;
+    bootstrapState.startTime = Date.now();
+    bootstrapState.abortController = new AbortController();
+
+    console.log('[BOOT] ==========================================');
+    console.log('[BOOT] INÍCIO DO BOOTSTRAP');
+    console.log('[BOOT] ==========================================');
+
+    // 3. TIMEOUT TOTAL DO BOOTSTRAP
+    const totalTimeout = setTimeout(() => {
+        if (bootstrapState.running && !bootstrapState.completed) {
+            console.error('[BOOT] TIMEOUT TOTAL DE INICIALIZACAO');
+            bootstrapState.abortController.abort();
+            showBootstrapError('Timeout de inicialização');
+        }
+    }, BOOT_CONFIG.BOOT_TIMEOUT_MS);
+
+    try {
+        // 4. ESCONDER SPLASH IMEDIATAMENTE
+        hideSplash();
+
+        // 5. VERIFICAR SUPABASE (não bloqueante)
+        console.log('[BOOT] Verificando Supabase...');
+        try {
+            if (window.supabaseClientReady) {
+                await withTimeout(
+                    window.supabaseClientReady,
+                    BOOT_CONFIG.TIMEOUT_MS,
+                    'supabaseClientReady'
+                );
+            }
+        } catch (readyError) {
+            console.warn('[BOOT] Supabase client ainda indisponivel:', readyError.message);
+        }
+
+        try {
+            if (typeof testeSupabase === 'function') {
+                testeSupabase();
+            }
+        } catch (se) {
+            console.warn('[BOOT] Supabase não disponível:', se.message);
+        }
+
+        atualizarStatusConexao();
+
+        // 6. CARREGAR USUÁRIOS COM TIMEOUT E FALLBACK ÚNICO
+        console.log('[BOOT] Carregando usuários...');
+        const usersLoaded = await loadUsersWithFallback();
+        
+        if (usersLoaded) {
+            console.log(`[BOOT] Usuários carregados: ${appData.users?.length || 0}`);
+        } else {
+            console.warn('[BOOT] Usuários não carregados, usando fallback');
+        }
+
+        // 7. CARGA INICIAL (separacao) - apenas se necessário
+        const currentUser = localStorage.getItem('currentUser');
+        if (!currentUser) {
+            console.log('[BOOT] Carregando dados mínimos (separacao)...');
+            try {
+                await withTimeout(
+                    loadAllData(true, 'initApp'),
+                    BOOT_CONFIG.TIMEOUT_MS,
+                    'loadAllData'
+                );
+            } catch (e) {
+                console.warn('[BOOT] loadAllData falhou:', e.message);
+            }
+        }
+
+        // 8. RENDERIZAR LOGIN SEMPRE
+        console.log('[BOOT] Renderizando tela de login...');
+        renderLogin();
+        
+        // 9. CONCLUIR BOOTSTRAP
+        clearTimeout(totalTimeout);
+        bootstrapState.completed = true;
+        bootstrapState.running = false;
+        
+        const elapsed = Date.now() - bootstrapState.startTime;
+        console.log('[BOOT] ==========================================');
+        console.log(`[BOOT] BOOTSTRAP CONCLUÍDO (${elapsed}ms)`);
+        console.log('[BOOT] ==========================================');
+        addSyncTrace('initApp', 'COMPLETE', `sucesso em ${elapsed}ms`);
+
+    } catch (err) {
+        clearTimeout(totalTimeout);
+        console.error('[BOOT] Erro crítico no bootstrap:', err);
+        addSyncTrace('initApp', 'ERROR', err.message);
+        
+        // SEMPRE renderizar login em caso de erro
+        hideSplash();
+        try {
+            renderLogin();
+        } catch (e2) {
+            console.error('[BOOT] Também falhou renderLogin:', e2);
+        }
+        
+        bootstrapState.completed = true;
+        bootstrapState.running = false;
+    }
+}
+
+async function loadUsersWithFallback() {
+    // TENTATIVA ÚNICA: Supabase (SSOT)
+    console.log('[BOOT] Carregando usuários do Supabase...');
+    try {
+        const data = await withTimeout(
+            DataClient.fetchUsuariosSupabase(),
+            BOOT_CONFIG.TIMEOUT_MS,
+            'fetchUsuariosSupabase'
+        );
+        
+        if (data && data.length > 0) {
+            appData.users = data.map(u => ({
+                ...u,
+                avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+            }));
+            console.log(`[DATA] usuarios -> Supabase (${appData.users.length} usuários)`);
+            console.log(`[DATA] Google Sheets ignorado para 'usuarios'`);
+            return true;
+        }
+        
+        console.error('[BOOT] Supabase retornou vazio para usuários (SSOT FALHOU)');
+    } catch (e) {
+        console.error(`[BOOT] Erro crítico ao carregar usuários do Supabase: ${e.message}`);
+    }
+
+    // SEM FALLBACK PARA SHEETS (Consolidado)
+    addSyncTrace('loadUsersWithFallback', 'ABORT', 'Supabase falhou e Sheets está desativado como fallback');
+    return false;
+}
+
+
+
+// Inicialização segura baseada no estado do documento
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+} else {
+    // Usar setTimeout para evitar bloqueio síncrono
+    setTimeout(initApp, 0);
+}
+
+let lastProcessSyncQueueCall = 0;
+const PROCESS_SYNC_QUEUE_DEBOUNCE_MS = 3000;
+const OPERATION_OUTBOX_DB = 'DYAUTO_OPERATION_OUTBOX';
+const OPERATION_OUTBOX_STORE = 'operations';
+
+function openOperationOutboxDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error('IndexedDB indisponivel'));
+            return;
+        }
+
+        const request = indexedDB.open(OPERATION_OUTBOX_DB, 1);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(OPERATION_OUTBOX_STORE)) {
+                const store = db.createObjectStore(OPERATION_OUTBOX_STORE, { keyPath: 'id' });
+                store.createIndex('status', 'status', { unique: false });
+                store.createIndex('createdAt', 'createdAt', { unique: false });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Erro ao abrir outbox'));
+    });
+}
+
+async function queueOperation(type, payload, meta = {}) {
+    const operation = {
+        id: payload.executionId || meta.executionId || generateExecutionId(),
+        type,
+        payload: {
+            ...payload,
+            executionId: payload.executionId || meta.executionId || generateExecutionId()
+        },
+        meta,
+        status: 'pending',
+        attempts: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastError: ''
+    };
+    operation.payload.executionId = operation.id;
+
+    try {
+        const db = await openOperationOutboxDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(OPERATION_OUTBOX_STORE, 'readwrite');
+            tx.objectStore(OPERATION_OUTBOX_STORE).put(operation);
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        });
+    } catch (error) {
+        const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
+        fallback.push(operation);
+        localStorage.setItem('operation_outbox_fallback', JSON.stringify(fallback));
+    }
+
+    await refreshOutboxPendingCount();
+    return operation;
+}
+
+async function getQueuedOperations() {
+    let operations = [];
+    try {
+        const db = await openOperationOutboxDB();
+        operations = await new Promise((resolve, reject) => {
+            const tx = db.transaction(OPERATION_OUTBOX_STORE, 'readonly');
+            const request = tx.objectStore(OPERATION_OUTBOX_STORE).getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        operations = [];
+    }
+
+    const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
+    return [...operations, ...fallback]
+        .filter(op => op.status === 'pending' || op.status === 'error')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+async function markQueuedOperation(operation, status, error = '') {
+    const updated = {
+        ...operation,
+        status,
+        attempts: (operation.attempts || 0) + (status === 'error' ? 1 : 0),
+        updatedAt: new Date().toISOString(),
+        lastError: error ? String(error) : ''
+    };
+
+    try {
+        const db = await openOperationOutboxDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(OPERATION_OUTBOX_STORE, 'readwrite');
+            if (status === 'synced') tx.objectStore(OPERATION_OUTBOX_STORE).delete(operation.id);
+            else tx.objectStore(OPERATION_OUTBOX_STORE).put(updated);
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        });
+    } catch (dbError) {
+        const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]')
+            .filter(op => op.id !== operation.id);
+        if (status !== 'synced') fallback.push(updated);
+        localStorage.setItem('operation_outbox_fallback', JSON.stringify(fallback));
+    }
+}
+
+async function refreshOutboxPendingCount() {
+    const outbox = await getQueuedOperations();
+    operacoesPendentes = outbox.length + getOfflinePendingCount();
+    atualizarPendentes();
+}
+
+async function executeQueuedOperation(operation) {
+    if (operation.type === 'supabase_rpc' && operation.meta?.rpcName === 'finalizar_conferencia') {
+        return DataClient.finalizarConferenciaSupabase(operation.payload);
+    }
+
+    if (operation.type === 'supabase_pick_draft') {
+        return DataClient.savePickingDraftSupabase(operation.payload);
+    }
+
+    if (operation.type === 'supabase_pick_finalize') {
+        return DataClient.finalizePickingDraftSupabase(operation.payload);
+    }
+
+    if (operation.type === 'google_sheets_post') {
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(operation.payload)
+        });
+        return true;
+    }
+
+    throw new Error(`Tipo de operacao offline desconhecido: ${operation.type}`);
+}
+
+async function syncOperationOutbox(caller = 'unknown') {
+    if (!navigator.onLine) return 0;
+    const operations = await getQueuedOperations();
+    let syncedCount = 0;
+
+    for (const operation of operations) {
+        try {
+            await executeQueuedOperation(operation);
+            await markQueuedOperation(operation, 'synced');
+            syncedCount++;
+        } catch (error) {
+            await markQueuedOperation(operation, 'error', error.message || error);
+            console.warn('[OUTBOX] pausa na sincronizacao:', caller, operation.type, error);
+            break;
+        }
+    }
+
+    await refreshOutboxPendingCount();
+    return syncedCount;
+}
+
+async function processSyncQueue(caller = 'unknown') {
+    const now = Date.now();
+    if (now - lastProcessSyncQueueCall < PROCESS_SYNC_QUEUE_DEBOUNCE_MS) {
+        console.log(`[SYNC] processSyncQueue ignorado (debounce): ${caller} | Última: ${now - lastProcessSyncQueueCall}ms`);
+        addSyncTrace('processSyncQueue', 'DEBOUNCE', caller);
+        return;
+    }
+    lastProcessSyncQueueCall = now;
+
+    if (!navigator.onLine || isSyncing) {
+        addSyncTrace('processSyncQueue', 'BLOCK', `online=${navigator.onLine} isSyncing=${isSyncing}`);
+        return;
+    }
+    
+    const outboxProcessed = await syncOperationOutbox(caller);
+
+    addSyncTrace('processSyncQueue', 'START', caller);
+    console.log(`[SYNC] processSyncQueue disparado por: ${caller}`);
+
+    let queue = JSON.parse(localStorage.getItem('pending_sync_queue') || '[]');
+    const initialQueueLength = queue.length;
+
+    if (queue.length === 0) {
+        await refreshOutboxPendingCount();
+        addSyncTrace('processSyncQueue', 'EMPTY', 'fila vazia');
+        if (outboxProcessed > 0) {
+            showToast("Sincronizado com sucesso!");
+            loadAllData(true, 'operation_outbox_success');
+        }
+        return;
+    }
+
+    isSyncing = true;
+    console.log(`Processando fila de sincronia: ${queue.length} itens`);
+
+    try {
+        while (queue.length > 0) {
+            const item = queue[0];
+            operacoesPendentes = queue.length;
+            atualizarPendentes();
+
+            try {
+                if (!item.payload.executionId) {
+                    item.payload.executionId = item.id;
+                }
+
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item.payload)
+                });
+
+                queue.shift();
+                localStorage.setItem('pending_sync_queue', JSON.stringify(queue));
+            } catch (error) {
+                console.warn(`Pausa na sincronia (Rede/GAS):`, error);
+                break;
+            }
+        }
+    } finally {
+        const itemsProcessed = initialQueueLength - (queue.length);
+        isSyncing = false;
+        operacoesPendentes = queue.length;
+        atualizarPendentes();
+
+        // Só recarrega dados se realmente houve mudança (itens processados)
+        if (queue.length === 0 && itemsProcessed > 0) {
+            console.log(`[SYNC] Fila limpa (${itemsProcessed} itens). Atualizando dados locais...`);
+            addSyncTrace('processSyncQueue', 'CALL', `loadAllData (fila processada: ${itemsProcessed} itens)`);
+            showToast("Sincronizado com sucesso!");
+            loadAllData(true, 'processSyncQueue_success');
+        } else if (queue.length === 0) {
+            console.log(`[SYNC] Fila já estava vazia. Nenhuma carga adicional necessária.`);
+            addSyncTrace('processSyncQueue', 'SKIP', 'fila vazia');
+        }
+        addSyncTrace('processSyncQueue', 'COMPLETE', `processados=${itemsProcessed} restantes=${queue.length}`);
+    }
+}
+
+async function safePost(payload) {
+    const executionId = generateExecutionId();
+    // Aplicar a Camada de Normalização imediatamente
+    const normalizedPayload = normalizePayloadForSheet({ ...payload, executionId });
+
+    const syncItem = {
+        id: executionId,
+        timestamp: new Date().toISOString(),
+        payload: normalizedPayload
+    };
+
+    // Log para debug - útil para identificar problemas de comunicação
+    console.log("[safePost] Enviando para SCRIPT_URL:", SCRIPT_URL);
+    console.log("[safePost] Payload:", JSON.stringify(syncItem.payload, null, 2));
+
+    if (!navigator.onLine) {
+        await queueOperation('google_sheets_post', syncItem.payload, { backupTarget: 'google_sheets' });
+        showToast("Offline: Salvo para sincronizar.");
+        return false;
+    }
+
+    try {
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(syncItem.payload)
+        });
+        
+        // Com no-cors, não podemos ver a resposta, mas se não threw erro, considera-se sucesso
+        console.log("[safePost] Envio concluído com sucesso (mode: no-cors)");
+        return true;
+    } catch (error) {
+        console.error("[safePost] Erro na requisição:", error);
+        
+        // Adicionar a fila mesmo em caso de erro
+        await queueOperation('google_sheets_post', syncItem.payload, { backupTarget: 'google_sheets' });
+        
+        // Mostrar erro mais específico
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            showToast("Erro de conexão: Salvando em fila local.");
+        } else if (error.name === 'AbortError') {
+            showToast("Timeout: Operação cancelada. Salvando em fila.");
+        } else {
+            showToast("Erro ao salvar: " + error.message);
+        }
+        return false;
+    }
+}
+
+function sincronizarSistema() {
+    if (isSyncing) return;
+    processSyncQueue('manual');
+    loadAllData(true, 'manual');
+}
+
+async function fetchSheetData(sheetName, timeoutMs = 20000) {
+    const url = `${SCRIPT_URL}?action=list&sheet=${encodeURIComponent(sheetName)}`;
+
+    // Controlador de timeout para evitar travamento infinito
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+
+        const result = await response.json();
+        if (!result.ok) {
+            console.error(`[BACKEND] Erro na aba '${sheetName}':`, result.error);
+            showToast(`Erro na aba '${sheetName}': ${result.error}`, "error");
+            return null;
+        }
+
+        console.log(`[BACKEND] Dados recebidos de '${sheetName}':`, {
+            count: (result.data || []).length,
+            firstRow: (result.data || [])[0]
+        });
+
+        const data = result.data || [];
+
+        // Mapear dados retornados pelo GAS para o formato esperado pelo app
+        // O GAS retorna objetos com as chaves sendo o nome exato dos cabeçalhos
+        return data.map(record => {
+            const obj = {};
+            Object.entries(record).forEach(([key, value], index) => {
+                const colLetter = getColumnLetter(index);
+                // Normalização consistente com o formato anterior
+                const colName = key.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+
+                obj[colName] = value;
+                obj[`col_${colLetter}`] = value;
+                obj[`col_${colLetter.toLowerCase()}`] = value;
+                obj[`col_${index}`] = value;
+            });
+            return obj;
+        }).filter(row => {
+            // Manter filtro de linhas vazias (usando primeira coluna mapeada como 'col_0' ou 'col_A')
+            const firstColValue = row.col_0 || row.col_a || "";
+            return String(firstColValue).trim() !== "";
+        });
+    } catch (error) {
+        console.error(`Error fetching sheet ${sheetName}:`, error);
+        
+        if (sheetName === 'estoque_atual') return null;
+
+        if (error.name === 'AbortError') {
+            showToast(`Timeout ao buscar dados de '${sheetName}'`, "error");
+        } else if (error.message.includes('Failed to fetch')) {
+            showToast(`Erro de conexão ao buscar '${sheetName}'`, "error");
+        } else {
+            showToast(`Erro ao buscar '${sheetName}': ${error.message}`, "error");
+        }
+        return null;
+    }
+}
+
+function getColumnLetter(index) {
+    let letter = '';
+    while (index >= 0) {
+        letter = String.fromCharCode((index % 26) + 65) + letter;
+        index = Math.floor(index / 26) - 1;
+    }
+    return letter;
+}
+
+function getOfflinePendingCount() {
+    // Se houver uma fila offline real no appData, retornar o tamanho dela.
+    // Por enquanto, retorna 0 conforme solicitado.
+    return (window.appData && window.appData.offlineQueue) ? window.appData.offlineQueue.length : 0;
+}
+
+// Listener para atualização de status online/offline
+window.addEventListener('online', () => updateMenuStatusUI());
+window.addEventListener('offline', () => updateMenuStatusUI());
+
+function getNFBackButton(backAction) {
+    const currentUser = localStorage.getItem('currentUser');
+    return getTopBarHTML(currentUser, backAction);
+}
+
+function handleActionKey(event, action) {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        runMenuAction(action);
+    }
+}
+
+function runMenuAction(action) {
+    if (!action) return;
+    try {
+        const fn = new Function(action);
+        fn();
+    } catch (error) {
+        console.error('[NAV] Falha ao executar acao:', action, error);
+        showToast('Nao foi possivel abrir esta tela.', 'error');
+    }
+}
+
+function updateMenuStatusUI() {
+    const statusDot = document.querySelector('.status-dot');
+    const statusText = document.querySelector('.status-text');
+    const pendingCount = document.querySelector('.pending-count');
+    
+    if (statusDot && statusText) {
+        const isOnline = navigator.onLine;
+        statusDot.className = `status-dot ${isOnline ? 'online' : 'offline'}`;
+        statusText.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+    }
+    
+    if (pendingCount) {
+        pendingCount.textContent = `${getOfflinePendingCount()} pendentes`;
+    }
+}
+
+function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') {
+    const isMenu = screenType === 'menu';
+    return `
+        <div class="top-action-group">
+                ${!isMenu && backAction ? `
+                <button class="fab-icon-btn fab-voltar" type="button" onclick="${backAction}" aria-label="Voltar">
+                    <span class="material-symbols-rounded">arrow_back</span>
+                </button>
+                ` : ''}
+                ${isMenu ? `
+                <button class="fab-icon-btn fab-config" type="button" onclick="renderConfigSubMenu()" aria-label="Configurações">
+                    <span class="material-symbols-rounded">settings</span>
+                </button>
+                <button class="fab-icon-btn fab-desligar" type="button" onclick="logout()" aria-label="Encerrar sessão">
+                    <span class="material-symbols-rounded">power_settings_new</span>
+                </button>
+                ` : ''}
+            </div>
+    `;
+}
+
+
+function getOperationalIdentityHTML(type = 'PICKING') {
+    const isPick = type === 'PICKING';
+    const label = isPick ? 'SEPARACAO (PICK)' : 'CONFERÊNCIA (PACK)';
+    const icon = isPick ? 'inventory_2' : 'verified';
+    const mobileGradient = isPick
+        ? 'linear-gradient(90deg, #EF4444 0%, #B91C1C 100%)'
+        : 'linear-gradient(90deg, #22C55E 0%, #15803D 100%)';
+    
+    return `
+        <!-- Identidade Visual Operacional (Desktop) -->
+        <div class="operational-sidebar">
+            <div class="sidebar-icon" style="background-color: white; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); margin-bottom: 32px;">
+                <span class="material-symbols-rounded" style="color: #1E3A8A; font-size: 20px !important;">${icon}</span>
+            </div>
+            <div class="sidebar-label">${label}</div>
+        </div>
+        
+        <!-- Identidade Visual Operacional (Mobile) -->
+        <div class="operational-top-bar">
+            <div class="top-bar-icon-wrap">
+                <span class="material-symbols-rounded top-bar-icon">${icon}</span>
+            </div>
+            <span class="top-bar-label">${label}</span>
+        </div>
+    `;
+}
+
+// Barra lateral para módulos internos (Produtos, Inventário, NF, etc.)
+const MODULE_SIDEBAR_CONFIG = {
+    produtos:      { label: 'PRODUTOS',      icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
+    kit_lampada:   { label: 'KIT LAMPADAS', icon: 'lightbulb',    colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
+    movimentos:    { label: 'MOVIMENTOS',    icon: 'sync_alt',     colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
+    inventario:    { label: 'INVENT\u00c1RIO',    icon: 'fact_check',   colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
+    nf:            { label: 'ENTRADA NF',    icon: 'receipt_long', colorFrom: '#1E3A8A', colorTo: '#1E40AF', shadow: '30,58,138' },
+    pick:          { label: 'SEPARA\u00c7\u00c3O (PICK)',    icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
+    pack:          { label: 'CONFER\u00caNCIA (CEGA)',  icon: 'verified',     colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
+    compras:       { label: 'COMPRAS',       icon: 'shopping_bag', colorFrom: '#EF2B2D', colorTo: '#B91C1C', shadow: '239,43,45' },
+    financeiro:    { label: 'FINANCEIRO',    icon: 'payments',     colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
+    configuracoes: { label: 'CONFIG.',       icon: 'settings',     colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
+};
+
+function getModuleSidebarHTML(moduleKey) {
+    const cfg = MODULE_SIDEBAR_CONFIG[moduleKey];
+    if (!cfg) return '';
+    return `
+        <div class="module-sidebar mod-sidebar-${moduleKey}" style="background:linear-gradient(180deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%);box-shadow:-2px 0 15px rgba(${cfg.shadow},0.18);">
+            <div class="sidebar-label">${cfg.label}</div>
+        </div>
+        <div class="module-top-bar mod-topbar-${moduleKey}">
+            <div class="top-bar-icon-wrap">
+                <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
+            </div>
+            <span class="top-bar-label">${cfg.label}</span>
+        </div>
+    `;
+}
+
+function getLoginLogoSrc() {
+    return getResolvedTheme(getStoredTheme()) === 'light' ? LOGO_LIGHT_BG : LOGO_DARK_BG;
+}
+
+function getStandardScreenTitleHTML(title, iconHTML) {
+    return `
+        <div class="screen-mini-title">
+            <div class="mini-icon">${iconHTML || ''}</div>
+            <span>${title}</span>
+        </div>
+    `;
+}
+
+function getMaterialScreenIconHTML(icon, color = '#3B82F6') {
+    return `
+        <span class="material-symbols-rounded" style="width:54px;height:54px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;box-shadow:0 2px 8px rgba(0,0,0,0.22);">
+            ${icon}
+        </span>
+    `;
+}
+
+function getStandardModuleCardsHTML(items = []) {
+    return `
+        <div class="standard-module-card-grid">
+            ${items.map(item => `
+                <button type="button" class="standard-module-card" onclick="${item.onclick}">
+                    <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
+                    <span class="standard-module-card-copy">
+                        <strong>${item.label}</strong>
+                        <small>${item.description || ''}</small>
+                    </span>
+                </button>
+            `).join('')}
+        </div>
+    `;
+}
+
+
+
+
+function startClock() {
+    // Clock removed from UI
+}
+
+async function loadUsersOnly() {
+    try {
+        const data = await DataClient.fetchUsuariosSupabase();
+        if (data && data.length > 0) {
+            appData.users = data.map(u => ({
+                ...u,
+                avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+            }));
+            console.log(`[BOOT] usuarios -> Supabase (${appData.users.length} usuários carregados)`);
+        } else {
+            console.log('[BOOT] usuários: fallback para dados em memória ou fallback');
+        }
+    } catch (e) {
+        console.warn('[BOOT] Erro ao carregar usuarios do Supabase, tentando fetchSheetData:', e);
+        try {
+            const data = await fetchSheetData('usuarios');
+            if (data) {
+                appData.users = data
+                    .filter(u => String(u.ativo).toLowerCase() === 'sim')
+                    .map(u => ({
+                        ...u,
+                        avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+                    }));
+            }
+        } catch (e2) {
+            console.warn('[BOOT] Também falhou fetchSheetData:', e2);
+        }
+    }
+}
+
+let lastLoadAllDataCall = 0;
+const LOAD_ALL_DATA_DEBOUNCE_MS = 3000;
+
+async function loadAllData(silent = false, caller = 'unknown') {
+    const now = Date.now();
+    if (now - lastLoadAllDataCall < LOAD_ALL_DATA_DEBOUNCE_MS) {
+        console.log(`[SYNC] loadAllData ignorado (debounce): ${caller} | Última: ${now - lastLoadAllDataCall}ms`);
+        addSyncTrace('loadAllData', 'DEBOUNCE', caller);
+        return false;
+    }
+    lastLoadAllDataCall = now;
+
+    try {
+        if (isAppLoading) {
+            console.log(`[SYNC] loadAllData ignorado (isAppLoading=true): ${caller}`);
+            addSyncTrace('loadAllData', 'BLOCK', `isAppLoading=true caller=${caller}`);
+            return false;
+        }
+        isAppLoading = true;
+
+        addSyncTrace('loadAllData', 'START', `${caller} silent=${silent}`);
+
+        if (!silent) {
+            renderLoading(0, "Carregando dados essenciais...");
+        }
+
+        addTechnicalLog('SYNC', 'START', `${silent ? 'Silent' : 'UI'} | Caller: ${caller}`);
+        console.log(`[SYNC] loadAllData disparado por: ${caller} (Silent: ${silent})`);
+
+        // Carregar apenas dados mínimos para o app funcionar (login + menu)
+        // Cada módulo carregará seus próprios dados sob demanda via DataClient
+        // ATENCAO: usuarios, canais_envio e produtos agora vem do Supabase, não mais do Google Sheets
+        // separacao e separacao_itens removidos: só devem ser carregados ao entrar na tela de separação/conferência
+        const essentialTables = [
+        ];
+
+        let completed = 0;
+        const total = essentialTables.length;
+
+        const promises = essentialTables.map(async (table) => {
+            try {
+                const data = await fetchSheetData(table);
+                if (data) {
+                    appData[table] = data;
+                }
+            } catch (e) {
+                console.warn(`Error loading table ${table}:`, e);
+            } finally {
+                completed++;
+                if (!silent) {
+                    updateLoadingProgress(Math.round((completed / total) * 100));
+                }
+            }
+        });
+
+        await Promise.allSettled(promises);
+
+        // Não salvar todo o appData no localStorage para evitar dados desatualizados
+        // Cada módulo gerencia seu próprio cache via DataClient
+        appData.lastSyncTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        appData.lastSyncTimestamp = Date.now();
+        
+        addTechnicalLog('SYNC', 'SUCCESS');
+
+        // Estoque crítico será verificado quando o módulo de produtos for carregado
+        // via DataClient para não impactar inicialização
+        hasCriticalStock = false;
+        addSyncTrace('loadAllData', 'SUCCESS', caller);
+        return true;
+    } catch (error) {
+        addTechnicalLog('SYNC', 'ERROR', error.toString());
+        console.error('Error loading data:', error);
+        addSyncTrace('loadAllData', 'ERROR', error.toString());
+        if (!silent) showToast("Erro ao sincronizar dados.");
+        return false;
+    } finally {
+        isAppLoading = false;
+        appData.isLoading = false;
+        addSyncTrace('loadAllData', 'FINALLY', `caller=${caller} screen=${currentScreen}`);
+        
+        // Anti-Blink: Não atualiza a UI se for silêncioso ou se estiver no login
+        if (!silent && currentScreen === 'menu') {
+            renderMenu();
+        }
+    }
+}
+
+/**
+ * Função crítica para garantir que os produtos foram carregados via DataClient
+ * se ainda não estiverem no appData.
+ */
+function hydrateProdutosForSearch(products) {
+    return (Array.isArray(products) ? products : []).map(p => {
+        const searchableTerms = [
+            p.descricao_base || p.descricao || "",
+            p.descricao_completa || "",
+            p.marca || p.marque || "",
+            p.categoria || "",
+            p.subcategoria || "",
+            p.ean || "",
+            p.sku_fornecedor || p.sku || "",
+            p.id_interno || p.id || "",
+            (p.id_interno || p.id || "").toString().replace(/[-.]/g, '')
+        ];
+
+        const attrs = safeParseAtributos(p.atributos);
+        attrs.forEach(a => {
+            searchableTerms.push(a.nome || "");
+            searchableTerms.push(a.valor || "");
+        });
+
+        return {
+            ...p,
+            _dBaseNorm: normalizeText(p.descricao_base || p.descricao || ""),
+            _dFullNorm: normalizeText(p.descricao_completa || ""),
+            _brandCatSubNorm: normalizeText(`${p.marca || ""} ${p.categoria || ""} ${p.subcategoria || ""}`),
+            _searchIndex: searchableTerms.map(normalizeProductSearchTerm).join(" ")
+        };
+    });
+}
+
+function useEmergencyProductsFallback(reason) {
+    if (!emergencyProductsCache.length) return false;
+    console.warn(`[DATA] Usando fallback emergencial de produtos em cache. Motivo: ${reason}`);
+    appData.products = hydrateProdutosForSearch(emergencyProductsCache);
+    showToast("Supabase indisponivel. Usando catalogo local temporario.", "warning");
+    return true;
+}
+
+async function ensureProdutosLoaded(force = false) {
+    const previousProducts = Array.isArray(appData.products) ? appData.products : [];
+
+    try {
+        if (window.supabaseClientReady) {
+            await withTimeout(window.supabaseClientReady, BOOT_CONFIG.TIMEOUT_MS, 'supabaseClientReady produtos');
+        }
+
+        const start = performance.now();
+        const data = await window.DataClient.loadModule('produtos', true);
+
+        if (data && data.products && data.products.length > 0) {
+            console.log(`[PERF] Produtos carregados do SUPABASE em ${Math.round(performance.now() - start)}ms`);
+            console.log('[SEP] refresh supabase ok', { total: data.products.length });
+
+            const indexStart = performance.now();
+            appData.products = hydrateProdutosForSearch(data.products);
+            appData.estoque = data.estoque;
+
+            console.log(`[PERF] Indice de busca criado para ${appData.products.length} produtos em ${Math.round(performance.now() - indexStart)}ms`);
+            console.log('[SEP] total produtos carregados', appData.products.length);
+            return true;
+        }
+
+        console.error('[DATA] ERRO: Catalogo retornou vazio ou invalido do Supabase');
+        if (previousProducts.length > 0) {
+            console.warn('[SEP] refresh supabase erro', { reason: 'retorno vazio', fallback: previousProducts.length });
+            appData.products = previousProducts;
+            return true;
+        }
+        if (useEmergencyProductsFallback('retorno vazio do Supabase')) return true;
+        showToast('Catalogo vazio. Verifique o Supabase.', 'error');
+        return false;
+    } catch (err) {
+        console.error('[DATA] ERRO FATAL ao carregar produtos:', err.message);
+        console.warn('[SEP] refresh supabase erro', {
+            message: err?.message,
+            details: err?.details,
+            hint: err?.hint,
+            code: err?.code,
+            fallback: previousProducts.length
+        });
+        if (previousProducts.length > 0) {
+            appData.products = previousProducts;
+            return true;
+        }
+        if (useEmergencyProductsFallback(err.message)) return true;
+        showToast('Erro ao carregar Supabase: ' + err.message, 'error');
+        return false;
+    }
+}
+/**
+ * Garante que os canais de envio foram carregados do Supabase.
+ * [CANAIS DEBUG]
+ */
+async function ensureCanaisLoaded(force = false) {
+    console.log('[CANAIS DEBUG] ensureCanaisLoaded chamado, force =', force);
+    console.log('[CANAIS DEBUG] cache atual appData.channels =', appData.channels ? appData.channels.length : 'undefined');
+
+    // Se já temos canais em cache e não é forçado, usar cache
+    if (!force && appData.channels && appData.channels.length > 0) {
+        console.log(`[CANAIS DEBUG] Usando ${appData.channels.length} canais do cache appData`);
+        return true;
+    }
+    
+    try {
+        console.log('[CANAIS DEBUG] supabase client existe?', !!window.supabaseClient);
+        console.log('[CANAIS DEBUG] buscando tabela canais_envio via DataClient...');
+        
+        // Sempre forçar refresh para canais (evitar cache vazio)
+        const data = await window.DataClient.loadModule('channels', true);
+        
+        console.log('[CANAIS DEBUG] resposta DataClient.loadModule:', data);
+        
+        if (data && data.channels && data.channels.length > 0) {
+            appData.channels = data.channels;
+            console.log(`[CANAIS DEBUG] quantidade retornada: ${appData.channels.length}`);
+            console.log(`[CANAIS DEBUG] canais retornados:`, appData.channels.map(c => c.nome || c.col_B));
+            return true;
+        }
+        
+        // Fallback: tentar busca direta no Supabase se DataClient falhou
+        console.warn('[CANAIS DEBUG] DataClient retornou vazio, tentando busca direta...');
+        if (window.supabaseClient) {
+            const { data: directData, error } = await window.supabaseClient
+                .from('canais_envio')
+                .select('*')
+                .eq('ativo', true)
+                .order('nome', { ascending: true });
+            
+            if (error) {
+                console.error('[CANAIS DEBUG] erro supabase direto:', error);
+            } else if (directData && directData.length > 0) {
+                appData.channels = directData;
+                console.log(`[CANAIS DEBUG] busca direta OK: ${directData.length} canais`);
+                console.log('[CANAIS DEBUG] canais retornados:', directData.map(c => c.nome));
+                return true;
+            } else {
+                console.warn('[CANAIS DEBUG] busca direta retornou 0 canais');
+            }
+        }
+        
+        console.warn('[CANAIS DEBUG] Nenhum canal retornado do Supabase');
+        appData.channels = appData.channels || [];
+        return false;
+    } catch (error) {
+        console.error('[CANAIS DEBUG] Erro ao carregar canais:', error);
+        appData.channels = appData.channels || [];
+        return false;
+    }
+}
+
+
+
+
+function renderSplash() {
+    app.innerHTML = `
+                <div style="background: var(--bg); min-height: 100vh; width: 100%;"></div>
+            `;
+}
+
+function renderLoading(progress = 0, message = "Sincronizando Dados") {
+    currentScreen = 'loading';
+    app.innerHTML = `
+                <div class="login-screen fade-in" style="justify-content: center; background: var(--bg);">
+                    <div class="login-logo-container" style="min-height: auto; margin-bottom: 40px; display: flex; justify-content: center; width: 100%;">
+                        <img src="${LOGO_URL}" alt="DY AutoParts" class="login-logo-img dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_DARK_BG}';">
+                    </div>
+                    <div style="text-align: center; width: 100%; max-width: 320px; padding: 0 20px;">
+                        <p style="margin-bottom: 20px; font-weight: 700; color: var(--muted); letter-spacing: 0.2em; font-size: 0.7rem; text-transform: uppercase;">${message}</p>
+                        <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div id="loading-bar" style="width: ${progress}%; height: 100%; background: var(--primary); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px var(--primary);"></div>
+                        </section>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.6rem; color: var(--muted); font-weight: 600;">CARREGANDO...</span>
+                            <span id="loading-percent" style="font-size: 0.8rem; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums;">${progress}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+}
+
+function updateLoadingProgress(progress) {
+    const bar = document.getElementById('loading-bar');
+    const percent = document.getElementById('loading-percent');
+    if (bar) bar.style.width = `${progress}%`;
+    if (percent) percent.innerText = `${progress}%`;
+}
+
+function showToast(message) {
+    clearTimeout(toastTimeout);
+    toast.textContent = message;
+    toast.classList.add('show');
+    toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+function playBeep(type) {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        if (type === 'success' || type === true) {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.12);
+        } else if (type === 'warning') {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+        } else if (type === 'error' || type === false) {
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(220, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        }
+    } catch (err) {
+        console.warn('[AUDIO] feedback falhou', err);
+    }
+}
+
+
+let isSyncingFlowActive = false;
+
+// SYNC WATCHDOG - garante que a flag nunca fique travada permanentemente
+setInterval(() => {
+    if (isSyncingFlowActive) {
+        console.warn('[SYNC WATCHDOG] resetando sync travado');
+        isSyncingFlowActive = false;
+    }
+}, 3000);
+
+function showSyncLoader() {
+    // Silent mode - UI screen removed per User request
+}
+
+function hideSyncLoader() {
+    // Silent mode - UI screen removed per User request
+}
+
+async function setUser(userName, userId, userProfile) {
+    console.log('[LOGIN DEBUG] usuário clicado');
+    console.log(`[LOGIN DEBUG] isSyncingFlowActive antes: ${isSyncingFlowActive}`);
+
+    if (isSyncingFlowActive) {
+        console.log('[LOGIN DEBUG] resetando bloqueio');
+        isSyncingFlowActive = false;
+    }
+
+    console.log('[LOGIN DEBUG] setUser permitido');
+    isSyncingFlowActive = true;
+
+    try {
+        addSyncTrace('setUser', 'START', `user=${userName} profile=${userProfile}`);
+
+        localStorage.setItem('currentUser', userName);
+        localStorage.setItem('currentUserId', userId || '');
+        localStorage.setItem('currentUserProfile', userProfile || 'Operador');
+
+        // Entrada INSTANTANEA no menu
+        renderMenu();
+
+        // Sincronização silenciosa em background - COORDENADA
+        if (navigator.onLine) {
+            addTechnicalLog('LOGIN', 'SILENT_SYNC_START', userName);
+            console.log("[SYNC] setUser coordenando sincronização inicial...");
+            addSyncTrace('setUser', 'CALL', 'processSyncQueue + loadAllData');
+            processSyncQueue('setUser');
+            loadAllData(true, 'setUser');
+        }
+
+        addSyncTrace('setUser', 'COMPLETE', userName);
+    } finally {
+        isSyncingFlowActive = false;
+    }
+}
+function logout() {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentUserId');
+    localStorage.removeItem('currentUserProfile');
+    localStorage.removeItem('draft_pick_session');
+    
+    // Limpar estados de memória
+    currentPackSession = null;
+    currentSessionItems = [];
+    
+    renderLogin();
+}
+
+/**
+ * Alterna visibilidade do custo nos detalhes do produto
+ */
+function toggleCostVisibility() {
+    const isVisible = localStorage.getItem('cost_visible') === 'true';
+    localStorage.setItem('cost_visible', !isVisible);
+    
+    // Se o elemento existir na tela atual, atualiza na hora sem re-renderizar tudo
+    const costField = document.getElementById('product-cost-field');
+    const toggleIcon = document.getElementById('cost-toggle-icon');
+    
+    if (costField && toggleIcon) {
+        if (!isVisible) {
+            // Estava oculto, vai mostrar
+            costField.classList.remove('cost-masked');
+            toggleIcon.innerText = 'visibility';
+            // Precisamos do dado do produto, mas como não temos aqui, o fallback é re-render
+            const activeEan = document.querySelector('[data-ean]')?.dataset.ean;
+            if (activeEan) {
+                const p = appData.products.find(x => x.ean === activeEan || x.id_interno === activeEan);
+                if (p) {
+                   costField.innerText = ((p.preco_custo || '0,00').toString().includes('R$') ? '' : 'R$ ') + (p.preco_custo || '0,00');
+                }
+            } else {
+                console.warn("Contexto do produto perdido para exibição do custo.");
+            }
+        } else {
+            // Estava visível, vai ocultar
+            costField.classList.add('cost-masked');
+            toggleIcon.innerText = 'visibility_off';
+            costField.innerText = 'R$ ------';
+        }
+    }
+}
+
+// Status Handlers moved to global section early in file
+
+
+window.loginSoundPaths = [
+    '/assets/audio/som1.mp3',
+    '/assets/audio/som2.mp3',
+    '/assets/audio/som3.mp3',
+    '/assets/audio/som4.mp3'
+];
+window.loginSounds = [];
+
+window.playLoginSound = function(index) {
+  const soundIndex = index % window.loginSoundPaths.length;
+  try {
+    if (!window.loginSounds[soundIndex]) {
+      window.loginSounds[soundIndex] = new Audio(window.loginSoundPaths[soundIndex]);
+    }
+    const sound = window.loginSounds[soundIndex];
+    if (!sound) return;
+
+    sound.pause();
+    sound.currentTime = 0;
+    sound.volume = 0.6;
+
+    sound.play().catch(() => {});
+
+    setTimeout(() => {
+      sound.pause();
+      sound.currentTime = 0;
+    }, 1000);
+  } catch (e) {
+    // Audio not available, silently ignore
+  }
+};
+
+function removeLegacyLoginFullscreenControls() {
+    if (!document.getElementById('login-screen') && currentScreen !== 'login') return;
+
+    document
+        .querySelectorAll('.top-bar-minimal, .btn-exit-minimal, .btn-exit-floating, #exit-fullscreen-float, #fullscreen-controls')
+        .forEach((el) => el.remove());
+
+    document.querySelectorAll('button, [role="button"], div').forEach((el) => {
+        if (!el || el.id === 'exit-fullscreen-login' || el.id === 'btn-fullscreen-login' || el.id === 'btn-theme-login' || el.id === 'btn-theme-light-login' || el.id === 'btn-theme-dark-login') return;
+        if (el.closest('#exit-fullscreen-login') || el.closest('#btn-fullscreen-login') || el.closest('#btn-theme-login') || el.closest('#btn-theme-light-login') || el.closest('#btn-theme-dark-login')) return;
+
+        const text = (el.textContent || '').trim().toLowerCase();
+        const signature = `${el.id || ''} ${el.className || ''} ${text}`;
+        const looksLikeClose = text === 'close' || text === 'x';
+        const looksLikeLegacyFullscreen = /(fullscreen|exit|floating|minimal)/i.test(signature);
+        if (!looksLikeClose && !looksLikeLegacyFullscreen) return;
+
+        const rect = el.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        const isSmallFloatingControl =
+            rect.width >= 30 &&
+            rect.width <= 90 &&
+            rect.height >= 30 &&
+            rect.height <= 90 &&
+            rect.top <= Math.max(180, window.innerHeight * 0.28);
+
+        if (!isSmallFloatingControl) return;
+
+        const style = window.getComputedStyle(el);
+        const canBeOverlay = style.position === 'fixed' || style.position === 'absolute' || Number(style.zIndex) >= 1000;
+        if (canBeOverlay) el.remove();
+    });
+}
+
+function renderLogin(push = true) {
+    currentScreen = 'login';
+    document.body.classList.add('login-active');
+    removeLegacyLoginFullscreenControls();
+    if (push) pushNav('login');
+    const fallbackUsers = [
+        { id: 'f1', nome: "Alexandre Kawai", perfil: 'Operador' },
+        { id: 'f2', nome: "Daniel Yanagihara", perfil: 'Operador' },
+        { id: 'f3', nome: "Fabio Kanashiro", perfil: 'Operador' },
+        { id: 'f4', nome: "Rafael Costa", perfil: 'Operador' }
+    ];
+
+    let usersToRender = [];
+
+    if (appData.users && appData.users.length > 0) {
+        usersToRender = appData.users
+            .map(u => ({
+                id: u.usuario_id || u.col_A || '',
+                nome: u.nome || u.col_B || '',
+                perfil: u.perfil || u.col_C || '',
+                avatar_url: u.avatar_url || ''
+            }))
+            .filter(u => u.nome.trim() !== '');
+    }
+
+    if (usersToRender.length === 0) {
+        usersToRender = fallbackUsers;
+    }
+
+    // Função para extrair iniciais (primeira letra do nome + primeira letra do último sobrenome)
+    const getUserInitials = (name) => {
+        if (!name) return '?';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length === 0) return '?';
+        if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+        const first = parts[0].charAt(0);
+        const last = parts[parts.length - 1].charAt(0);
+        return (first + last).toUpperCase();
+    };
+
+    // Stable color function (Deterministic based on ID or Name)
+    const getUserColorClass = (id, name) => {
+        const seed = id || name || 'default';
+        let hash = 0;
+        for (let i = 0; i < seed.length; i++) {
+            hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return `avatar-color-${Math.abs(hash + seed.length) % 6}`;
+    };
+
+    // Fallback visual do login acompanha o tema, sem tocar no fluxo operacional.
+    const backgroundStyleValue = getLoginBackgroundStyleValue();
+    const backgroundStyle = `style="background: ${backgroundStyleValue};"`;
+    
+    const userGridHTML = usersToRender.map((u, index) => {
+        const initials = getUserInitials(u.nome);
+        const nameParts = (u.nome || '').trim().split(/\s+/).filter(Boolean);
+        const formattedName = nameParts.length > 1
+            ? `${nameParts.slice(0, -1).join(' ')}<br>${nameParts[nameParts.length - 1]}`
+            : (u.nome || '');
+        
+        return `
+                <div class="user-card login-user-card" onclick="window.playLoginSound(${index}); setUser('${u.nome}', '${u.id}', '${u.perfil}')">
+                    <div class="user-avatar-box">
+                        <span class="user-initials">${initials}</span>
+                    </div>
+                    <span class="name" style="display: block;">${formattedName}</span>
+                </div>
+            `;
+    }).join('');
+
+    const loginHTML = `
+        <div class="login-screen fade-in" id="login-screen" ${backgroundStyle}>
+            <div class="top-hover-zone">
+                <button id="btn-theme-light-login" onclick="setAppTheme('light')" class="btn-floating-app btn-theme-login login-theme-toggle" data-login-theme="light" type="button" aria-label="Tema claro" aria-pressed="false">
+                    <img src="/assets/icons/sun.svg" alt="" aria-hidden="true">
+                </button>
+                <button id="btn-theme-dark-login" onclick="setAppTheme('dark')" class="btn-floating-app btn-theme-login login-theme-toggle" data-login-theme="dark" type="button" aria-label="Tema escuro" aria-pressed="false">
+                    <img src="/assets/icons/moon.svg" alt="" aria-hidden="true">
+                </button>
+                <button id="btn-fullscreen-login" onclick="toggleFullscreen()" class="btn-floating-app btn-tela-cheia" type="button" aria-label="Tela cheia">
+                    <img src="/assets/icons/fullscreen.svg" alt="" aria-hidden="true">
+                </button>
+            </div>
+            <img src="${getLoginLogoSrc()}" alt="DY AutoParts" class="login-logo dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_DARK_BG}';">
+            <div class="user-grid login-user-grid">
+                ${userGridHTML}
+            </div>
+            
+        </div>
+    `;
+
+    const appContainer = document.getElementById('app');
+    if (!appContainer) return;
+
+    // Se já estiver na tela de login, apenas atualiza a grid se houver mudanças reais para evitar flicker
+    const existingScreen = appContainer.querySelector('.login-screen');
+    if (existingScreen) {
+        existingScreen.style.background = backgroundStyleValue;
+        existingScreen.style.backgroundSize = 'cover';
+        existingScreen.style.backgroundPosition = 'center';
+        existingScreen.style.backgroundRepeat = 'no-repeat';
+
+        const gridContainer = existingScreen.querySelector('.user-grid');
+        if (gridContainer) {
+            const newContent = userGridHTML;
+            if (gridContainer.innerHTML.trim().length !== newContent.trim().length) {
+                gridContainer.innerHTML = newContent;
+            }
+            if (!existingScreen.querySelector('.login-user-hint')) {
+                existingScreen.insertAdjacentHTML('beforeend', `
+                    <div class="login-user-hint" aria-label="Selecione seu usuário">
+                        <span class="material-symbols-rounded">person</span>
+                        <span>SELECIONE SEU USUARIO</span>
+                    </div>
+                `);
+            }
+            removeLegacyLoginFullscreenControls();
+            updateThemeControlsUI();
+            setTimeout(removeLegacyLoginFullscreenControls, 0);
+            return;
+        }
+    }
+
+    appContainer.innerHTML = loginHTML;
+    removeLegacyLoginFullscreenControls();
+    updateThemeControlsUI();
+    setTimeout(removeLegacyLoginFullscreenControls, 0);
+}
+
+function getNextInternalId() {
+    if (!appData.products || appData.products.length === 0) return "DY-000.001";
+
+    let maxNum = 0;
+    let prefix = "DY-000.";
+
+    appData.products.forEach(p => {
+        const idVal = String(p.id_interno || p.col_a || p.col_A || p.col_0 || "");
+        if (idVal && idVal.trim() !== "") {
+            // Extract numeric part. 
+            // For "DY-000.197", we want 197.
+            // We look for the last sequence of digits.
+            const match = idVal.match(/(\d+)$/);
+            if (match) {
+                const num = parseInt(match[1]);
+                if (!isNaN(num) && num > maxNum) {
+                    maxNum = num;
+                    // Update prefix based on what we found (everything before the number)
+                    prefix = idVal.substring(0, idVal.length - match[1].length);
+                }
+            }
+        }
+    });
+
+    const nextNum = maxNum + 1;
+    // Pad with at least 3 zeros if it was padded before
+    const paddedNum = nextNum.toString().padStart(3, '0');
+    return `${prefix}${paddedNum}`;
+}
+
+async function renderAlerts() {
+    const currentUser = localStorage.getItem('currentUser');
+    
+    await ensureProdutosLoaded();
+    
+    const criticalProducts = (appData.products || []).filter(p => {
+        if (!p.estoque_minimo || parseFloat(p.estoque_minimo) <= 0) return false;
+        const stock = parseFloat((p.estoque_atual || 0).toString().replace(',', '.'));
+        const min = parseFloat(p.estoque_minimo.toString().replace(',', '.'));
+        return stock <= min;
+    });
+    
+    let pendingCount = 0;
+    if (appData.pickSessions && appData.pickSessions.length > 0) {
+        pendingCount = appData.pickSessions.filter(s => s.status === 'pending' || s.status === 'open' || !s.status).length;
+    }
+    
+    const criticalCount = criticalProducts.length;
+    const totalAlerts = criticalCount + pendingCount;
+    
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            <main class="container">
+                <div class="sub-menu-header">
+                    <h2 style="font-size: 1.2rem; font-weight: 700;">ALERTAS OPERACIONAIS</h2>
+                    ${totalAlerts > 0 ? `<span style="background: #EF4444; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 700;">${totalAlerts}</span>` : ''}
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 24px;">
+                    <div class="menu-card" onclick="renderEstoqueAtual()" style="cursor: pointer;">
+                        <span class="material-symbols-rounded icon" style="font-size: 32px; color: #EF4444;">inventory</span>
+                        <div style="flex: 1;">
+                            <span class="label" style="font-size: 16px; font-weight: 700;">Estoque Crítico</span>
+                            <span style="display: block; font-size: 0.85rem; color: var(--muted);">Produtos abaixo do estoque mínimo</span>
+                        </div>
+                        ${criticalCount > 0 ? `<span style="background: #EF4444; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 700;">${criticalCount}</span>` : '<span class="material-symbols-rounded" style="color: #22c55e;">check_circle</span>'}
+                    </div>
+                    
+                    <div class="menu-card" onclick="renderPickMenu()" style="cursor: pointer;">
+                        <span class="material-symbols-rounded icon" style="font-size: 32px; color: #F59E0B;">conveyor_belt</span>
+                        <div style="flex: 1;">
+                            <span class="label" style="font-size: 16px; font-weight: 700;">Separações Pendentes</span>
+                            <span style="display: block; font-size: 0.85rem; color: var(--muted);">Filas de separação aguardando</span>
+                        </div>
+                        ${pendingCount > 0 ? `<span style="background: #F59E0B; color: black; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 700;">${pendingCount}</span>` : '<span class="material-symbols-rounded" style="color: #22c55e;">check_circle</span>'}
+                    </div>
+                    
+                    <div class="menu-card" style="opacity: 0.5; cursor: default;">
+                        <span class="material-symbols-rounded icon" style="font-size: 32px; color: #94A3B8;">local_shipping</span>
+                        <div style="flex: 1;">
+                            <span class="label" style="font-size: 16px; font-weight: 700;">Compras a Caminho</span>
+                            <span style="display: block; font-size: 0.85rem; color: var(--muted);">Pedidos de compra em trânsito</span>
+                        </div>
+                        <span style="background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">Em breve</span>
+                    </div>
+                </div>
+                
+                ${totalAlerts === 0 ? `
+                <div style="text-align: center; padding: 40px; background: var(--surface); border-radius: 20px; color: var(--muted); margin-top: 24px;">
+                    <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px; color: #22c55e;">check_circle</span>
+                    <p style="font-size: 1rem;">Nenhum alerta operacional.</p>
+                </div>
+                ` : ''}
+            </main>
+        </div>
+    `;
+}
+
+// ========================================================
+// CONFIGURACAO CENTRALIZADA DOS MÓDULOS DO MENU
+// Estrutura única: tipo = "principal" | "em_breve"
+// Preparado para migrar para tabela no Supabase
+// ========================================================
+const menuModulesConfig = [
+    { id: 'produtos', label: 'PRODUTOS', icon: 'produtos', order: 1, type: 'principal' },
+    { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 2, type: 'principal' },
+    { id: 'pick', label: 'SEPARA\u00C7\u00C3O (PICK)', icon: 'pick', order: 3, type: 'principal' },
+    { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
+    { id: 'movimentacoes', label: 'MOVIMENTOS', icon: 'movimentacoes', order: 5, type: 'principal' },
+    { id: 'inventario', label: 'INVENT\u00c1RIO', icon: 'inventario', order: 6, type: 'principal' },
+    { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
+    { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
+    { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
+    { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' }
+];
+
+const menu3DIcons = {
+    produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="18" y="22" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="28" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="33" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="38" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
+    kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M28 43 L33 49 L43 38" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+    pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+    movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
+    inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><rect x="18" y="41" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/></svg>',
+    dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
+    configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
+    nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#475569"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.6"/><rect x="20" y="39" width="12" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/><rect x="20" y="44" width="9" height="2.5" rx="1.25" fill="#fff" opacity="0.35"/></svg>',
+    compras: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M20 22 L22 18 H42 L44 22 V40 H20 Z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/><path d="M26 22 V18 M38 22 V18" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M26 31 L31 36 L38 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+    financeiro: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><circle cx="32" cy="32" r="14" stroke="#fff" stroke-width="2.5" fill="none"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">$</text></svg>',
+    financeiro_avencer: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 18 H42 C44 18 46 20 46 22 V46 H18 V22 C18 20 20 18 22 18 Z" fill="#fff" opacity="0.95"/><path d="M24 28 H40 M24 34 H36" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/><path d="M34 40 L38 44 L46 36" stroke="#F59E0B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    financeiro_vencidas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 16 L50 48 H14 Z" fill="#fff" opacity="0.95"/><path d="M32 27 V36" stroke="#EF4444" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="42" r="2.6" fill="#EF4444"/></svg>',
+    financeiro_pendentes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M20 20 H44 V46 H20 Z" fill="#fff" opacity="0.95"/><path d="M26 28 H38 M26 34 H38 M26 40 H34" stroke="#3B82F6" stroke-width="3" stroke-linecap="round"/></svg>',
+    financeiro_pagas_mes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M19 32 L28 41 L46 23" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="20" stroke="#fff" stroke-width="3" fill="none" opacity="0.35"/></svg>',
+    // Ícones dos Sub-módulos
+    busca: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><circle cx="28" cy="28" r="8" stroke="#fff" stroke-width="3" fill="none"/><line x1="34" y1="34" x2="42" y2="42" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
+    cadastrar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><line x1="32" y1="20" x2="32" y2="44" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line x1="20" y1="32" x2="44" y2="32" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>',
+    transferencia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M22 28 L30 20 L38 28 M30 20 V44" stroke="#fff" stroke-width="3" fill="none"/><path d="M42 36 L34 44 L26 36" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/></svg>',
+    ajuste: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 22 L42 42 M22 42 L42 22" stroke="#fff" stroke-width="3"/></svg>',
+    historico: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><circle cx="32" cy="32" r="12" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M32 24 V32 L38 36" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>',
+    fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="20" y="20" width="24" height="24" rx="2" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 26 H38 M26 32 H38 M26 38 H32" stroke="#fff" stroke-width="2" opacity="0.8"/></svg>',
+    pedido_compra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 24 H44 L40 40 H24 Z" stroke="#fff" stroke-width="3" fill="none"/><circle cx="26" cy="46" r="2.5" fill="#fff"/><circle cx="38" cy="46" r="2.5" fill="#fff"/></svg>',
+    transporte: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="26" width="20" height="14" rx="1" fill="#fff" opacity="0.9"/><rect x="38" y="30" width="8" height="10" rx="1" fill="#fff" opacity="0.7"/></svg>',
+    abertas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><circle cx="32" cy="32" r="10" stroke="#fff" stroke-width="3" fill="none" opacity="0.5"/><path d="M32 26 V32 L36 36" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+    garantia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 20 L32 36" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="43" r="2.5" fill="#fff"/></svg>',
+    xml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M22 22 H42 V42 H22 Z" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 28 L32 34 L38 28" stroke="#fff" stroke-width="3" fill="none"/></svg>',
+    manual: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M22 22 L42 42 M42 22 L22 42" stroke="#fff" stroke-width="3"/></svg>',
+    inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
+    inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
+    inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>'
+};
+
+
+const channel3DIcons = {
+    flex: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M34 16 L22 36 H32 L30 48 L42 28 H32 Z" fill="#fff" opacity="0.95"/></svg>',
+    shopee: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EA580C"/><path d="M22 26 C22 18, 42 18, 42 26" stroke="#fff" stroke-width="3" fill="none" opacity="0.9"/><rect x="18" y="26" width="28" height="22" rx="3" fill="#fff" opacity="0.95"/><circle cx="26" cy="34" r="2.5" fill="#EA580C"/><circle cx="38" cy="34" r="2.5" fill="#EA580C"/></svg>',
+    ml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M22 30 H42 M22 38 H34" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M24 22 L18 30 V44 H46 V30 L40 22 Z" stroke="#fff" stroke-width="3" fill="none" stroke-linejoin="round"/></svg>',
+    magalu: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><rect x="20" y="26" width="24" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M20 26 L32 18 L44 26" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M26 18 V26 M38 18 V26" stroke="#fff" stroke-width="3"/></svg>',
+    correios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EAB308"/><rect x="16" y="22" width="32" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M16 22 L32 32 L48 22" stroke="#EAB308" stroke-width="3" fill="none"/></svg>',
+    ultra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M26 44 L38 44 L32 20 Z" fill="#fff" opacity="0.95"/><path d="M32 20 Q44 24 38 44 Q20 24 32 20" fill="#fff" opacity="0.8"/><circle cx="32" cy="34" r="3" fill="#DC2626"/></svg>',
+    full: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#16A34A"/><path d="M18 32 H46 M32 18 V46" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.4"/><path d="M34 20 L24 34 H32 L30 44 L40 30 H32 Z" fill="#fff" opacity="0.95"/></svg>',
+    pdv: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><path d="M18 24 L22 18 H42 L46 24 V28 H18 Z" fill="#fff" opacity="0.95"/><rect x="20" y="30" width="24" height="16" fill="#fff" opacity="0.8"/><path d="M32 30 V46" stroke="#64748B" stroke-width="2"/></svg>'
+};
+
+
+// Função para obter os itens do menu baseados na configuração centralizada
+function getMenuItemsFromConfig() {
+    const modoRapidoAtivo = isModoRapidoAtivo();
+    
+    // Aplicar lógica baseada na configuração (todos os módulos sempre visíveis)
+    return menuModulesConfig
+        .sort((a, b) => a.order - b.order)
+        .map(module => {
+            let isDisabled = false;
+            let badge = null;
+            
+            // Lógica especial para PACK (desativado no modo rápido)
+            if (module.id === 'pack' && modoRapidoAtivo) {
+                isDisabled = true;
+                badge = 'Desativado';
+            } else if (module.type === 'em_breve') {
+                badge = 'EM BREVE';
+            }
+            
+            return {
+                id: module.id,
+                label: module.label,
+                icon: module.icon,
+                primary: module.order <= 2,
+                disabled: isDisabled,
+                badge: badge
+            };
+        });
+}
+
+// Rota mapeada para cada módulo
+const menuRoutes = {
+    dashboard: 'renderAlerts()',
+    produtos: 'renderProductSubMenu()',
+    pick: 'renderPickMenu()',
+    pack: 'renderPackMenu()',
+    compras: 'renderComprasSubMenu()',
+    movimentacoes: 'renderMovimentacoesSubMenu()',
+    inventario: 'renderInventarioSubMenu()',
+    nf: 'renderNFSubMenu()',
+    financeiro: 'renderFinanceiroSubMenu()',
+    configuracoes: 'renderConfigSubMenu()',
+    kit_lampada: 'renderGuiaLampada()',
+    ajuste: 'renderAjusteEstoqueScreen()'
+};
+
+function getQuickActionsHTML(modoRapidoAtivo) {
+    const fastTone = modoRapidoAtivo ? 'is-on' : 'is-off';
+    const fastModeIcon = modoRapidoAtivo ? 'assets/icons/modo-rapido-on.png' : 'assets/icons/modo-rapido-off.png';
+    const fastModeAlt = modoRapidoAtivo ? 'Modo rápido ativado' : 'Modo rápido desativado';
+    return `
+        <div id="quick-actions-overlay" class="quick-actions-overlay hidden" onclick="toggleQuickActions()" aria-hidden="true"></div>
+        <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="Ações rápidas">
+            <span class="quick-sheet-grabber" aria-hidden="true"></span>
+            <button class="quick-action-item quick-action-card quick-action-fast ${fastTone}" type="button" role="menuitem" onclick="quickActionToggleFastMode()">
+                <span class="quick-action-icon quick-action-icon-fast material-symbols-rounded" aria-hidden="true">bolt</span>
+                <span class="quick-action-label">MODO RÁPIDO</span>
+                <span class="quick-action-toggle ${modoRapidoAtivo ? 'on' : 'off'}" aria-hidden="true">
+                    <span></span>
+                </span>
+            </button>
+            <button class="quick-action-item quick-action-card quick-action-labels" type="button" role="menuitem" onclick="quickActionGerarEtiquetas()">
+                <span class="quick-action-icon quick-action-icon-labels material-symbols-rounded">barcode_scanner</span>
+                <span class="quick-action-label">GERAR ETIQUETAS</span>
+                <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            </button>
+            <button class="quick-action-item quick-action-card quick-action-quote" type="button" role="menuitem" onclick="quickActionOrcamentoCliente()">
+                <span class="quick-action-icon quick-action-icon-quote material-symbols-rounded">request_quote</span>
+                <span class="quick-action-label">ORÇAMENTO CLIENTE</span>
+                <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            </button>
+        </div>
+        
+        <button class="quick-action-fab fab-icon-btn fab-funcoes ${modoRapidoAtivo ? 'fast-mode' : ''}" type="button" onclick="toggleQuickActions()" aria-label="Funções rápidas" title="Funções rápidas">
+            <img id="quick-action-icon" class="quick-action-mode-img quick-action-fab-img" src="${fastModeIcon}" alt="${fastModeAlt}" decoding="async">
+        </button>
+    `;
+}
+
+function renderMenu(push = true) {
+    stopScanner();
+    currentScreen = 'menu';
+    document.body.classList.remove('login-active');
+    if (push) pushNav('menu');
+    const currentUser = localStorage.getItem('currentUser');
+    if (!currentUser) {
+        document.body.classList.remove('menu-active');
+        renderLogin();
+        return;
+    }
+    document.body.classList.add('menu-active');
+
+    const modoRapidoAtivo = isModoRapidoAtivo();
+    // Usar configuração centralizada
+    const finalMenuItems = getMenuItemsFromConfig();
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in menu-screen">
+            ${getTopBarHTML(currentUser, null, 'menu')}
+            <main class="container">
+                        <div class="menu-grid">
+${finalMenuItems.map(item => {
+    const routeAction = menuRoutes[item.id] || `handleMenuClick('${item.label}')`;
+    return `
+                                <button class="menu-card mobile-nav-card ${item.disabled ? 'disabled' : ''}" type="button"
+                                     ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="runMenuAction('${routeAction.replace(/'/g, "\\'")}')" onkeydown="handleActionKey(event, '${routeAction.replace(/'/g, "\\'")}')"`}
+                                     aria-label="${item.label}">
+                                    ${item.badge ? `<span class="badge">${item.badge}</span>` : ''}
+                                    <span class="menu-icon-3d">${menu3DIcons[item.icon] || ''}</span>
+                                    <span class="label">${item.label}</span>
+                                </button>
+                            `;
+}).join('')}
+                        </div>
+                    </main>
+                    ${getQuickActionsHTML(modoRapidoAtivo)}
+                </div>
+    `;
+}
+
+async function renderDashboard() {
+    await renderAlerts();
+}
+
+async function renderEstoqueAtual() {
+    await ensureProdutosLoaded();
+    
+    console.log("[DIAGNOSTICO] renderEstoqueAtual iniciado.");
+    console.log(`[DIAGNOSTICO] Itens em appData.products: ${appData.products ? appData.products.length : 0}`);
+    console.log(`[DIAGNOSTICO] Itens em appData.estoque: ${appData.estoque ? appData.estoque.length : 0}`);
+    
+    const currentUser = localStorage.getItem('currentUser');
+
+    // Consolidate stock by id_interno
+    const consolidated = {};
+
+    // Use appData.estoque (mapped from ESTOQUE_ATUAL)
+    (appData.estoque || []).forEach(item => {
+        const id = (item.id_interno || item.col_a || '').toString();
+        if (!id) return;
+
+        if (!consolidated[id]) {
+            // Find product details for SKU and description
+            const product = appData.products.find(p => (p.id_interno || p.col_a || '').toString() === id);
+            consolidated[id] = {
+                id_interno: id,
+                sku: product ? (product.sku_fornecedor || product.col_c || '-') : '-',
+                descricao: product ? (product.descricao_base || product.nome || product.col_b) : (item.descricao || item.col_b || 'Sem Descrição'),
+                saldo_total: 0,
+                saldo_disponivel: 0,
+                saldo_reservado: 0,
+                saldo_em_transito: 0,
+                locations: []
+            };
+        }
+
+        const total = parseFloat((item.saldo_total || item.col_f || 0).toString().replace(',', '.'));
+        const disponivel = parseFloat((item.saldo_disponivel || item.col_c || 0).toString().replace(',', '.'));
+        const reservado = parseFloat((item.saldo_reservado || item.col_d || 0).toString().replace(',', '.'));
+        const transito = parseFloat((item.saldo_em_transito || item.col_e || 0).toString().replace(',', '.'));
+
+        consolidated[id].saldo_total += isNaN(total) ? 0 : total;
+        consolidated[id].saldo_disponivel += isNaN(disponivel) ? 0 : disponivel;
+        consolidated[id].saldo_reservado += isNaN(reservado) ? 0 : reservado;
+        consolidated[id].saldo_em_transito += isNaN(transito) ? 0 : transito;
+
+        const localName = item.local || item.col_b;
+        if (localName) {
+            consolidated[id].locations.push({
+                local: localName,
+                total: isNaN(total) ? 0 : total,
+                disponivel: isNaN(disponivel) ? 0 : disponivel
+            });
+        }
+    });
+
+    // Convert to array and sort
+    const stockList = Object.values(consolidated).sort((a, b) => a.descricao.localeCompare(b.descricao));
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE ATUAL</h2>
+                        </div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
+                            ${stockList.length === 0 ? `
+                                <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
+                                    <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">database</span>
+                                    <p style="color: var(--muted);">Nenhum estoque registrado.</p>
+                                </div>
+                            ` : stockList.map(item => {
+        return `
+                                    <div style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                            <div style="flex: 1; padding-right: 12px;">
+                                                <div style="font-weight: 800; color: white; font-size: 0.9rem; margin-bottom: 4px; line-height: 1.2;">${item.descricao}</div>
+                                                <div style="display: flex; gap: 8px;">
+                                                    <div style="font-size: 0.65rem; color: var(--muted); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">SKU: ${item.sku}</div>
+                                                    <div style="font-size: 0.65rem; color: var(--muted); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">ID: ${item.id_interno}</div>
+                                                </div>
+                                            </div>
+                                            <div style="text-align: right;">
+                                                <div style="font-size: 1.2rem; font-weight: 800; color: var(--primary);">${item.saldo_total}</div>
+                                                <div style="font-size: 0.55rem; color: var(--muted); text-transform: uppercase; font-weight: 700;">Total Geral</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                                            <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
+                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">Disponível</div>
+                                                <div style="font-size: 0.8rem; font-weight: 700; color: #22c55e;">${item.saldo_disponivel}</div>
+                                            </div>
+                                            <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
+                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">Reservado</div>
+                                                <div style="font-size: 0.8rem; font-weight: 700; color: #f59e0b;">${item.saldo_reservado}</div>
+                                            </div>
+                                            <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
+                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">Trânsito</div>
+                                                <div style="font-size: 0.8rem; font-weight: 700; color: #3b82f6;">${item.saldo_em_transito}</div>
+                                            </div>
+                                        </div>
+
+                                        ${item.locations.length > 0 ? `
+                                            <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;">
+                                                <div style="font-size: 0.55rem; color: var(--muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Locais:</div>
+                                                ${item.locations.map(loc => `
+                                                    <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); margin-bottom: 2px;">
+                                                        <span>${loc.local}</span>
+                                                        <span style="font-weight: 700; color: white;">${loc.total} <span style="font-size: 0.55rem; opacity: 0.6;">(Disp: ${loc.disponivel})</span></span>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `;
+    }).join('')}
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function renderModuleScreen(config) {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+    document.body.classList.remove('menu-active');
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, config.backFunc)}
+                    <main class="container">
+                        <div class="module-content">
+                            ${config.content}
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function getPlaceholderList(items, columns) {
+    if (!items || items.length === 0) {
+        return `
+                    <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
+                        <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">inventory_2</span>
+                        <p style="color: var(--muted);">Nenhum registro encontrado.</p>
+                    </div>
+                `;
+    }
+    return `
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${items.map(item => `
+                        <div style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item[columns[0]]}</div>
+                                <div style="font-size: 0.65rem; color: var(--muted);">${item[columns[1]] || ''}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 700; color: var(--primary); font-size: 0.85rem;">${item[columns[2]] || ''}</div>
+                                <div style="font-size: 0.6rem; color: var(--muted);">${item[columns[3]] || ''}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+}
+
+function getPlaceholderForm(fields) {
+    return `
+                <div class="form-grid" style="background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05);">
+                    ${fields.map(f => `
+                        <div class="input-group ${f.fullWidth ? 'full-width' : ''}">
+                            <label>${f.label}</label>
+                            ${f.type === 'select' ? `
+                                <select class="input-field" style="width: 100%; appearance: none;">
+                                    ${f.options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                                </select>
+                            ` : f.type === 'textarea' ? `
+                                <textarea class="input-field" style="min-height: 80px;" placeholder="${f.placeholder || ''}"></textarea>
+                            ` : `
+                                <input type="${f.type || 'text'}" class="input-field" placeholder="${f.placeholder || ''}">
+                            `}
+                        </div>
+                    `).join('')}
+                    <div style="grid-column: 1 / -1; display: flex; gap: 16px; margin-top: 24px;">
+                        <button class="btn-action" style="flex: 1; justify-content: center;" onclick="showToast('Dados salvos com sucesso!')">
+                            <span class="material-symbols-rounded">save</span>
+                            Salvar Registro
+                        </button>
+                    </div>
+                </div>
+            `;
+}
+
+function renderComprasSubMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    const primaryCards = [
+        {
+            label: 'PEDIDO DE COMPRA',
+            description: 'Crie e gerencie pedidos de compra para seus fornecedores.',
+            icon: 'compras',
+            onclick: 'renderPedidoCompraScreen()'
+        },
+        {
+            label: 'COTAÇÃO',
+            description: 'Compare preços e condições entre fornecedores antes de comprar.',
+            icon: 'pedido_compra',
+            onclick: 'renderCotacaoComprasScreen()'
+        },
+        {
+            label: 'FORNECEDORES',
+            description: 'Cadastre e gerencie seus fornecedores e informações comerciais.',
+            icon: 'fornecedores',
+            onclick: 'renderFornecedoresScreen()'
+        },
+        {
+            label: 'PEDIDOS EM TRÂNSITO',
+            description: 'Acompanhe pedidos que já foram despachados pelos fornecedores.',
+            icon: 'transporte',
+            onclick: 'renderPedidosTransporteScreen()'
+        },
+        {
+            label: 'HISTÓRICO DE COMPRAS',
+            description: 'Consulte histórico de compras, preços e entradas de mercadorias.',
+            icon: 'historico',
+            onclick: 'renderHistoricoComprasScreen()'
+        }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal compras-screen module-screen standard-card-menu-screen compras-standard-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('compras')}
+            <main class="container">
+                <div class="standard-module-card-grid compras-standard-grid">
+                    ${primaryCards.map(card => `
+                        <button type="button" class="standard-module-card" onclick="${card.onclick}">
+                            <span class="standard-module-card-icon">${menu3DIcons[card.icon] || ''}</span>
+                            <span class="standard-module-card-copy">
+                                <strong>${card.label}</strong>
+                                <small>${card.description}</small>
+                            </span>
+                        </button>
+                    `).join('')}
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+
+function renderComprasShell(title, subtitle, contentHTML) {
+    const currentUser = localStorage.getItem('currentUser');
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal compras-screen module-screen">
+            ${getTopBarHTML(currentUser, 'renderComprasSubMenu()')}
+            ${getModuleSidebarHTML('compras')}
+            <main class="container compras-workspace compras-detail-workspace">
+                <header class="compras-header compras-detail-header">
+                    <div class="compras-header-icon">${menu3DIcons.compras || ''}</div>
+                    <div>
+                        <p class="compras-kicker">COMPRAS</p>
+                        <h1>${title}</h1>
+                        <span>${subtitle}</span>
+                    </div>
+                </header>
+                ${contentHTML}
+            </main>
+        </div>
+    `;
+}
+
+async function loadFornecedoresCompras() {
+    const client = window.supabaseClient;
+    if (!client) {
+        console.warn('[FORNECEDORES] Supabase indisponível para carregar fornecedores.');
+        return [];
+    }
+
+    const { data, error } = await client
+        .from('fornecedores')
+        .select('*')
+        .order('razao_social', { ascending: true });
+
+    if (error) {
+        console.error('[FORNECEDORES] erro ao carregar fornecedores', error);
+        showToast('Erro ao carregar fornecedores. Verifique a conexão com o Supabase.', 'error');
+        return [];
+    }
+
+    return data || [];
+}
+
+function getFornecedorDisplayName(fornecedor) {
+    return fornecedor?.razao_social || fornecedor?.nome_fantasia || fornecedor?.cnpj || 'Fornecedor sem nome';
+}
+
+function filterFornecedoresCompras(fornecedores = [], termo = '') {
+    const query = String(termo || '').trim().toLowerCase();
+    if (!query) return fornecedores;
+
+    return fornecedores.filter(fornecedor => {
+        const haystack = [
+            fornecedor.razao_social,
+            fornecedor.nome_fantasia,
+            fornecedor.cnpj
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+    });
+}
+
+function renderFornecedoresComprasList(fornecedores = []) {
+    const list = document.getElementById('fornecedores-compras-list');
+    if (!list) return;
+
+    if (!fornecedores.length) {
+        list.innerHTML = `
+            <div class="compras-empty-state fornecedores-empty-state">
+                <span class="material-symbols-rounded">domain_disabled</span>
+                <strong>Nenhum fornecedor encontrado</strong>
+                <p>Fornecedores importados pela Entrada NF aparecerão aqui automaticamente.</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = fornecedores.map(fornecedor => {
+        const nome = getFornecedorDisplayName(fornecedor);
+        const cidadeUf = [fornecedor.cidade, fornecedor.estado || fornecedor.uf].filter(Boolean).join(' / ');
+        const contato = [fornecedor.telefone, fornecedor.email].filter(Boolean).join(' • ');
+
+        return `
+            <article class="fornecedor-card">
+                <div class="fornecedor-card-icon">
+                    <span class="material-symbols-rounded">business</span>
+                </div>
+                <div class="fornecedor-card-main">
+                    <div class="fornecedor-card-head">
+                        <div>
+                            <strong>${escapeKitAttribute(nome)}</strong>
+                            <small>${escapeKitAttribute(fornecedor.nome_fantasia && fornecedor.nome_fantasia !== nome ? fornecedor.nome_fantasia : fornecedor.cnpj || 'CNPJ não informado')}</small>
+                        </div>
+                        <span class="fornecedor-status-pill status-${escapeKitAttribute(fornecedor.status || 'ativo')}">${escapeKitAttribute(fornecedor.status || 'ativo')}</span>
+                    </div>
+                    <div class="fornecedor-card-meta">
+                        <span><b>CNPJ</b>${escapeKitAttribute(fornecedor.cnpj || '-')}</span>
+                        <span><b>Cidade</b>${escapeKitAttribute(cidadeUf || '-')}</span>
+                        <span><b>Contato</b>${escapeKitAttribute(contato || '-')}</span>
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function searchFornecedoresCompras(value) {
+    const fornecedores = window.comprasFornecedoresCache || [];
+    renderFornecedoresComprasList(filterFornecedoresCompras(fornecedores, value));
+}
+
+async function renderFornecedoresScreen() {
+    renderComprasShell('FORNECEDORES', 'Cadastro único usado por Entrada NF, Compras, Cotações e Financeiro.', `
+        <section class="compras-panel fornecedores-panel">
+            <div class="compras-toolbar">
+                <label class="compras-search-field">
+                    <span class="material-symbols-rounded">search</span>
+                    <input type="search" placeholder="Buscar por razão social, fantasia ou CNPJ..." aria-label="Buscar fornecedor" oninput="searchFornecedoresCompras(this.value)">
+                </label>
+                <button class="compras-primary-btn" type="button" onclick="showToast('Fornecedores novos são criados automaticamente pela Entrada NF ao importar XML.', 'info')">
+                    <span class="material-symbols-rounded">add_business</span>
+                    Novo Fornecedor
+                </button>
+            </div>
+            <div id="fornecedores-compras-list" class="fornecedores-list">
+                <div class="compras-empty-state fornecedores-loading-state">
+                    <span class="material-symbols-rounded">sync</span>
+                    <strong>Carregando fornecedores</strong>
+                    <p>Buscando o cadastro único no Supabase.</p>
+                </div>
+            </div>
+        </section>
+    `);
+
+    const fornecedores = await loadFornecedoresCompras();
+    window.comprasFornecedoresCache = fornecedores;
+    renderFornecedoresComprasList(fornecedores);
+}
+
+function renderPedidoCompraScreen() {
+    renderComprasShell('PEDIDO DE COMPRA', 'Rascunho visual para montar pedidos de compra.', `
+        <section class="compras-panel compras-order-panel">
+            <div class="compras-form-grid">
+                <label class="compras-field">
+                    <span>Fornecedor</span>
+                    <select aria-label="Selecionar fornecedor">
+                        <option>Selecionar fornecedor</option>
+                    </select>
+                </label>
+                <label class="compras-field">
+                    <span>Adicionar produtos</span>
+                    <input type="text" placeholder="Buscar produto por EAN, SKU ou nome">
+                </label>
+                <button class="compras-secondary-btn" type="button" onclick="showToast('Itens do pedido serão integrados em uma próxima fase.', 'info')">
+                    <span class="material-symbols-rounded">add</span>
+                    Adicionar
+                </button>
+            </div>
+            <div class="compras-list-placeholder">
+                <span class="material-symbols-rounded">inventory_2</span>
+                <strong>Lista de itens vazia</strong>
+                <p>Os produtos adicionados ao pedido aparecerão aqui.</p>
+            </div>
+            <div class="compras-summary-row">
+                <span>Total</span>
+                <strong>R$ 0,00</strong>
+                <button class="compras-primary-btn" type="button" onclick="showToast('Finalização visual preparada para fase futura.', 'info')">
+                    <span class="material-symbols-rounded">check</span>
+                    Finalizar
+                </button>
+            </div>
+        </section>
+    `);
+}
+
+function renderCotacaoComprasScreen() {
+    renderComprasShell('COTAÇÃO', 'Comparação de fornecedores preparada para fase futura.', `
+        <section class="compras-panel">
+            <div class="compras-empty-state">
+                <span class="material-symbols-rounded">request_quote</span>
+                <strong>Cotações em preparação</strong>
+                <p>Este espaço ficará reservado para comparar fornecedores, preços, prazos e condições.</p>
+            </div>
+        </section>
+    `);
+}
+
+function renderProdutosAbaixoMinimoComprasScreen() {
+    renderComprasShell('PRODUTOS ABAIXO DO MÍNIMO', 'Consulta visual de produtos abaixo do estoque mínimo.', `
+        <section class="compras-panel">
+            <div class="compras-empty-state">
+                <span class="material-symbols-rounded">production_quantity_limits</span>
+                <strong>Consulta de reposição</strong>
+                <p>Atalho visual reservado para produtos abaixo do mínimo. Nenhuma compra automática será gerada.</p>
+            </div>
+        </section>
+    `);
+}
+
+function renderPedidosTransporteScreen() {
+    renderComprasShell('PEDIDOS EM TRANSPORTE', 'Pedidos comprados que ainda não chegaram.', `
+        <section class="compras-panel">
+            <div class="compras-status-strip">
+                <div>
+                    <span>Em trânsito</span>
+                    <strong>0</strong>
+                </div>
+                <div>
+                    <span>Atrasados</span>
+                    <strong>0</strong>
+                </div>
+                <div>
+                    <span>Recebidos hoje</span>
+                    <strong>0</strong>
+                </div>
+                ${false ? `
+                <div class="inv-initial-note">
+                    <span class="material-symbols-rounded">info</span>
+                    <div>
+                        <strong>INVENTÁRIO INICIAL</strong>
+                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+            <div class="compras-empty-state">
+                <span class="material-symbols-rounded">local_shipping</span>
+                <strong>Nenhum pedido em transporte</strong>
+                <p>Futuramente, compras pendentes de recebimento serão acompanhadas aqui.</p>
+            </div>
+        </section>
+    `);
+}
+
+function renderHistoricoComprasScreen() {
+    renderComprasShell('HISTÓRICO DE COMPRAS', 'Consulta visual preparada para compras finalizadas.', `
+        <section class="compras-panel">
+            <div class="compras-toolbar compras-history-toolbar">
+                <label class="compras-search-field">
+                    <span class="material-symbols-rounded">search</span>
+                    <input type="search" placeholder="Buscar compra, fornecedor ou NF..." aria-label="Buscar histórico de compras">
+                </label>
+                <div class="compras-filter-row" aria-label="Filtros de histórico">
+                    <button type="button">Todos</button>
+                    <button type="button">Abertos</button>
+                    <button type="button">Finalizados</button>
+                </div>
+                ${false ? `
+                <div class="inv-initial-note">
+                    <span class="material-symbols-rounded">info</span>
+                    <div>
+                        <strong>INVENTÁRIO INICIAL</strong>
+                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+            <div class="compras-list-placeholder compras-table-empty">
+                <span class="material-symbols-rounded">history</span>
+                <strong>Nenhum histórico de compras</strong>
+                <p>As compras registradas aparecerão nesta área em formato de lista/tabela.</p>
+            </div>
+        </section>
+    `);
+}
+
+function handleModuleClick(item, backFunc) {
+    let content = '';
+    if (item.type === 'form') {
+        content = getPlaceholderForm(item.fields);
+    } else if (item.type === 'list') {
+        content = getPlaceholderList(item.items, item.cols);
+    } else {
+        content = `<div style="text-align: center; padding: 40px; color: var(--muted);">Funcionalidade em desenvolvimento para ${item.label}</div>`;
+    }
+
+    renderModuleScreen({
+        title: item.label,
+        backFunc: backFunc,
+        content: content
+    });
+}
+
+function renderMovimentacoesSubMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    const subItems = [
+        { id: 'transferencia', label: 'TRANSFERÊNCIA', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
+        { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo do ajuste.' },
+        { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolução ao fornecedor.' },
+        { id: 'historico_mov', label: 'HISTÓRICO MOVIMENTO', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar movimentações registradas, ajustes, transferências e garantias.' }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('movimentos')}
+            <main class="container">
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+function renderEnvioDefeitoForm() {
+    const currentUser = localStorage.getItem('currentUser');
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
+            ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+            <main class="container" style="display: flex; align-items: center; justify-content: center; height: calc(100vh - 80px);">
+                <div style="text-align: center; color: var(--muted);">
+                    <span class="material-symbols-rounded" style="font-size: 64px; margin-bottom: 20px; opacity: 0.5;">construction</span>
+                    <p>Formulário de Envio para Defeito em desenvolvimento.</p>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+const STOCK_LOCALS = ['TÉRREO', 'MOSTRUÁRIO', '1º ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE'];
+
+const MOVIMENTACAO_ORIGINS = [
+    { value: 'MANUAL', label: 'Manual' },
+    { value: 'PEDIDO', label: 'Pedido' },
+    { value: 'NOTA_FISCAL', label: 'Nota Fiscal' },
+    { value: 'INVENTARIO', label: 'Inventário' },
+    { value: 'CONFERENCIA', label: 'Conferência' },
+    { value: 'SEPARACAO', label: 'Separação' }
+];
+
+function renderMovimentacoes() {
+    const currentUser = localStorage.getItem('currentUser');
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+        </div>
+    `;
+}
+
+function renderMovimentacoesList(history) {
+    if (!history || history.length === 0) {
+        return `
+            <div style="text-align: center; padding: 40px; color: var(--muted);">
+                <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px;">inbox</span>
+                <p>Nenhum movimento encontrado</p>
+            </div>
+        `;
+    }
+
+    const getTipoBadge = (tipo) => {
+        const colors = {
+            'ENTRADA': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+            'ENTRADA_NF': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+            'SAIDA': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
+            'SAÍDA': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
+            'TRANSFERENCIA': { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+            'AJUSTE': { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+            'AJUSTE+': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+            'AJUSTE-': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
+            'AJUSTE_ESTOQUE': { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' }
+        };
+        const c = colors[tipo] || { bg: 'rgba(255,255,255,0.1)', color: 'white' };
+        const labels = {
+            'ENTRADA_NF': 'ENTRADA NF',
+            'ajuste_estoque': 'AJUSTE'
+        };
+        return `<span style="background: ${c.bg}; color: ${c.color}; padding: 4px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 700;">${labels[tipo] || tipo}</span>`;
+    };
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    };
+
+    return `
+        <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
+            ${history.map(m => `
+                <div class="mov-item" style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            ${getTipoBadge(m.tipo)}
+                            <span style="font-size: 0.7rem; color: var(--muted);">${formatDate(m.data_hora || m.data)}</span>
+                        </div>
+                        <span style="font-size: 0.7rem; color: var(--primary); font-weight: 600;">${m.origem || 'MANUAL'}</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; font-size: 0.75rem;">
+                        <div>
+                            <span style="color: var(--muted);">Produto:</span>
+                            <div style="font-weight: 600; color: white;">${m.id_interno || '-'}</div>
+                        </div>
+                        <div>
+                            <span style="color: var(--muted);">Qtd:</span>
+                            <div style="font-weight: 700; color: white;">${m.quantidade || 0}</div>
+                        </div>
+                        <div>
+                            <span style="color: var(--muted);">De:</span>
+                            <div style="font-weight: 600; color: white;">${m.local_origem || '-'}</div>
+                        </div>
+                        <div>
+                            <span style="color: var(--muted);">Para:</span>
+                            <div style="font-weight: 600; color: white;">${m.local_destino || '-'}</div>
+                        </div>
+                    </div>
+                    ${m.observacao ? `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.7rem; color: var(--muted);">${m.observacao}</div>` : ''}
+                    <div style="margin-top: 8px; font-size: 0.65rem; color: var(--muted);">Por: ${m.usuario || '-'}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function filterMovimentacoes() {
+    const search = document.getElementById('mov-filter-search')?.value?.toLowerCase() || '';
+    const tipo = document.getElementById('mov-filter-tipo')?.value || '';
+    const local = document.getElementById('mov-filter-local')?.value || '';
+    const origem = document.getElementById('mov-filter-origem')?.value || '';
+
+    let filtered = appData.movimentacoes || [];
+
+    if (search) {
+        filtered = filtered.filter(m => 
+            (m.id_interno || '').toLowerCase().includes(search) ||
+            (m.descricao || '').toLowerCase().includes(search)
+        );
+    }
+    if (tipo) {
+        filtered = filtered.filter(m => m.tipo === tipo);
+    }
+    if (local) {
+        filtered = filtered.filter(m => m.local_origem === local || m.local_destino === local);
+    }
+    if (origem) {
+        filtered = filtered.filter(m => m.origem === origem);
+    }
+
+    filtered.sort((a, b) => {
+        const dateA = new Date(a.data_hora || a.data || 0);
+        const dateB = new Date(b.data_hora || b.data || 0);
+        return dateB - dateA;
+    });
+
+    const listContainer = document.getElementById('movimentacoes-list');
+    if (listContainer) {
+        listContainer.innerHTML = renderMovimentacoesList(filtered);
+    }
+}
+
+const MOV_HISTORY_FILTERS = [
+    { id: 'todos', label: 'Todos' },
+    { id: 'entrada_nf', label: 'Entrada NF' },
+    { id: 'inventario', label: 'Inventário' },
+    { id: 'transferencia', label: 'Transferência' },
+    { id: 'ajuste', label: 'Ajuste' },
+    { id: 'garantia', label: 'Garantia' },
+    { id: 'separacao', label: 'Separação' },
+    { id: 'conferencia', label: 'Conferência' }
+];
+
+const MOV_HISTORY_PERIODS = [
+    { id: 'hoje', label: 'Hoje' },
+    { id: '7d', label: '7 dias' },
+    { id: '30d', label: '30 dias' },
+    { id: 'custom', label: 'Personalizado' }
+];
+
+const MOV_HISTORY_PAGE_SIZES = [10, 25, 50];
+
+let movementHistoryState = {
+    operations: [],
+    filtered: [],
+    filter: 'todos',
+    period: '30d',
+    customFrom: '',
+    customTo: '',
+    search: '',
+    page: 1,
+    pageSize: 10,
+    expanded: new Set()
+};
+
+function formatMovHistoryDate(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatMovHistoryMoney(value) {
+    const num = parseDecimal(value);
+    if (!num) return '-';
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function getMovHistoryTypeConfig(type) {
+    const map = {
+        entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e' },
+        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8' },
+        transferencia: { label: 'Transferência', icon: 'sync_alt', color: '#60a5fa' },
+        ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b' },
+        garantia: { label: 'Garantia', icon: 'shield', color: '#a78bfa' },
+        separacao: { label: 'Separação', icon: 'inventory_2', color: '#ef4444' },
+        conferencia: { label: 'Conferência', icon: 'task_alt', color: '#14b8a6' },
+        outro: { label: 'Movimento', icon: 'history', color: '#94a3b8' }
+    };
+    return map[type] || map.outro;
+}
+
+function getMovHistoryPeriodStart(period) {
+    const now = new Date();
+    if (period === 'hoje') {
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+    if (period === '7d') {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 7);
+        return d;
+    }
+    if (period === '30d') {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 30);
+        return d;
+    }
+    return null;
+}
+
+async function fetchMovHistoryTable(table, select = '*', orderColumn = null, ascending = false) {
+    const client = window.supabaseClient || (window.supabaseClientReady ? await window.supabaseClientReady.catch(() => null) : null);
+    if (!client) return [];
+    try {
+        let query = client.from(table).select(select);
+        if (orderColumn) query = query.order(orderColumn, { ascending });
+        const { data, error } = await query;
+        if (error) {
+            console.warn(`[MOV_HISTORY] tabela ${table} indisponivel`, error);
+            return [];
+        }
+        return data || [];
+    } catch (error) {
+        console.warn(`[MOV_HISTORY] erro ao carregar ${table}`, error);
+        return [];
+    }
+}
+
+function parseMovHistoryNF(value) {
+    const text = String(value || '');
+    return text.match(/\bNF\s*([0-9A-Za-z.-]+)/i)?.[1] || '';
+}
+
+function classifyMovHistoryMovement(mov = {}) {
+    const tipo = String(mov.tipo || '').toUpperCase();
+    const origem = String(mov.origem || '').toUpperCase();
+    const obs = String(mov.observacao || '');
+    const obsUpper = obs.toUpperCase();
+    if (tipo.includes('ENTRADA_NF') || origem.includes('ENTRADA_NF') || parseMovHistoryNF(obs)) return 'entrada_nf';
+    if (tipo.includes('INVENT') || origem.includes('INVENT') || obsUpper.includes('INVENT')) return 'inventario';
+    if (tipo.includes('TRANSFER') || origem.includes('TRANSFER')) return 'transferencia';
+    if (tipo.includes('GARANT') || origem.includes('GARANT') || String(mov.local_destino || '').toUpperCase().includes('GARANT')) return 'garantia';
+    if (tipo.includes('CONFER') || origem.includes('CONFER')) return 'conferencia';
+    if (tipo.includes('SEPAR') || origem.includes('SEPAR')) return 'separacao';
+    if (tipo.includes('AJUST') || origem.includes('AJUST')) return 'ajuste';
+    return 'outro';
+}
+
+function buildMovHistoryMovementKey(mov) {
+    const type = classifyMovHistoryMovement(mov);
+    const nf = parseMovHistoryNF(mov.observacao);
+    if (type === 'entrada_nf' && nf) return `entrada_nf:${nf}`;
+
+    const obs = String(mov.observacao || '');
+    const sessionId = obs.match(/\b((?:INV|SEP|CONF|TRF|AJU|GAR)[-_A-Z0-9.]+)\b/i)?.[1];
+    if (sessionId) return `${type}:${sessionId}`;
+
+    const time = mov.data_hora ? new Date(mov.data_hora).toISOString().slice(0, 16) : mov.movimento_id;
+    const route = `${mov.local_origem || ''}>${mov.local_destino || ''}`;
+    return `${type}:${obs || route}:${mov.usuario || ''}:${time}`;
+}
+
+function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set()) {
+    const groups = new Map();
+    movimentos.forEach(mov => {
+        const type = classifyMovHistoryMovement(mov);
+        const nf = parseMovHistoryNF(mov.observacao);
+        if (type === 'entrada_nf' && nf && entradaNumbers.has(String(nf))) return;
+        const key = buildMovHistoryMovementKey(mov);
+        if (!groups.has(key)) {
+            const config = getMovHistoryTypeConfig(type);
+            const route = [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' → ');
+            groups.set(key, {
+                id: key,
+                type,
+                typeLabel: config.label,
+                identification: nf ? `NF ${nf}` : (mov.movimento_id || '-'),
+                title: config.label,
+                subtitle: nf ? `Origem: ${mov.origem || '-'}` : (route || mov.observacao || mov.origem || '-'),
+                date: mov.data_hora || mov.created_at,
+                user: mov.usuario || '-',
+                supplier: '',
+                productsCount: 0,
+                quantityTotal: 0,
+                valueTotal: 0,
+                items: [],
+                notes: [],
+                raw: mov
+            });
+        }
+        const op = groups.get(key);
+        op.productsCount += 1;
+        op.quantityTotal += parseDecimal(mov.quantidade);
+        if (!op.date || new Date(mov.data_hora || 0) > new Date(op.date || 0)) op.date = mov.data_hora;
+        if (mov.observacao && !op.notes.includes(mov.observacao)) op.notes.push(mov.observacao);
+        op.items.push({
+            idInterno: mov.id_interno || '-',
+            descricao: mov.descricao || '',
+            quantidade: parseDecimal(mov.quantidade),
+            origem: mov.local_origem,
+            destino: mov.local_destino,
+            custo: 0,
+            lote: '',
+            observacao: mov.observacao
+        });
+    });
+    return [...groups.values()];
+}
+
+function buildMovHistoryFromEntradas(entradas = [], lotes = [], movimentos = []) {
+    return (entradas || [])
+        .filter(entrada => entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada')
+        .map(entrada => {
+            const itens = entrada.itens || [];
+            const entradaLotes = lotes.filter(lote => String(lote.origem_id || '') === String(entrada.id));
+            const entradaMovs = movimentos.filter(mov => String(mov.observacao || '').includes(`NF ${entrada.numero_nf}`));
+            const date = entrada.atualizado_em || entrada.created_at || entrada.data_recebimento || entrada.data_emissao;
+            const user = entradaMovs.find(mov => mov.usuario)?.usuario || entrada.criado_por || entrada.usuario || '-';
+            return {
+                id: `entrada_nf:${entrada.id}`,
+                type: 'entrada_nf',
+                typeLabel: 'Entrada NF',
+                identification: `NF ${entrada.numero_nf || '-'}`,
+                title: 'Entrada NF',
+                subtitle: `Fornecedor: ${entrada.fornecedor_nome || entrada.fornecedor_cnpj || '-'}`,
+                date,
+                user,
+                supplier: entrada.fornecedor_nome || entrada.fornecedor_cnpj || '',
+                productsCount: itens.length,
+                quantityTotal: itens.reduce((sum, item) => sum + parseDecimal(item.quantidade), 0),
+                valueTotal: parseDecimal(entrada.valor_total),
+                items: itens.map(item => {
+                    const itemId = item.id_interno || item.produto_id_interno || '';
+                    const lote = entradaLotes.find(l => String(l.id_interno) === String(itemId));
+                    return {
+                        idInterno: itemId || '-',
+                        descricao: item.descricao_produto_fornecedor || item.descricao_xml || itemId || '-',
+                        quantidade: parseDecimal(item.quantidade),
+                        origem: '',
+                        destino: lote?.local_estoque || 'terreo',
+                        custo: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
+                        total: parseDecimal(item.custo_real_total ?? item.valor_total),
+                        lote: lote ? `${lote.numero_nf || entrada.numero_nf} / ${formatStockNumber(lote.quantidade_atual)} un` : '',
+                        observacao: item.status_vinculo || ''
+                    };
+                }),
+                notes: entrada.chave_acesso ? [`Chave: ${entrada.chave_acesso}`] : [],
+                finance: entrada.parcelas || [],
+                lotes: entradaLotes,
+                raw: entrada
+            };
+        });
+}
+
+function getMovHistorySearchText(op) {
+    return [
+        op.typeLabel,
+        op.identification,
+        op.subtitle,
+        op.user,
+        op.supplier,
+        ...(op.notes || []),
+        ...(op.items || []).flatMap(item => [item.idInterno, item.descricao, item.observacao])
+    ].join(' ').toLowerCase();
+}
+
+function applyMovHistoryFilters() {
+    const start = getMovHistoryPeriodStart(movementHistoryState.period);
+    const search = String(movementHistoryState.search || '').trim().toLowerCase();
+    let filtered = [...movementHistoryState.operations];
+
+    if (movementHistoryState.filter !== 'todos') {
+        filtered = filtered.filter(op => op.type === movementHistoryState.filter);
+    }
+    if (movementHistoryState.period === 'custom' && (movementHistoryState.customFrom || movementHistoryState.customTo)) {
+        const from = movementHistoryState.customFrom ? new Date(`${movementHistoryState.customFrom}T00:00:00`) : null;
+        const to = movementHistoryState.customTo ? new Date(`${movementHistoryState.customTo}T23:59:59`) : null;
+        filtered = filtered.filter(op => {
+            const date = new Date(op.date || 0);
+            if (Number.isNaN(date.getTime())) return false;
+            if (from && date < from) return false;
+            if (to && date > to) return false;
+            return true;
+        });
+    } else if (start) {
+        filtered = filtered.filter(op => {
+            const date = new Date(op.date || 0);
+            return !Number.isNaN(date.getTime()) && date >= start;
+        });
+    }
+    if (search) {
+        filtered = filtered.filter(op => getMovHistorySearchText(op).includes(search));
+    }
+
+    filtered.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    movementHistoryState.filtered = filtered;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
+    if (movementHistoryState.page > totalPages) movementHistoryState.page = totalPages;
+}
+
+async function loadMovHistoryOperations() {
+    if (!window.supabaseClient && window.supabaseClientReady) {
+        await window.supabaseClientReady.catch(() => null);
+    }
+    const [movimentos, entradas, lotes] = await Promise.all([
+        DataClient.fetchMovimentosSupabase().catch(error => {
+            console.warn('[MOV_HISTORY] movimentos indisponiveis', error);
+            return [];
+        }),
+        loadHistoricoEntradasNF(true).catch(error => {
+            console.warn('[MOV_HISTORY] entradas indisponiveis', error);
+            return [];
+        }),
+        fetchMovHistoryTable('estoque_lotes', '*', 'criado_em', false)
+    ]);
+
+    const entradaNumbers = new Set((entradas || []).map(entrada => String(entrada.numero_nf || '')).filter(Boolean));
+    const ops = [
+        ...buildMovHistoryFromEntradas(entradas, lotes, movimentos),
+        ...buildMovHistoryFromMovements(movimentos, entradaNumbers)
+    ];
+    movementHistoryState.operations = ops;
+    applyMovHistoryFilters();
+    return ops;
+}
+
+function getMovHistorySummary() {
+    const ops = movementHistoryState.filtered || [];
+    const count = type => ops.filter(op => op.type === type).length;
+    return [
+        { label: 'Total de operações', value: ops.length, sub: 'no período filtrado', icon: 'analytics', type: 'outro' },
+        { label: 'Entrada NF', value: count('entrada_nf'), sub: 'notas finalizadas', icon: 'receipt_long', type: 'entrada_nf' },
+        { label: 'Inventários', value: count('inventario'), sub: 'contagens e ajustes', icon: 'fact_check', type: 'inventario' },
+        { label: 'Transferências', value: count('transferencia'), sub: 'entre locais', icon: 'sync_alt', type: 'transferencia' },
+        { label: 'Ajustes', value: count('ajuste'), sub: 'correções manuais', icon: 'tune', type: 'ajuste' },
+        { label: 'Garantias', value: count('garantia'), sub: 'envios e retornos', icon: 'shield', type: 'garantia' }
+    ];
+}
+
+function renderMovHistoryShell(loading = false) {
+    const filtered = movementHistoryState.filtered || [];
+    const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
+    const start = (movementHistoryState.page - 1) * movementHistoryState.pageSize;
+    const pageItems = filtered.slice(start, start + movementHistoryState.pageSize);
+
+    return `
+        <div class="dashboard-screen internal fade-in mov-history-screen no-top-bar">
+            <button type="button" class="mov-history-back" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+            <main class="mov-history-workspace">
+                <header class="mov-history-header">
+                    <div class="mov-history-title-mark">
+                        <span class="material-symbols-rounded">history</span>
+                    </div>
+                    <div>
+                        <h1>HISTÓRICO DE MOVIMENTOS</h1>
+                        <p>Operações agrupadas por documento, origem ou processo.</p>
+                    </div>
+                </header>
+
+                <section class="mov-history-controls">
+                    <div class="mov-history-tabs">
+                        ${MOV_HISTORY_FILTERS.map(item => `
+                            <button type="button" class="${movementHistoryState.filter === item.id ? 'active' : ''}" onclick="setMovHistoryFilter('${item.id}')">${item.label}</button>
+                        `).join('')}
+                    </div>
+                    <div class="mov-history-search">
+                        <span class="material-symbols-rounded">search</span>
+                        <input id="mov-history-search-input" value="${escapeKitAttribute(movementHistoryState.search)}" oninput="setMovHistorySearch(this.value)" placeholder="Buscar por NF, produto, fornecedor...">
+                    </div>
+                    <div class="mov-history-period">
+                        ${MOV_HISTORY_PERIODS.map(item => `
+                            <button type="button" class="${movementHistoryState.period === item.id ? 'active' : ''}" onclick="setMovHistoryPeriod('${item.id}')">${item.label}</button>
+                        `).join('')}
+                        ${movementHistoryState.period === 'custom' ? `
+                            <input type="date" value="${escapeKitAttribute(movementHistoryState.customFrom)}" onchange="setMovHistoryCustomPeriod('from', this.value)" aria-label="Data inicial">
+                            <input type="date" value="${escapeKitAttribute(movementHistoryState.customTo)}" onchange="setMovHistoryCustomPeriod('to', this.value)" aria-label="Data final">
+                        ` : ''}
+                    </div>
+                </section>
+
+                <section class="mov-history-summary">
+                    ${getMovHistorySummary().map(card => {
+                        const cfg = getMovHistoryTypeConfig(card.type);
+                        return `
+                            <article style="--tone:${cfg.color}">
+                                <span class="material-symbols-rounded">${card.icon}</span>
+                                <div>
+                                    <strong>${card.value}</strong>
+                                    <small>${card.label}</small>
+                                    <em>${card.sub}</em>
+                                </div>
+                            </article>
+                        `;
+                    }).join('')}
+                </section>
+
+                <section class="mov-history-list-panel">
+                    <div class="mov-history-table-head">
+                        <span>Operação</span>
+                        <span>Identificação</span>
+                        <span>Data/Hora</span>
+                        <span>Usuário</span>
+                        <span>Produtos</span>
+                        <span>Qtde total</span>
+                        <span>Valor total</span>
+                        <span>Ações</span>
+                    </div>
+                    <div id="mov-history-list" class="mov-history-list">
+                        ${loading ? renderMovHistoryLoadingHTML() : renderMovHistoryRows(pageItems)}
+                    </div>
+                    ${!loading ? renderMovHistoryPagination(totalPages, filtered.length) : ''}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+function renderMovHistoryLoadingHTML() {
+    return `
+        <div class="mov-history-empty">
+            <span class="material-symbols-rounded">sync</span>
+            <strong>Carregando movimentos...</strong>
+        </div>
+    `;
+}
+
+function renderMovHistoryRows(items) {
+    if (!items.length) {
+        return `
+            <div class="mov-history-empty">
+                <span class="material-symbols-rounded">history</span>
+                <strong>Nenhuma operação encontrada</strong>
+                <small>Ajuste os filtros ou confira se há movimentos gravados no Supabase.</small>
+            </div>
+        `;
+    }
+
+    return items.map(op => {
+        const cfg = getMovHistoryTypeConfig(op.type);
+        const expanded = movementHistoryState.expanded.has(op.id);
+        return `
+            <article class="mov-history-row ${expanded ? 'expanded' : ''}" style="--tone:${cfg.color}">
+                <button type="button" class="mov-history-row-main" onclick="toggleMovHistoryOperation(${quoteKitInlineArg(op.id)})">
+                    <span class="mov-history-op">
+                        <span class="mov-history-type-icon material-symbols-rounded">${cfg.icon}</span>
+                        <span><strong>${cfg.label}</strong><small>${escapeKitAttribute(op.subtitle || '-')}</small></span>
+                    </span>
+                    <span class="mov-history-id" data-label="Identificação">${escapeKitAttribute(op.identification || '-')}</span>
+                    <span data-label="Data/Hora">${formatMovHistoryDate(op.date)}</span>
+                    <span data-label="Usuário">${escapeKitAttribute(op.user || '-')}</span>
+                    <span data-label="Produtos">${formatStockNumber(op.productsCount || 0)}</span>
+                    <span data-label="Qtde total">${formatStockNumber(op.quantityTotal || 0)}</span>
+                    <span data-label="Valor total">${formatMovHistoryMoney(op.valueTotal)}</span>
+                    <span class="mov-history-action material-symbols-rounded">${expanded ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                ${expanded ? renderMovHistoryDetails(op) : ''}
+            </article>
+        `;
+    }).join('');
+}
+
+function renderMovHistoryDetails(op) {
+    return `
+        <div class="mov-history-details">
+            <div class="mov-history-detail-meta">
+                ${op.supplier ? `<span><b>Fornecedor</b>${escapeKitAttribute(op.supplier)}</span>` : ''}
+                <span><b>Usuário responsável</b>${escapeKitAttribute(op.user || '-')}</span>
+                ${(op.notes || []).map(note => `<span><b>Observação</b>${escapeKitAttribute(note)}</span>`).join('')}
+                ${op.finance?.length ? `<span><b>Financeiro vinculado</b>${op.finance.length} parcela(s)</span>` : ''}
+            </div>
+            <div class="mov-history-items">
+                ${(op.items || []).map(item => `
+                    <div class="mov-history-item">
+                        <div>
+                            <strong>${escapeKitAttribute(item.descricao || item.idInterno || '-')}</strong>
+                            <small>ID: ${escapeKitAttribute(item.idInterno || '-')}</small>
+                        </div>
+                        <span><b>Qtd</b>${formatStockNumber(item.quantidade || 0)}</span>
+                        <span><b>Origem/Destino</b>${escapeKitAttribute([prettyLocal(item.origem), prettyLocal(item.destino)].filter(Boolean).join(' → ') || '-')}</span>
+                        <span><b>Custo real</b>${formatMovHistoryMoney(item.custo || item.total || 0)}</span>
+                        <span><b>Lote/FIFO</b>${escapeKitAttribute(item.lote || '-')}</span>
+                    </div>
+                `).join('') || '<div class="mov-history-empty compact"><strong>Sem itens detalhados.</strong></div>'}
+            </div>
+        </div>
+    `;
+}
+
+function renderMovHistoryPagination(totalPages, totalItems) {
+    return `
+        <footer class="mov-history-pagination">
+            <span>${formatStockNumber(totalItems)} operação(ões)</span>
+            <label>
+                Itens por página
+                <select onchange="setMovHistoryPageSize(this.value)">
+                    ${MOV_HISTORY_PAGE_SIZES.map(size => `<option value="${size}" ${movementHistoryState.pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+                </select>
+            </label>
+            <div>
+                <button type="button" onclick="setMovHistoryPage(${movementHistoryState.page - 1})" ${movementHistoryState.page <= 1 ? 'disabled' : ''}>
+                    <span class="material-symbols-rounded">chevron_left</span>
+                </button>
+                <strong>${movementHistoryState.page} / ${totalPages}</strong>
+                <button type="button" onclick="setMovHistoryPage(${movementHistoryState.page + 1})" ${movementHistoryState.page >= totalPages ? 'disabled' : ''}>
+                    <span class="material-symbols-rounded">chevron_right</span>
+                </button>
+            </div>
+        </footer>
+    `;
+}
+
+function refreshMovHistoryScreen() {
+    const activeId = document.activeElement?.id || '';
+    const searchCursor = document.getElementById('mov-history-search-input')?.selectionStart ?? null;
+    applyMovHistoryFilters();
+    app.innerHTML = renderMovHistoryShell(false);
+    if (activeId === 'mov-history-search-input') {
+        requestAnimationFrame(() => {
+            const input = document.getElementById('mov-history-search-input');
+            if (!input) return;
+            input.focus();
+            const pos = searchCursor ?? input.value.length;
+            input.setSelectionRange(pos, pos);
+        });
+    }
+}
+
+function setMovHistoryFilter(filter) {
+    movementHistoryState.filter = filter;
+    movementHistoryState.page = 1;
+    refreshMovHistoryScreen();
+}
+
+function setMovHistorySearch(value) {
+    movementHistoryState.search = value;
+    movementHistoryState.page = 1;
+    refreshMovHistoryScreen();
+}
+
+function setMovHistoryPeriod(period) {
+    movementHistoryState.period = period;
+    movementHistoryState.page = 1;
+    refreshMovHistoryScreen();
+}
+
+function setMovHistoryCustomPeriod(bound, value) {
+    if (bound === 'from') movementHistoryState.customFrom = value;
+    if (bound === 'to') movementHistoryState.customTo = value;
+    movementHistoryState.period = 'custom';
+    movementHistoryState.page = 1;
+    refreshMovHistoryScreen();
+}
+
+function setMovHistoryPage(page) {
+    const totalPages = Math.max(1, Math.ceil((movementHistoryState.filtered || []).length / movementHistoryState.pageSize));
+    movementHistoryState.page = Math.min(Math.max(1, page), totalPages);
+    refreshMovHistoryScreen();
+}
+
+function setMovHistoryPageSize(value) {
+    movementHistoryState.pageSize = Number(value) || 10;
+    movementHistoryState.page = 1;
+    refreshMovHistoryScreen();
+}
+
+function toggleMovHistoryOperation(id) {
+    if (movementHistoryState.expanded.has(id)) movementHistoryState.expanded.delete(id);
+    else movementHistoryState.expanded.add(id);
+    refreshMovHistoryScreen();
+}
+
+function openNovaMovimentacaoModal() {
+    console.log('[MOV] clique em Nova movimentação');
+    console.log('[MOV] abrindo modal');
+    const isInitialType = false;
+    
+    const modalHTML = `
+        <div id="nova-mov-modal" class="modal-overlay" onclick="closeNovaMovimentacaoModal(event)">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 style="font-size: 1.1rem; font-weight: 700; margin: 0;">Nova Movimentação</h2>
+                    <button onclick="closeNovaMovimentacaoModal()" style="background: none; border: none; color: var(--muted); cursor: pointer; padding: 8px;">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 20px;">
+                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; display: block;">Tipo de Movimentação</label>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                        ${['ENTRADA', 'SAIDA', 'TRANSFERENCIA', 'AJUSTE'].map(tipo => `
+                            <button type="button" class="tipo-mov-btn" data-tipo="${tipo}" onclick="selectTipoMovimentacao('${tipo}', this)" style="padding: 12px 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: rgba(255,255,255,0.02); color: white; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.2s;">
+                                ${tipo === 'ENTRADA' ? 'Entrada' : tipo === 'SAIDA' ? 'Saída' : tipo === 'TRANSFERENCIA' ? 'Transferência' : 'Ajuste'}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div id="mov-form-container">
+                    <div style="text-align: center; padding: 40px 20px; color: var(--muted);">
+                        <span class="material-symbols-rounded" style="font-size: 40px; margin-bottom: 12px; opacity: 0.5;">touch_app</span>
+                        <p style="font-size: 0.85rem;">Selecione o tipo de movimentação acima</p>
+                    </div>
+                </div>
+                ${false ? `
+                <div class="inv-initial-note">
+                    <span class="material-symbols-rounded">info</span>
+                    <div>
+                        <strong>INVENTÁRIO INICIAL</strong>
+                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = document.getElementById('nova-mov-modal');
+    modal.style.opacity = '0';
+    modal.style.transition = 'opacity 0.2s ease';
+    requestAnimationFrame(() => {
+        modal.style.opacity = '1';
+    });
+}
+
+
+function closeNovaMovimentacaoModal(event) {
+    if (event && event.target !== event.currentTarget && !event.target.closest('.modal-content')) return;
+    const modal = document.getElementById('nova-mov-modal');
+    if (modal) {
+        modal.style.opacity = '0';
+        setTimeout(() => modal.remove(), 200);
+    }
+}
+
+function showAppConfirm({ title = 'Confirmar acao', message = '', detail = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false } = {}) {
+    return new Promise(resolve => {
+        const existing = document.getElementById('app-confirm-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'app-confirm-modal';
+        overlay.className = 'app-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="app-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
+                <div class="app-confirm-icon ${danger ? 'danger' : ''}">
+                    <span class="material-symbols-rounded">${danger ? 'delete' : 'help'}</span>
+                </div>
+                <h3 id="app-confirm-title">${escapeKitAttribute(title)}</h3>
+                <p>${escapeKitAttribute(message)}</p>
+                ${detail ? `<small>${escapeKitAttribute(detail)}</small>` : ''}
+                <div class="app-confirm-actions">
+                    <button type="button" class="app-confirm-btn cancel" data-action="cancel">${escapeKitAttribute(cancelLabel)}</button>
+                    <button type="button" class="app-confirm-btn confirm ${danger ? 'danger' : ''}" data-action="confirm">${escapeKitAttribute(confirmLabel)}</button>
+                </div>
+            </div>
+        `;
+
+        let settled = false;
+        const close = (confirmed) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('keydown', onKeyDown);
+            overlay.classList.add('closing');
+            setTimeout(() => overlay.remove(), 160);
+            resolve(confirmed);
+        };
+
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay || event.target?.dataset?.action === 'cancel') close(false);
+            if (event.target?.dataset?.action === 'confirm') close(true);
+        });
+
+        const onKeyDown = event => {
+            if (!document.body.contains(overlay)) {
+                document.removeEventListener('keydown', onKeyDown);
+                return;
+            }
+            if (event.key === 'Escape') close(false);
+            if (event.key === 'Enter') close(true);
+        };
+        document.addEventListener('keydown', onKeyDown);
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('open'));
+        overlay.querySelector('[data-action="confirm"]')?.focus();
+    });
+}
+
+function showAppAlert({ title = 'Aviso', message = '', detail = '', buttonLabel = 'OK', danger = false, icon = null } = {}) {
+    return new Promise(resolve => {
+        const existing = document.getElementById('app-alert-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'app-alert-modal';
+        overlay.className = 'app-confirm-overlay app-alert-overlay';
+        const iconName = icon || (danger ? 'error' : 'info');
+        overlay.innerHTML = `
+            <div class="app-confirm-dialog app-alert-dialog" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title">
+                <div class="app-confirm-icon ${danger ? 'danger' : ''}">
+                    <span class="material-symbols-rounded">${iconName}</span>
+                </div>
+                <h3 id="app-alert-title">${escapeKitAttribute(title)}</h3>
+                <p>${escapeKitAttribute(message)}</p>
+                ${detail ? `<small>${escapeKitAttribute(detail)}</small>` : ''}
+                <div class="app-confirm-actions app-alert-actions">
+                    <button type="button" class="app-confirm-btn confirm ${danger ? 'danger' : ''}" data-action="confirm">${escapeKitAttribute(buttonLabel)}</button>
+                </div>
+            </div>
+        `;
+
+        let settled = false;
+        const close = () => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('keydown', onKeyDown);
+            overlay.classList.add('closing');
+            setTimeout(() => overlay.remove(), 160);
+            resolve(true);
+        };
+
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay || event.target?.dataset?.action === 'confirm') close();
+        });
+
+        const onKeyDown = event => {
+            if (!document.body.contains(overlay)) {
+                document.removeEventListener('keydown', onKeyDown);
+                return;
+            }
+            if (event.key === 'Escape' || event.key === 'Enter') close();
+        };
+        document.addEventListener('keydown', onKeyDown);
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('open'));
+        overlay.querySelector('[data-action="confirm"]')?.focus();
+    });
+}
+
+let selectedTipoMovimentacao = null;
+let selectedProductForMov = null;
+
+function selectTipoMovimentacao(tipo, btn) {
+    console.log(`[MOV] tipo selecionado: ${tipo}`);
+    document.querySelectorAll('.tipo-mov-btn').forEach(b => {
+        b.style.borderColor = 'rgba(255,255,255,0.1)';
+        b.style.background = 'rgba(255,255,255,0.02)';
+    });
+    btn.style.borderColor = 'var(--primary)';
+    btn.style.background = 'rgba(227,6,19,0.15)';
+    
+    selectedTipoMovimentacao = tipo;
+    selectedProductForMov = null;
+    
+    renderMovimentacaoForm(tipo);
+}
+
+function renderMovimentacaoForm(tipo) {
+    const container = document.getElementById('mov-form-container');
+    const locals = STOCK_LOCALS;
+    const origens = MOVIMENTACAO_ORIGINS;
+
+    const getCommonFields = () => `
+        <div class="input-group full-width">
+            <label>Produto (EAN ou ID)</label>
+            <input type="text" id="mov-search" class="input-field" placeholder="Bipe ou digite..." oninput="searchProductForMovInModal()">
+            <div id="mov-search-results" style="margin-top: 8px; max-height: 120px; overflow-y: auto;"></div>
+        </div>
+        <div id="mov-selected-info" class="full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--primary); display: ${selectedProductForMov ? 'block' : 'none'};">
+            <div style="font-weight: 700; color: white; font-size: 0.9rem;">${selectedProductForMov ? (selectedProductForMov.descricao_base || selectedProductForMov.nome || selectedProductForMov.col_b) : ''}</div>
+            <div style="font-size: 0.7rem; color: var(--muted);">ID: ${selectedProductForMov ? (selectedProductForMov.id_interno || selectedProductForMov.col_a) : ''}</div>
+        </div>
+    `;
+
+    const getOrigemField = () => `
+        <div class="input-group">
+            <label>Origem</label>
+            <select id="mov-origem" class="input-field">
+                ${origens.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+            </select>
+        </div>
+    `;
+
+    const getDestinoField = () => `
+        <div class="input-group">
+            <label>Destino</label>
+            <select id="mov-destino" class="input-field">
+                ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+            </select>
+        </div>
+    `;
+
+    const getLocalField = () => `
+        <div class="input-group">
+            <label>Local</label>
+            <select id="mov-local" class="input-field">
+                ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+            </select>
+        </div>
+    `;
+
+    const getQuantidadeField = () => `
+        <div class="input-group">
+            <label>Quantidade</label>
+            <input type="number" id="mov-qty" class="input-field" placeholder="0" min="1">
+        </div>
+    `;
+
+    const getObservacaoField = () => `
+        <div class="input-group full-width">
+            <label>Observação</label>
+            <input type="text" id="mov-obs" class="input-field" placeholder="Opcional">
+        </div>
+    `;
+
+    const getAjusteTipoField = () => `
+        <div class="input-group">
+            <label>Tipo de Ajuste</label>
+            <select id="mov-tipo-ajuste" class="input-field">
+                <option value="positivo">Positivo (Entrada)</option>
+                <option value="negativo">Negativo (Baixa)</option>
+            </select>
+        </div>
+    `;
+
+    const getMotivoField = () => `
+        <div class="input-group full-width">
+            <label>Motivo</label>
+            <input type="text" id="mov-motivo" class="input-field" placeholder="Ex: Contagem inventário, ajuste sistema...">
+        </div>
+    `;
+
+    let fieldsHTML = '';
+    let submitLabel = '';
+    let submitFunc = '';
+
+    switch(tipo) {
+        case 'ENTRADA':
+            fieldsHTML = getCommonFields() + getDestinoField() + getOrigemField() + getQuantidadeField() + getObservacaoField();
+            submitLabel = 'Registrar Entrada';
+            submitFunc = "saveNovaMovimentacao('ENTRADA')";
+            break;
+        case 'SAIDA':
+            fieldsHTML = getCommonFields() + getLocalField() + getOrigemField() + getQuantidadeField() + getObservacaoField();
+            submitLabel = 'Registrar Saída';
+            submitFunc = "saveNovaMovimentacao('SAIDA')";
+            break;
+        case 'TRANSFERENCIA':
+            fieldsHTML = getCommonFields() + getLocalField().replace('id="mov-local"', 'id="mov-origem"') + getDestinoField() + getQuantidadeField() + getObservacaoField();
+            submitLabel = 'Confirmar Transferência';
+            submitFunc = "saveNovaMovimentacao('TRANSFERENCIA')";
+            break;
+        case 'AJUSTE':
+            fieldsHTML = getCommonFields() + getLocalField() + getAjusteTipoField() + getQuantidadeField() + getMotivoField() + getObservacaoField();
+            submitLabel = 'Registrar Ajuste';
+            submitFunc = "saveNovaMovimentacao('AJUSTE')";
+            break;
+    }
+
+    container.innerHTML = `
+        <form onsubmit="event.preventDefault(); ${submitFunc}" style="display: flex; flex-direction: column; gap: 16px;">
+            ${fieldsHTML}
+            <div style="display: flex; gap: 12px; margin-top: 8px;">
+                <button type="button" class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="closeNovaMovimentacaoModal()">Cancelar</button>
+                <button type="submit" class="btn-action" style="flex: 2; justify-content: center;">${submitLabel}</button>
+            </div>
+        </form>
+    `;
+    console.log('[MOV] modal renderizado');
+}
+
+
+function searchProductForMovInModal() {
+    const searchInput = document.getElementById('mov-search');
+    const resultsDiv = document.getElementById('mov-search-results');
+
+    if (!searchInput || !resultsDiv) return;
+
+    const query = searchInput.value.toLowerCase();
+    if (query.length < 2) {
+        resultsDiv.innerHTML = '';
+        return;
+    }
+
+    const results = (appData.products || []).filter(p =>
+        (p.descricao_base || '').toLowerCase().includes(query) ||
+        (p.ean || '').toString().toLowerCase().includes(query) ||
+        (p.id_interno || '').toString().toLowerCase().includes(query)
+    ).slice(0, 5);
+
+
+    console.log(`[MOV] busca modal: "${query}" -> ${results.length} resultados`);
+
+    resultsDiv.innerHTML = results.map(p => `
+        <div style="padding: 10px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="selectProductForMovInModal('${p.ean || p.id_interno}')">
+            <div style="font-weight: 700; font-size: 0.8rem; color: white;">${p.descricao_base || p.nome}</div>
+            <div style="font-size: 0.65rem; color: var(--muted);">SKU: ${p.id_interno || p.id}</div>
+        </div>
+    `).join('');
+}
+
+
+function selectProductForMovInModal(id) {
+    console.log('[MOV] produto selecionado - ID:', id);
+    selectedProductForMov = (appData.products || []).find(p => p.ean == id || p.id_interno == id);
+    console.log('[MOV] selectedProduct atual:', selectedProductForMov);
+    
+    if (!selectedProductForMov) return;
+
+    document.getElementById('mov-search').value = selectedProductForMov.descricao_base || selectedProductForMov.nome || '';
+    document.getElementById('mov-search-results').innerHTML = '';
+
+    const infoDiv = document.getElementById('mov-selected-info');
+    if (infoDiv) {
+        infoDiv.style.display = 'block';
+        infoDiv.innerHTML = `
+            <div style="font-weight: 700; color: white; font-size: 0.9rem;">${selectedProductForMov.descricao_base || selectedProductForMov.nome}</div>
+            <div style="font-size: 0.7rem; color: var(--muted);">ID: ${selectedProductForMov.id_interno || selectedProductForMov.id}</div>
+        `;
+    }
+    
+    console.log('[MOV] produto vinculado ao state');
+}
+
+async function saveNovaMovimentacao(tipo) {
+    console.log('[MOV] salvar clicado - tipo:', tipo);
+    
+    if (isFinalizing) {
+        console.log('[MOV] Bloqueado: isFinalizing=true');
+        return;
+    }
+    isFinalizing = true;
+
+    // ==========================================
+    // PASSO 1: LOCALIZAR E VALIDAR O PRODUTO
+    // ==========================================
+    console.log('========== VALIDACAO DETALHADA ==========');
+    
+    // Primeiro: verificar se produtos estão carregados no appData
+    const produtosDisponiveis = appData.products || [];
+    console.log('[MOV] produtos carregados no appData:', produtosDisponiveis.length);
+    
+    // Segundo: tentar encontrar o produto no state
+    const searchInput = document.getElementById('mov-search');
+    const inputValue = searchInput?.value?.trim() || '';
+    console.log('[MOV] valor do input produto:', inputValue);
+    console.log('[MOV] selectedProductForMov do state:', selectedProductForMov);
+    
+    // Terceiro: se não tem produto no state mas tem texto, buscar
+    if (!selectedProductForMov && inputValue) {
+        console.log('[MOV] trying to find product by text in appData...');
+        
+        // Buscar em appData.products
+        const produtoEncontrado = produtosDisponiveis.find(p => {
+            const idInterno = p.id_interno || p.col_a || '';
+            const ean = p.ean || '';
+            return idInterno.toString().trim() === inputValue || 
+                   idInterno.toString().includes(inputValue) ||
+                   ean.toString().trim() === inputValue;
+        });
+        
+        if (produtoEncontrado) {
+            selectedProductForMov = produtoEncontrado;
+            console.log('[MOV] produto encontrado em appData.products:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
+        } else {
+            // Se não achou em appData, tentar DataClient
+            console.log('[MOV] não achou em appData, tentando DataClient...');
+            try {
+                const data = await DataClient.loadModule('produtos', false);
+                if (data && data.products && data.products.length > 0) {
+                    appData.products = data.products;
+                    const produtoDataClient = data.products.find(p => {
+                        const idInterno = p.id_interno || p.col_a || '';
+                        return idInterno.toString().trim() === inputValue || 
+                               idInterno.toString().includes(inputValue);
+                    });
+                    if (produtoDataClient) {
+                        selectedProductForMov = produtoDataClient;
+                        console.log('[MOV] produto encontrado via DataClient:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
+                    }
+                }
+            } catch (e) {
+                console.log('[MOV] erro ao carregar produtos via DataClient:', e);
+            }
+        }
+    }
+    
+    // Log final do produto
+    console.log('[MOV] produto final para salvar:', selectedProductForMov ? (selectedProductForMov.id_interno || selectedProductForMov.col_a) : 'NULO');
+    
+    // ==========================================
+    // PASSO 2: VALIDAR PRODUTO
+    // ==========================================
+    if (!selectedProductForMov) {
+        console.log('[MOV] ERRO: produto NAO encontrado');
+        console.log('[MOV] razao: selectedProductForMov é null');
+        showToast("Produto não encontrado. Selecione da lista ou digite ID correto.");
+        isFinalizing = false;
+        console.log('=========================================');
+        return;
+    }
+    console.log('[MOV] produto OK:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
+
+    // ==========================================
+    // PASSO 3: LOCALIZAR E VALIDAR QUANTIDADE
+    // ==========================================
+    const qtyInput = document.getElementById('mov-qty');
+    const qtyRaw = qtyInput?.value;
+    console.log('[MOV] elemento quantidade encontrado:', qtyInput ? 'SIM' : 'NAO');
+    console.log('[MOV] valor bruto quantidade:', qtyRaw);
+    
+    if (!qtyInput) {
+        console.log('[MOV] ERRO: campo quantidade NAO encontrado no DOM');
+        showToast("Erro: campo de quantidade não encontrado.");
+        isFinalizing = false;
+        console.log('=========================================');
+        return;
+    }
+
+    const qty = parseFloat(qtyRaw);
+    console.log('[MOV] quantidade parseada:', qty, 'isNaN:', isNaN(qty));
+
+    if (isNaN(qty) || qty <= 0) {
+        console.log('[MOV] ERRO: quantidade invalida');
+        console.log('[MOV] razao: qty <= 0 ou isNaN');
+        showToast("Quantidade inválida. Digite um número maior que 0.");
+        isFinalizing = false;
+        console.log('=========================================');
+        return;
+    }
+    console.log('[MOV] quantidade OK:', qty);
+    
+    console.log('========== FIM VALIDACAO OK ==========');
+
+    // ==========================================
+    // PASSO 4: MONTAR PAYLOAD
+    // ==========================================
+    const obsInput = document.getElementById('mov-obs');
+    const origemInput = document.getElementById('mov-origem');
+    const destinoInput = document.getElementById('mov-destino');
+    const localInput = document.getElementById('mov-local');
+    const tipoAjusteInput = document.getElementById('mov-tipo-ajuste');
+    const motivoInput = document.getElementById('mov-motivo');
+
+    let localOrigem = '';
+    let localDestino = '';
+    let origem = 'MANUAL';
+    let observacao = obsInput?.value?.trim() || '';
+
+    if (tipo === 'ENTRADA') {
+        localDestino = destinoInput?.value || '';
+        origem = origemInput?.value || 'MANUAL';
+    } else if (tipo === 'SAIDA') {
+        localOrigem = localInput?.value || '';
+        origem = origemInput?.value || 'MANUAL';
+    } else if (tipo === 'TRANSFERENCIA') {
+        localOrigem = document.getElementById('mov-origem')?.value || '';
+        localDestino = destinoInput?.value || '';
+    } else if (tipo === 'AJUSTE') {
+        localOrigem = localInput?.value || '';
+        const ajusteTipo = tipoAjusteInput?.value || 'positivo';
+        const motivo = motivoInput?.value?.trim() || '';
+        observacao = motivo ? `Ajuste ${ajusteTipo}: ${motivo}` : `Ajuste ${ajusteTipo}`;
+        if (obsInput?.value?.trim()) {
+            observacao += ' - ' + obsInput.value.trim();
+        }
+    }
+
+    const movData = {
+        tipo: tipo,
+        id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
+        local_origem: localOrigem,
+        local_destino: localDestino,
+        quantidade: qty,
+        usuario: localStorage.getItem('currentUser'),
+        origem: origem,
+        observacao: observacao
+    };
+
+    console.log('[MOV] payload enviado:', JSON.stringify(movData, null, 2));
+
+    showToast("Processando...");
+
+    try {
+        console.log('[MOV] Tentando insert em movimentos...');
+        const savedMov = await DataClient.saveMovimentoSupabase(movData);
+        
+        if (!savedMov) {
+            console.log('[MOV] ERRO: insert movimentos retornou null');
+            showToast("Erro ao gravar movimento.");
+            isFinalizing = false;
+            return;
+        }
+        
+        console.log('[MOV] insert movimentos sucesso:', savedMov);
+
+        let stockSuccess = false;
+        const idInterno = movData.id_interno;
+
+        console.log(`[MOV] Atualizando estoque: tipo=${tipo} localOrigem=${localOrigem} localDestino=${localDestino}`);
+        
+        if (tipo === 'ENTRADA') {
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
+        } else if (tipo === 'SAIDA') {
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
+        } else if (tipo === 'TRANSFERENCIA') {
+            const outOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
+            const inOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
+            stockSuccess = outOk && inOk;
+        } else if (tipo === 'AJUSTE') {
+            const ajusteTipo = tipoAjusteInput?.value || 'positivo';
+            const operacao = ajusteTipo === 'positivo' ? 'soma' : 'subtrai';
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, operacao, movData.quantidade);
+        }
+
+        console.log('[MOV] update estoque resultado:', stockSuccess);
+
+        if (stockSuccess) {
+            if (tipo === 'SAIDA') {
+                await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
+            }
+            console.log('[MOV] fluxo concluído com sucesso');
+            console.log('[MOV] resposta de sucesso');
+            showToast("Movimentação registrada com sucesso!");
+            
+            if (!appData.movimentacoes) appData.movimentacoes = [];
+            appData.movimentacoes.unshift({
+                ...savedMov,
+                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+            });
+
+            DataClient.invalidateCache('produtos');
+            
+            console.log('[MOV] modal fechado após sucesso');
+            closeNovaMovimentacaoModal();
+            
+            // Pequeno delay para garantir que toast apareça antes de renderizar nova tela
+            setTimeout(() => {
+                renderMovimentacoes();
+                console.log('[MOV] mensagem exibida - tela atualizada');
+            }, 300);
+        } else {
+            console.log('[MOV] ERRO: movimento salvo mas estoque não atualizado');
+            console.log('[MOV] resposta de erro');
+            showToast("Erro: Movimento salvo, mas estoque não atualizado.");
+            console.log('[MOV] mensagem exibida');
+        }
+    } catch (e) {
+        console.error('[MOV] ERRO fatal:', e);
+        showToast("Erro fatal no processamento: " + e.message);
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+function renderTransferenciaForm() {
+    const currentUser = localStorage.getItem('currentUser');
+    const locals = ['TERREO', '1ºANDAR', 'MOSTRUARIO', 'DEFEITO'];
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">TRANSFERÊNCIA</h2>
+                        </div>
+                        <div class="form-grid" style="background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="input-group full-width">
+                                <label>Produto (EAN ou ID)</label>
+                                <div style="display: flex; gap: 12px;">
+                                    <input type="text" id="mov-search" class="input-field" style="flex: 1;" placeholder="Bipe ou digite..." oninput="searchProductForMov()">
+                                </div>
+                                <div id="mov-search-results" style="margin-top: 8px; max-height: 150px; overflow-y: auto;"></div>
+                            </div>
+                            <div id="mov-selected-info" class="hidden full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--primary);"></div>
+                            
+                            <div class="input-group">
+                                <label>Origem</label>
+                                <select id="mov-origem" class="input-field">
+                                    ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Destino</label>
+                                <select id="mov-destino" class="input-field">
+                                    ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Quantidade</label>
+                                <input type="number" id="mov-qty" class="input-field" placeholder="0">
+                            </div>
+                            <div class="input-group">
+                                <label>Observação</label>
+                                <input type="text" id="mov-obs" class="input-field" placeholder="Opcional">
+                            </div>
+                            
+                            <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
+                                <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
+                                <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveMovimentacao('TRANSFERÊNCIA')">Confirmar</button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function renderDefeitoForm() {
+
+    const currentUser = localStorage.getItem('currentUser');
+    const locals = ['TERREO', '1_ANDAR', 'MOSTRUARIO', 'DEFEITO'];
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">DEFEITO / AVARIA</h2>
+                        </div>
+                        <div class="form-grid" style="background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="input-group full-width">
+                                <label>Produto (EAN ou ID)</label>
+                                <div style="display: flex; gap: 12px;">
+                                    <input type="text" id="mov-search" class="input-field" style="flex: 1;" placeholder="Bipe ou digite..." oninput="searchProductForMov()">
+                                </div>
+                                <div id="mov-search-results" style="margin-top: 8px; max-height: 150px; overflow-y: auto;"></div>
+                            </div>
+                            <div id="mov-selected-info" class="hidden full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--danger);"></div>
+                            
+                            <div class="input-group">
+                                <label>Local de Origem</label>
+                                <select id="mov-origem" class="input-field">
+                                    ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+                                </select>
+                                <input type="hidden" id="mov-destino" value="DEFEITO">
+                            </div>
+                            <div class="input-group">
+                                <label>Quantidade</label>
+                                <input type="number" id="mov-qty" class="input-field" placeholder="0">
+                            </div>
+                            <div class="input-group full-width">
+                                <label>Motivo / Observação</label>
+                                <input type="text" id="mov-obs" class="input-field" placeholder="Descreva o defeito...">
+                            </div>
+                            
+                            <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
+                                <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
+                                <button class="btn-action" style="flex: 2; justify-content: center; background: var(--danger) !important;" onclick="saveMovimentacao('ENVIO_DEFEITO')">Registrar Defeito</button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+
+// Função searchProductForMov
+
+function searchProductForMov() {
+    const searchInput = document.getElementById('mov-search');
+    const resultsDiv = document.getElementById('mov-search-results');
+
+    if (!searchInput || !resultsDiv) return;
+
+    const query = searchInput.value.trim().toLowerCase();
+    if (query.length < 2) {
+        resultsDiv.innerHTML = '';
+        return;
+    }
+
+    const results = appData.products.filter(p =>
+        (p.descricao_base || '').toLowerCase().includes(query) ||
+        (p.ean || '').toString().includes(query) ||
+        (p.id_interno || '').toString().includes(query)
+    ).slice(0, 5);
+
+    resultsDiv.innerHTML = results.map(p => `
+                <div style="padding: 10px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="selectProductForMov('${p.ean || p.id_interno}')">
+                    <div style="font-weight: 700; font-size: 0.8rem; color: white;">${p.descricao_base || p.nome}</div>
+                    <div style="font-size: 0.65rem; color: var(--muted);">SKU: ${p.id_interno || p.id}</div>
+                </div>
+            `).join('');
+}
+
+function selectProductForMov(id) {
+    selectedProductForMov = appData.products.find(p => p.ean == id || p.id_interno == id);
+    if (!selectedProductForMov) return;
+
+    const infoDiv = document.getElementById('mov-selected-info');
+    const resultsDiv = document.getElementById('mov-search-results');
+    const searchInput = document.getElementById('mov-search');
+
+    if (infoDiv) {
+        infoDiv.classList.remove('hidden');
+        infoDiv.innerHTML = `
+                    <div style="font-weight: 800; color: white; font-size: 0.85rem;">${selectedProductForMov.descricao_base || selectedProductForMov.nome}</div>
+                    <div style="font-size: 0.65rem; color: var(--muted);">ID: ${selectedProductForMov.id_interno || selectedProductForMov.id}</div>
+                `;
+    }
+
+    if (resultsDiv) resultsDiv.innerHTML = '';
+    if (searchInput) searchInput.value = selectedProductForMov.descricao_base || selectedProductForMov.nome || selectedProductForMov.col_b;
+}
+
+async function saveMovimentacao(tipo) {
+    if (isFinalizing) return;
+    isFinalizing = true;
+
+    const qtyInput = document.getElementById('mov-qty');
+    const obsInput = document.getElementById('mov-obs');
+    const origemInput = document.getElementById('mov-origem');
+    const destinoInput = document.getElementById('mov-destino');
+
+    if (!qtyInput || !origemInput) {
+        showToast("Erro: Campos de movimentação não encontrados.");
+        return;
+    }
+
+    const qty = parseFloat(qtyInput.value);
+    const obs = obsInput ? obsInput.value.trim() : "";
+    const localOrigem = origemInput.value;
+    const localDestino = destinoInput?.value || '';
+
+    if (!selectedProductForMov || isNaN(qty) || qty <= 0) {
+        showToast("Selecione o produto e a quantidade.");
+        return;
+    }
+
+    const movData = {
+        tipo: tipo === 'TRANSFERÊNCIA' ? 'TRANSFERENCIA' : tipo,
+        id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
+        local_origem: localOrigem,
+        local_destino: localDestino,
+        quantidade: qty,
+        usuario: localStorage.getItem('currentUser'),
+        origem: 'APP_MOBILE',
+        observacao: obs
+    };
+
+    showToast("Processando no Supabase...");
+
+    try {
+        // 1. Gravar registro de movimento
+        const savedMov = await DataClient.saveMovimentoSupabase(movData);
+        if (!savedMov) {
+            showToast("Erro ao gravar movimento no Supabase.");
+            isFinalizing = false;
+            return;
+        }
+
+        console.log("[Supabase] Movimento id: " + savedMov.movimento_id + " gravado.");
+
+        // 2. Atualizar estoque de forma atômica conforme o tipo
+        let stockSuccess = false;
+        const idInterno = movData.id_interno;
+
+        if (movData.tipo === 'ENTRADA') {
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
+        } else if (movData.tipo === 'SAÍDA' || movData.tipo === 'SAIDA') {
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
+        } else if (movData.tipo === 'AJUSTE') {
+            stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'ajuste', movData.quantidade);
+        } else if (movData.tipo === 'TRANSFERENCIA') {
+            const outOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
+            const inOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
+            stockSuccess = outOk && inOk;
+        }
+
+        if (stockSuccess) {
+            if (movData.tipo === 'SAÍDA' || movData.tipo === 'SAIDA') {
+                await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
+            }
+            showToast("Movimento e estoque atualizados!");
+            
+            // Atualização local para o histórico de tela
+            if (!appData.movimentacoes) appData.movimentacoes = [];
+            appData.movimentacoes.unshift({
+                ...savedMov,
+                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+            });
+
+            // Forçar invalidação do cache de produtos/estoque para refletir na tela
+            DataClient.invalidateCache('inventory'); 
+            
+            setTimeout(() => renderMovimentacoesSubMenu(), 1500);
+        } else {
+            console.error("[Supabase] Falha Crítica: Movimento gravado, mas estoque NÃO atualizado.");
+            showToast("Erro: Movimento gravado, mas o saldo não pôde ser atualizado.");
+        }
+    } catch (e) {
+        console.error("[Supabase] Erro inesperado:", e);
+        showToast("Erro fatal no processamento.");
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+async function renderMovimentacoesHistory() {
+    movementHistoryState.page = 1;
+    movementHistoryState.expanded = new Set();
+    app.innerHTML = renderMovHistoryShell(true);
+
+    try {
+        console.log('[MOVIMENTOS DEBUG] iniciando busca de movimentos...');
+        await loadMovHistoryOperations();
+        console.log('[MOVIMENTOS DEBUG] operações agrupadas:', movementHistoryState.operations?.length || 0);
+        app.innerHTML = renderMovHistoryShell(false);
+    } catch (err) {
+        console.error('[MOVIMENTOS DEBUG] erro crítico ao processar movimentos:', err);
+        movementHistoryState.operations = [];
+        movementHistoryState.filtered = [];
+        app.innerHTML = renderMovHistoryShell(false);
+        showToast('Erro ao carregar histórico de movimentos.', 'error');
+    }
+}
+
+/* ===================================================
+   TELA DE TRANSFERÊNCIA DE ESTOQUE (MODO CIRÓGGICO)
+   =================================================== */
+
+function normalizeLocal(local) {
+    if (!local) return "";
+    let norm = local
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/\s+/g, '_')
+        .replace('1º_ANDAR', 'PRIMEIRO_ANDAR')
+        .replace('1º_ANDAR', 'PRIMEIRO_ANDAR')
+        .replace('1_ANDAR', 'PRIMEIRO_ANDAR');
+    // Normalizar variações de FULL ML
+    if (norm === 'FULL_ML' || norm === 'FULLML' || norm === 'FULL_M_L') return 'FULL_ML';
+    return norm;
+}
+
+function prettyLocal(local) {
+    const norm = normalizeLocal(local);
+    const map = {
+        'TERREO': 'TÉRREO',
+        'MOSTRUARIO': 'MOSTRUÁRIO',
+        'PRIMEIRO_ANDAR': '1º ANDAR',
+        'DEFEITO': 'DEFEITO',
+        'EM_GARANTIA': 'EM GARANTIA',
+        'EM_TRANSPORTE': 'EM TRANSPORTE',
+        'FULL_ML': 'FULL ML'
+    };
+    return map[norm] || norm;
+}
+
+async function renderTransferenciaScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    if (!appData.transferItems) appData.transferItems = [];
+
+    // TAREFA 1 & 2: Garantir produtos carregados (Sempre aguardar para garantir)
+    console.log('[INV-DIAG] Garantindo produtos carregados na Transferência...');
+    
+    const needsLoadingUI = !appData.products || appData.products.length === 0;
+    
+    if (needsLoadingUI) {
+        app.innerHTML = `
+            <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;">
+                <div class="material-symbols-rounded" style="font-size: 3rem; margin-bottom: 20px; animation: pulse 1.5s infinite;">inventory_2</div>
+                <div style="font-weight: 800; font-size: 1.2rem;">Sincronizando Produtos...</div>
+                <div style="color: #777; font-size: 0.9rem; margin-top: 8px;">Aguarde um instante.</div>
+            </div>
+        `;
+    }
+    
+    await ensureProdutosLoaded(true); // TAREFA 1: Garantir carregamento real
+
+    const locals = ['TÉRREO', 'MOSTRUÁRIO', '1º ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE', 'FULL ML'];
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in no-top-bar transfer-ops-screen">
+            <button type="button" class="transfer-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+
+            <main class="transfer-ops-shell">
+                <header class="transfer-ops-header">
+                    <div class="transfer-ops-icon">
+                        <span class="material-symbols-rounded">sync_alt</span>
+                    </div>
+                    <div>
+                        <h1>TRANSFERÊNCIA</h1>
+                        <p>Movimentação de produtos entre locais do estoque.</p>
+                    </div>
+                </header>
+
+                <section class="transfer-flow-card">
+                    <article class="transfer-local-card">
+                        <label for="trans-origem">Origem</label>
+                        <div class="transfer-local-control">
+                            <span class="material-symbols-rounded">warehouse</span>
+                            <select id="trans-origem" onchange="handleTransferLocalChange()">
+                                <option value="">Selecione...</option>
+                                ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+                            </select>
+                        </div>
+                    </article>
+
+                    <div class="transfer-route-arrow">
+                        <span class="material-symbols-rounded">arrow_forward</span>
+                    </div>
+
+                    <article class="transfer-local-card">
+                        <label for="trans-destino">Destino</label>
+                        <div class="transfer-local-control">
+                            <span class="material-symbols-rounded">warehouse</span>
+                            <select id="trans-destino" onchange="handleTransferLocalChange()">
+                                <option value="">Selecione...</option>
+                                ${locals.map(l => `<option value="${l}">${l}</option>`).join('')}
+                            </select>
+                        </div>
+                    </article>
+
+                    <article class="transfer-scanner-card">
+                        <label for="trans-ean-input">Scanner / Bipagem</label>
+                        <div class="transfer-scanner-input">
+                            <span class="material-symbols-rounded">barcode_scanner</span>
+                            <input type="text" id="trans-ean-input" placeholder="BIPAR EAN OU CÓDIGO..." onkeypress="if(event.key === 'Enter') addTransferItem()">
+                            <span class="material-symbols-rounded transfer-scan-mark">barcode</span>
+                        </div>
+                        <small>Use o leitor de código de barras para adicionar produtos.</small>
+                    </article>
+                </section>
+
+                <section class="transfer-content-grid">
+                    <article class="transfer-products-panel">
+                        <div class="transfer-panel-head">
+                            <div>
+                                <h2>PRODUTOS NA TRANSFERÊNCIA</h2>
+                                <span id="transfer-items-badge">0 itens</span>
+                            </div>
+                            <button type="button" class="transfer-clear-btn" onclick="clearTransferItems()">
+                                <span class="material-symbols-rounded">delete</span>
+                                Limpar lista
+                            </button>
+                        </div>
+
+                        <div class="transfer-table-head">
+                            <span>Produto</span>
+                            <span>Identificação</span>
+                            <span>Qtd.</span>
+                            <span>Ações</span>
+                        </div>
+
+                        <div id="transfer-items-list" class="transfer-items-list">
+                            <!-- Preenchido via updateTransferenciaListUI -->
+                        </div>
+                    </article>
+
+                    <aside class="transfer-summary-panel">
+                        <div class="transfer-summary-title">
+                            <span class="material-symbols-rounded">assignment</span>
+                            <h2>RESUMO DA TRANSFERÊNCIA</h2>
+                        </div>
+
+                        <div class="transfer-route-summary">
+                            <div>
+                                <small>Origem</small>
+                                <strong id="transfer-summary-origin">-</strong>
+                            </div>
+                            <span class="material-symbols-rounded">arrow_forward</span>
+                            <div>
+                                <small>Destino</small>
+                                <strong id="transfer-summary-destiny">-</strong>
+                            </div>
+                        </div>
+
+                        <div class="transfer-summary-metrics">
+                            <div>
+                                <span class="material-symbols-rounded">inventory_2</span>
+                                <small>Itens na lista</small>
+                                <strong id="transfer-summary-items">0</strong>
+                            </div>
+                            <div>
+                                <span class="material-symbols-rounded">deployed_code</span>
+                                <small>Quantidade total</small>
+                                <strong id="transfer-summary-qty">0</strong>
+                            </div>
+                            <div>
+                                <span class="material-symbols-rounded">tag</span>
+                                <small>Códigos diferentes</small>
+                                <strong id="transfer-summary-codes">0</strong>
+                            </div>
+                        </div>
+
+                        <p class="transfer-summary-tip">
+                            <span class="material-symbols-rounded">info</span>
+                            Confira os itens antes de confirmar.
+                        </p>
+                    </aside>
+                </section>
+
+                <footer class="transfer-action-footer">
+                    <button type="button" class="transfer-cancel-btn" onclick="renderMovimentacoesSubMenu()">
+                        <span class="material-symbols-rounded">close</span>
+                        Cancelar
+                    </button>
+                    <button type="button" id="btn-confirm-transfer" class="transfer-confirm-btn" onclick="confirmTransferencia()">
+                        <span class="material-symbols-rounded">check_circle</span>
+                        Confirmar Transferência
+                    </button>
+                </footer>
+            </main>
+        </div>
+    `;
+
+    updateTransferenciaListUI();
+    setTimeout(() => document.getElementById('trans-ean-input')?.focus(), 500);
+}
+
+function validateTransferLocals() {
+    const origem = document.getElementById('trans-origem')?.value;
+    const destino = document.getElementById('trans-destino')?.value;
+    
+    if (origem && destino && origem === destino) {
+        showToast("Origem e destino devem ser diferentes!", "warning");
+        return false;
+    }
+    return true;
+}
+
+function handleTransferLocalChange() {
+    validateTransferLocals();
+    updateTransferenciaSummaryUI();
+    setTimeout(() => document.getElementById('trans-ean-input')?.focus(), 80);
+}
+
+function clearTransferItems() {
+    if (!appData.transferItems?.length) return;
+    appData.transferItems = [];
+    updateTransferenciaListUI();
+    setTimeout(() => document.getElementById('trans-ean-input')?.focus(), 80);
+}
+
+function getTransferProductDetails(item) {
+    const product = (appData.products || []).find(p => String(p.id_interno || '') === String(item.id_interno || ''));
+    const imageUrl = product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
+    return {
+        name: item.descricao || product?.descricao_completa || product?.descricao_base || product?.nome || 'Produto',
+        brand: product?.marca || product?.brand || 'SEM MARCA',
+        id: item.id_interno || product?.id_interno || '-',
+        ean: product?.ean || '-',
+        sku: product?.sku_fornecedor || item.id_interno || '-',
+        imageUrl
+    };
+}
+
+function updateTransferenciaSummaryUI() {
+    const items = appData.transferItems || [];
+    const origem = document.getElementById('trans-origem')?.value || '-';
+    const destino = document.getElementById('trans-destino')?.value || '-';
+    const totalQty = items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+    const differentCodes = new Set(items.map(item => String(item.id_interno || ''))).size;
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    setText('transfer-items-badge', `${items.length} ${items.length === 1 ? 'item' : 'itens'}`);
+    setText('transfer-summary-origin', origem);
+    setText('transfer-summary-destiny', destino);
+    setText('transfer-summary-items', items.length);
+    setText('transfer-summary-qty', totalQty);
+    setText('transfer-summary-codes', differentCodes);
+}
+
+async function addTransferItem() {
+    const eanInput = document.getElementById('trans-ean-input');
+    const origemInput = document.getElementById('trans-origem');
+    const ean = eanInput?.value?.trim();
+    const origem = origemInput?.value;
+
+    if (!origem) {
+        showToast("Selecione o local de origem primeiro!");
+        return;
+    }
+
+    if (!ean) return;
+
+    // LOG: Termo digitado
+    console.log('[INV-DIAG] termo digitado:', ean);
+
+    // TAREFA 3: Se appData.products estiver vazio, tentar carregar
+    if (!appData.products || appData.products.length === 0) {
+        console.log('[INV-DIAG] products vazio no bip, recarregando...');
+        await ensureProdutosLoaded(true);
+    }
+
+    // TAREFA A: Buscar primeiro em appData.products
+    let product = appData.products.find(p => p.ean == ean || p.id_interno == ean);
+    
+    // TAREFA 3: Se não encontrar e cache estiver suspeito, tentar carregar uma vez
+    if (!product) {
+        console.log('[INV-DIAG] produto não no cache, tentando recarga forçada...');
+        await ensureProdutosLoaded(true);
+        product = appData.products.find(p => p.ean == ean || p.id_interno == ean);
+    }
+
+    // LOG: Produto encontrado
+    console.log('[INV-DIAG] produto encontrado:', product);
+
+    if (!product) {
+        showToast("Produto não encontrado!", "error");
+        eanInput.value = '';
+        return;
+    }
+
+    const idInterno = product.id_interno;
+    const origemNorm = normalizeLocal(origem);
+
+    // TAREFA B: Validar estoque_atual
+    const { data: stockData, error } = await window.supabaseClient
+        .from('estoque_atual')
+        .select('saldo_disponivel')
+        .eq('id_interno', idInterno)
+        .eq('local', origemNorm)
+        .maybeSingle();
+
+    if (error) {
+        showToast("Erro ao validar estoque.");
+        return;
+    }
+
+    if (!stockData) {
+        showToast("Produto sem estoque no local de origem", "error");
+        eanInput.value = '';
+        return;
+    }
+
+    const existing = appData.transferItems.find(i => i.id_interno === idInterno);
+
+    // LOGS OBRIGATÓRIOS
+    console.log('[TRANSF-DIAG] produto id_interno:', idInterno);
+    console.log('[TRANSF-DIAG] origem selecionada:', origem);
+    console.log('[TRANSF-DIAG] origem normalizada:', origemNorm);
+    console.log('[TRANSF-DIAG] estoque origem encontrado:', stockData);
+    
+    const available = Number(stockData.saldo_disponivel || 0);
+    const requested = Number((existing ? existing.quantidade : 0) + 1);
+
+    console.log('[TRANSF-DIAG] saldo_disponivel origem:', available);
+    console.log('[TRANSF-DIAG] quantidade solicitada:', requested);
+
+    if (available < requested) {
+        showToast("Estoque insuficiente no local de origem", "error");
+        eanInput.value = '';
+        return;
+    }
+
+    if (existing) {
+        existing.quantidade += 1;
+    } else {
+        appData.transferItems.unshift({
+            id_interno: idInterno,
+            descricao: product.descricao_base || product.nome,
+            quantidade: 1
+        });
+    }
+
+    eanInput.value = '';
+    eanInput.focus();
+    updateTransferenciaListUI();
+}
+
+function updateTransferenciaListUI() {
+    const list = document.getElementById('transfer-items-list');
+    if (!list) return;
+
+    if (!appData.transferItems || appData.transferItems.length === 0) {
+        list.innerHTML = `
+            <div class="transfer-empty-state">
+                <span class="material-symbols-rounded">barcode_scanner</span>
+                <strong>AGUARDANDO LEITURA</strong>
+                <small>Bipe produtos para adicioná-los à transferência.</small>
+            </div>
+        `;
+        updateTransferenciaSummaryUI();
+        return;
+    }
+
+    list.innerHTML = appData.transferItems.map((item, index) => `
+        ${(() => {
+            const details = getTransferProductDetails(item);
+            return `
+        <article class="transfer-item">
+            <div class="transfer-product-cell">
+                <div class="transfer-product-image">
+                    ${details.imageUrl ? `<img src="${escapeKitAttribute(details.imageUrl)}" alt="${escapeKitAttribute(details.name)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+                </div>
+                <div>
+                    <strong>${escapeKitAttribute(details.name)}</strong>
+                    <small>${escapeKitAttribute(details.brand)}</small>
+                    <em>ID: ${escapeKitAttribute(details.id)} <b>•</b> EAN: ${escapeKitAttribute(details.ean)}</em>
+                </div>
+            </div>
+
+            <div class="transfer-id-cell">
+                <strong>${escapeKitAttribute(details.sku)}</strong>
+                <small>EAN ${escapeKitAttribute(details.ean)}</small>
+            </div>
+
+            <div class="transfer-qty-control">
+                <button type="button" onclick="adjustTransferItemQty(${index}, -1)" aria-label="Reduzir quantidade">−</button>
+                <span>${item.quantidade}</span>
+                <button type="button" onclick="adjustTransferItemQty(${index}, 1)" aria-label="Aumentar quantidade">+</button>
+            </div>
+
+            <button type="button" class="transfer-delete-btn" onclick="removeTransferItem(${index})" aria-label="Excluir item">
+                <span class="material-symbols-rounded">delete</span>
+            </button>
+        </article>`;
+        })()}
+    `).join('');
+
+    list.innerHTML += `
+        <div class="transfer-keep-scanning">
+            <span class="material-symbols-rounded">barcode_scanner</span>
+            Continue bipando produtos...
+        </div>
+    `;
+    updateTransferenciaSummaryUI();
+}
+
+async function adjustTransferItemQty(index, delta) {
+    const item = appData.transferItems[index];
+    const origem = document.getElementById('trans-origem')?.value;
+
+    if (delta > 0) {
+        const origemNorm = normalizeLocal(origem);
+        const { data: stockData, error } = await window.supabaseClient
+            .from('estoque_atual')
+            .select('saldo_disponivel')
+            .eq('id_interno', item.id_interno)
+            .eq('local', origemNorm)
+            .maybeSingle();
+
+        const available = Number(stockData ? stockData.saldo_disponivel : 0);
+        const requested = Number(item.quantidade + delta);
+
+        console.log('[TRANSF-DIAG] produto id_interno:', item.id_interno);
+        console.log('[TRANSF-DIAG] origem selecionada:', origem);
+        console.log('[TRANSF-DIAG] origem normalizada:', origemNorm);
+        console.log('[TRANSF-DIAG] estoque origem encontrado:', stockData);
+        console.log('[TRANSF-DIAG] saldo_disponivel origem:', available);
+        console.log('[TRANSF-DIAG] quantidade solicitada:', requested);
+
+        if (available < requested) {
+            showToast("Estoque insuficiente no local de origem", "error");
+            return;
+        }
+    }
+
+    item.quantidade += delta;
+    if (item.quantidade <= 0) {
+        appData.transferItems.splice(index, 1);
+    }
+    updateTransferenciaListUI();
+}
+
+function removeTransferItem(index) {
+    appData.transferItems.splice(index, 1);
+    updateTransferenciaListUI();
+}
+
+async function confirmTransferencia() {
+    const origem = document.getElementById('trans-origem')?.value;
+    const destino = document.getElementById('trans-destino')?.value;
+    const items = appData.transferItems;
+
+    if (!origem || !destino || items.length === 0) {
+        showToast("Verifique origem, destino e itens.", "warning");
+        return;
+    }
+    if (origem === destino) {
+        showToast("Origem e destino devem ser diferentes!", "warning");
+        return;
+    }
+
+    const confirmBtn = document.getElementById('btn-confirm-transfer');
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = "PROCESSANDO...";
+    
+    showToast("Iniciando transferência...");
+
+    try {
+        const origemNorm = normalizeLocal(origem);
+        const destinoNorm = normalizeLocal(destino);
+        const result = await DataClient.transferirEstoqueSupabase({
+            origem: origemNorm,
+            destino: destinoNorm,
+            usuario: localStorage.getItem('currentUser'),
+            items,
+            executionId: generateExecutionId()
+        });
+
+        console.log('[TRANSF-DIAG] transferência RPC result:', result);
+
+        showToast("Transferência realizada com sucesso!");
+        appData.transferItems = [];
+        await DataClient.loadModule('produtos', true);
+        renderTransferenciaScreen();
+
+    } catch (err) {
+        console.error('[TRANSF-DIAG] Erro fatal na transferência:', err);
+        showToast("ERRO: " + (err.message || "Falha no servidor"), "error");
+        
+        alert("FALHA NA TRANSFERÊNCIA: \n" + err.message + "\n\nA operação foi enviada como transação única ao Supabase. Se falhou, nenhum débito/crédito parcial deve ter sido confirmado.");
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "CONFIRMAR TRANSFERÊNCIA";
+    }
+}
+
+
+/* ===================================================
+   LÓGICA DE INVENTÁRIO (SESSÃO E SCANNING)
+   =================================================== */
+
+let isStartingInventory = false;
+
+async function startInventarioInicial() {
+    renderInventorySetup('inicial');
+}
+
+async function startInventarioGeral() {
+    renderInventorySetup('geral');
+}
+
+function renderInventarioParcialForm() {
+    renderInventorySetup('parcial');
+}
+
+// ==== AJUSTE DE ESTOQUE (Módulo Movimentações) ====
+// Correção manual de saldo por produto e local.
+// NÃO cria inventário. Gera movimento tipo 'ajuste_estoque' e atualiza estoque_atual.
+let ajusteSelectedProduct = null;
+
+function renderAjusteEstoqueScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    if (!currentUser) return renderLogin();
+
+    currentScreen = 'ajuste_estoque';
+    ensureProdutosLoaded();
+
+    ajusteSelectedProduct = null;
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in no-top-bar ajuste-ops-screen">
+            <button type="button" class="ajuste-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+
+            <main class="ajuste-ops-shell">
+                <header class="ajuste-ops-header">
+                    <div class="ajuste-ops-icon">
+                        <span class="material-symbols-rounded">inventory_2</span>
+                    </div>
+                    <div>
+                        <h1>AJUSTE DE ESTOQUE</h1>
+                        <p>Correções manuais e sincronização de inventário.</p>
+                    </div>
+                </header>
+
+                <form id="ajuste-form" class="ajuste-ops-grid" onsubmit="event.preventDefault(); saveAjusteEstoque()">
+                    <section class="ajuste-main-flow">
+                        <article class="ajuste-card ajuste-product-card">
+                            <div class="ajuste-card-title">
+                                <span>1</span>
+                                <h2>PRODUTO</h2>
+                            </div>
+                            <div class="ajuste-search-shell">
+                                <span class="material-symbols-rounded">barcode_scanner</span>
+                                <input type="text" id="ajuste-search" placeholder="BIPAR EAN, SKU OU PRODUTO..." oninput="searchProductForAjuste()" autocomplete="off">
+                                <span class="material-symbols-rounded ajuste-keyboard-icon">keyboard</span>
+                            </div>
+                            <small class="ajuste-scan-tip"><span class="material-symbols-rounded">info</span>Bipe ou digite o código do produto para iniciar.</small>
+                            <div id="ajuste-search-results" class="ajuste-search-results"></div>
+
+                            <div class="ajuste-selected-label">Produto selecionado</div>
+                            <article id="ajuste-selected-info" class="ajuste-selected-product">
+                                <div class="ajuste-product-image">
+                                    <span class="material-symbols-rounded">inventory_2</span>
+                                </div>
+                                <div class="ajuste-product-main">
+                                    <strong id="ajuste-selected-name">Nenhum produto selecionado</strong>
+                                    <small id="ajuste-selected-id">ID: - • EAN: - • SKU: -</small>
+                                    <em id="ajuste-selected-stock">Selecione um produto para consultar saldo.</em>
+                                    <span>Em estoque</span>
+                                </div>
+                                <div class="ajuste-product-metrics">
+                                    <div>
+                                        <span>Estoque atual</span>
+                                        <strong id="ajuste-selected-stock-value">- <small>un</small></strong>
+                                    </div>
+                                    <div>
+                                        <span>Local</span>
+                                        <strong id="ajuste-selected-local">TÉRREO</strong>
+                                    </div>
+                                </div>
+                            </article>
+                        </article>
+
+                        <article class="ajuste-card">
+                            <div class="ajuste-card-title is-warning">
+                                <span>2</span>
+                                <h2>DADOS DO AJUSTE</h2>
+                            </div>
+                            <div class="ajuste-form-grid">
+                                <div class="ajuste-field">
+                                    <label for="ajuste-local">Local do estoque</label>
+                                    <div class="ajuste-select-shell is-local">
+                                        <span class="material-symbols-rounded">warehouse</span>
+                                        <select id="ajuste-local" onchange="handleAjusteFieldChange(true)">
+                                            <option value="TÉRREO">TÉRREO</option>
+                                            <option value="MOSTRUÁRIO">MOSTRUÁRIO</option>
+                                            <option value="1º ANDAR">1º ANDAR</option>
+                                            <option value="DEFEITO">DEFEITO</option>
+                                            <option value="EM_GARANTIA">EM GARANTIA</option>
+                                            <option value="EM_TRANSPORTE">EM TRANSPORTE</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="ajuste-field">
+                                    <label for="ajuste-tipo">Tipo de ajuste</label>
+                                    <div class="ajuste-select-shell is-type">
+                                        <span class="material-symbols-rounded">swap_vert</span>
+                                        <select id="ajuste-tipo" onchange="updateAjusteSummaryUI()">
+                                            <option value="definir">Definir quantidade correta</option>
+                                            <option value="somar">Somar quantidade</option>
+                                            <option value="subtrair">Subtrair quantidade</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="ajuste-field">
+                                    <label>Quantidade</label>
+                                    <div class="ajuste-qty-control">
+                                        <button type="button" onclick="adjustAjusteQty(-1)">−</button>
+                                        <span id="ajuste-qty-display">0</span>
+                                        <button type="button" onclick="adjustAjusteQty(1)">+</button>
+                                    </div>
+                                    <input type="number" id="ajuste-qty" value="0" min="0" step="1" hidden>
+                                </div>
+
+                                <div class="ajuste-field">
+                                    <label for="ajuste-motivo">Motivo</label>
+                                    <div class="ajuste-select-shell is-reason">
+                                        <span class="material-symbols-rounded">chat</span>
+                                        <select id="ajuste-motivo" onchange="updateAjusteSummaryUI()">
+                                            <option value="correcao_contagem">Correção de contagem</option>
+                                            <option value="avaria">Avaria</option>
+                                            <option value="perda">Perda</option>
+                                            <option value="devolucao">Devolução</option>
+                                            <option value="garantia">Garantia</option>
+                                            <option value="erro_lancamento">Erro de lançamento</option>
+                                            <option value="outro">Outro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+
+                        <article class="ajuste-card">
+                            <div class="ajuste-card-title is-note">
+                                <span>3</span>
+                                <h2>OBSERVAÇÃO <small>(OPCIONAL)</small></h2>
+                            </div>
+                            <textarea id="ajuste-obs" class="ajuste-note" placeholder="Detalhes do ajuste, observações adicionais, motivo da correção..." autocomplete="off" oninput="updateAjusteSummaryUI()"></textarea>
+                        </article>
+                    </section>
+
+                    <aside class="ajuste-summary-panel">
+                        <div class="ajuste-summary-title">
+                            <span class="material-symbols-rounded">assignment</span>
+                            <h2>RESUMO DO AJUSTE</h2>
+                        </div>
+                        <div class="ajuste-summary-product">
+                            <div class="ajuste-summary-image"><span class="material-symbols-rounded">inventory_2</span></div>
+                            <div>
+                                <strong id="ajuste-summary-product">Produto não selecionado</strong>
+                                <small id="ajuste-summary-id">ID: - • EAN: -</small>
+                            </div>
+                        </div>
+                        <div class="ajuste-summary-list">
+                            <div class="is-local"><span class="material-symbols-rounded">warehouse</span><small>Local do estoque</small><strong id="ajuste-summary-local">TÉRREO</strong></div>
+                            <div class="is-type"><span class="material-symbols-rounded">swap_vert</span><small>Tipo de ajuste</small><strong id="ajuste-summary-type">Definir quantidade</strong></div>
+                            <div class="is-qty"><span class="material-symbols-rounded">calculate</span><small>Quantidade</small><strong id="ajuste-summary-qty">0 un</strong></div>
+                            <div class="is-reason"><span class="material-symbols-rounded">chat</span><small>Motivo</small><strong id="ajuste-summary-reason">Correção de contagem</strong></div>
+                            <div><span class="material-symbols-rounded">schedule</span><small>Data e hora</small><strong id="ajuste-summary-date">${new Date().toLocaleString('pt-BR')}</strong></div>
+                            <div><span class="material-symbols-rounded">person</span><small>Usuário</small><strong>${escapeKitAttribute(currentUser || '-')}</strong></div>
+                        </div>
+                        <div class="ajuste-impact-card">
+                            <span class="material-symbols-rounded">error</span>
+                            <div>
+                                <strong>IMPACTO DO AJUSTE</strong>
+                                <p>A quantidade será definida exatamente para o valor informado acima.</p>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <footer class="ajuste-action-footer">
+                        <button type="button" class="ajuste-cancel-btn" onclick="renderMovimentacoesSubMenu()">
+                            <span class="material-symbols-rounded">close</span>
+                            Cancelar
+                        </button>
+                        <button type="submit" class="ajuste-save-btn">
+                            <span class="material-symbols-rounded">save</span>
+                            Salvar Ajuste
+                        </button>
+                    </footer>
+                </form>
+            </main>
+        </div>
+    `;
+    updateAjusteSummaryUI();
+    setTimeout(() => document.getElementById('ajuste-search')?.focus(), 250);
+}
+
+function getAjusteProductImage(product) {
+    return product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
+}
+
+function getAjusteProductName(product) {
+    return product?.descricao_base || product?.descricao_completa || product?.nome || product?.descricao || 'Produto';
+}
+
+function updateAjusteSummaryUI() {
+    const qty = Number(document.getElementById('ajuste-qty')?.value || 0);
+    const localSelect = document.getElementById('ajuste-local');
+    const tipoSelect = document.getElementById('ajuste-tipo');
+    const motivoSelect = document.getElementById('ajuste-motivo');
+    const localText = localSelect?.selectedOptions?.[0]?.textContent || localSelect?.value || 'TÉRREO';
+    const tipoText = tipoSelect?.selectedOptions?.[0]?.textContent || 'Definir quantidade correta';
+    const motivoText = motivoSelect?.selectedOptions?.[0]?.textContent || 'Correção de contagem';
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    setText('ajuste-qty-display', qty);
+    setText('ajuste-summary-local', localText);
+    setText('ajuste-summary-type', tipoText.replace(' correta', ''));
+    setText('ajuste-summary-qty', `${formatStockNumber(qty)} un`);
+    setText('ajuste-summary-reason', motivoText);
+    setText('ajuste-summary-date', new Date().toLocaleString('pt-BR'));
+
+    if (ajusteSelectedProduct) {
+        setText('ajuste-summary-product', getAjusteProductName(ajusteSelectedProduct));
+        setText('ajuste-summary-id', `ID: ${ajusteSelectedProduct.id_interno || '-'} • EAN: ${ajusteSelectedProduct.ean || '-'}`);
+    }
+}
+
+function adjustAjusteQty(delta) {
+    const input = document.getElementById('ajuste-qty');
+    if (!input) return;
+    input.value = Math.max(0, Number(input.value || 0) + delta);
+    updateAjusteSummaryUI();
+}
+
+function handleAjusteFieldChange(updateStock = false) {
+    updateAjusteSummaryUI();
+    if (updateStock) updateAjusteStockInfo();
+}
+
+function searchProductForAjuste() {
+    const searchInput = document.getElementById('ajuste-search');
+    const resultsDiv = document.getElementById('ajuste-search-results');
+    if (!searchInput || !resultsDiv) return;
+
+    const query = searchInput.value.toLowerCase().trim();
+    if (query.length < 2) {
+        resultsDiv.innerHTML = '';
+        return;
+    }
+
+    const results = (appData.products || []).filter(p =>
+        (p.descricao_base || '').toLowerCase().includes(query) ||
+        (p.descricao_completa || '').toLowerCase().includes(query) ||
+        (p.sku_fornecedor || '').toString().toLowerCase().includes(query) ||
+        (p.ean || '').toString().toLowerCase().includes(query) ||
+        (p.id_interno || '').toString().toLowerCase().includes(query)
+    ).slice(0, 6);
+
+    resultsDiv.innerHTML = results.map(p => `
+        <div class="ajuste-search-item" onclick="selectProductForAjuste('${escapeKitAttribute((p.id_interno || p.ean || '').replace(/'/g, ''))}')">
+            ${getAjusteProductImage(p) ? `<img src="${escapeKitAttribute(getAjusteProductImage(p))}" onerror="this.style.display='none'; this.parentElement.querySelector('.ajuste-search-fallback').style.display='flex'">` : ''}
+            <span class="ajuste-search-fallback material-symbols-rounded" style="${getAjusteProductImage(p) ? 'display:none' : ''}">inventory_2</span>
+            <div>
+                <strong>${escapeKitAttribute(getAjusteProductName(p))}</strong>
+                <small>ID: ${escapeKitAttribute(p.id_interno || '-')} • EAN: ${escapeKitAttribute(p.ean || 'N/A')} • SKU: ${escapeKitAttribute(p.sku_fornecedor || p.sku || '-')}</small>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function selectProductForAjuste(id) {
+    ajusteSelectedProduct = (appData.products || []).find(p => p.id_interno == id || p.ean == id);
+    if (!ajusteSelectedProduct) return;
+
+    const searchInput = document.getElementById('ajuste-search');
+    const resultsDiv = document.getElementById('ajuste-search-results');
+    const infoDiv = document.getElementById('ajuste-selected-info');
+
+    if (searchInput) searchInput.value = getAjusteProductName(ajusteSelectedProduct);
+    if (resultsDiv) resultsDiv.innerHTML = '';
+
+    if (infoDiv) {
+        infoDiv.classList.add('selected');
+        document.getElementById('ajuste-selected-name').textContent = getAjusteProductName(ajusteSelectedProduct);
+        document.getElementById('ajuste-selected-id').textContent = `ID: ${ajusteSelectedProduct.id_interno || '-'} • EAN: ${ajusteSelectedProduct.ean || 'N/A'} • SKU: ${ajusteSelectedProduct.sku_fornecedor || ajusteSelectedProduct.sku || '-'}`;
+        const imageBox = infoDiv.querySelector('.ajuste-product-image');
+        const imageUrl = getAjusteProductImage(ajusteSelectedProduct);
+        if (imageBox) {
+            imageBox.innerHTML = imageUrl
+                ? `<img src="${escapeKitAttribute(imageUrl)}" alt="${escapeKitAttribute(getAjusteProductName(ajusteSelectedProduct))}" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">`
+                : `<span class="material-symbols-rounded">inventory_2</span>`;
+        }
+        const summaryImage = document.querySelector('.ajuste-summary-image');
+        if (summaryImage) {
+            summaryImage.innerHTML = imageUrl
+                ? `<img src="${escapeKitAttribute(imageUrl)}" alt="${escapeKitAttribute(getAjusteProductName(ajusteSelectedProduct))}" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">`
+                : `<span class="material-symbols-rounded">inventory_2</span>`;
+        }
+    }
+
+    await updateAjusteStockInfo();
+    updateAjusteSummaryUI();
+}
+
+async function updateAjusteStockInfo() {
+    if (!ajusteSelectedProduct) return;
+
+    const localRaw = document.getElementById('ajuste-local')?.value || 'TÉRREO';
+    const stockDiv = document.getElementById('ajuste-selected-stock');
+    if (!stockDiv) return;
+
+    try {
+        const stockData = await DataClient.fetchEstoqueItemLocalSupabase(ajusteSelectedProduct.id_interno, localRaw);
+        const saldo = stockData ? Number(stockData.saldo_disponivel || 0) : 0;
+        stockDiv.textContent = `Saldo atual neste local: ${saldo}`;
+        stockDiv.style.color = saldo > 0 ? '#4ade80' : '#fbbf24';
+        const stockValue = document.getElementById('ajuste-selected-stock-value');
+        if (stockValue) stockValue.innerHTML = `${formatStockNumber(saldo)} <small>un</small>`;
+        const stockLocal = document.getElementById('ajuste-selected-local');
+        if (stockLocal) stockLocal.textContent = prettyLocal(localRaw) || localRaw;
+    } catch (e) {
+        stockDiv.textContent = 'Erro ao buscar saldo';
+        stockDiv.style.color = '#ef4444';
+    }
+}
+
+async function saveAjusteEstoque() {
+    if (isFinalizing) return;
+    isFinalizing = true;
+
+    try {
+        // Validar produto
+        if (!ajusteSelectedProduct) {
+            showToast('Selecione um produto.', 'error');
+            isFinalizing = false;
+            return;
+        }
+
+        const localRaw = document.getElementById('ajuste-local')?.value || 'TÉRREO';
+        const tipoAjuste = document.getElementById('ajuste-tipo')?.value || 'definir';
+        const qtyRaw = document.getElementById('ajuste-qty')?.value;
+        const motivo = document.getElementById('ajuste-motivo')?.value || 'outro';
+        const obs = document.getElementById('ajuste-obs')?.value?.trim() || '';
+
+        const qty = parseFloat(qtyRaw);
+        if (isNaN(qty) || qty < 0) {
+            showToast('Quantidade inválida. Digite um número >= 0.', 'error');
+            isFinalizing = false;
+            return;
+        }
+
+        const idInterno = ajusteSelectedProduct.id_interno;
+        const currentUser = localStorage.getItem('currentUser');
+
+        // Buscar saldo atual neste local
+        const stockData = await DataClient.fetchEstoqueItemLocalSupabase(idInterno, localRaw);
+        const saldoAtual = stockData ? Number(stockData.saldo_disponivel || 0) : 0;
+
+        // Calcular novo saldo
+        let novoSaldo = 0;
+        let diferenca = 0;
+
+        if (tipoAjuste === 'definir') {
+            novoSaldo = qty;
+            diferenca = qty - saldoAtual;
+        } else if (tipoAjuste === 'somar') {
+            novoSaldo = saldoAtual + qty;
+            diferenca = qty;
+        } else if (tipoAjuste === 'subtrair') {
+            novoSaldo = saldoAtual - qty;
+            diferenca = -qty;
+        }
+
+        // Verificar estoque negativo
+        if (novoSaldo < 0) {
+            const config = typeof getAppConfig === 'function' ? getAppConfig() : {};
+            if (!config.permitir_saida_estoque_zero) {
+                showToast('Estoque ficaria negativo. Habilite "Permitir saída com estoque zerado" nas Configurações.', 'error');
+                isFinalizing = false;
+                return;
+            }
+        }
+
+        // Montar descrição do motivo
+        const motivoLabels = {
+            'correcao_contagem': 'Correção de contagem',
+            'avaria': 'Avaria',
+            'perda': 'Perda',
+            'devolucao': 'Devolução',
+            'garantia': 'Garantia',
+            'erro_lancamento': 'Erro de lançamento',
+            'outro': 'Outro'
+        };
+        const motivoLabel = motivoLabels[motivo] || motivo;
+        const tipoLabels = { 'definir': 'Definir para', 'somar': 'Somar', 'subtrair': 'Subtrair' };
+        let observacao = `${tipoLabels[tipoAjuste] || tipoAjuste} ${qty} | Motivo: ${motivoLabel}`;
+        if (obs) observacao += ` | Obs: ${obs}`;
+        observacao += ` | Saldo anterior: ${saldoAtual} -> Novo: ${novoSaldo}`;
+
+        showToast('Processando ajuste...');
+
+        console.log('[AJUSTE] Salvando movimento tipo ajuste_estoque...');
+        console.log('[AJUSTE] idInterno:', idInterno, 'local:', localRaw, 'tipo:', tipoAjuste, 'qty:', qty, 'novoSaldo:', novoSaldo);
+
+        // 1. Salvar movimento
+        const movData = {
+            tipo: 'ajuste_estoque',
+            id_interno: idInterno,
+            local_origem: localRaw,
+            local_destino: '',
+            quantidade: Math.abs(diferenca),
+            usuario: currentUser,
+            origem: 'MANUAL',
+            observacao: observacao
+        };
+
+        const savedMov = await DataClient.saveMovimentoSupabase(movData);
+        if (!savedMov) {
+            showToast('Erro ao gravar movimento.', 'error');
+            isFinalizing = false;
+            return;
+        }
+
+        console.log('[AJUSTE] Movimento salvo:', savedMov);
+
+        // 2. Atualizar estoque_atual (definir = ajuste absoluto, somar/subtrair = relativo)
+        let operacao;
+        let qtyParaEstoque;
+        if (tipoAjuste === 'definir') {
+            operacao = 'ajuste';
+            qtyParaEstoque = novoSaldo;
+        } else if (tipoAjuste === 'somar') {
+            operacao = 'soma';
+            qtyParaEstoque = qty;
+        } else {
+            operacao = 'subtrai';
+            qtyParaEstoque = qty;
+        }
+
+        const stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, localRaw, operacao, qtyParaEstoque);
+
+        if (stockSuccess) {
+            console.log('[AJUSTE] Estoque atualizado com sucesso');
+            showToast('Ajuste de estoque salvo com sucesso!', 'success');
+
+            // Atualizar cache local
+            if (!appData.movimentacoes) appData.movimentacoes = [];
+            appData.movimentacoes.unshift({
+                ...savedMov,
+                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+            });
+            DataClient.invalidateCache('produtos');
+            DataClient.invalidateCache('movimentos');
+
+            setTimeout(() => renderMovimentacoesSubMenu(), 1200);
+        } else {
+            showToast('Movimento salvo, mas estoque NÃO foi atualizado.', 'error');
+        }
+    } catch (e) {
+        console.error('[AJUSTE] Erro fatal:', e);
+        showToast('Erro fatal no ajuste: ' + e.message, 'error');
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+async function renderInventorySetup(type) {
+    const currentUser = localStorage.getItem('currentUser');
+    
+    // UI de Carregamento inicial
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
+            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            <div id="inventory-setup-content" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 80px);">
+                <div class="loading-spinner"></div>
+                <p style="color: #aaa; margin-top: 15px;">Validando sessões no servidor...</p>
+            </div>
+        </div>
+    `;
+
+    try {
+        // TAREFA 1 - Logs de diagnóstico
+        console.log('[INV-DIAG] Entrando em setup para:', type);
+        console.log('[INV-DIAG] Produtos em cache:', appData.products?.length || 0);
+        console.log('[INV-DIAG] Inventários no histórico local:', appData.inventario?.length || 0);
+
+        // 1. Validar/Limpar sessões fantasmas locais
+        checkGhostInventorySession();
+
+        // 2. Carregar inventários frescos do servidor
+        const data = await DataClient.loadModule('inventarios', true);
+        if (data && data.inventario) {
+            appData.inventario = data.inventario;
+            console.log('[INV-DIAG] Inventários carregados do Supabase:', appData.inventario.length);
+        }
+
+        const openSameType = getOpenInventorySessions(type);
+        console.log('[INV-DIAG] Sessoes abertas do tipo:', openSameType.length);
+
+        const content = document.getElementById('inventory-setup-content');
+        if (!content) return;
+
+        content.innerHTML = renderInventoryStartCard(type);
+    } catch (e) {
+        console.error(e);
+        showToast("Erro de conexão", 'error');
+        renderInventarioSubMenu();
+    }
+}
+
+function checkGhostInventorySession() {
+    if (appData.currentInventory && (!appData.currentInventory.items || appData.currentInventory.items.length === 0)) {
+        appData.currentInventory = null;
+    }
+}
+
+function buildInventoryItemFromRow(row) {
+    const product = appData.products?.find(p => String(p.id_interno) === String(row.id_interno));
+    const qty = Number(row.saldo_fisico || row.qty || 0);
+    const saldoSistema = Number(row.saldo_sistema || 0);
+    const valorUnitario = Number(row.valor_unitario || product?.preco_custo || product?.custo || 0);
+    return {
+        id_interno: row.id_interno,
+        qty,
+        saldo_sistema: saldoSistema,
+        diferenca: Number(row.diferenca ?? (qty - saldoSistema)),
+        valor_unitario: valorUnitario,
+        ean: product?.ean || row.ean || row.id_interno,
+        name: product?.descricao_completa || product?.nome || row.name || `PRODUTO ID: ${row.id_interno} (NÃO CARREGADO)`,
+        brand: product?.marca || row.brand || '',
+        db_ids: row.id ? [row.id] : (Array.isArray(row.db_ids) ? row.db_ids : [])
+    };
+}
+
+function groupInventoryItemsByProduct(rows = []) {
+    const grouped = new Map();
+    for (const row of rows || []) {
+        const idInterno = String(row?.id_interno || '').trim();
+        if (!idInterno) continue;
+
+        const item = buildInventoryItemFromRow({ ...row, id_interno: idInterno });
+        const current = grouped.get(idInterno);
+        if (current) {
+            current.qty += item.qty;
+            current.diferenca = current.qty - Number(current.saldo_sistema || 0);
+            current.db_ids = Array.from(new Set([...(current.db_ids || []), ...(item.db_ids || [])]));
+            continue;
+        }
+        grouped.set(idInterno, item);
+    }
+    return Array.from(grouped.values());
+}
+
+function getInventoryTypeLabel(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'INICIAL') return 'INICIAL';
+    if (normalized === 'GERAL') return 'GERAL';
+    if (normalized === 'PARCIAL') return 'PARCIAL';
+    return normalized || 'INICIAL';
+}
+
+function formatInventoryDateTime(value) {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function getInventoryId(inv) {
+    return inv?.inventario_id || inv?.col_a || inv?.col_A || inv?.col_0 || '';
+}
+
+function getInventoryStatus(inv) {
+    return (inv?.status || inv?.col_h || inv?.col_H || inv?.col_7 || '').toString().toUpperCase();
+}
+
+function getInventoryTypeRaw(inv) {
+    return inv?.tipo || inv?.col_d || inv?.col_D || inv?.col_4 || '';
+}
+
+function getInventoryLocalRaw(inv) {
+    return inv?.local || inv?.col_c || inv?.col_C || inv?.col_2 || '';
+}
+
+function getInventoryStartedBy(inv) {
+    return inv?.usuario_responsavel || inv?.criado_por || inv?.usuario || inv?.col_e || inv?.col_E || 'Desconhecido';
+}
+
+function normalizeInventoryUser(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function isOpenInventoryStatus(status) {
+    const normalized = String(status || '').toUpperCase();
+    return normalized === 'ABERTO' || normalized === 'ABERTA';
+}
+
+function isInventoryOwnedByCurrentUser(inv) {
+    const currentUser = localStorage.getItem('currentUser');
+    return normalizeInventoryUser(getInventoryStartedBy(inv)) === normalizeInventoryUser(currentUser);
+}
+
+function isCurrentInventoryEditable() {
+    const inv = appData.currentInventory;
+    if (!inv) return false;
+    return isOpenInventoryStatus(inv.status) && normalizeInventoryUser(inv.user) === normalizeInventoryUser(localStorage.getItem('currentUser')) && inv.mode !== 'view';
+}
+
+function getOpenInventorySessions(type, local = null) {
+    const typeLabel = getInventoryTypeLabel(type);
+    const normalizedLocal = local ? normalizeLocal(local) : null;
+    return (appData.inventario || []).filter(inv => {
+        const status = getInventoryStatus(inv);
+        const invType = getInventoryTypeLabel(getInventoryTypeRaw(inv));
+        const invLocal = normalizeLocal(getInventoryLocalRaw(inv));
+        return isOpenInventoryStatus(status) &&
+            invType === typeLabel &&
+            (!normalizedLocal || invLocal === normalizedLocal);
+    });
+}
+
+function renderInventorySessionAction(inv, type) {
+    const id = getInventoryId(inv);
+    if (isInventoryOwnedByCurrentUser(inv)) {
+        return `
+            <button type="button" class="inv-session-action inv-session-action-primary" onclick="resumeInventorySession('${id}', '${type}')">
+                <span class="material-symbols-rounded">arrow_forward</span>
+                <span>
+                    <strong>CONTINUAR INVENTARIO</strong>
+                    <small>Retomar contagem de onde parou</small>
+                </span>
+            </button>
+
+            <button type="button" class="inv-session-action inv-session-action-danger" onclick="confirmCancelInventory('${id}')">
+                <span class="material-symbols-rounded">delete</span>
+                <span>
+                    <strong>CANCELAR E LIMPAR SESSAO</strong>
+                    <small>Descartar esta sessao e iniciar uma nova</small>
+                </span>
+            </button>
+        `;
+    }
+
+    return `
+        <div class="inv-session-info-note">
+            <span class="material-symbols-rounded">visibility</span>
+            <span><strong>Sessao iniciada por outro usuario.</strong> Voce pode visualizar, mas nao e permitido editar esta sessao.</span>
+        </div>
+        <button type="button" class="inv-session-action inv-session-action-view" onclick="resumeInventorySession('${id}', '${type}', 'view')">
+            <span class="material-symbols-rounded">visibility</span>
+            <span>
+                <strong>VISUALIZAR SESSAO</strong>
+                <small>Acompanhar esta sessao</small>
+            </span>
+        </button>
+    `;
+}
+
+function renderInventoryOpenSessionCard(inv, type) {
+    const id = getInventoryId(inv) || '-';
+    const typeLabel = getInventoryTypeLabel(getInventoryTypeRaw(inv) || type);
+    const local = prettyLocal(getInventoryLocalRaw(inv) || 'N/A');
+    const startedBy = getInventoryStartedBy(inv);
+    const startedAt = inv.data_inicio || inv.criado_em || inv.col_b || inv.col_B || inv.col_1;
+    const status = getInventoryStatus(inv) || 'ABERTO';
+    const owned = isInventoryOwnedByCurrentUser(inv);
+    const accentClass = owned ? 'is-owner' : 'is-other';
+
+    return `
+        <article class="inv-open-session-card ${accentClass}">
+            <div class="inv-open-session-head">
+                <span class="material-symbols-rounded">${owned ? 'assignment' : 'group'}</span>
+                <div>
+                    <strong>Inventario ${typeLabel}</strong>
+                    <span class="inv-session-status-pill">
+                        <i></i>
+                        EM ANDAMENTO
+                    </span>
+                </div>
+                <small class="inv-session-owner-badge">${owned ? 'SUA SESSAO' : 'OUTRO USUARIO'}</small>
+            </div>
+
+            <div class="inv-open-details">
+                <div class="inv-open-row">
+                    <span class="material-symbols-rounded">badge</span>
+                    <span>ID da sessao</span>
+                    <strong class="is-green">${id}</strong>
+                </div>
+                <div class="inv-open-row">
+                    <span class="material-symbols-rounded">assignment</span>
+                    <span>Tipo de Inventario</span>
+                    <strong>${typeLabel}</strong>
+                </div>
+                <div class="inv-open-row">
+                    <span class="material-symbols-rounded">location_on</span>
+                    <span>Local</span>
+                    <strong>${local}</strong>
+                </div>
+                <div class="inv-open-row">
+                    <span class="material-symbols-rounded">person</span>
+                    <span>Iniciado por</span>
+                    <strong>${startedBy}${owned ? ' (voce)' : ''}</strong>
+                </div>
+                <div class="inv-open-row">
+                    <span class="material-symbols-rounded">calendar_month</span>
+                    <span>Data de inicio</span>
+                    <strong>${formatInventoryDateTime(startedAt)}</strong>
+                </div>
+            </div>
+
+            ${owned ? `
+                <div class="inv-session-info-note">
+                    <span class="material-symbols-rounded">info</span>
+                    <span><strong>Esta e a sua sessao ativa.</strong> Voce pode continuar, editar ou cancelar esta sessao.</span>
+                </div>
+            ` : ''}
+
+            <div class="inv-open-session-actions">
+                ${renderInventorySessionAction(inv, type)}
+            </div>
+        </article>
+    `;
+}
+
+function renderInventoryOpenDetectedCard(openSessions, type, localRaw = null) {
+    const sessions = Array.isArray(openSessions) ? openSessions : [openSessions].filter(Boolean);
+    const typeLabel = getInventoryTypeLabel(type);
+    const local = prettyLocal(localRaw || getInventoryLocalRaw(sessions[0]) || 'N/A');
+    const ownSession = sessions.find(inv => isInventoryOwnedByCurrentUser(inv));
+
+    return `
+        <section class="inv-open-card inv-open-card-list" aria-label="Inventarios abertos detectados">
+            <span class="material-symbols-rounded inv-open-alert-icon">warning</span>
+            <h1>INVENTARIO ${typeLabel} EM ANDAMENTO</h1>
+            <p class="inv-open-description">
+                Ja existe uma sessao sua de inventario ${typeLabel} aberta neste local.
+                <span>Outras sessoes ficam visiveis para consulta, mas cada usuario edita apenas a propria sessao.</span>
+            </p>
+
+            <div class="inv-open-location-badge">
+                <span class="material-symbols-rounded">location_on</span>
+                <div>
+                    <small>LOCAL DO INVENTARIO</small>
+                    <strong>${local}</strong>
+                </div>
+            </div>
+
+            <div class="inv-open-section-title">SESSOES EM ANDAMENTO (${sessions.length})</div>
+            <div class="inv-open-session-grid">
+                ${sessions.map(inv => renderInventoryOpenSessionCard(inv, type)).join('')}
+            </div>
+
+            <div class="inv-open-safety">
+                <span class="material-symbols-rounded">shield</span>
+                <span>${ownSession ? 'Para iniciar outra sessao neste local, finalize ou cancele a sua sessao aberta.' : 'Sessoes de outros usuarios sao apenas para visualizacao.'}</span>
+            </div>
+        </section>
+    `;
+}
+
+function getInventorySetupCopy(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'GERAL') {
+        return {
+            subtitle: 'Use para conferir todo o estoque de um local.',
+            detail: 'O inventario geral verifica todos os produtos do local selecionado, comparando o estoque esperado com o estoque contado.'
+        };
+    }
+    if (normalized === 'PARCIAL') {
+        return {
+            subtitle: 'Use para conferir produtos especificos ou uma area do estoque.',
+            detail: 'O inventario parcial permite conferir somente produtos ou areas selecionadas, mantendo a comparacao com o saldo esperado.'
+        };
+    }
+    return {
+        subtitle: 'Use para cadastrar o primeiro saldo real do estoque.',
+        detail: 'O inventario inicial registra o primeiro saldo real do estoque e mostra apenas a quantidade informada na contagem.'
+    };
+}
+
+function selectInventorySetupLocal(local, type = null) {
+    const select = document.getElementById('setup-local');
+    if (select) select.value = local;
+    document.querySelectorAll('.inv-setup-location-btn').forEach(btn => {
+        btn.classList.toggle('is-selected', btn.dataset.local === local);
+    });
+
+    const sessionsEl = document.getElementById('inv-setup-open-sessions');
+    const selectedType = type || document.querySelector('.inv-setup-card')?.dataset.inventoryType || 'inicial';
+    if (sessionsEl) sessionsEl.innerHTML = renderInventorySetupOpenSessions(selectedType, local);
+    document.querySelectorAll('[data-inv-selected-local-label]').forEach(el => {
+        el.textContent = prettyLocal(local);
+    });
+}
+
+function renderInventorySetupOpenSessions(type, local) {
+    const openSessions = getOpenInventorySessions(type, local);
+    if (!openSessions.length) {
+        return '';
+    }
+
+    return `
+        <section class="inv-sessions-section">
+            <h2>SESSOES EM ANDAMENTO <span>(${openSessions.length})</span></h2>
+            <div class="inv-open-session-grid">
+                ${openSessions.map(inv => renderInventoryOpenSessionCard(inv, type)).join('')}
+            </div>
+            <div class="inv-sessions-rule-note">
+                <span class="material-symbols-rounded">shield</span>
+                <span><strong>Importante:</strong> Voce so pode editar e gerenciar a sessao que iniciou. Outros usuarios podem criar novas sessoes simultaneamente e todas ficam visiveis para consulta.</span>
+            </div>
+        </section>
+    `;
+}
+
+function renderInventoryStartCard(type) {
+    const typeLabel = getInventoryTypeLabel(type);
+    const copy = getInventorySetupCopy(typeLabel);
+    const locais = [
+        { value: 'TÉRREO', label: 'TERREO', icon: 'apartment' },
+        { value: 'MOSTRUÁRIO', label: 'MOSTRUARIO', icon: 'storefront' },
+        { value: '1 ANDAR', label: '1 ANDAR', icon: 'layers' },
+        { value: 'FULL_ML', label: 'FULL ML', icon: 'warehouse' },
+        { value: 'EM_TRANSPORTE', label: 'EM TRANSPORTE', icon: 'local_shipping' }
+    ];
+
+    return `
+        <section class="inv-setup-card inv-setup-page" data-inventory-type="${type}" aria-label="Iniciar inventario ${typeLabel}">
+            <input type="hidden" id="setup-local" value="${locais[0].value}">
+
+            <div class="inv-setup-hero">
+                <div class="inv-setup-title-block">
+                    <h1>INVENTARIO ${typeLabel}</h1>
+                    <p>
+                        Acompanhe as sessoes de Inventario ${typeLabel.charAt(0) + typeLabel.slice(1).toLowerCase()} em andamento neste local.
+                        <span>Voce pode continuar a sua sessao ou visualizar as iniciadas por outros usuarios.</span>
+                    </p>
+                </div>
+
+                <div class="inv-create-card" aria-label="Criar novo inventario">
+                    <span class="inv-create-icon material-symbols-rounded">add</span>
+                    <span class="inv-create-copy">
+                        <strong>CRIAR NOVO INVENTARIO</strong>
+                        <small>Inicie uma nova sessao de Inventario ${typeLabel.charAt(0) + typeLabel.slice(1).toLowerCase()} para este local.</small>
+                    </span>
+                    <button type="button" class="inv-create-arrow-btn" onclick="createNewInventorySession('${type}')" aria-label="Iniciar inventario">
+                        <span class="material-symbols-rounded">chevron_right</span>
+                    </button>
+                    <div class="inv-setup-local-filter" aria-label="Local do inventario">
+                        <span>Local do inventario</span>
+                        <div class="inv-setup-location-grid">
+                            ${locais.map((local, index) => `
+                                <button type="button" class="inv-setup-location-btn ${index === 0 ? 'is-selected' : ''}" data-local="${local.value}" onclick="selectInventorySetupLocal('${local.value}', '${type}')">
+                                    <span class="material-symbols-rounded">${local.icon}</span>
+                                    <strong>${local.label}</strong>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="inv-setup-open-sessions" class="inv-setup-open-sessions">
+                ${renderInventorySetupOpenSessions(type, locais[0].value)}
+            </div>
+        </section>
+    `;
+}
+async function createNewInventorySession(type) {
+    if (isStartingInventory) return;
+    const localRaw = document.getElementById('setup-local')?.value || 'TÉRREO';
+    const local = normalizeLocal(localRaw);
+    const currentUser = localStorage.getItem('currentUser');
+    isStartingInventory = true;
+    try {
+        const data = await DataClient.loadModule('inventarios', true);
+        if (data && data.inventario) appData.inventario = data.inventario;
+
+        const openSameTypeLocal = getOpenInventorySessions(type, local);
+        const ownOpenSession = openSameTypeLocal.find(inv => isInventoryOwnedByCurrentUser(inv));
+        if (ownOpenSession) {
+            const content = document.getElementById('inventory-setup-content');
+            if (content) {
+                content.innerHTML = renderInventoryStartCard(type);
+                selectInventorySetupLocal(local, type);
+            }
+            showToast('Voce ja possui um inventario aberto neste local.', 'warning');
+            return;
+        }
+
+        const date = new Date();
+        const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
+        const prefix = type === 'inicial' ? 'INI' : (type === 'geral' ? 'GER' : 'PAR');
+        
+        // TAREFA 4 - Numeração inteligente baseada no maior ID do dia
+        const sameDayPrefix = `INV-${prefix}-${dateStr}-`;
+        const sameDayInventories = (appData.inventario || []).filter(inv => {
+            const id = (inv.inventario_id || inv.col_a || '').toString();
+            return id.startsWith(sameDayPrefix);
+        });
+
+        let nextSeq = 1;
+        if (sameDayInventories.length > 0) {
+            const lastSeqs = sameDayInventories.map(inv => {
+                const id = (inv.inventario_id || inv.col_a || '').toString();
+                const parts = id.split('-');
+                return parseInt(parts[parts.length - 1]) || 0;
+            });
+            nextSeq = Math.max(...lastSeqs) + 1;
+        }
+        
+        const seq = String(nextSeq).padStart(3, '0');
+        const sessionId = `INV-${prefix}-${dateStr}-${seq}`;
+        
+        console.log('[INV-DIAG] Criando nova sessão:', sessionId);
+        console.log('[INV-DIAG] Maior seq encontrado hoje:', nextSeq - 1);
+
+        appData.currentInventory = {
+            id: sessionId,
+            user: currentUser,
+            date: date.toISOString(),
+            items: [],
+            local: local,
+            type: type,
+            filter: 'TOTAL',
+            status: 'ABERTO'
+        };
+
+        const client = window.supabaseClient;
+        if (!client) {
+            alert('Erro: Supabase não conectado');
+            return;
+        }
+
+        appData.currentInventory.isNewSession = true;
+        console.log('[INVENTARIO DEBUG] tela aberta sem salvar');
+
+        await renderInventarioInicialScreen(sessionId);
+    } catch (e) {
+        console.error("Erro no catch createNewInventorySession:", e);
+        showToast("Erro ao iniciar sessão", 'error');
+    } finally {
+        isStartingInventory = false;
+    }
+}
+
+async function resumeInventorySession(sessionId, type, mode = 'edit') {
+    try {
+        console.log('[INV-DIAG] resumeInventorySession id:', sessionId);
+        showToast("Carregando itens...");
+        const client = window.supabaseClient;
+        if (!client) { showToast("Supabase nao disponivel", 'error'); return; }
+
+        // TAREFA 3 - Buscar cabeçalho (Header)
+        const { data: invData, error: headerErr } = await client
+            .from('inventarios')
+            .select('*')
+            .eq('inventario_id', sessionId)
+            .maybeSingle();
+
+        if (headerErr) {
+            console.error('[INV-DIAG] erro header:', headerErr);
+            showToast('Erro ao carregar cabeçalho');
+            return;
+        }
+
+        if (!invData) {
+            console.error('[INV-DIAG] inventário não encontrado no banco:', sessionId);
+            showToast('Sessao não encontrada no servidor');
+            return;
+        }
+
+        // TAREFA 3 - Buscar Itens
+        console.log('[INV-DIAG] buscando itens para inventario:', sessionId);
+        const { data: itens, error: itensErr } = await client
+            .from('inventarios_itens')
+            .select('*')
+            .eq('inventario_id', sessionId);
+
+        console.log('[INV-DIAG] itens retornados:', itens);
+
+        if (itensErr) {
+            console.error('[INV-DIAG] Erro ao buscar itens:', itensErr);
+            showToast('Erro ao carregar itens do servidor');
+            return;
+        }
+
+        const startedBy = invData.usuario_responsavel || invData.criado_por || localStorage.getItem('currentUser');
+        const ownedByCurrentUser = normalizeInventoryUser(startedBy) === normalizeInventoryUser(localStorage.getItem('currentUser'));
+        const renderMode = mode === 'view' || !ownedByCurrentUser ? 'view' : 'edit';
+
+        if (mode !== 'view' && !ownedByCurrentUser) {
+            showToast('Sessao iniciada por outro usuario. Abrindo somente visualizacao.', 'warning');
+        }
+
+        appData.currentInventory = {
+            id: sessionId,
+            user: startedBy,
+            date: invData.data_inicio || new Date().toISOString(),
+            data_fim: invData.data_fim || invData.finalizado_em || null,
+            local: invData.local || 'TÉRREO',
+            type: invData.tipo || type,
+            status: invData.status || 'ABERTO',
+            mode: renderMode,
+            items: []
+        };
+
+        await ensureProdutosLoaded(true);
+
+        appData.currentInventory.items = groupInventoryItemsByProduct(itens || []);
+
+        console.log('[INV-DIAG] currentInventory.items após map:', appData.currentInventory.items.length);
+
+        await renderInventarioInicialScreen(sessionId, renderMode);
+    } catch (e) {
+        console.error('[INV-DIAG] Erro crítico ao retomar:', e);
+        showToast("Erro técnico ao retomar", 'error');
+    }
+}
+async function confirmCancelInventory(sessionId) {
+    const confirmed = await showAppConfirm({
+        title: 'Cancelar e limpar sessao?',
+        message: 'Tem certeza que deseja cancelar e excluir esta sessao de inventario? Esta acao nao pode ser desfeita.',
+        confirmLabel: 'Sim, excluir sessao',
+        cancelLabel: 'Nao, manter sessao',
+        danger: true
+    });
+
+    if (confirmed) {
+        try {
+            const client = window.supabaseClient;
+            let invType = 'inicial';
+            if (client) {
+                const { data: invData, error: ownerErr } = await client
+                    .from('inventarios')
+                    .select('usuario_responsavel, criado_por, tipo')
+                    .eq('inventario_id', sessionId)
+                    .maybeSingle();
+
+                if (ownerErr) throw ownerErr;
+                invType = invData?.tipo || invType;
+                const startedBy = invData?.usuario_responsavel || invData?.criado_por || '';
+                if (normalizeInventoryUser(startedBy) !== normalizeInventoryUser(localStorage.getItem('currentUser'))) {
+                    showToast('Apenas quem iniciou a sessao pode cancelar.', 'error');
+                    return;
+                }
+
+                await client.from('inventarios').update({
+                    status: 'CANCELADO',
+                    data_fim: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                }).eq('inventario_id', sessionId);
+            }
+            appData.currentInventory = null;
+            DataClient.invalidateCache?.('inventarios');
+            await renderInventorySetup(invType);
+        } catch (e) {
+            showToast("Erro ao cancelar", 'error');
+        }
+    }
+}
+
+async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
+    const currentUser = localStorage.getItem('currentUser');
+    const inv = appData.currentInventory;
+    if (!inv || inv.id !== sessionId) { renderInventorySetup('inicial'); return; }
+
+    const isView = mode === 'view' || normalizeInventoryUser(inv.user) !== normalizeInventoryUser(currentUser);
+    const invTypeLabel = getInventoryTypeLabel(inv.tipo || inv.type);
+    const isInitialType = isInitialInventoryType(inv.tipo || inv.type);
+
+    // TAREFA 3 - Corrigir loading "Sincronizando Produtos"
+    // Só mostrar tela de sincronização se appData.products estiver realmente vazio
+    if (!appData.products || appData.products.length === 0) {
+        console.log('[INV-DIAG] Cache de produtos vazio, carregando antes de renderizar...');
+        app.innerHTML = `
+            <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 20px; animation: pulse 1.5s infinite;">...</div>
+                <div style="font-weight: 800; font-size: 1.2rem;">Sincronizando Produtos...</div>
+                <div style="color: #777; font-size: 0.9rem; margin-top: 8px;">Isso levará apenas alguns segundos.</div>
+            </div>
+        `;
+        await ensureProdutosLoaded(true);
+    } else {
+        // Se já existem produtos, garante carregamento em background se for necessário, sem bloquear ou piscar tela
+        ensureProdutosLoaded(); 
+    }
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in inventory-screen-shell" style="background: #232323; height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            <div class="inventory-scanning-screen" style="flex: 1; min-height: 0; width: min(94vw, 880px); max-width: 880px; margin: 0 auto; display: flex; flex-direction: column;">
+                <div style="padding: 20px 10px 0 10px; flex-shrink: 0;">
+                    <div class="inv-screen-title">
+                        <h1>INVENTARIO ${invTypeLabel}</h1>
+                        <span><i></i> Contagem em andamento</span>
+                    </div>
+                    <div class="inv-session-summary" style="background: rgba(255,255,255,0.03); padding: 16px 24px; border-radius: 16px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.06); display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 16px; align-items: center;">
+                        <div>
+                            <div style="font-size: 0.65rem; color: #666; text-transform: uppercase; margin-bottom: 2px; font-weight: 700; letter-spacing: 0.5px;">Sessao</div>
+                            <div style="font-weight: 800; color: #4ade80; font-size: 1rem;">${inv.id}</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 0.65rem; color: #666; text-transform: uppercase; margin-bottom: 2px; font-weight: 700; letter-spacing: 0.5px;">Local</div>
+                            <div style="font-weight: 800; font-size: 1rem; color: #fff;">${inv.local}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.65rem; color: #666; text-transform: uppercase; margin-bottom: 2px; font-weight: 700; letter-spacing: 0.5px;">Tipo</div>
+                            <div style="font-weight: 800; color: #eab308; font-size: 1rem;">${invTypeLabel}</div>
+                        </div>
+                    </div>
+                    ${isView ? `
+                        <div class="inv-view-owner-banner">
+                            <span class="material-symbols-rounded">visibility</span>
+                            <span>Sessao iniciada por ${inv.user || 'outro usuario'}. Visualizacao sem edicao.</span>
+                        </div>
+                    ` : ''}
+                    <div class="inv-search-wrapper" style="position: relative; margin-bottom: 10px;">
+                        <span class="material-symbols-rounded" style="position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: #555; font-size: 24px;">barcode_scanner</span>
+                        <input type="text" id="inv-ean-input" ${isView ? 'disabled' : ''} placeholder="${isView ? 'MODO VISUALIZACAO' : 'Bipar EAN ou Codigo...'}" style="width: 100%; padding: 18px 60px; border-radius: 14px; border: 2px solid #333; background: #111; color: white; font-size: 1.1rem; text-align: left; transition: all 0.2s;" onkeypress="if(event.key === 'Enter') addInventoryItem()">
+                        <button class="inv-cam-btn" ${isView ? 'disabled' : ''} onclick="${isView ? '' : `startScanner(false, false, true)`}" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; cursor: ${isView ? 'not-allowed' : 'pointer'}; transition: all 0.2s; opacity: ${isView ? '0.45' : '1'};" title="Abrir leitor de código">
+                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                        </button>
+                    </div>
+                    <div id="scanner-container-inv" class="hidden" style="width: 100%; margin-bottom: 12px; overflow: hidden; border-radius: 16px; border: 2px solid var(--primary); background: #000; position: relative;">
+                        <div id="reader-inv" style="width: 100%;"></div>
+                        <button class="scanner-close-btn" onclick="stopScanner()">
+                            <span class="material-symbols-rounded">close</span>
+                        </button>
+                    </div>
+                    <div class="inv-list-head">
+                        <span>Produto</span>
+                        <span>${isInitialType ? 'Saldo inicial' : 'Contagem'}</span>
+                        <span>Acoes</span>
+                    </div>
+                </div>
+                <div id="inventory-items-list" onscroll="updateInventoryBackToTopButton()" style="flex: 1; overflow-y: auto; padding: 10px 10px 120px 10px; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;"></div>
+                <button id="inv-back-top-btn" type="button" class="inv-back-top-btn" onclick="scrollInventoryItemsToTop()" title="Voltar ao topo da lista" aria-label="Voltar ao topo da lista">
+                    <span class="material-symbols-rounded">keyboard_arrow_up</span>
+                </button>
+                <div class="inv-footer-bar">
+                    <div class="inv-footer-inner">
+                        ${isView ? 
+                            `
+                            <div style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                                <span class="inv-total-label">Total de itens: <span id="inv-total-count" class="inv-total-num">0</span></span>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <button onclick="gerarPdfPreInventario()" class="inv-btn-pdf" title="Gerar PDF de Inventario">
+                                        <span class="material-symbols-rounded">picture_as_pdf</span>
+                                    </button>
+                                    ${inv.status === 'FECHADO' ? `
+                                        <button onclick="cancelClosedInventory('${inv.id}')" class="inv-btn-cancel">ANULAR</button>
+                                    ` : `
+                                        <button disabled class="inv-btn-status">SESSÃO ${inv.status}</button>
+                                    `}
+                                </div>
+                            </div>
+                            ` :
+                            `
+                            <span class="inv-total-label">Total de itens: <span id="inv-total-count" class="inv-total-num">0</span></span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button onclick="gerarPdfPreInventario()" class="inv-btn-pdf" title="Gerar PDF de Conferencia">
+                                    <span class="material-symbols-rounded">picture_as_pdf</span>
+                                </button>
+                                <button id="btn-finish-inv" onclick="finishInventorySession()" class="inv-btn-finish">&#10003; Finalizar Inventario</button>
+                            </div>
+                            `
+                        }
+                    </div>
+                </div>
+            </div>
+            ${isInitialType ? `
+            <div class="inv-initial-note">
+                <span class="material-symbols-rounded">info</span>
+                <div>
+                    <strong>INVENTARIO INICIAL</strong>
+                    <p>Como este e o primeiro inventario, nao existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+    await updateInventoryItemsList();
+    updateInventoryBackToTopButton();
+    if (!isView) setTimeout(() => document.getElementById('inv-ean-input')?.focus(), 500);
+}
+
+async function gerarPdfPreInventario() {
+    const inv = appData.currentInventory;
+    if (!inv || !inv.items || inv.items.length === 0) {
+        showToast("Nenhum item bipado para gerar o relatório.", "warning");
+        return;
+    }
+
+    try {
+        showToast("Gerando PDF...", "info");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const now = new Date();
+        const timestamp = now.toLocaleString('pt-BR');
+        const fileNameDate = now.toISOString().split('T')[0] + '_' + now.getHours().toString().padStart(2, '0') + '-' + now.getMinutes().toString().padStart(2, '0');
+        const status = String(inv.status || 'ABERTO').toUpperCase();
+        const isClosed = ['FECHADO', 'FINALIZADO', 'FINALIZADA'].includes(status);
+        const title = isClosed ? 'Relatório Final de Inventário' : 'Relatório Parcial de Inventário';
+        const currentUser = inv.user || localStorage.getItem('currentUser') || 'Não identificado';
+        const formatPdfDate = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
+        const groupedItems = groupInventoryItemsByProduct(inv.items);
+
+        appData.currentInventory.items = groupedItems;
+
+        const reportItems = groupedItems.map(item => {
+            const product = (appData.products || []).find(p => String(p.id_interno) === String(item.id_interno));
+            return {
+                id_interno: item.id_interno || '-',
+                marca: product?.marca || item.brand || 'SEM MARCA',
+                nome: product?.descricao_completa || product?.descricao_base || item.name || '-',
+                sku: product?.sku_fornecedor || item.sku || '-',
+                ean: product?.ean || item.ean || '-',
+                qty: Number(item.qty || item.saldo_fisico || 0)
+            };
+        }).sort((a, b) => {
+            const brandSort = a.marca.localeCompare(b.marca, 'pt-BR', { sensitivity: 'base' });
+            if (brandSort !== 0) return brandSort;
+            return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+        });
+
+        const totalUnidades = reportItems.reduce((acc, item) => acc + item.qty, 0);
+
+        doc.setFontSize(16);
+        doc.text(title, 105, 15, { align: 'center' });
+        
+        doc.setFontSize(10);
+        doc.text(`ID Inventário: ${inv.id}`, 14, 25);
+        doc.text(`Status: ${status}`, 14, 30);
+        doc.text(`Data de abertura: ${formatPdfDate(inv.date || inv.data_inicio)}`, 14, 35);
+        doc.text(`Data de fechamento: ${formatPdfDate(inv.data_fim || inv.finalizado_em)}`, 14, 40);
+        doc.text(`Responsável: ${currentUser}`, 14, 45);
+        doc.text(`Local: ${inv.local || '-'}`, 14, 50);
+        doc.text(`Gerado em: ${timestamp}`, 14, 55);
+
+        doc.setFont("helvetica", "bold");
+        doc.text(`Total de produtos diferentes: ${reportItems.length}`, 14, 65);
+        doc.text(`Quantidade total contada: ${formatStockNumber(totalUnidades)} UN`, 14, 70);
+        doc.setFont("helvetica", "normal");
+
+        const tableData = [];
+        let currentBrand = null;
+        reportItems.forEach(item => {
+            if (item.marca !== currentBrand) {
+                currentBrand = item.marca;
+                tableData.push([`MARCA: ${currentBrand}`, '', '', '', '']);
+            }
+            tableData.push([
+                item.id_interno,
+                item.nome,
+                item.sku,
+                item.ean,
+                `${formatStockNumber(item.qty)} UN`
+            ]);
+        });
+
+        doc.autoTable({
+            startY: 80,
+            head: [['ID Interno', 'Produto', 'SKU', 'EAN', 'Qtd']],
+            body: tableData,
+            theme: 'grid',
+            styles: { fontSize: 6.6, cellPadding: 1.2, overflow: 'linebreak' },
+            headStyles: { fillColor: [227, 6, 19], fontSize: 7, cellPadding: 1.4 }, // Cor primária do app #E30613
+            columnStyles: {
+                0: { cellWidth: 26 },
+                1: { cellWidth: 76 },
+                2: { cellWidth: 22 },
+                3: { cellWidth: 32 },
+                4: { cellWidth: 18, halign: 'right' }
+            },
+            didParseCell: function (data) {
+                const raw = String(data.row.raw?.[0] || '');
+                if (data.section === 'body' && raw.startsWith('MARCA:')) {
+                    data.cell.styles.fillColor = [245, 245, 245];
+                    data.cell.styles.textColor = [20, 20, 20];
+                    data.cell.styles.fontStyle = 'bold';
+                    if (data.column.index === 0) data.cell.colSpan = 5;
+                    if (data.column.index > 0) data.cell.text = [''];
+                }
+            },
+            margin: { top: 12, right: 14, bottom: 12, left: 14 }
+        });
+
+        doc.save(`inventario_${isClosed ? 'final' : 'parcial'}_${inv.id || fileNameDate}.pdf`);
+        showToast("PDF gerado com sucesso!", "success");
+    } catch (error) {
+        console.error("Erro ao gerar PDF:", error);
+        showToast("Falha ao gerar o PDF.", "error");
+    }
+}
+
+async function updateInventoryItemsList() {
+    const list = document.getElementById('inventory-items-list');
+    if (!list) return;
+
+    if (appData.currentInventory?.items?.length) {
+        appData.currentInventory.items = groupInventoryItemsByProduct(appData.currentInventory.items);
+    }
+
+    const items = appData.currentInventory?.items || [];
+
+    // Atualizar contador de itens bipados no rodapé
+    const totalCountEl = document.getElementById('inv-total-count');
+    if (totalCountEl) totalCountEl.textContent = items.length;
+
+    if (items.length === 0) {
+        list.innerHTML = `
+            <div style="text-align: center; color: #555; padding: 60px 20px;">
+                <span class="material-symbols-rounded" style="font-size: 56px; display: block; margin-bottom: 16px; opacity: 0.2;">inventory_2</span>
+                <div style="font-weight: 700; color: #666;">Nenhum item encontrado</div>
+                <div style="font-size: 0.8rem; margin-top: 5px;">Inicie a contagem bipando um produto.</div>
+            </div>
+        `;
+        updateInventoryBackToTopButton();
+        return;
+    }
+
+    const isView = appData.currentInventory?.mode === 'view' || appData.currentInventory?.status === 'FECHADO' || appData.currentInventory?.status === 'ANULADO';
+
+    list.innerHTML = items.map((item, displayIndex) => {
+        // Enriquecer com dados do produto (SKU, EAN, cor) pelo id_interno original
+        const product = (appData.products || []).find(p => String(p.id_interno) === String(item.id_interno));
+        const sku   = product?.sku_fornecedor || item.sku || '-';
+        const ean   = product?.ean || item.ean || '-';
+        const cor   = product?.cor || item.cor || '';
+        const nome  = product?.descricao_completa || product?.descricao_base || item.name || 'Produto';
+        const expectedQty = parseStockQty(item.saldo_sistema ?? getStockQtyByLocal(getProductStockEntriesFromCache(item.id_interno), appData.currentInventory?.local));
+        const realIndex = displayIndex;
+        const productImg = product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
+        const qtyLabel = isInitialInventoryType(appData.currentInventory?.type) ? 'SALDO INICIAL' : 'CONTADO';
+
+        return `
+        <div class="inventory-item">
+            <div class="inv-item-index">${String(displayIndex + 1).padStart(2, '0')}</div>
+            <div class="inv-item-thumb">
+                ${productImg ? `<img src="${productImg}" alt="">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+            </div>
+            <!-- ESQUERDA: Informações -->
+            <div class="inv-col-info">
+                <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">tag</span><span class="inv-info-label">ID</span><span class="inv-info-val">${item.id_interno}</span></div>
+                <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">inventory_2</span><span class="inv-info-label">SKU</span><span class="inv-info-val">${sku}</span></div>
+                <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">barcode</span><span class="inv-info-label">EAN</span><span class="inv-info-val">${ean}</span></div>
+                ${cor ? `<div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">palette</span><span class="inv-info-label">COR</span><span class="inv-info-val">${cor}</span></div>` : ''}
+            </div>
+            <!-- CENTRO: Produto -->
+            <div class="inv-col-product">
+                <span class="inv-product-code">${item.id_interno}</span>
+                <span class="inv-product-name">${nome}</span>
+                <span class="inv-product-meta"><strong>SKU</strong> ${sku} <strong>EAN</strong> ${ean}</span>
+                ${renderInventoryQuantitySummary(product, item, expectedQty)}
+            </div>
+            <!-- DIREITA: Quantidade + Remover -->
+            <div class="inv-col-qty" style="flex-direction: row; justify-content: flex-end; width: 100%;">
+                <div class="inv-qty-label">${qtyLabel}</div>
+                <div class="inv-qty-control" style="opacity: ${isView ? '0.5' : '1'}">
+                    <button class="inv-qty-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, -1)`}" ${isView ? 'disabled' : ''}>-</button>
+                    <input
+                        class="inv-qty-num inv-qty-input"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        step="1"
+                        value="${item.qty}"
+                        aria-label="Quantidade do item ${escapeKitAttribute(nome)}"
+                        ${isView ? 'readonly disabled' : ''}
+                        onfocus="this.select()"
+                        onchange="setInventoryQty(${realIndex}, this.value)"
+                        onkeydown="if(event.key === 'Enter'){ event.preventDefault(); this.blur(); setTimeout(() => document.getElementById('inv-ean-input')?.focus(), 80); }"
+                    >
+                    <button class="inv-qty-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, 1)`}" ${isView ? 'disabled' : ''}>+</button>
+                </div>
+                <div class="inv-qty-unit">UNIDADES</div>
+                ${isView ? '' : `<button class="inv-btn-remove" onclick="removeInventoryItem(${realIndex})" style="margin-top: 0;"><span class="material-symbols-rounded" style="font-size: 18px;">delete</span></button>`}
+            </div>
+        </div>`;
+    }).join('');
+    requestAnimationFrame(updateInventoryBackToTopButton);
+}
+
+function updateInventoryBackToTopButton() {
+    const list = document.getElementById('inventory-items-list');
+    const button = document.getElementById('inv-back-top-btn');
+    if (!list || !button) return;
+
+    const canScroll = list.scrollHeight - list.clientHeight > 24;
+    const shouldShow = canScroll && list.scrollTop > 180;
+    button.classList.toggle('is-visible', shouldShow);
+}
+
+function scrollInventoryItemsToTop() {
+    const list = document.getElementById('inventory-items-list');
+    if (!list) return;
+
+    list.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(updateInventoryBackToTopButton, 280);
+}
+
+if (typeof window !== 'undefined') {
+    window.updateInventoryBackToTopButton = updateInventoryBackToTopButton;
+    window.scrollInventoryItemsToTop = scrollInventoryItemsToTop;
+}
+
+async function handleInventoryCamera(input) {
+    if (!input.files || !input.files[0]) return;
+    showToast("Captura de câmera detectada. Processando...", "info");
+    
+    // Simulação de processamento de imagem/barcode
+    // No futuro, aqui integraria com uma lib de OCR ou Barcode reader
+    setTimeout(() => {
+        showToast("Leitura via câmera em fase de implementação técnica.", "warning");
+        input.value = ""; // Limpa input de arquivo
+    }, 1500);
+}
+
+async function addInventoryItem(scannedEan = null) {
+    if (!isCurrentInventoryEditable()) {
+        showToast('Esta sessao e somente visualizacao para o usuario atual.', 'warning');
+        return;
+    }
+
+    const eanInput = document.getElementById('inv-ean-input');
+    const ean = (scannedEan || eanInput?.value?.trim() || '').toString();
+    if (!ean) return;
+    
+    if (eanInput) eanInput.value = ""; // Limpa campo imediatamente para novo bip
+
+    console.log('[INV-DIAG] currentInventory.id:', appData.currentInventory?.id);
+    console.log('[INV-DIAG] bipado ean:', ean);
+
+    // Fallback: Se por algum motivo appData estiver vazio, carregar agora
+    if (!appData.products || appData.products.length === 0) {
+        showToast("Carregando banco de produtos...", "info");
+        await ensureProdutosLoaded(true);
+    }
+
+    let product = appData.products.find(p => (p.ean?.toString() === ean) || (p.id_interno?.toString() === ean) || (p.sku_fornecedor?.toString() === ean));
+
+    console.log('[INV-DIAG] produto encontrado:', product ? `${product.id_interno} - ${product.descricao_completa}` : 'NÃO');
+
+    if (!product) {
+        console.log(`[INV-DIAG] Produto ${ean} não encontrado no cache. Tentando recarregar banco...`);
+        await ensureProdutosLoaded(true);
+        product = appData.products.find(p => (p.ean?.toString() === ean) || (p.id_interno?.toString() === ean) || (p.sku_fornecedor?.toString() === ean));
+    }
+
+    if (!product) { 
+        console.warn('[INV-DIAG] Produto não encontrado em definitivo:', ean);
+        playBeep(false); 
+        showToast("PRODUTO NÃO ENCONTRADO!", "error");
+        await showAppAlert({
+            title: 'Produto não encontrado',
+            message: 'Este código não está cadastrado no banco de produtos.',
+            detail: `Código lido: ${ean}`,
+            buttonLabel: 'Entendi',
+            danger: true,
+            icon: 'barcode_off'
+        });
+        if(eanInput) eanInput.value = ''; 
+        if(eanInput) eanInput.focus();
+        return; 
+    }
+
+    appData.currentInventory.items = groupInventoryItemsByProduct(appData.currentInventory.items || []);
+    const existingIndex = appData.currentInventory.items.findIndex(i => String(i.id_interno) === String(product.id_interno));
+    const existing = existingIndex >= 0 ? appData.currentInventory.items[existingIndex] : null;
+    let itemToSave = null;
+    const previousQty = existing ? Number(existing.qty || 0) : 0;
+    if (existing) {
+        existing.qty += 1;
+        itemToSave = existing;
+        appData.currentInventory.items.splice(existingIndex, 1);
+        appData.currentInventory.items.unshift(itemToSave);
+    }
+    else {
+        itemToSave = { ean: product.ean || product.id_interno, name: product.descricao_completa || product.nome || 'Produto', brand: product.marca || '', qty: 1, id_interno: product.id_interno };
+        appData.currentInventory.items.unshift(itemToSave);
+    }
+    
+    if(eanInput) eanInput.value = ''; 
+    if(eanInput) eanInput.focus(); 
+    playBeep(true); 
+    updateInventoryItemsList(); 
+    
+    console.log('[INV-DIAG] inventario atual:', appData.currentInventory.id);
+    console.log('[INV-DIAG] salvando item:', {
+      inventario_id: appData.currentInventory.id,
+      id_interno: product.id_interno
+    });
+
+    let saved = false;
+    try {
+        saved = await saveInventoryItemToServer(itemToSave);
+    } catch (e) {
+        console.error('[INV-DIAG] erro ao incluir item bipado:', e);
+    }
+    if (!saved) {
+        playBeep(false);
+        if (existing) {
+            itemToSave.qty = previousQty;
+        } else {
+            appData.currentInventory.items = (appData.currentInventory.items || []).filter(i => String(i.id_interno) !== String(product.id_interno));
+        }
+        appData.currentInventory.items = groupInventoryItemsByProduct(appData.currentInventory.items || []);
+        updateInventoryItemsList();
+        await showAppAlert({
+            title: 'Erro ao incluir produto',
+            message: 'O item foi lido, mas não foi confirmado no inventário.',
+            detail: 'Verifique sua conexão e tente bipar novamente.',
+            buttonLabel: 'OK',
+            danger: true,
+            icon: 'error'
+        });
+        if(eanInput) eanInput.focus();
+    }
+}
+
+async function saveInventoryItemToServer(item) {
+    if (!isCurrentInventoryEditable()) {
+        console.warn('[INV-DIAG] tentativa de salvar em sessao nao editavel');
+        return false;
+    }
+
+    const client = window.supabaseClient;
+    if (!client) {
+        console.error('[INV-DIAG] Supabase client não encontrado');
+        showToast('Supabase não disponível. Item não incluído.', 'error');
+        return false;
+    }
+    const inv = appData.currentInventory;
+    if (!inv || !inv.id) {
+        console.error('[INV-DIAG] Sessao de inventário inválida');
+        showToast('Sessão de inventário inválida. Item não incluído.', 'error');
+        return false;
+    }
+
+    if (inv.isNewSession) {
+        console.log('[INVENTARIO DEBUG] primeiro item bipado, criando inventário');
+        const payload = {
+            inventario_id: inv.id,
+            tipo: inv.type,
+            status: 'ABERTO',
+            criado_por: inv.user,
+            usuario_responsavel: inv.user,
+            data_inicio: inv.date,
+            local: inv.local
+        };
+        const { error } = await client.from('inventarios').insert([payload]);
+        if (error) {
+            console.error('[INVENTARIO DEBUG] Erro ao criar inventário no Supabase:', error);
+            showToast('Erro ao criar sessão de inventário.', 'error');
+            return false;
+        }
+        inv.isNewSession = false;
+        
+        if (!appData.inventario) appData.inventario = [];
+        appData.inventario.unshift(payload);
+    }
+
+    // Buscar saldo_sistema REAL do Supabase (id_interno + local)
+    const estoqueReal = await DataClient.fetchEstoqueItemLocalSupabase(item.id_interno, inv.local);
+    const saldo_sistema = estoqueReal ? parseFloat(estoqueReal.saldo_disponivel || 0) : 0;
+    const saldo_fisico = Number(item.qty || 0);
+    const diferenca = saldo_fisico - saldo_sistema;
+    item.saldo_sistema = saldo_sistema;
+
+    const product = appData.products.find(p => p.id_interno == item.id_interno);
+    const valor_unitario = product ? parseFloat((product.preco_custo || product.custo || 0).toString().replace(',', '.')) : 0;
+
+    const payload = {
+        inventario_id: inv.id,
+        id_interno: item.id_interno,
+        local: inv.local,
+        saldo_sistema: saldo_sistema,
+        saldo_fisico: saldo_fisico,
+        diferenca: diferenca,
+        valor_unitario: valor_unitario,
+        valor_diferenca: diferenca * valor_unitario,
+        auditado_em: new Date().toISOString()
+    };
+
+    console.log('[INV-DIAG] payload inventarios_itens:', payload);
+
+    try {
+        // Lógica segura por inventario_id + id_interno.
+        // SELECT em lista evita que duplicados antigos quebrem a consulta.
+        const { data: existingRows, error: selectErr } = await client
+            .from('inventarios_itens')
+            .select('id')
+            .eq('inventario_id', inv.id)
+            .eq('id_interno', item.id_interno);
+
+        if (selectErr) console.error('[INV-DIAG] erro ao verificar existência:', selectErr);
+
+        let result;
+        if ((existingRows || []).length > 0) {
+            console.log('[INV-DIAG] item já existe, executando UPDATE por chave inventario_id + id_interno...');
+            result = await client
+                .from('inventarios_itens')
+                .update(payload)
+                .eq('inventario_id', inv.id)
+                .eq('id_interno', item.id_interno);
+        } else {
+            console.log('[INV-DIAG] item novo, executando INSERT...');
+            result = await client
+                .from('inventarios_itens')
+                .insert([payload]);
+        }
+
+        if (result.error) {
+            if (result.error.code === '23505') {
+                console.warn('[INV-DIAG] insert conflitou com item existente, refazendo UPDATE...');
+                result = await client
+                    .from('inventarios_itens')
+                    .update(payload)
+                    .eq('inventario_id', inv.id)
+                    .eq('id_interno', item.id_interno);
+            }
+        }
+
+        if (result.error) {
+            console.error('[INV-DIAG] Erro ao persistir no banco:', result.error.message);
+            showToast("Erro ao salvar: " + result.error.message, "error");
+            return false;
+        } else {
+            console.log('[INV-DIAG] Persistência OK. Iniciando confirmação imediata...');
+            
+            // TAREFA 1 e 2 - Query de confirmação imediata
+            const { data: check, error: checkError } = await client
+                .from('inventarios_itens')
+                .select('*')
+                .eq('inventario_id', inv.id)
+                .eq('id_interno', item.id_interno);
+
+            console.log('[INV-DIAG] confirmação inventarios_itens:', check, checkError);
+
+            if (!check || check.length === 0) {
+                console.error('[INV-DIAG] FALHA CRÁGICA: Item não encontrado após salvamento!');
+                showToast("Item NÃO foi salvo no banco!", "error");
+                // TAREFA 5 - Bloqueio se não salvar
+                throw new Error("Persistência falhou");
+            } else {
+                item.db_ids = (check || []).map(row => row.id).filter(Boolean);
+                console.log('[INV-DIAG] Confirmação FINALIZADA COM SUCESSO.');
+                return true;
+            }
+        }
+    } catch (e) {
+        console.error('[INV-DIAG] Erro inesperado ao salvar item:', e);
+        showToast('Erro ao incluir produto no inventário.', 'error');
+        return false;
+    }
+}
+
+
+
+window.finishInventorySession = async function () {
+    if (isFinalizing) return;
+    if (!isCurrentInventoryEditable()) { showToast("Apenas quem iniciou a sessao pode finalizar.", "error"); return; }
+    if (!appData.currentInventory?.items?.length) { showToast("Não é possível fechar um inventário vazio!", "error"); return; }
+
+    const totalProdutos = appData.currentInventory.items.length;
+    const totalUnidades = appData.currentInventory.items.reduce((acc, item) => acc + Number(item.qty || item.saldo_fisico || 0), 0);
+    const confirmed = confirm(
+        `Deseja realmente finalizar este inventário?\n\n` +
+        `Depois de finalizado, ele será fechado e o estoque será ajustado.\n\n` +
+        `Produtos diferentes: ${totalProdutos}\n` +
+        `Quantidade total contada: ${formatStockNumber(totalUnidades)} UN`
+    );
+    if (!confirmed) return;
+
+    isFinalizing = true;
+
+    const client = window.supabaseClient;
+    if (!client) { showToast("Supabase não disponível", 'error'); isFinalizing = false; return; }
+
+    const btn = document.getElementById('btn-finish-inv');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.innerHTML = 'PROCESSANDO...'; }
+
+    try {
+        const sessionId = appData.currentInventory.id;
+        const local = appData.currentInventory.local;
+        const user = localStorage.getItem('currentUser');
+        
+        // TAREFA 2 - Buscar itens reais do banco antes de processar
+        console.log('[INV-DIAG] buscando itens reais para finalizar:', sessionId);
+        const { data: dbItems, error: fetchErr } = await client
+            .from('inventarios_itens')
+            .select('*')
+            .eq('inventario_id', sessionId);
+
+        if (fetchErr || !dbItems || dbItems.length === 0) {
+            console.error('[INV-DIAG] erro ou nenhum item encontrado:', fetchErr);
+            showToast("Nenhum item salvo no banco para este inventário!", "error");
+            isFinalizing = false;
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'FINALIZAR INVENTÁRIO'; }
+            return;
+        }
+
+        const groupedDbItems = groupInventoryItemsByProduct(dbItems);
+        console.log('[INV-DIAG] itens para finalizar:', dbItems.length, 'agrupados:', groupedDbItems.length);
+
+        let total_skus = groupedDbItems.length;
+        let total_itens = 0;
+        let total_itens_contados = 0;
+        let total_divergencias = 0;
+        let valor_ajuste_positivo = 0;
+        let valor_ajuste_negativo = 0;
+
+        let step = 0;
+        for (const item of groupedDbItems) {
+            step++;
+            if (btn) btn.innerHTML = `PROCESSANDO ${step}/${total_skus}...`;
+            
+            const saldo_sistema = parseFloat(item.saldo_sistema || 0);
+            const saldo_fisico = parseFloat(item.qty || item.saldo_fisico || 0);
+            const diferenca = saldo_fisico - saldo_sistema;
+            const valor_unitario = parseFloat(item.valor_unitario || 0);
+
+            total_itens += saldo_sistema;
+            total_itens_contados += saldo_fisico;
+            if (diferenca !== 0) {
+                total_divergencias++;
+                if (diferenca > 0) valor_ajuste_positivo += (diferenca * valor_unitario);
+                else valor_ajuste_negativo += (Math.abs(diferenca) * valor_unitario);
+            }
+
+            // 1. Atualizar estoque_atual (Trava: se falhar, interrompe)
+            console.log('[INV-DIAG] estoque payload:', { id_interno: item.id_interno, local, quantidade: saldo_fisico });
+            const stockResult = await DataClient.updateEstoqueSupabase(item.id_interno, local, 'ajuste', saldo_fisico);
+            console.log('[INV-DIAG] estoque result:', stockResult);
+            if (!stockResult) throw new Error(`Falha ao atualizar estoque do item ${item.id_interno}`);
+
+            // 2. Gerar movimento (Trava: se falhar, interrompe)
+            if (diferenca !== 0) {
+                // Mapeamento de tipo de movimento de inventário
+                const invType = (appData.currentInventory.type || '').toLowerCase();
+                let movTipo = '';
+                if (invType === 'inicial') movTipo = 'INVENTARIO_INICIAL';
+                else if (invType === 'parcial') movTipo = 'INVENTARIO_PARCIAL';
+                else if (invType === 'geral') movTipo = 'INVENTARIO_GERAL';
+                else movTipo = diferenca > 0 ? 'AJUSTE+' : 'AJUSTE-'; // Fallback seguro
+
+                const movPayload = {
+                    tipo: movTipo,
+                    id_interno: item.id_interno,
+                    local_origem: null,
+                    local_destino: null,
+                    quantidade: Math.abs(diferenca),
+                    usuario: user,
+                    origem: 'APP_INVENTARIO',
+                    observacao: sessionId
+                };
+                console.log('[INV-DIAG] movimento payload:', movPayload);
+                const movResult = await DataClient.saveMovimentoSupabase(movPayload);
+                console.log('[INV-DIAG] movimento result:', movResult);
+                if (!movResult) throw new Error(`Falha ao gerar movimento do item ${item.id_interno}`);
+            }
+        }
+
+        // 3. Só agora marcamos como FECHADO
+        console.log('[INV-DIAG] executando fechamento final...');
+        const { error: finalErr } = await client.from('inventarios').update({
+            status: 'FECHADO',
+            data_fim: new Date().toISOString(),
+            atualizado_em: new Date().toISOString(),
+            total_skus: total_skus,
+            total_itens: total_itens,
+            total_itens_contados: total_itens_contados,
+            total_divergencias: total_divergencias,
+            valor_ajuste_positivo: valor_ajuste_positivo,
+            valor_ajuste_negativo: valor_ajuste_negativo
+        }).eq('inventario_id', sessionId);
+        
+        console.log('[INV-DIAG] fechamento result:', finalErr ? 'ERRO' : 'OK');
+
+        if (finalErr) throw finalErr;
+
+        showToast("Inventário finalizado com sucesso!");
+        appData.currentInventory = null;
+        renderInventorySuccessScreen();
+
+    } catch (err) {
+        console.error('[INV-DIAG] ERRO CRÁGICO na finalização:', err);
+        showToast('Erro ao finalizar: ' + err.message, 'error');
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = '&#10003; Finalizar Inventario'; }
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+async function adjustInventoryQty(index, delta) {
+    if (!isCurrentInventoryEditable()) { showToast('Sessao somente para visualizacao.', 'warning'); return; }
+    const item = appData.currentInventory.items[index];
+    const previousQty = Number(item.qty || 0);
+    item.qty = Math.max(1, item.qty + delta);
+    updateInventoryItemsList();
+    let saved = false;
+    try {
+        saved = await saveInventoryItemToServer(item);
+    } catch (e) {
+        console.error('[INV-DIAG] erro ao ajustar quantidade:', e);
+    }
+    if (!saved) {
+        item.qty = previousQty;
+        updateInventoryItemsList();
+        await showAppAlert({
+            title: 'Erro ao incluir produto',
+            message: 'A quantidade não foi confirmada no inventário.',
+            detail: 'Verifique sua conexão e tente novamente.',
+            buttonLabel: 'OK',
+            danger: true,
+            icon: 'error'
+        });
+    }
+}
+
+async function setInventoryQty(index, value) {
+    if (!isCurrentInventoryEditable()) { showToast('Sessao somente para visualizacao.', 'warning'); return; }
+    const item = appData.currentInventory?.items?.[index];
+    if (!item) return;
+
+    const normalized = Math.floor(Number(String(value).replace(',', '.')));
+    if (!Number.isFinite(normalized) || normalized < 1) {
+        showToast('Informe uma quantidade válida.', 'warning');
+        updateInventoryItemsList();
+        return;
+    }
+
+    const previousQty = Number(item.qty || 0);
+    item.qty = normalized;
+    updateInventoryItemsList();
+    let saved = false;
+    try {
+        saved = await saveInventoryItemToServer(item);
+    } catch (e) {
+        console.error('[INV-DIAG] erro ao definir quantidade:', e);
+    }
+    if (!saved) {
+        item.qty = previousQty;
+        updateInventoryItemsList();
+        await showAppAlert({
+            title: 'Erro ao incluir produto',
+            message: 'A quantidade não foi confirmada no inventário.',
+            detail: 'Verifique sua conexão e tente novamente.',
+            buttonLabel: 'OK',
+            danger: true,
+            icon: 'error'
+        });
+    }
+}
+
+async function removeInventoryItem(index) {
+    if (!isCurrentInventoryEditable()) { showToast('Sessao somente para visualizacao.', 'warning'); return; }
+    const inv = appData.currentInventory;
+    const item = inv?.items?.[index];
+    if (!inv || !item) return;
+
+    const productName = item.name || item.id_interno || 'este produto';
+    const confirmed = await showAppConfirm({
+        title: 'Remover produto?',
+        message: `Tem certeza que deseja remover ${productName} deste inventario?`,
+        detail: 'Confirmando, ele sera excluido da lista e do Supabase.',
+        confirmLabel: 'Remover',
+        cancelLabel: 'Cancelar',
+        danger: true
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    const client = window.supabaseClient;
+    if (!client) {
+        showToast('Supabase nao disponivel. Item nao removido.', 'error');
+        return;
+    }
+
+    try {
+        showToast('Removendo item do inventario...', 'info');
+
+        if (!inv.isNewSession && inv.id && item.id_interno) {
+            const dbIds = (item.db_ids || []).filter(Boolean);
+            let deletedRows = [];
+
+            if (dbIds.length) {
+                const { data, error } = await client
+                    .from('inventarios_itens')
+                    .delete()
+                    .in('id', dbIds)
+                    .select('id');
+
+                if (error) throw error;
+                deletedRows = data || [];
+            }
+
+            const { data: fallbackDeleted, error: fallbackError } = await client
+                .from('inventarios_itens')
+                .delete()
+                .eq('inventario_id', inv.id)
+                .eq('id_interno', item.id_interno)
+                .select('id');
+
+            if (fallbackError) throw fallbackError;
+            deletedRows = deletedRows.concat(fallbackDeleted || []);
+
+            const { data: remainingRows, error: remainingError } = await client
+                .from('inventarios_itens')
+                .select('id')
+                .eq('inventario_id', inv.id)
+                .eq('id_interno', item.id_interno);
+
+            if (remainingError) throw remainingError;
+            console.log('[INV-DIAG] remocao confirmada:', {
+                deletedRows: deletedRows.length,
+                remainingRows: (remainingRows || []).length,
+                inventario_id: inv.id,
+                id_interno: item.id_interno
+            });
+
+            if ((remainingRows || []).length > 0) {
+                throw new Error('O Supabase nao permitiu excluir este item. Verifique a politica DELETE da tabela inventarios_itens.');
+            }
+        }
+
+        inv.items.splice(index, 1);
+        DataClient.invalidateCache?.('inventarios');
+        updateInventoryItemsList();
+        showToast('Item removido do inventario.', 'success');
+    } catch (error) {
+        console.error('[INV-DIAG] erro ao remover item do inventario:', error);
+        showToast('Erro ao remover item: ' + (error.message || error), 'error');
+    }
+}
+
+function renderInventorySuccessScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    appData.currentInventory = null; // Limpa o inventário atual
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 20px;">
+                    <div style="background: var(--surface); padding: 40px; border-radius: 24px; border: 1px solid var(--primary); box-shadow: 0 20px 40px rgba(0,0,0,0.4); max-width: 400px; width: 100%;">
+                        <span class="material-symbols-rounded" style="font-size: 80px; color: #22c55e; margin-bottom: 20px;">check_circle</span>
+                        <h2 style="font-size: 1.8rem; margin-bottom: 10px; color: white;">INVENTÁRIO SALVO!</h2>
+                        <p style="color: var(--muted); margin-bottom: 30px;">Dados processados e salvos com sucesso no Supabase.</p>
+                        
+                        <div style="background: rgba(34, 197, 94, 0.1); padding: 16px; border-radius: 16px; margin-bottom: 30px; text-align: left; border: 1px solid rgba(34, 197, 94, 0.2);">
+                            <div style="display: flex; align-items: center; gap: 10px; color: #4ade80; font-size: 0.8rem; font-weight: 700; margin-bottom: 8px;">
+                                <span class="material-symbols-rounded" style="font-size: 18px;">check_circle</span>
+                                FLUXO CONCLUÍDO
+                            </div>
+                            <p style="font-size: 0.75rem; color: var(--muted); line-height: 1.4;">
+                                O estoque foi atualizado e os movimentos de ajuste foram registrados no servidor.
+                            </p>
+                        </div>
+
+                        <button class="btn-action" style="width: 100%; justify-content: center; padding: 16px; background: var(--primary) !important;" onclick="renderInventarioSubMenu()">
+                            <span class="material-symbols-rounded">inventory_2</span>
+                            VOLTAR AO INVENTÁRIO
+                        </button>
+                    </div>
+                </div>
+            `;
+
+    playBeep(true);
+}
+
+function renderInventarioSubMenu() {
+    stopScanner();
+    
+    if (appData.currentInventory && appData.currentInventory.isNewSession) {
+        console.log('[INVENTARIO DEBUG] usuário saiu sem itens, nada salvo');
+        appData.currentInventory = null;
+    }
+    
+    const currentUser = localStorage.getItem('currentUser');
+    const subItems = [
+        { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
+        { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergências de estoque.' },
+        { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventorySetup('parcial')", description: 'Contar uma seleção específica de produtos, marcas ou locais.' },
+        { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventários abertos, fechados e anulados.' }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('inventario')}
+
+            <main class="container">
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+function renderInventoryHistoryAction(inv) {
+    const id = getInventoryId(inv);
+    const status = getInventoryStatus(inv);
+    const type = getInventoryTypeRaw(inv);
+    if (!isOpenInventoryStatus(status)) return '';
+
+    if (isInventoryOwnedByCurrentUser(inv)) {
+        return `<button onclick="event.stopPropagation(); resumeInventorySession('${id}', '${type}')" style="background: #4ade80; border: none; padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; color: #111; transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">CONTINUAR</button>`;
+    }
+
+    return `<button onclick="event.stopPropagation(); resumeInventorySession('${id}', '${type}', 'view')" style="background: transparent; border: 1px solid #3b82f6; padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; color: #60a5fa; transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">VISUALIZAR</button>`;
+}
+
+async function renderInventarioHistory() {
+    const currentUser = localStorage.getItem('currentUser');
+    
+    // UI de Carregamento
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
+            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            <div style="padding: 20px; width: min(92vw, 860px); max-width: 860px; margin: 0 auto; text-align: center; color: #777;">
+                <div class="loading-spinner" style="margin: 20px auto;"></div>
+                Carregando histórico...
+            </div>
+        </div>
+    `;
+
+    try {
+        const client = window.supabaseClient;
+        if (!client) return;
+
+        const { data, error } = await client
+            .from('inventarios')
+            .select('*')
+            .order('data_inicio', { ascending: false });
+
+        if (error) throw error;
+
+        appData.inventario = data || [];
+        console.log('[INV-DIAG] histórico inventarios encontrados:', appData.inventario.length);
+
+        const history = appData.inventario;
+
+        app.innerHTML = `
+            <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
+                ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+                <div style="padding: 20px; width: min(92vw, 860px); max-width: 860px; margin: 0 auto;">
+                    <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 10px;">
+                        ${history.length === 0 ? '<p style="color: #555; text-align: center; padding: 40px;">Nenhum registro encontrado.</p>' : 
+                            history.map(inv => `
+                                <div onclick="${(inv.status === 'FECHADO' || inv.status === 'ANULADO') ? `viewClosedInventory('${inv.inventario_id}')` : ''}" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 24px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; ${(inv.status === 'FECHADO' || inv.status === 'ANULADO') ? 'cursor: pointer;' : ''}" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+                                    <div>
+                                        <div style="color: #4ade80; font-weight: 800; font-size: 1.1rem; margin-bottom: 4px;">${inv.inventario_id}</div>
+                                        <div style="color: #777; font-size: 0.85rem; margin-bottom: 2px;">${(inv.tipo || '').toUpperCase()} | ${inv.local}</div>
+                                        <div style="color: #666; font-size: 0.8rem; margin-bottom: 2px;">Iniciado por: ${getInventoryStartedBy(inv)}${isInventoryOwnedByCurrentUser(inv) ? ' (voce)' : ''}</div>
+                                        <div style="color: #555; font-size: 0.8rem;">${new Date(inv.data_inicio).toLocaleDateString('pt-BR')} ${new Date(inv.data_inicio).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="color: ${inv.status === 'FECHADO' ? '#4ade80' : (inv.status === 'ANULADO' ? '#ef4444' : '#fbbf24')}; font-size: 0.85rem; font-weight: 800; letter-spacing: 0.5px;">${inv.status}</div>
+                                        <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 12px;">
+                                            ${renderInventoryHistoryAction(inv)}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        console.error('[INV-DIAG] Erro ao carregar histórico:', e);
+        showToast("Erro ao carregar histórico", "error");
+    }
+}
+
+async function deleteTestInventory(sessionId) {
+    if (!confirm(`EXCLUIR TESTE: Deseja apagar permanentemente todos os dados do inventário ${sessionId}?\nIsso apagará itens, movimentos e o registro da sessão.`)) return;
+    
+    try {
+        const client = window.supabaseClient;
+        if (!client) return;
+        showToast("Excluindo dados de teste...");
+
+        // 1. Deletar itens
+        await client.from('inventarios_itens').delete().eq('inventario_id', sessionId);
+        
+        // 2. Deletar movimentos relacionados
+        await client.from('movimentos').delete().or(`observacao.ilike.%${sessionId}%,observacao.ilike.%Inventário ${sessionId}%`);
+
+        // 3. Deletar cabeçalho
+        await client.from('inventarios').delete().eq('inventario_id', sessionId);
+
+        showToast("Dados de teste excluídos!", "success");
+        renderInventarioHistory(); // Recarregar
+    } catch (e) {
+        console.error('[INV-DIAG] Erro ao excluir teste:', e);
+        showToast("Erro ao excluir dados", "error");
+    }
+}
+
+async function viewClosedInventory(sessionId) {
+    try {
+        console.log('[INV-DIAG] viewClosedInventory id:', sessionId);
+        showToast("Carregando inventário fechado...");
+        
+        const client = window.supabaseClient;
+        if (!client) {
+            console.error('[INV-DIAG] Supabase Client não disponível');
+            return;
+        }
+
+        await ensureProdutosLoaded();
+
+        const { data: invData, error: headerErr } = await client
+            .from('inventarios')
+            .select('*')
+            .eq('inventario_id', sessionId)
+            .maybeSingle();
+
+        console.log('[INV-DIAG] header encontrado:', invData ? 'SIM' : 'NÃO');
+        if (headerErr) console.error('[INV-DIAG] erro header:', headerErr);
+
+        const { data: itensData, error: itensErr } = await client
+            .from('inventarios_itens')
+            .select('*')
+            .eq('inventario_id', sessionId);
+
+        const serverItems = itensData || [];
+        console.log('[INV-DIAG] itens encontrados:', serverItems.length);
+        if (itensErr) console.error('[INV-DIAG] erro itens:', itensErr);
+
+        appData.currentInventory = {
+            id: sessionId,
+            user: invData?.usuario_responsavel || invData?.criado_por || 'N/A',
+            date: invData?.data_inicio || invData?.criado_em,
+            data_fim: invData?.data_fim || invData?.finalizado_em || null,
+            local: invData?.local || invData?.filtro_aplicado || 'TÉRREO',
+            type: invData?.tipo || 'geral',
+            status: invData?.status || 'FECHADO',
+            items: groupInventoryItemsByProduct(serverItems)
+        };
+
+        console.log('[INV-DIAG] currentInventory.items após map (view):', appData.currentInventory.items.length);
+
+        await renderInventarioInicialScreen(sessionId, 'view');
+    } catch (e) {
+        console.error('[INV-DIAG] Erro crítico ao visualizar:', e);
+        showToast("Falha técnica ao abrir visualização", 'error');
+    }
+}
+
+async function startInventoryReview(baseInventoryId) {
+    const original = appData.currentInventory;
+    if (!original || !original.items || original.items.length === 0) {
+        alert("Não é possível revisar um inventário sem itens contados!");
+        return;
+    }
+
+    if (!confirm("Deseja iniciar uma REVISÃO deste inventário?\nSerá gerada uma nova sessão com os mesmos itens.")) return;
+    
+    try {
+        showToast("Iniciando revisão...");
+        const client = window.supabaseClient;
+        if (!client) return;
+
+        const currentUser = localStorage.getItem('currentUser');
+        
+        // Gerar novo ID
+        const date = new Date();
+        const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
+        
+        // TAREFA 4 - Numeração inteligente para REVISÃO
+        const sameDayPrefix = `REV-${dateStr}-`;
+        const sameDayInventories = (appData.inventario || []).filter(inv => {
+            const id = (inv.inventario_id || '').toString();
+            return id.startsWith(sameDayPrefix);
+        });
+
+        let nextSeq = 1;
+        if (sameDayInventories.length > 0) {
+            const lastSeqs = sameDayInventories.map(inv => {
+                const id = inv.inventario_id.toString();
+                const parts = id.split('-');
+                return parseInt(parts[parts.length - 1]) || 0;
+            });
+            nextSeq = Math.max(...lastSeqs) + 1;
+        }
+
+        const seq = String(nextSeq).padStart(3, '0');
+        const newSessionId = `REV-${dateStr}-${seq}`;
+
+        // 1. Criar cabeçalho da revisão
+        const { error: invErr } = await client.from('inventarios').insert([{
+            inventario_id: newSessionId,
+            tipo: 'revisao',
+            status: 'ABERTO',
+            criado_por: currentUser,
+            usuario_responsavel: currentUser,
+            data_inicio: date.toISOString(),
+            local: original.local,
+            filtro_aplicado: `REVISÃO DO ${baseInventoryId}`
+        }]);
+
+        if (invErr) throw invErr;
+
+        // 2. Clonar itens
+        for (const item of original.items) {
+            await client.from('inventarios_itens').insert([{
+                inventario_id: newSessionId,
+                id_interno: item.id_interno,
+                local: original.local,
+                saldo_sistema: item.saldo_sistema,
+                saldo_fisico: item.qty,
+                diferenca: item.qty - item.saldo_sistema,
+                auditado_em: date.toISOString()
+            }]);
+        }
+
+        // 3. Carregar nova sessão como atual
+        appData.currentInventory = {
+            ...original,
+            id: newSessionId,
+            status: 'ABERTO',
+            user: currentUser,
+            date: date.toISOString()
+        };
+
+        await renderInventarioInicialScreen(newSessionId, 'edit');
+        showToast("Revisão iniciada!", "success");
+    } catch (e) {
+        console.error('[INV] Erro ao criar revisão:', e);
+        showToast("Erro ao criar revisão", 'error');
+    }
+}
+
+async function cancelClosedInventory(sessionId) {
+    if (!confirm('Tem certeza que deseja ANULAR este inventário?\n\nEssa ação NÃO apaga dados, apenas marca como ANULADO.')) return;
+
+    try {
+        showToast("Anulando inventário...");
+        const client = window.supabaseClient;
+        if (!client) return;
+
+        const { error } = await client
+            .from('inventarios')
+            .update({
+                status: 'ANULADO',
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('inventario_id', sessionId);
+
+        if (error) throw error;
+
+        showToast("Inventário anulado com sucesso!", "success");
+        appData.currentInventory = null;
+        
+        // Atualizar cache local do histórico se existir
+        if (appData.inventario) {
+            const idx = appData.inventario.findIndex(inv => inv.inventario_id === sessionId);
+            if (idx !== -1) appData.inventario[idx].status = 'ANULADO';
+        }
+
+        renderInventarioHistory();
+    } catch (e) {
+        console.error('[INV] Erro ao anular inventário:', e);
+        showToast("Erro ao anular inventário", "error");
+    }
+}
+
+async function renderStockCritical() {
+    await ensureProdutosLoaded();
+    const currentUser = localStorage.getItem('currentUser');
+    const criticalProducts = appData.products.filter(p => {
+        const stock = parseFloat((p.estoque_atual || p.estoque_minimo || 0).toString().replace(',', '.'));
+        const min = parseFloat((p.estoque_minimo || 0).toString().replace(',', '.'));
+        return stock <= min && min > 0;
+    });
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
+
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE CRÁGICO</h2>
+                        </div>
+
+                        <div id="critical-results">
+                            ${criticalProducts.length === 0 ? `
+                                <div style="text-align: center; padding: 40px; background: var(--surface); border-radius: 20px; color: var(--muted);">
+                                    <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px; color: #22c55e;">check_circle</span>
+                                    <p>Nenhum produto com estoque crítico.</p>
+                                </div>
+                            ` : `
+                                <div style="display: flex; flex-direction: column; gap: 16px;">
+                                    <p style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase;">Produtos abaixo do mínimo (${criticalProducts.length})</p>
+                                    ${criticalProducts.map(p => `
+                                        <div class="menu-card" style="flex-direction: row; justify-content: flex-start; padding: 16px; gap: 20px; min-height: auto; text-align: left; border-left: 4px solid var(--danger);" onclick="showProductDetails('${p.ean}')">
+                                            <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                                                ${(p.url_imagem || p.image_path) ? `<img src="${formatImageUrl(p.image_path || p.url_imagem)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\' style=\\'color: var(--muted)\\'>image</span>'">` : `<span class="material-symbols-rounded" style="color: var(--muted)">image</span>`}
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 700; color: white; font-size: 0.9rem; margin-bottom: 4px;">${p.descricao_base || 'Sem Descrição'}</div>
+                                                <div style="font-size: 0.75rem; color: var(--muted);">SKU: ${p.sku_fornecedor || '-'} | EAN: ${p.ean || '-'}</div>
+                                                
+                                            </div>
+                                            <span class="material-symbols-rounded" style="color: var(--muted)">chevron_right</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function renderSearchProduct() {
+    return renderSearchScreen();
+}
+
+const PRODUCT_STOCK_LOCATION_FILTERS = [
+    { key: 'TODOS', label: 'Todos', locals: [] },
+    { key: 'DISPONIVEL', label: 'Disponível', locals: ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'] },
+    { key: 'TERREO', label: 'Térreo', locals: ['TERREO'] },
+    { key: 'MOSTRUARIO', label: 'Mostruário', locals: ['MOSTRUARIO'] },
+    { key: 'PRIMEIRO_ANDAR', label: '1º Andar', locals: ['PRIMEIRO_ANDAR'] },
+    { key: 'FULL_ML', label: 'Full ML', locals: ['FULL_ML'] },
+    { key: 'DEFEITO', label: 'Defeito', locals: ['DEFEITO'] },
+    { key: 'EM_GARANTIA', label: 'Garantia', locals: ['EM_GARANTIA'] },
+    { key: 'EM_TRANSITO', label: 'Em transporte', locals: ['EM_TRANSITO', 'EM_TRANSPORTE'] }
+];
+
+let currentProductStockFilter = 'TODOS';
+
+function getProductStockFilter(key = currentProductStockFilter) {
+    return PRODUCT_STOCK_LOCATION_FILTERS.find(filter => filter.key === key) || PRODUCT_STOCK_LOCATION_FILTERS[0];
+}
+
+function getStockLocationQty(productId, filterKey = currentProductStockFilter) {
+    const filter = getProductStockFilter(filterKey);
+    if (!filter.locals.length || !productId || !Array.isArray(appData.estoque)) return 0;
+
+    return appData.estoque.reduce((total, item) => {
+        const itemId = String(item.id_interno || item.id || '').trim();
+        if (itemId !== String(productId).trim()) return total;
+
+        const normalizedLocal = normalizeLocal(item.local);
+        if (!filter.locals.includes(normalizedLocal)) return total;
+
+        const saldoTotal = item.saldo_total ?? item.saldo;
+        const qty = saldoTotal !== undefined && saldoTotal !== null
+            ? parseFloat(String(saldoTotal).replace(',', '.'))
+            : (
+                parseFloat(String(item.saldo_disponivel || 0).replace(',', '.')) +
+                parseFloat(String(item.saldo_reservado || 0).replace(',', '.')) +
+                parseFloat(String(item.saldo_em_transito || 0).replace(',', '.'))
+            );
+
+        return total + (isNaN(qty) ? 0 : qty);
+    }, 0);
+}
+
+function applyProductStockLocationFilter(products) {
+    const filter = getProductStockFilter();
+    if (!filter.locals.length) return products;
+    return products.filter(product => getStockLocationQty(product.id_interno || product.col_A, filter.key) > 0);
+}
+
+function getProductStockFilterCount(filterKey) {
+    const productsSource = Array.isArray(appData.products) ? appData.products : [];
+    const filter = getProductStockFilter(filterKey);
+    if (!filter.locals.length) return productsSource.length;
+
+    return productsSource.reduce((total, product) => {
+        const qty = getStockLocationQty(product.id_interno || product.col_A, filter.key);
+        return qty > 0 ? total + 1 : total;
+    }, 0);
+}
+
+function renderProductStockFilterChips() {
+    return `
+        <div class="product-stock-filter-chips" role="tablist" aria-label="Filtro de estoque por local">
+            ${PRODUCT_STOCK_LOCATION_FILTERS.map((filter, index) => {
+                const count = getProductStockFilterCount(filter.key);
+                const shouldShowCount = filter.key === 'TODOS' || count > 0;
+                const group = ['TODOS', 'DISPONIVEL', 'TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'].includes(filter.key) ? 'primary' : filter.key === 'FULL_ML' ? 'external' : 'secondary';
+                return `
+                <button
+                    type="button"
+                    class="product-stock-filter-chip ${currentProductStockFilter === filter.key ? 'active' : ''}"
+                    data-filter-group="${group}"
+                    data-filter-key="${filter.key}"
+                    role="tab"
+                    aria-selected="${currentProductStockFilter === filter.key}"
+                    onclick="setProductStockFilter('${filter.key}')"
+                >
+                    <span class="product-stock-filter-label">${filter.label}</span>
+                    ${shouldShowCount ? `<span class="product-stock-filter-count">${count}</span>` : ''}
+                </button>
+                ${index === 3 ? '<span class="product-stock-filter-break" aria-hidden="true"></span>' : ''}
+            `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function getProductSearchStatusText(queryRaw = '') {
+    const filter = getProductStockFilter();
+    const query = String(queryRaw || '').trim();
+    if (query && filter.key !== 'TODOS') return `Busca: ${query} · Local: ${filter.label}`;
+    if (query) return `Busca: ${query} · Local: Todos`;
+    return `Mostrando: ${filter.label}`;
+}
+
+function updateProductSearchStatus(queryRaw = '') {
+    const status = document.getElementById('product-search-status');
+    if (status) status.textContent = getProductSearchStatusText(queryRaw);
+}
+
+function setProductStockFilter(filterKey) {
+    currentProductStockFilter = getProductStockFilter(filterKey).key;
+
+    document.querySelectorAll('.product-stock-filter-chip').forEach(chip => {
+        const isActive = chip.getAttribute('onclick')?.includes(`'${currentProductStockFilter}'`);
+        chip.classList.toggle('active', Boolean(isActive));
+        chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    const input = document.getElementById('search-input');
+    updateProductSearchStatus(input?.value || '');
+    performSearch();
+}
+
+window.setProductStockFilter = setProductStockFilter;
+
+async function renderSearchScreen(push = true) {
+    if (currentScreen === 'search' && document.getElementById('search-input')) {
+        console.log('[BUSCA MOBILE DEBUG] re-render ignorado (já ativo)');
+        await ensureProdutosLoaded();
+        updateProductSearchStatus(document.getElementById('search-input')?.value || '');
+        return;
+    }
+    const currentUser = localStorage.getItem('currentUser');
+    if (!currentUser) return renderLogin();
+    
+    await ensureProdutosLoaded();
+
+    currentScreen = 'search';
+    if (push) pushNav('search');
+    window.scrollTo(0, 0);
+    
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal product-search-screen">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+            
+            <main class="container product-search-center">
+                <div id="scanner-container" class="hidden">
+                    <div id="reader"></div>
+                    <button class="scanner-close-btn" onclick="stopScanner()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+
+                <div class="product-search-workbench">
+                    ${renderProductSearchSidePanel(0, '')}
+                    <section class="product-search-main-panel">
+                        ${renderProductSearchSummaryBar(0)}
+                        <div id="search-results" class="product-search-results">
+                            ${renderSearchInitialStateHTML()}
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+    `;
+    resetProductSearchScroll();
+    
+    setTimeout(() => {
+        const input = document.getElementById('search-input');
+        if (input) {
+            input.focus();
+        }
+    }, 100);
+}
+
+
+
+let html5QrCode = null;
+let lastScanTime = 0;
+let isScannerStarting = false;
+
+async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false) {
+    if (isScannerStarting) return;
+    isScannerStarting = true;
+
+    // Use specific IDs based on context to avoid conflicts
+    let containerId = 'scanner-container';
+    let readerId = 'reader';
+    let inputId = 'search-input';
+
+    if (isInventory) {
+        containerId = 'scanner-container-inv';
+        readerId = 'reader-inv';
+        inputId = 'inv-ean-input';
+    } else if (isPicking) {
+        containerId = 'scanner-container-pick';
+        readerId = 'reader-pick';
+        inputId = 'pick-ean-input';
+    } else if (isConference) {
+        containerId = 'scanner-container-pack';
+        readerId = 'reader-pack';
+        inputId = 'pack-ean-input';
+    } else if (isGarantia) {
+        containerId = 'scanner-container-garantia';
+        readerId = 'reader-garantia';
+        inputId = 'garantia-search-input';
+    } else if (isEdit) {
+        containerId = 'scanner-container-edit';
+        readerId = 'reader-edit';
+        inputId = 'edit-search-input';
+    }
+
+    const scannerContainer = document.getElementById(containerId);
+    const inputField = document.getElementById(inputId);
+
+    if (!scannerContainer) {
+        isScannerStarting = false;
+        return;
+    }
+
+    // Prevent keyboard from opening during scanning
+    if (inputField) {
+        inputField.setAttribute('inputmode', 'none');
+        inputField.blur();
+    }
+
+    // Ensure any previous scanner is fully stopped
+    try {
+        await stopScanner();
+        await stopManualNFScanner();
+        // Small delay to allow hardware to release
+        await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (e) {
+        console.warn("Error during pre-scan cleanup:", e);
+    }
+
+    scannerContainer.classList.remove('hidden');
+    scannerContainer.style.borderColor = 'var(--primary)';
+
+    html5QrCode = new Html5Qrcode(readerId);
+
+    // Optimized config for mobile barcode reading
+    const config = {
+        fps: 30,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const size = Math.floor(minEdge * 0.9);
+            return { width: size, height: size * 0.6 };
+        },
+        aspectRatio: 1.0,
+        experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+        },
+        // Forçar formatos específicos para maior velocidade
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.QR_CODE
+        ]
+    };
+
+
+    try {
+        await html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            async (decodedText) => {
+                const now = Date.now();
+                if (now - lastScanTime < 1500) return;
+                lastScanTime = now;
+
+                console.log(`[SCANNER] Decoded: ${decodedText}`);
+
+                let context = 'search';
+                if (isInventory) context = 'inventory';
+                else if (isPicking) context = 'picking';
+                else if (isConference) context = 'conference';
+                else if (isGarantia) context = 'garantia';
+                else if (isEdit) context = 'edit';
+
+                const product = await handleProductScan(decodedText, context);
+
+                // Se não for busca, precisa tratar as funções específicas
+                if (product) {
+                    if (isInventory) addInventoryItem(decodedText);
+                    else if (isPicking) addPickItem(decodedText);
+                    else if (isConference) addPackScan(decodedText);
+                }
+            },
+
+            (errorMessage) => {
+                // parse error, ignore it.
+            }
+        );
+    } catch (err) {
+        console.error("Scanner error:", err);
+        showToast("Câmera em uso ou não disponível. Tente novamente.");
+        scannerContainer.classList.add('hidden');
+    } finally {
+        isScannerStarting = false;
+    }
+}
+
+async function showScannerFeedback(type, containerId = 'scanner-container') {
+    const container = document.getElementById(containerId);
+    const feedback = document.getElementById('scanner-feedback');
+    const icon = document.getElementById('scanner-feedback-icon');
+
+    if (!container || !feedback || !icon) return;
+
+    if (type === 'success') {
+        container.style.borderColor = '#22c55e'; // Green
+        feedback.style.background = 'rgba(254, 240, 138, 0.3)'; // Light yellow background
+        icon.innerText = 'check_circle';
+        icon.style.color = '#854d0e'; // Darker yellow icon
+
+        // Show "PRODUTO OK" text if picking or conference
+        const feedbackText = document.createElement('div');
+        feedbackText.innerText = 'PRODUTO OK';
+        feedbackText.style.position = 'absolute';
+        feedbackText.style.top = '15%'; // Positioned at the top
+        feedbackText.style.background = '#fef08a'; // Light yellow background
+        feedbackText.style.color = '#854d0e'; // Darker yellow text
+        feedbackText.style.padding = '8px 24px';
+        feedbackText.style.borderRadius = '99px';
+        feedbackText.style.fontWeight = '900';
+        feedbackText.style.fontSize = '1.2rem';
+        feedbackText.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+        feedback.appendChild(feedbackText);
+
+        setTimeout(() => feedbackText.remove(), 1200);
+    } else {
+        container.style.borderColor = '#eab308'; // Yellow
+        feedback.style.background = 'rgba(234, 179, 8, 0.4)';
+        icon.innerText = 'warning';
+    }
+
+    feedback.style.display = 'flex';
+
+    // Wait for feedback to be visible
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    // Reset feedback
+    feedback.style.display = 'none';
+    container.style.borderColor = 'var(--primary)';
+}
+
+async function stopScanner() {
+    if (html5QrCode) {
+        try {
+            if (html5QrCode.isScanning) {
+                await html5QrCode.stop();
+            }
+        } catch (err) {
+            console.error("Error stopping scanner:", err);
+        } finally {
+            html5QrCode = null;
+        }
+    }
+
+    // Restore inputmode
+    const inputs = ['search-input', 'pick-ean-input', 'pack-ean-input', 'garantia-search-input', 'edit-search-input'];
+    inputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.removeAttribute('inputmode');
+    });
+
+    // Hide all potential scanner containers
+    const containers = [
+        'scanner-container',
+        'scanner-container-pick',
+        'scanner-container-pack',
+        'scanner-container-garantia',
+        'scanner-container-edit'
+    ];
+
+    containers.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            container.classList.add('hidden');
+            container.style.borderColor = 'var(--primary)';
+        }
+    });
+}
+
+function showProductDetailsByCode(code) {
+    if (!code) return;
+    const searchCode = code.toString().trim().toLowerCase();
+
+    const product = appData.products.find(p =>
+        (p.ean && p.ean.toString().toLowerCase() === searchCode) ||
+        (p.sku_fornecedor && p.sku_fornecedor.toString().toLowerCase() === searchCode) ||
+        (p.id_interno && p.id_interno.toString().toLowerCase() === searchCode) ||
+        (p.col_B && p.col_B.toString().toLowerCase() === searchCode)
+    );
+
+    if (product) {
+        renderProductDetails(product);
+    } else {
+        playBeep('error');
+        showToast(`PRODUTO NÃO CADASTRADO: ${code}`);
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.value = '';
+            performSearch();
+            searchInput.focus();
+        }
+    }
+}
+
+const PRODUCT_SEARCH_PAGE_SIZE = 50;
+let productSearchAllResults = [];
+let productSearchVisibleCount = PRODUCT_SEARCH_PAGE_SIZE;
+
+function getVisibleProductSearchResults() {
+    return productSearchAllResults.slice(0, productSearchVisibleCount);
+}
+
+function loadMoreProductSearchResults() {
+    productSearchVisibleCount += PRODUCT_SEARCH_PAGE_SIZE;
+    renderSearchResults(getVisibleProductSearchResults(), productSearchAllResults.length, false);
+}
+
+const doPerformSearch = async () => {
+    console.log('[BUSCA MOBILE DEBUG] executando busca...');
+    const start = performance.now();
+    const input = document.getElementById('search-input');
+    if (!input) return;
+    
+    const queryRaw = input.value.trim();
+    console.log('[BUSCA MOBILE DEBUG] termo digitado:', queryRaw);
+    const activeStockFilter = getProductStockFilter();
+    const hasLocationFilter = activeStockFilter.key !== 'TODOS';
+    updateProductSearchStatus(queryRaw);
+    if ((!queryRaw || queryRaw.length < 2) && !hasLocationFilter) {
+        productSearchAllResults = [];
+        productSearchVisibleCount = PRODUCT_SEARCH_PAGE_SIZE;
+        const resultsContainer = document.getElementById('search-results');
+        if (resultsContainer) resultsContainer.innerHTML = renderSearchInitialStateHTML();
+        updateProductSearchSummary(0, []);
+        return;
+    }
+
+    // 1. Classificação Inteligente e Auto-open (Somente se não for texto genérico e tiver tamanho mínimo)
+    const classification = classifyProductInput(queryRaw);
+    if (queryRaw && classification.type !== 'text' && classification.type !== 'empty' && queryRaw.length >= 4) {
+        const matchedProduct = await handleProductScan(queryRaw, 'search');
+        if (matchedProduct) {
+            input.value = '';
+            const resultsContainer = document.getElementById('search-results');
+            if (resultsContainer) resultsContainer.innerHTML = '';
+            console.log('[BUSCA MOBILE DEBUG] match exato encontrado, abrindo detalhes');
+            return;
+        }
+    }
+
+    const query = normalizeProductSearchTerm(queryRaw);
+    console.log('[BUSCA DEBUG] termo original:', queryRaw);
+    console.log('[BUSCA DEBUG] termo normalizado:', query);
+
+    // 2. Busca Local no ÍNdice
+    const productsSource = Array.isArray(appData.products) ? appData.products : [];
+    const textResults = query.length >= 2
+        ? productsSource.filter(p => p._searchIndex.includes(query))
+        : productsSource.slice();
+    const results = applyProductStockLocationFilter(textResults);
+
+    // 3. Score de Relevância e Ordenação
+    const finalResults = results
+        .sort((a, b) => {
+            // Prioridade 1: Ativos primeiro (opcional, mas recomendado para ERP)
+            const statusA = String(a.status || "ativo").toLowerCase();
+            const statusB = String(b.status || "ativo").toLowerCase();
+            const isAtivoA = statusA === 'ativo' || statusA === 'sim' || statusA === '1';
+            const isAtivoB = statusB === 'ativo' || statusB === 'sim' || statusB === '1';
+            
+            if (isAtivoA && !isAtivoB) return -1;
+            if (!isAtivoA && isAtivoB) return 1;
+
+            if (query.length >= 2) {
+                // Prioridade 2: Score de termo (StartsWith > Includes)
+                const getScore = (p) => {
+                    if (p._dBaseNorm.startsWith(query)) return 0;
+                    if (p._dFullNorm.startsWith(query)) return 1;
+                    if (p._dBaseNorm.includes(query)) return 2;
+                    if (p._dFullNorm.includes(query)) return 3;
+                    if (p._brandCatSubNorm.includes(query)) return 4;
+                    return 5; // Outros campos (EAN, SKU, Atributos)
+                };
+
+                const scoreA = getScore(a);
+                const scoreB = getScore(b);
+
+                if (scoreA !== scoreB) return scoreA - scoreB;
+            }
+
+            if (hasLocationFilter) {
+                const qtyA = getStockLocationQty(a.id_interno || a.col_A, activeStockFilter.key);
+                const qtyB = getStockLocationQty(b.id_interno || b.col_A, activeStockFilter.key);
+                if (qtyA !== qtyB) return qtyB - qtyA;
+            }
+
+            // Prioridade 3: Alfabética
+            return a._dBaseNorm.localeCompare(b._dBaseNorm);
+        });
+
+    productSearchAllResults = finalResults;
+    productSearchVisibleCount = PRODUCT_SEARCH_PAGE_SIZE;
+    const visibleResults = getVisibleProductSearchResults();
+
+    const end = performance.now();
+    console.log(`[BUSCA DEBUG] Local: "${queryRaw}" | Filtro estoque: ${activeStockFilter.key} | Encontrados: ${finalResults.length} | Exibindo: ${visibleResults.length} | Tempo: ${Math.round(end - start)}ms`);
+    
+    renderSearchResults(visibleResults, finalResults.length);
+    
+    if (finalResults.length > 0) {
+        showPageSearchSignal('success');
+    }
+
+    // Mostrar alerta após falha na busca, diferenciando código bipado/digitado de texto comum
+    if (finalResults.length === 0 && queryRaw.length >= 3) {
+        console.log('[BUSCA DEBUG] nenhum resultado real encontrado na busca');
+        const isPotentialCode = queryRaw.length >= 6 && !queryRaw.includes(' ');
+        showScanFeedback('warning', isPotentialCode ? 'PRODUTO NÃO CADASTRADO' : 'PRODUTO NÃO EXISTE');
+    }
+};
+
+window.performSearch = debounce(doPerformSearch, 300);
+
+// Criar versão debounced da busca para evitar processamento excessivo ao digitar
+let lastSearchQuery = '';
+const debouncedSearch = debounce(async () => {
+    const input = document.getElementById('search-input');
+    if (!input) return;
+    const query = input.value.trim();
+    if (query === lastSearchQuery) return;
+    lastSearchQuery = query;
+    await performSearch();
+}, 300);
+
+function handleSearchEnter(event) {
+    if (event.key === 'Enter') {
+        const rawValue = event.target.value.trim();
+        if (!rawValue) return;
+        handleProductScan(rawValue, 'search');
+    }
+}
+
+function getSearchProductMetaItems(product) {
+    const attrs = getProductAttrMap(product);
+    const cor = product.cor || product.col_I || attrs.cor || attrs.cor_lente || attrs.cor_botao;
+    return [
+        { label: 'EAN', value: product.ean || product.col_B },
+        { label: 'SKU', value: product.sku_fornecedor || product.sku },
+        { label: 'COR', value: cor }
+    ].filter(item => isSearchProductMetaValue(item.value));
+}
+
+function isSearchProductMetaValue(value) {
+    if (!isFilledValue(value)) return false;
+    const normalized = normalizeText(value).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return !['n_a', 'na', 'sem_informacao', 'sem_info'].includes(normalized);
+}
+
+function cleanProductSearchText(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replaceAll('Disponﾃｭvel', 'Disponivel')
+        .replaceAll('DISPONﾃ昂EL', 'DISPONIVEL')
+        .replaceAll('Tﾃｩrreo', 'Terreo')
+        .replaceAll('Tﾃ嘘REO', 'TERREO')
+        .replaceAll('MOSTRUﾃヽIO', 'MOSTRUARIO')
+        .replaceAll('Mostruﾃ｡rio', 'Mostruario')
+        .replaceAll('1ﾂｺ', '1')
+        .replaceAll('Descriﾃｧﾃ｣o', 'Descricao')
+        .replaceAll('descriﾃｧﾃ｣o', 'descricao')
+        .replaceAll('Cﾃｳdigo', 'Codigo')
+        .replaceAll('cﾃｳdigo', 'codigo')
+        .replaceAll('Nﾃ｣o', 'Nao')
+        .replaceAll('nﾃ｣o', 'nao')
+        .replaceAll('ﾃ｡', 'a')
+        .replaceAll('ﾃ｣', 'a')
+        .replaceAll('ﾃｧ', 'c')
+        .replaceAll('ﾃｩ', 'e')
+        .replaceAll('ﾃｭ', 'i')
+        .replaceAll('ﾃｳ', 'o')
+        .replaceAll('ﾃｺ', 'u')
+        .replaceAll('�', '');
+}
+
+function renderSearchProductMeta(product) {
+    const items = getSearchProductMetaItems(product);
+    if (!items.length) return '';
+    return `
+        <div class="card-meta-row">
+            ${items.map(item => {
+                const value = cleanProductSearchText(item.value);
+                const displayValue = item.label === 'COR' ? value.toUpperCase() : value;
+                return `<span class="card-meta-chip"><strong>${item.label}:</strong> ${displayValue}</span>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+function renderSearchProductLocationBadge(product) {
+    const location = cleanProductSearchText(product?.localizacao_estoque || '');
+    if (!isFilledValue(location)) return '';
+
+    return `
+        <span class="product-location-badge" title="Localização física no estoque">
+            <span class="material-symbols-rounded location-icon">location_on</span>
+            ${location}
+        </span>
+    `;
+}
+
+function getProductImageUrl(product) {
+    const rawUrl = product?.image_path || product?.url_imagem || product?.imagem_url || product?.col_F || product?.col_f || '';
+    return rawUrl ? formatImageUrl(rawUrl) : '';
+}
+
+function getSearchCardStockQty(product) {
+    const idInterno = product.id_interno || product.col_A;
+    const activeFilter = getProductStockFilter();
+    if (activeFilter.key !== 'TODOS') {
+        return getStockLocationQty(idInterno, activeFilter.key);
+    }
+    return getAvailableStockCache(idInterno);
+}
+
+function getSearchCardStockLocationLabel() {
+    const activeFilter = getProductStockFilter();
+    return activeFilter.key === 'TODOS' ? 'DISPONIVEL' : activeFilter.label;
+}
+
+function resetProductSearchScroll() {
+    const reset = () => {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+
+        const resultsContainer = document.getElementById('search-results');
+        if (resultsContainer) resultsContainer.scrollTop = 0;
+
+        const sidePanel = document.querySelector('.product-side-card.product-side-filters');
+        if (sidePanel) sidePanel.scrollTop = 0;
+    };
+
+    reset();
+    requestAnimationFrame(reset);
+    setTimeout(reset, 80);
+}
+
+function getSearchProductPackInfo(product, estoqueTotal) {
+    const attrs = getProductAttrMap(product);
+    const qtdEmbalagem = parseFloat(String(
+        product?.qtd_por_caixa ??
+        product?.quantidade_por_caixa ??
+        product?.quantidade_caixa ??
+        product?.quantidade_embalagem ??
+        attrs.qtd_por_caixa ??
+        attrs.quantidade_por_caixa ??
+        attrs.quantidade_caixa ??
+        attrs.quantidade_embalagem ??
+        attrs.caixa ??
+        attrs.embalagem ??
+        ''
+    ).replace(',', '.'));
+    if (!Number.isFinite(qtdEmbalagem) || qtdEmbalagem <= 1) return null;
+
+    const estoque = parseStockQty(estoqueTotal);
+    const caixas = Math.floor(estoque / qtdEmbalagem);
+    const sobra = estoque % qtdEmbalagem;
+
+    return { caixas, sobra, qtdEmbalagem };
+}
+
+function renderSearchProductPackInfo(product, estoqueTotal) {
+    const pack = getSearchProductPackInfo(product, estoqueTotal);
+    if (!pack) return '';
+    return `
+        <span class="stock-pack-pill">
+            <span class="stock-pack-cx">${formatStockNumber(pack.caixas)} CX${pack.sobra > 0 ? ' aprox.' : ''}</span>
+        </span>
+    `;
+}
+
+function getSearchCardSellableLocationQty(productId, filterKey) {
+    if (!productId || !Array.isArray(appData.estoque)) return 0;
+    const filter = getProductStockFilter(filterKey);
+    if (!filter.locals.length) return 0;
+
+    return appData.estoque.reduce((total, item) => {
+        const itemId = String(item.id_interno || item.id || '').trim();
+        if (itemId !== String(productId).trim()) return total;
+
+        const normalizedLocal = normalizeLocal(item.local);
+        if (!filter.locals.includes(normalizedLocal)) return total;
+
+        const availableRaw = item.saldo_disponivel ?? item.saldo_total ?? item.saldo ?? 0;
+        const qty = parseFloat(String(availableRaw).replace(',', '.'));
+        return total + (Number.isFinite(qty) ? qty : 0);
+    }, 0);
+}
+
+function renderSearchProductSellableLocations(product) {
+    const productId = product?.id_interno || product?.col_A;
+    const locations = [
+        { key: 'TERREO', label: 'Térreo' },
+        { key: 'PRIMEIRO_ANDAR', label: '1º Andar' }
+    ]
+        .map(location => ({
+            ...location,
+            qty: getSearchCardSellableLocationQty(productId, location.key)
+        }))
+        .filter(location => location.qty > 0);
+
+    if (!locations.length) return '';
+
+    return `
+        <div class="stock-sellable-locations" aria-label="Estoque disponível por local">
+            ${locations.map(location => `
+                <span class="stock-sellable-location">
+                    <span class="material-symbols-rounded">location_on</span>
+                    <strong>${location.label}</strong>
+                    <em>${formatStockNumber(location.qty)} UN</em>
+                </span>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderProductStockFilterSideList() {
+    return `
+        <div class="product-side-filter-list" role="tablist" aria-label="Setor do estoque">
+            ${PRODUCT_STOCK_LOCATION_FILTERS.map(filter => {
+                const count = getProductStockFilterCount(filter.key);
+                return `
+                    <button
+                        type="button"
+                        class="product-stock-filter-chip product-side-filter-chip ${currentProductStockFilter === filter.key ? 'active' : ''}"
+                        data-filter-key="${filter.key}"
+                        role="tab"
+                        aria-selected="${currentProductStockFilter === filter.key}"
+                        onclick="setProductStockFilter('${filter.key}')"
+                    >
+                        <span class="product-stock-filter-dot" aria-hidden="true"></span>
+                        <span class="product-stock-filter-label">${filter.label}</span>
+                        <span class="product-stock-filter-count">${count}</span>
+                    </button>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function renderProductSearchSummaryBar(resultCount = 0) {
+    return `
+        <section class="product-search-summary-bar" aria-label="Resumo da busca">
+            <div class="product-summary-metric">
+                <span>RESUMO DA BUSCA</span>
+                <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
+                <small>PRODUTOS ENCONTRADOS</small>
+            </div>
+            <div class="product-summary-metric">
+                <strong id="product-summary-stock">${formatStockNumber(getProductStockFilterCount('DISPONIVEL'))} <em>UN</em></strong>
+                <small>ESTOQUE TOTAL</small>
+            </div>
+            <div class="product-summary-metric">
+                <strong id="product-summary-price">R$ 1,00</strong>
+                <small>PREÇO MÉDIO</small>
+            </div>
+        </section>
+    `;
+}
+
+function renderSearchInitialStateHTML() {
+    return `
+        <div id="search-initial-state" class="search-empty-state">
+            <div class="empty-state-visual">
+                <div class="empty-state-icon-glow"></div>
+                <span class="material-symbols-rounded">search</span>
+            </div>
+            <div class="empty-state-content">
+                <h3>Digite um termo para buscar produtos</h3>
+                <p>Use a busca ao lado para encontrar produtos pelo nome, código ou descrição.</p>
+            </div>
+            <span class="search-empty-arrow" aria-hidden="true">&gt;</span>
+        </div>
+    `;
+}
+
+function updateProductSearchSummary(resultCount = 0, results = []) {
+    const countEl = document.getElementById('product-summary-count');
+    const stockEl = document.getElementById('product-summary-stock');
+    const priceEl = document.getElementById('product-summary-price');
+    const helpEl = document.getElementById('product-side-search-help');
+    const query = document.getElementById('search-input')?.value?.trim() || '';
+
+    if (countEl) countEl.textContent = formatStockNumber(resultCount);
+    if (stockEl) {
+        const totalStock = Array.isArray(results)
+            ? results.reduce((total, product) => total + getSearchCardStockQty(product), 0)
+            : 0;
+        stockEl.innerHTML = `${formatStockNumber(totalStock)} <em>UN</em>`;
+    }
+    if (priceEl) {
+        const prices = Array.isArray(results)
+            ? results.map(product => parseFloat(String(product.preco_varejo || product.col_G || 0).replace(',', '.'))).filter(Number.isFinite)
+            : [];
+        const avgPrice = prices.length ? prices.reduce((sum, value) => sum + value, 0) / prices.length : 1;
+        priceEl.textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    if (helpEl) {
+        helpEl.textContent = query ? `${resultCount} resultado(s) para "${cleanProductSearchText(query)}"` : 'Digite um termo para buscar produtos';
+    }
+}
+
+function renderProductSearchSidePanel(resultCount, queryRaw = '') {
+    const query = String(queryRaw || '').trim();
+    return `
+        <aside class="product-search-side-panel">
+            <section class="product-side-card product-side-filters">
+                <div class="product-side-heading product-side-heading-main">
+                    <button class="product-side-back-btn" type="button" aria-label="Voltar" onclick="renderProductSubMenu()">
+                        <span class="material-symbols-rounded">arrow_back</span>
+                    </button>
+                    <span class="material-symbols-rounded">filter_alt</span>
+                    <span>Filtros</span>
+                </div>
+                <label class="product-side-search-label" for="search-input">Busca por</label>
+                <div class="search-bar-wrapper">
+                    <div class="product-search-bar">
+                        <span class="material-symbols-rounded search-icon">search</span>
+                        <input
+                            type="search"
+                            id="search-input"
+                            class="product-search-input"
+                            placeholder="caneta"
+                            value="${query ? cleanProductSearchText(query) : ''}"
+                            autocomplete="off"
+                            autocorrect="off"
+                            autocapitalize="none"
+                            spellcheck="false"
+                            inputmode="search"
+                            oninput="debouncedSearch()"
+                            onkeypress="if(event.key === 'Enter') handleSearchEnter(event)"
+                            onkeydown="handleSearchKeyDown(event)"
+                        />
+
+                        <div class="search-actions">
+                            <button class="product-search-camera-btn" type="button" aria-label="Escanear" onclick="startScanner()">
+                                <span class="material-symbols-rounded">qr_code_scanner</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <p id="product-side-search-help" class="product-side-search-help">${query ? `${resultCount} resultado(s) para "${cleanProductSearchText(query)}"` : 'Digite um termo para buscar produtos'}</p>
+
+                <div class="product-side-heading">
+                    <span class="material-symbols-rounded">warehouse</span>
+                    <span>Setor do estoque</span>
+                </div>
+                ${renderProductStockFilterSideList()}
+            </section>
+        </aside>
+    `;
+}
+
+function renderProductSearchSummaryBar(resultCount = 0) {
+    return `
+        <section class="product-search-summary-bar product-search-command-bar" aria-label="Consulta de produtos">
+            <div class="search-bar-wrapper product-search-command-input">
+                <div class="product-search-bar">
+                    <span class="material-symbols-rounded search-icon">search</span>
+                    <input
+                        type="search"
+                        id="search-input"
+                        class="product-search-input"
+                        placeholder="Buscar produto, ID, EAN ou SKU"
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="none"
+                        spellcheck="false"
+                        inputmode="search"
+                        oninput="debouncedSearch()"
+                        onkeypress="if(event.key === 'Enter') handleSearchEnter(event)"
+                        onkeydown="handleSearchKeyDown(event)"
+                    />
+                    <div class="search-actions">
+                        <button class="product-search-camera-btn" type="button" aria-label="Escanear" onclick="startScanner()">
+                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="product-summary-metric product-found-counter">
+                <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
+                <small>PRODUTOS ENCONTRADOS</small>
+            </div>
+        </section>
+    `;
+}
+
+function renderSearchInitialStateHTML() {
+    return `
+        <div id="search-initial-state" class="search-empty-state">
+            <div class="empty-state-visual">
+                <div class="empty-state-icon-glow"></div>
+                <span class="material-symbols-rounded">search</span>
+            </div>
+            <div class="empty-state-content">
+                <h3>Digite um termo para buscar produtos</h3>
+                <p>Use a busca acima para encontrar produtos pelo nome, codigo ou descricao.</p>
+            </div>
+        </div>
+    `;
+}
+
+function updateProductSearchSummary(resultCount = 0) {
+    const countEl = document.getElementById('product-summary-count');
+    const helpEl = document.getElementById('product-side-search-help');
+    const query = document.getElementById('search-input')?.value?.trim() || '';
+
+    if (countEl) countEl.textContent = formatStockNumber(resultCount);
+    if (helpEl) {
+        helpEl.textContent = query ? `${resultCount} produto(s) para "${cleanProductSearchText(query)}"` : 'Filtros por local/setor do estoque';
+    }
+}
+
+function renderProductSearchSidePanel(resultCount, queryRaw = '') {
+    const query = String(queryRaw || '').trim();
+    return `
+        <aside class="product-search-side-panel">
+            <section class="product-side-card product-side-filters">
+                <div class="product-side-heading product-side-heading-main">
+                    <button class="product-side-back-btn" type="button" aria-label="Voltar" onclick="renderProductSubMenu()">
+                        <span class="material-symbols-rounded">arrow_back</span>
+                    </button>
+                    <span class="material-symbols-rounded">filter_alt</span>
+                    <span>Filtros</span>
+                </div>
+                <p id="product-side-search-help" class="product-side-search-help">${query ? `${resultCount} produto(s) para "${cleanProductSearchText(query)}"` : 'Filtros por local/setor do estoque'}</p>
+
+                <div class="product-side-heading">
+                    <span class="material-symbols-rounded">warehouse</span>
+                    <span>Setor do estoque</span>
+                </div>
+                ${renderProductStockFilterSideList()}
+            </section>
+        </aside>
+    `;
+}
+
+
+function renderSearchResults(results, totalResults = results.length, shouldResetScroll = true) {
+    const resultsContainer = document.getElementById('search-results');
+    if (!resultsContainer) return;
+
+    const query = document.getElementById('search-input')?.value?.trim().toLowerCase() || '';
+
+    if (totalResults === 0) {
+        if (query.length < 2) {
+            resultsContainer.innerHTML = renderSearchInitialStateHTML();
+            updateProductSearchSummary(0, []);
+            return;
+        }
+        resultsContainer.innerHTML = `
+            <div class="search-no-results">
+                <span class="material-symbols-rounded">search_off</span>
+                <h3>Nenhum produto encontrado</h3>
+                <p>Verifique a ortografia ou tente termos mais genéricos.</p>
+            </div>
+        `;
+        updateProductSearchSummary(0, []);
+        return;
+    }
+
+    const cardsHtml = results.map((p, index) => {
+        const idInterno = p.id_interno || p.col_A || '-';
+        const desc = cleanProductSearchText(p.descricao_completa || p.col_C || 'Produto sem descrição');
+        const marca = cleanProductSearchText(p.marca || p.col_E || '-');
+        const imgUrl = getProductImageUrl(p);
+        const precoVarejo = p.preco_varejo || p.col_G || 0;
+        const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
+        const isAtivo = status === 'SIM' || status === 'TRUE';
+
+        // Obter estoque principal (Disponível)
+        const estoque = getSearchCardStockQty(p);
+        return `
+            <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
+                 onclick="showProductDetails('${idInterno}')" 
+                 role="option" 
+                 data-index="${index}"
+                 tabindex="0"
+                 onkeydown="handleSearchKeyDown(event)">
+                <div class="card-image-wrapper">
+                    ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<span class=\\'material-symbols-rounded\\'>image</span>';">` : `<span class="material-symbols-rounded">image</span>`}
+                </div>
+                
+                <div class="card-main-info">
+                    <div class="card-header-row">
+                        <span class="card-id">
+                            <small>ID INTERNO</small>
+                            <span class="product-id-row">
+                                <strong>${idInterno}</strong>
+                                ${renderSearchProductLocationBadge(p)}
+                            </span>
+                        </span>
+                        ${isFilledValue(marca) ? `<span class="card-brand">${marca}</span>` : ''}
+                    </div>
+                    <h3 class="card-title">${desc}</h3>
+                    ${renderSearchProductMeta(p)}
+                </div>
+
+                <div class="card-operational-info">
+                    <div class="card-stock-block">
+                        <span class="stock-label">ESTOQUE TOTAL</span>
+                        <span class="stock-value ${estoque <= 0 ? 'out' : ''}">${formatStockNumber(estoque)} <small>UN</small></span>
+                        ${renderSearchProductPackInfo(p, estoque)}
+                        ${renderSearchProductSellableLocations(p)}
+                    </div>
+                    <div class="card-price-block">
+                        <span class="price-label">PREÇO VAREJO</span>
+                        <span class="price-value">R$ ${Number(precoVarejo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                <div class="card-status-indicator ${isAtivo ? 'active' : 'inactive'}"></div>
+                <div class="card-more-indicator"><span class="material-symbols-rounded">more_vert</span></div>
+            </div>
+        `;
+    }).join('');
+
+    const hasMoreResults = results.length < totalResults;
+    const loadMoreHtml = hasMoreResults ? `
+        <div class="product-search-load-more">
+            <span>Exibindo ${formatStockNumber(results.length)} de ${formatStockNumber(totalResults)} produtos</span>
+            <button type="button" class="btn-action" onclick="loadMoreProductSearchResults()">
+                <span class="material-symbols-rounded">expand_more</span>
+                Carregar mais
+            </button>
+        </div>
+    ` : `
+        <div class="product-search-load-more product-search-load-more-complete">
+            <span>Exibindo ${formatStockNumber(results.length)} de ${formatStockNumber(totalResults)} produtos</span>
+        </div>
+    `;
+
+    resultsContainer.innerHTML = `
+        <div class="product-search-results-list">
+            ${cardsHtml}
+        </div>
+        ${loadMoreHtml}
+    `;
+    if (shouldResetScroll) resetProductSearchScroll();
+
+    updateProductSearchStatus(query);
+    updateProductSearchSummary(totalResults, results);
+}
+
+function highlightMatch(text, query) {
+    if (!query || query.length < 2) return text;
+    try {
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
+        return parts.map(part => 
+            part.toLowerCase() === query.toLowerCase() 
+                ? `<span class="search-highlight">${part}</span>` 
+                : part
+        ).join('');
+    } catch (e) {
+        return text;
+    }
+}
+
+function handleSearchKeyDown(e) {
+    const results = document.querySelectorAll('.search-result-card');
+    if (results.length === 0) return;
+
+    let currentIndex = Array.from(results).findIndex(el => el === document.activeElement);
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = (currentIndex + 1) % results.length;
+        results[nextIndex].focus();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = (currentIndex - 1 + results.length) % results.length;
+        results[prevIndex].focus();
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex !== -1) {
+            results[currentIndex].click();
+        } else {
+            results[0].click();
+        }
+    } else if (e.key === 'Escape') {
+        const input = document.getElementById('search-input');
+        if (input) {
+            input.value = '';
+            debouncedSearch();
+            input.focus();
+        }
+    }
+}
+
+
+
+function showProductDetails(id) {
+    const product = appData.products.find(p => p.ean == id || p.id_interno == id);
+    if (!product) return;
+    renderProductDetails(product);
+}
+
+function openImageModal(url) {
+    if (!url) return;
+    const modal = document.createElement('div');
+    modal.id = 'image-modal';
+    modal.className = 'image-modal';
+    
+    // Closer on background click
+    modal.onclick = (e) => {
+        if (e.target.id === 'image-modal' || e.target.className === 'image-modal-content') {
+            closeImageModal();
+        }
+    };
+
+    modal.innerHTML = `
+                <div class="image-modal-content">
+                    <button class="image-modal-close" onclick="closeImageModal()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                    <img src="${url}" alt="Zoom" id="modal-image-zoom">
+                </div>
+            `;
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+
+    // Premium Interaction: Click to Zoom
+    const img = modal.querySelector('img');
+    let isZoomed = false;
+    img.onclick = (e) => {
+        e.stopPropagation();
+        isZoomed = !isZoomed;
+        if (isZoomed) {
+            img.style.transform = 'scale(1.5)';
+            img.style.cursor = 'zoom-out';
+modal.style.overflow = 'auto';
+            img.style.maxHeight = 'none';
+        } else {
+            img.style.transform = 'scale(1)';
+            img.style.cursor = 'zoom-in';
+            modal.style.overflow = 'hidden';
+            img.style.maxHeight = '90vh';
+        }
+    };
+    img.style.cursor = 'zoom-in';
+    img.style.transition = 'transform 0.4s cubic-bezier(0.19, 1, 0.22, 1)';
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 0.2s ease';
+        setTimeout(() => {
+            modal.remove();
+            document.body.style.overflow = '';
+        }, 200);
+    }
+}
+
+// ==== LÓGICA DE ESTOQUE E LOCAIS ====
+const LOCAIS_DISPONIVEIS = ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'];
+const LOCAIS_SAIDA = ['TERREO', 'MOSTRUARIO'];
+const LOCAIS_NAO_VENDAVEIS = ['DEFEITO', 'EM_GARANTIA', 'EM_TRANSPORTE'];
+const LOCAIS_EXTERNOS = ['FULL_ML'];
+
+function normalizarLocal(local) {
+  return normalizeLocal(local);
+}
+
+function parseDecimal(value) {
+    const num = parseFloat(String(value ?? 0).replace(',', '.'));
+    return Number.isFinite(num) ? num : 0;
+}
+
+function isMissingEstoqueLotesError(error) {
+    const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+    return error?.code === '42P01' ||
+        error?.code === 'PGRST205' ||
+        text.includes('estoque_lotes') ||
+        text.includes('schema cache');
+}
+
+function getLoteLocal(localEstoque) {
+    return (normalizeLocal(localEstoque || 'terreo') || 'terreo').toLowerCase();
+}
+
+function getLoteStatus(quantidadeAtual) {
+    return parseDecimal(quantidadeAtual) > 0 ? 'ativo' : 'esgotado';
+}
+
+async function criarLotesEntradaNF(entrada, itens = []) {
+    const client = window.supabaseClient;
+    if (!client || !entrada?.id) return { ok: false, skipped: true, reason: 'client_or_entrada_missing' };
+
+    const itensValidos = (itens || []).filter(item => item?.id_interno && parseDecimal(item.quantidade) > 0);
+    if (!itensValidos.length) return { ok: true, inserted: 0, skipped: 0 };
+
+    try {
+        const idsInternos = [...new Set(itensValidos.map(item => String(item.id_interno)))];
+        const { data: existentes, error: existingError } = await client
+            .from('estoque_lotes')
+            .select('id_interno')
+            .eq('origem_tipo', 'entrada_nf')
+            .eq('origem_id', entrada.id)
+            .in('id_interno', idsInternos);
+
+        if (existingError) throw existingError;
+
+        const existentesPorId = (existentes || []).reduce((acc, row) => {
+            const key = String(row.id_interno);
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        const dataEntrada = entrada.data_recebimento || entrada.data_emissao || new Date().toISOString();
+        const payload = itensValidos
+            .filter(item => {
+                const key = String(item.id_interno);
+                if (existentesPorId[key] > 0) {
+                    existentesPorId[key] -= 1;
+                    return false;
+                }
+                return true;
+            })
+            .map(item => {
+                const quantidade = parseDecimal(item.quantidade);
+                const custoUnitario = parseDecimal(item.custo_real_unitario || item.valor_unitario);
+                const custoTotal = parseDecimal(item.custo_real_total || (quantidade * custoUnitario));
+                return {
+                    produto_id: item.produto_id || null,
+                    id_interno: String(item.id_interno),
+                    origem_tipo: 'entrada_nf',
+                    origem_id: entrada.id,
+                    numero_nf: entrada.numero_nf || entrada.numero || null,
+                    data_entrada: dataEntrada,
+                    quantidade_inicial: quantidade,
+                    quantidade_atual: quantidade,
+                    custo_unitario: custoUnitario,
+                    custo_total: custoTotal,
+                    local_estoque: getLoteLocal(item.local_entrada || item.local_estoque || entrada.local_estoque),
+                    status: getLoteStatus(quantidade),
+                    atualizado_em: new Date().toISOString()
+                };
+            });
+
+        const skipped = (existentes || []).length;
+        if (!payload.length) return { ok: true, inserted: 0, skipped };
+
+        const { error } = await client.from('estoque_lotes').insert(payload);
+        if (error) throw error;
+        return { ok: true, inserted: payload.length, skipped };
+    } catch (error) {
+        if (isMissingEstoqueLotesError(error)) {
+            console.warn('[ESTOQUE_LOTES] tabela estoque_lotes ainda nao aplicada no Supabase.', error);
+            return { ok: false, skipped: true, reason: 'missing_table', error };
+        }
+        throw error;
+    }
+}
+
+async function listarLotesProduto(idInterno) {
+    const client = window.supabaseClient;
+    if (!client || !idInterno) return [];
+
+    try {
+        const { data, error } = await client
+            .from('estoque_lotes')
+            .select('*')
+            .eq('id_interno', String(idInterno))
+            .gt('quantidade_atual', 0)
+            .order('data_entrada', { ascending: true })
+            .order('criado_em', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        if (isMissingEstoqueLotesError(error)) {
+            console.warn('[ESTOQUE_LOTES] tabela estoque_lotes indisponivel para listar lotes.', error);
+            return [];
+        }
+        console.warn('[ESTOQUE_LOTES] erro ao listar lotes do produto', idInterno, error);
+        return [];
+    }
+}
+
+async function calcularResumoLotesProduto(idInterno) {
+    const lotes = await listarLotesProduto(idInterno);
+    const estoqueTotal = lotes.reduce((total, lote) => total + parseDecimal(lote.quantidade_atual), 0);
+    const valorTotal = lotes.reduce((total, lote) => total + (parseDecimal(lote.quantidade_atual) * parseDecimal(lote.custo_unitario)), 0);
+    const proximoLote = lotes.find(lote => parseDecimal(lote.quantidade_atual) > 0);
+
+    return {
+        lotes,
+        estoqueTotal,
+        valorTotal,
+        custoMedioAtual: estoqueTotal > 0 ? valorTotal / estoqueTotal : 0,
+        proximoCustoSaida: proximoLote ? parseDecimal(proximoLote.custo_unitario) : 0
+    };
+}
+
+async function baixarEstoqueFIFO(idInterno, quantidade, localEstoque = 'terreo') {
+    const client = window.supabaseClient;
+    const quantidadeSolicitada = parseDecimal(quantidade);
+    const local = getLoteLocal(localEstoque);
+    if (!client || !idInterno || quantidadeSolicitada <= 0) {
+        return { ok: false, reason: 'invalid_params', lotesConsumidos: [], custoTotal: 0 };
+    }
+
+    try {
+        const { data: lotes, error } = await client
+            .from('estoque_lotes')
+            .select('*')
+            .eq('id_interno', String(idInterno))
+            .eq('local_estoque', local)
+            .gt('quantidade_atual', 0)
+            .order('data_entrada', { ascending: true })
+            .order('criado_em', { ascending: true });
+
+        if (error) throw error;
+        if (!lotes?.length) return { ok: false, reason: 'sem_lotes', lotesConsumidos: [], custoTotal: 0 };
+
+        let restante = quantidadeSolicitada;
+        const lotesConsumidos = [];
+
+        for (const lote of lotes) {
+            if (restante <= 0) break;
+            const quantidadeAtual = parseDecimal(lote.quantidade_atual);
+            if (quantidadeAtual <= 0) continue;
+
+            const quantidadeConsumida = Math.min(restante, quantidadeAtual);
+            const novaQuantidade = quantidadeAtual - quantidadeConsumida;
+            const custoUnitario = parseDecimal(lote.custo_unitario);
+            const custoConsumido = quantidadeConsumida * custoUnitario;
+
+            const { error: updateError } = await client
+                .from('estoque_lotes')
+                .update({
+                    quantidade_atual: novaQuantidade,
+                    custo_total: novaQuantidade * custoUnitario,
+                    status: getLoteStatus(novaQuantidade),
+                    atualizado_em: new Date().toISOString()
+                })
+                .eq('id', lote.id);
+
+            if (updateError) throw updateError;
+
+            lotesConsumidos.push({
+                lote_id: lote.id,
+                origem_tipo: lote.origem_tipo,
+                origem_id: lote.origem_id,
+                numero_nf: lote.numero_nf,
+                quantidade: quantidadeConsumida,
+                custo_unitario: custoUnitario,
+                custo_total: custoConsumido
+            });
+            restante -= quantidadeConsumida;
+        }
+
+        const custoTotal = lotesConsumidos.reduce((total, lote) => total + lote.custo_total, 0);
+        return {
+            ok: restante <= 0,
+            reason: restante > 0 ? 'lotes_insuficientes' : null,
+            quantidadeSolicitada,
+            quantidadeConsumida: quantidadeSolicitada - Math.max(restante, 0),
+            quantidadePendente: Math.max(restante, 0),
+            lotesConsumidos,
+            custoTotal
+        };
+    } catch (error) {
+        if (isMissingEstoqueLotesError(error)) {
+            console.warn('[ESTOQUE_LOTES] baixa FIFO ignorada: tabela estoque_lotes ainda nao aplicada.', error);
+            return { ok: false, skipped: true, reason: 'missing_table', lotesConsumidos: [], custoTotal: 0 };
+        }
+        console.warn('[ESTOQUE_LOTES] erro na baixa FIFO', { idInterno, quantidade, localEstoque, error });
+        return { ok: false, reason: 'fifo_error', error, lotesConsumidos: [], custoTotal: 0 };
+    }
+}
+
+async function registrarConsumoLotes(movimentoId, lotesConsumidos = []) {
+    const client = window.supabaseClient;
+    if (!client || !movimentoId || !lotesConsumidos.length) return { ok: false, skipped: true };
+
+    const custoTotal = lotesConsumidos.reduce((total, lote) => total + parseDecimal(lote.custo_total), 0);
+    const resumo = `FIFO custo=${formatPrice(custoTotal)} lotes=${lotesConsumidos.map(lote => `${lote.numero_nf || lote.lote_id}:${formatStockNumber(lote.quantidade)}un`).join(', ')}`;
+    try {
+        const { data: movimento, error: fetchError } = await client
+            .from('movimentos')
+            .select('observacao')
+            .eq('movimento_id', movimentoId)
+            .maybeSingle();
+
+        if (fetchError) throw fetchError;
+
+        const observacaoAtual = movimento?.observacao || '';
+        const observacao = observacaoAtual.includes('FIFO custo=')
+            ? observacaoAtual
+            : [observacaoAtual, resumo].filter(Boolean).join(' | ');
+
+        const { error } = await client
+            .from('movimentos')
+            .update({ observacao })
+            .eq('movimento_id', movimentoId);
+
+        if (error) throw error;
+        return { ok: true, custoTotal };
+    } catch (error) {
+        console.warn('[ESTOQUE_LOTES] nao foi possivel registrar resumo FIFO no movimento', { movimentoId, error });
+        return { ok: false, error };
+    }
+}
+
+async function aplicarBaixaFIFOSeSaida(movimento, idInterno, quantidade, localEstoque) {
+    const fifo = await baixarEstoqueFIFO(idInterno, quantidade, localEstoque);
+    if (fifo.lotesConsumidos?.length && movimento?.movimento_id) {
+        await registrarConsumoLotes(movimento.movimento_id, fifo.lotesConsumidos);
+    }
+    if (!fifo.ok && !fifo.skipped) {
+        console.warn('[ESTOQUE_LOTES] baixa FIFO parcial/ausente; estoque_atual foi mantido como resumo rapido.', fifo);
+    }
+    return fifo;
+}
+
+function renderCamadasEstoqueHTML(lotes = [], resumo = {}) {
+    const rows = (lotes || []).map(lote => {
+        const quantidade = parseDecimal(lote.quantidade_atual);
+        const custoUnitario = parseDecimal(lote.custo_unitario);
+        const custoTotal = quantidade * custoUnitario;
+        return `
+            <div class="product-stock-layer-row">
+                <span><b>Origem</b>${escapeKitAttribute(lote.origem_tipo || '-')}</span>
+                <span><b>NF</b>${escapeKitAttribute(lote.numero_nf || '-')}</span>
+                <span><b>Data entrada</b>${lote.data_entrada ? new Date(lote.data_entrada).toLocaleDateString('pt-BR') : '-'}</span>
+                <span><b>Local</b>${escapeKitAttribute(lote.local_estoque || '-')}</span>
+                <span><b>Quantidade atual</b>${formatStockNumber(quantidade)}</span>
+                <span><b>Custo unit.</b>${formatPrice(custoUnitario)}</span>
+                <span><b>Custo total</b>${formatPrice(custoTotal)}</span>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <section class="product-stock-layers">
+            <div class="product-stock-title">Camadas de Estoque</div>
+            <div class="product-stock-layers-summary">
+                <div><span>Estoque total</span><strong>${formatStockNumber(resumo.estoqueTotal || 0)}</strong></div>
+                <div><span>Valor total em estoque</span><strong>${formatPrice(resumo.valorTotal || 0)}</strong></div>
+                <div><span>Custo médio atual</span><strong>${formatPrice(resumo.custoMedioAtual || 0)}</strong></div>
+                <div><span>Próximo custo de saída</span><strong>${formatPrice(resumo.proximoCustoSaida || 0)}</strong></div>
+            </div>
+            <div class="product-stock-layers-list">
+                ${rows || '<div class="product-stock-layer-empty">Nenhuma camada de estoque ativa encontrada.</div>'}
+            </div>
+        </section>
+    `;
+}
+
+window.criarLotesEntradaNF = criarLotesEntradaNF;
+window.listarLotesProduto = listarLotesProduto;
+window.calcularResumoLotesProduto = calcularResumoLotesProduto;
+window.baixarEstoqueFIFO = baixarEstoqueFIFO;
+window.registrarConsumoLotes = registrarConsumoLotes;
+
+function calcularEstoqueDisponivel(estoques) {
+  if (!estoques || !Array.isArray(estoques)) return 0;
+  return estoques
+    .filter(item => LOCAIS_DISPONIVEIS.includes(normalizarLocal(item.local)))
+    .reduce((total, item) => {
+        const qtd = parseFloat(String(item.saldo_total || item.saldo || 0).replace(',', '.'));
+        return total + (isNaN(qtd) ? 0 : qtd);
+    }, 0);
+}
+
+function calcularEstoqueNaoVendavel(estoques) {
+  if (!estoques || !Array.isArray(estoques)) return 0;
+  return estoques
+    .filter(item => LOCAIS_NAO_VENDAVEIS.includes(normalizarLocal(item.local)))
+    .reduce((total, item) => {
+        const qtd = parseFloat(String(item.saldo_total || item.saldo || 0).replace(',', '.'));
+        return total + (isNaN(qtd) ? 0 : qtd);
+    }, 0);
+}
+
+function parseStockQty(value) {
+    const qty = parseFloat(String(value ?? 0).replace(',', '.'));
+    return isNaN(qty) ? 0 : qty;
+}
+
+function getStockQtyByLocal(estoques, local) {
+    if (!Array.isArray(estoques)) return 0;
+    const wanted = normalizeLocal(local);
+    return estoques
+        .filter(item => normalizeLocal(item.local) === wanted)
+        .reduce((total, item) => total + parseStockQty(item.saldo_total ?? item.saldo), 0);
+}
+
+function calcularEstoqueOperacional(estoques) {
+    return getStockQtyByLocal(estoques, 'TERREO') + getStockQtyByLocal(estoques, 'PRIMEIRO_ANDAR');
+}
+
+function normalizeQtdPorCaixa(value) {
+    const qty = parseFloat(String(value ?? 1).replace(',', '.'));
+    return Number.isFinite(qty) && qty > 0 ? qty : 1;
+}
+
+function readQtdPorCaixaInput(inputId) {
+    const input = document.getElementById(inputId);
+    const raw = String(input?.value ?? '').trim();
+    const qty = parseFloat(raw.replace(',', '.'));
+    if (!raw || !Number.isFinite(qty) || qty <= 0) {
+        showToast('Quantidade por caixa deve ser maior que zero.', 'error');
+        input?.focus();
+        return null;
+    }
+    return qty;
+}
+
+function formatStockNumber(value) {
+    const num = parseFloat(String(value ?? 0).replace(',', '.'));
+    if (!Number.isFinite(num)) return '0';
+    return Number.isInteger(num) ? String(num) : num.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
+
+function getPackagingBreakdown(product, estoqueDisponivel) {
+    const qtdPorCaixa = normalizeQtdPorCaixa(product?.qtd_por_caixa);
+    const estoque = parseStockQty(estoqueDisponivel);
+    return {
+        qtdPorCaixa,
+        caixasFechadas: Math.floor(estoque / qtdPorCaixa),
+        unidadesAvulsas: estoque % qtdPorCaixa
+    };
+}
+
+function renderVolumeSummary(product, estoqueDisponivel) {
+    const { qtdPorCaixa, caixasFechadas, unidadesAvulsas } = getPackagingBreakdown(product, estoqueDisponivel);
+    if (qtdPorCaixa <= 1) return 'Venda avulsa / 1 UN';
+    return `${formatStockNumber(caixasFechadas)} CX + ${formatStockNumber(unidadesAvulsas)} UN`;
+}
+
+function isInitialInventoryType(type) {
+    return String(type || '').trim().toLowerCase() === 'inicial';
+}
+
+function renderInventoryQuantitySummary(product, item, expectedQty) {
+    const countedQty = Number(item?.qty || 0);
+    if (isInitialInventoryType(appData.currentInventory?.type)) {
+        return `
+            <span class="inv-expected-stock">
+                <strong>Saldo Inicial:</strong> ${formatStockNumber(countedQty)} UN
+                ${normalizeQtdPorCaixa(product?.qtd_por_caixa) > 1 ? `<small>${renderVolumeSummary(product, countedQty)}</small>` : ''}
+            </span>
+        `;
+    }
+
+    const diffQty = countedQty - expectedQty;
+    return `
+        <span class="inv-expected-stock inv-count-comparison">
+            <span><strong>Esperado:</strong> ${formatStockNumber(expectedQty)} UN</span>
+            <span><strong>Contado:</strong> ${formatStockNumber(countedQty)} UN</span>
+            <span class="${diffQty === 0 ? 'is-ok' : diffQty > 0 ? 'is-positive' : 'is-negative'}"><strong>Diferença:</strong> ${diffQty > 0 ? '+' : ''}${formatStockNumber(diffQty)} UN</span>
+            ${normalizeQtdPorCaixa(product?.qtd_por_caixa) > 1 ? `<small>${renderVolumeSummary(product, expectedQty)}</small>` : ''}
+        </span>
+    `;
+}
+
+function getProductStockEntriesFromCache(idInterno) {
+    if (!appData.estoque) return [];
+    const id = String(idInterno || '');
+    return appData.estoque.filter(s => String(s.id_interno || s.id || '') === id);
+}
+
+function getProductOperationalStockCache(idInterno) {
+    return calcularEstoqueOperacional(getProductStockEntriesFromCache(idInterno));
+}
+
+function getProductShowroomStockCache(idInterno) {
+    return getStockQtyByLocal(getProductStockEntriesFromCache(idInterno), 'MOSTRUARIO');
+}
+
+function getStockStatusClass(disponivel, minimo) {
+    if (disponivel <= 0) return 'is-zero';
+    if (minimo > 0 && disponivel <= minimo) return 'is-low';
+    return 'is-good';
+}
+
+function isFilledValue(value) {
+    const v = String(value ?? '').trim();
+    if (!v) return false;
+    return !['null', 'undefined', 'empty', 's/n', 'sn', '-', '--'].includes(v.toLowerCase());
+}
+
+function renderInfoRows(rows) {
+    const validRows = rows.filter(row => isFilledValue(row.value));
+    if (!validRows.length) return '';
+    return validRows.map(row => `
+        <div class="product-info-row">
+            <span class="product-info-label">${row.label}</span>
+            <span class="product-info-value">${row.value}</span>
+        </div>
+    `).join('');
+}
+
+function renderInfoBlock(title, rows) {
+    const body = renderInfoRows(rows);
+    if (!body) return '';
+    return `
+        <section class="product-info-block">
+            <div class="product-info-block-title">${title}</div>
+            <div class="product-info-block-body">${body}</div>
+        </section>
+    `;
+}
+
+function getProductAttrMap(product) {
+    const map = {};
+    safeParseAtributos(product?.atributos).forEach(attr => {
+        const key = normalizeText(attr.nome || '').replace(/\s+/g, '_');
+        if (key && isFilledValue(attr.valor)) map[key] = normalizeText(attr.valor);
+    });
+    return map;
+}
+
+function getComparableAttr(attrMap, names) {
+    for (const name of names) {
+        const key = normalizeText(name).replace(/\s+/g, '_');
+        if (isFilledValue(attrMap[key])) return attrMap[key];
+    }
+    return '';
+}
+
+function getEquivalentProducts(p) {
+    if (!appData.products || !p) return [];
+    
+    const attrs = safeParseAtributos(p.atributos);
+    const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // 1. Prioridade 1: Código Equivalente (Regra Principal)
+    const codEquivalenteAttr = attrs.find(a => norm(a.nome).includes('equivalente'));
+    const codEquivalente = (codEquivalenteAttr && norm(codEquivalenteAttr.valor)) ? norm(codEquivalenteAttr.valor) : null;
+    
+    if (codEquivalente && codEquivalente !== 'null' && codEquivalente !== 'undefined') {
+        return appData.products.filter(other => {
+            if (other.id_interno === p.id_interno) return false;
+            const otherAttrs = safeParseAtributos(other.atributos);
+            const otherCod = otherAttrs.find(a => norm(a.nome).includes('equivalente'));
+            return otherCod && norm(otherCod.valor) === codEquivalente;
+        }).slice(0, 5);
+    }
+    
+    // 2. Prioridade 2: Fallback Seguro (Combinação Obrigatória)
+    const ATRIBUTOS_OBRIGATORIOS = ['tipo', 'modelo', 'encaixe', 'tensao', 'potencia', 'polos', 'pinos', 'aplicacao'];
+    const ATRIBUTOS_CONDICIONAIS = ['cor', 'lado', 'acabamento'];
+    const ATRIBUTOS_CHAVE = [...ATRIBUTOS_OBRIGATORIOS, ...ATRIBUTOS_CONDICIONAIS];
+    
+    const pTechAttrs = {};
+    attrs.forEach(a => {
+        const nome = norm(a.nome);
+        if (ATRIBUTOS_CHAVE.includes(nome)) {
+            pTechAttrs[nome] = norm(a.valor);
+        }
+    });
+
+    // Segurança: Se não houver atributos técnicos suficientes para garantir equivalência, NÃO agrupar.
+    // Exigimos pelo menos 1 atributo técnico chave para o fallback.
+    if (Object.keys(pTechAttrs).length === 0) return [];
+
+    const pDesc = norm(p.descricao_base);
+    const pCat = norm(p.categoria);
+    const pSub = norm(p.subcategoria);
+    
+    // Regra 3: NÃO permitir agrupamento usando apenas descricao_base (sem categoria/sub ou atributos)
+    if (!pDesc || !pCat) return [];
+
+    return appData.products.filter(other => {
+        if (other.id_interno === p.id_interno) return false;
+        
+        // Deve ser de marca diferente (equivalência inter-marcas)
+        if (norm(other.marca) === norm(p.marca)) return false;
+
+        // Validação de Descrição, Categoria e Subcategoria
+        if (norm(other.descricao_base) !== pDesc) return false;
+        if (norm(other.categoria) !== pCat) return false;
+        if (norm(other.subcategoria) !== pSub) return false;
+        
+        // Validação de Atributos Técnicos
+        const otherAttrs = safeParseAtributos(other.atributos);
+        const otherTechAttrs = {};
+        otherAttrs.forEach(a => {
+            const nome = norm(a.nome);
+            if (ATRIBUTOS_CHAVE.includes(nome)) {
+                otherTechAttrs[nome] = norm(a.valor);
+            }
+        });
+        
+        // 1. Validar Atributos Obrigatórios (Devem ser idênticos, inclusive se um estiver vazio e o outro não)
+        for (const key of ATRIBUTOS_OBRIGATORIOS) {
+            if (pTechAttrs[key] !== otherTechAttrs[key]) return false;
+        }
+        
+        // 2. Validar Atributos Condicionais (Se P tem valor, OTHER deve ter o mesmo valor. Se P está vazio, ignora)
+        for (const key of ATRIBUTOS_CONDICIONAIS) {
+            if (pTechAttrs[key] && pTechAttrs[key] !== otherTechAttrs[key]) return false;
+        }
+
+        return true;
+    }).slice(0, 5);
+}
+
+function getAvailableStockCache(idInterno) {
+    return getProductOperationalStockCache(idInterno);
+}
+
+function sortEquivalentProductsForDetail(a, b) {
+    const stockDiff = getProductOperationalStockCache(b.id_interno) - getProductOperationalStockCache(a.id_interno);
+    if (stockDiff !== 0) return stockDiff;
+
+    const activeA = (a.status === 'inativo' || a.status === 'nao' || a.status === '0') ? 0 : 1;
+    const activeB = (b.status === 'inativo' || b.status === 'nao' || b.status === '0') ? 0 : 1;
+    if (activeA !== activeB) return activeB - activeA;
+
+    const brandCompare = String(a.marca || '').localeCompare(String(b.marca || ''), 'pt-BR');
+    if (brandCompare !== 0) return brandCompare;
+
+    const priceA = parseFloat(String(a.preco_varejo || 0).replace(',', '.')) || 0;
+    const priceB = parseFloat(String(b.preco_varejo || 0).replace(',', '.')) || 0;
+    return priceA - priceB;
+}
+
+function getEquivalentProductsForDetail(p) {
+    if (!appData.products || !p) return [];
+
+    const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isSameProduct = (other) => String(other.id_interno || '') === String(p.id_interno || '') || String(other.ean || '') === String(p.ean || '');
+    const attrs = safeParseAtributos(p.atributos);
+    const codEquivalenteAttr = attrs.find(a => {
+        const nome = norm(a.nome).replace(/\s+/g, '_');
+        return nome === 'codigo_equivalente' || nome.includes('codigo_equivalente');
+    });
+    const codEquivalente = codEquivalenteAttr && isFilledValue(codEquivalenteAttr.valor) ? norm(codEquivalenteAttr.valor) : null;
+
+    if (codEquivalente) {
+        return appData.products.filter(other => {
+            if (isSameProduct(other)) return false;
+            const otherAttrs = safeParseAtributos(other.atributos);
+            const otherCod = otherAttrs.find(a => {
+                const nome = norm(a.nome).replace(/\s+/g, '_');
+                return nome === 'codigo_equivalente' || nome.includes('codigo_equivalente');
+            });
+            return otherCod && norm(otherCod.valor) === codEquivalente;
+        }).sort(sortEquivalentProductsForDetail).slice(0, 8);
+    }
+
+    const pDesc = norm(p.descricao_base);
+    const pCat = norm(p.categoria);
+    const pSub = norm(p.subcategoria);
+    if (!pDesc || !pCat || !pSub) return [];
+
+    const pMap = getProductAttrMap(p);
+    const requiredGroups = [
+        ['modelo'],
+        ['tipo_lampada', 'tipo'],
+        ['voltagem', 'tensao'],
+        ['potencia']
+    ];
+    const optionalGroups = [['encaixe']];
+    const conditionalGroups = [['cor'], ['acabamento'], ['lado'], ['linha'], ['aplicacao']];
+    const pRequired = requiredGroups.map(group => getComparableAttr(pMap, group));
+    if (pRequired.some(value => !isFilledValue(value))) return [];
+    const pOptional = optionalGroups.map(group => getComparableAttr(pMap, group));
+    const pConditional = conditionalGroups.map(group => getComparableAttr(pMap, group));
+
+    return appData.products.filter(other => {
+        if (isSameProduct(other)) return false;
+        if (norm(other.descricao_base) !== pDesc) return false;
+        if (norm(other.categoria) !== pCat) return false;
+        if (norm(other.subcategoria) !== pSub) return false;
+
+        const otherMap = getProductAttrMap(other);
+        for (let i = 0; i < requiredGroups.length; i++) {
+            if (pRequired[i] !== getComparableAttr(otherMap, requiredGroups[i])) return false;
+        }
+        for (let i = 0; i < optionalGroups.length; i++) {
+            if (isFilledValue(pOptional[i]) && pOptional[i] !== getComparableAttr(otherMap, optionalGroups[i])) return false;
+        }
+        for (let i = 0; i < conditionalGroups.length; i++) {
+            if (isFilledValue(pConditional[i]) && pConditional[i] !== getComparableAttr(otherMap, conditionalGroups[i])) return false;
+        }
+
+        return true;
+    }).sort(sortEquivalentProductsForDetail).slice(0, 8);
+}
+
+window.toggleMoreInfo = function() {
+    const content = document.getElementById('more-info-content');
+    const label = document.getElementById('more-info-label');
+    const mobileSecondary = document.querySelectorAll('.collapsible-mobile');
+    
+    if (content && label) {
+        const isHidden = content.classList.toggle('hidden');
+        const isOpen = !isHidden;
+        
+        // Toggle mobile-specific secondary info
+        mobileSecondary.forEach(el => {
+            if (isHidden) el.classList.remove('open');
+            else el.classList.add('open');
+        });
+
+        label.innerText = 'Info';
+        label.closest('.product-more-info-btn')?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+};
+
+
+async function renderProductDetails(p) {
+    const currentUser = localStorage.getItem('currentUser');
+    const idInterno = (p.id_interno || p.col_A || '').toString();
+    window.currentProductDetailForEdit = p;
+
+    let productStockEntries = [];
+    try {
+        productStockEntries = await DataClient.fetchEstoqueProdutoSupabase(idInterno);
+    } catch (e) {
+        console.log('[DETALHE] Estoque via cache local');
+    }
+
+    if (productStockEntries.length === 0) {
+        productStockEntries = (appData.estoque || []).filter(s => {
+            const hasId = s.id_interno && s.id_interno.toString() === idInterno;
+            if (!hasId) return false;
+            const total = parseFloat((s.saldo_total || s.saldo || '0').toString().replace(',', '.'));
+            return total > 0;
+        });
+    }
+
+    const terreoQty = getStockQtyByLocal(productStockEntries, 'TERREO');
+    const primeiroAndarQty = getStockQtyByLocal(productStockEntries, 'PRIMEIRO_ANDAR');
+    const mostruarioQty = getStockQtyByLocal(productStockEntries, 'MOSTRUARIO');
+    const defeitoQty = getStockQtyByLocal(productStockEntries, 'DEFEITO');
+    const garantiaQty = getStockQtyByLocal(productStockEntries, 'EM_GARANTIA');
+    const transporteQty = getStockQtyByLocal(productStockEntries, 'EM_TRANSPORTE');
+    const fullMlQty = getStockQtyByLocal(productStockEntries, 'FULL_ML');
+    const disponivel = calcularEstoqueOperacional(productStockEntries);
+    const naoVendavel = calcularEstoqueNaoVendavel(productStockEntries);
+    const totalStock = disponivel + naoVendavel;
+    const resumoLotesProduto = await calcularResumoLotesProduto(idInterno);
+    const camadasEstoqueHTML = renderCamadasEstoqueHTML(resumoLotesProduto.lotes, resumoLotesProduto);
+
+    const equivalentes = getEquivalentProductsForDetail(p);
+
+    const attrs = safeParseAtributos(p.atributos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const rawPdf = p.url_pdf_manual || p.url_pdf;
+    const pdfUrl = isValidUrl(rawPdf) ? rawPdf : null;
+
+    const isInactiveProduct = (p.status === 'inativo' || p.status === 'nao' || p.status === '0');
+    const statusColor = isInactiveProduct ? '#ef4444' : '#22c55e';
+    const statusText = isInactiveProduct ? 'Inativo' : 'Ativo';
+    const estoqueMinimo = parseStockQty(p.estoque_minimo);
+    const stockStatusClass = getStockStatusClass(disponivel, estoqueMinimo);
+    const unitLabel = p.unidade || 'UN';
+    const packaging = getPackagingBreakdown(p, disponivel);
+    const packagingHTML = `
+        <div class="product-packaging-card">
+            <div class="product-packaging-header">
+                <span class="material-symbols-rounded">inventory</span>
+                <span>Embalagem / Volume</span>
+            </div>
+            <div class="product-packaging-grid">
+                <div class="product-packaging-item">
+                    <span class="product-packaging-label">Embalagem</span>
+                    <strong>${packaging.qtdPorCaixa > 1 ? `Caixa com ${formatStockNumber(packaging.qtdPorCaixa)} UN` : 'Venda avulsa / 1 UN'}</strong>
+                </div>
+                ${packaging.qtdPorCaixa > 1 ? `
+                <div class="product-packaging-item">
+                    <span class="product-packaging-label">Volume</span>
+                    <strong>${formatStockNumber(packaging.caixasFechadas)} caixas fechadas + ${formatStockNumber(packaging.unidadesAvulsas)} unidades avulsas</strong>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    const stockAlertsHTML = '';
+
+    const renderProductMetaItem = (icon, label, value) => `
+        <div class="product-detail-meta-item">
+            <span class="material-symbols-rounded">${icon}</span>
+            <strong>${label}:</strong>
+            <span>${value || '-'}</span>
+        </div>
+    `;
+
+    const stockIconByGroup = {
+        operational: 'inventory_2',
+        secondary: 'storefront',
+        blocked: 'error',
+        warranty: 'shield',
+        transit: 'local_shipping',
+        external: 'warehouse'
+    };
+    const renderStockLocationCard = (key, label, qty, group) => `
+        <div class="product-stock-location ${qty === 0 ? 'is-empty' : ''}" data-stock-group="${group}" data-stock-key="${key}">
+            <span class="product-stock-location-icon material-symbols-rounded">${stockIconByGroup[group] || 'inventory_2'}</span>
+            <span class="product-stock-location-name">${label}</span>
+            <span class="product-stock-location-value">
+                <span class="product-stock-location-qty">${qty}</span>
+                <span class="product-stock-location-unit">${unitLabel}</span>
+            </span>
+        </div>
+    `;
+
+    const stockLocationsHTML = `
+        <div class="product-stock-locations">
+            <div class="product-stock-title">ESTOQUE POR LOCAL</div>
+            <div class="product-stock-group">
+                <div class="product-stock-group-title">Disponível operacional</div>
+                <div class="product-stock-grid">
+                    ${renderStockLocationCard('TERREO', 'Térreo', terreoQty, 'operational')}
+                    ${renderStockLocationCard('PRIMEIRO_ANDAR', '1º Andar', primeiroAndarQty, 'operational')}
+                </div>
+            </div>
+            <div class="product-stock-group">
+                <div class="product-stock-group-title">Estoque secundário / não disponível</div>
+                <p class="product-stock-group-note">Mostruário: venda opcional - verificar estado do produto.</p>
+                <div class="product-stock-grid product-stock-grid-secondary">
+                    ${renderStockLocationCard('MOSTRUARIO', 'Mostruário', mostruarioQty, 'secondary')}
+                    ${renderStockLocationCard('DEFEITO', 'Defeito', defeitoQty, 'blocked')}
+                    ${renderStockLocationCard('EM_GARANTIA', 'Em Garantia', garantiaQty, 'warranty')}
+                    ${renderStockLocationCard('EM_TRANSPORTE', 'Em Transporte', transporteQty, 'transit')}
+                </div>
+            </div>
+            <div class="product-stock-group product-stock-group-external">
+                <div class="product-stock-group-title" style="display: flex; align-items: center; gap: 6px;">
+                    <span class="material-symbols-rounded" style="font-size: 16px; color: #f59e0b;">warehouse</span>
+                    Estoque externo
+                </div>
+                <p class="product-stock-group-note">Depósito Mercado Livre - não disponível para venda direta.</p>
+                <div class="product-stock-grid">
+                    ${renderStockLocationCard('FULL_ML', 'FULL ML', fullMlQty, 'external')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    const commercialInfoHTML = renderInfoBlock('Comercial', [
+        { label: 'Marca', value: p.marca },
+        { label: 'EAN', value: p.ean },
+        { label: 'SKU', value: p.sku_fornecedor || p.sku },
+        { label: 'Categoria', value: p.categoria },
+        { label: 'Subcategoria', value: p.subcategoria }
+    ]);
+    const technicalInfoHTML = attrs.length ? renderInfoBlock('Técnico', attrs.map(attr => ({
+        label: formatAttributeName(attr.nome),
+        value: formatAttributeValue(attr.valor)
+    }))) : '';
+    const operationalInfoHTML = renderInfoBlock('Operacional', [
+        { label: 'Estoque mínimo', value: p.estoque_minimo },
+        { label: 'Unidade', value: p.unidade },
+        { label: 'Qtd. embalagem', value: p.quantidade_embalagem },
+        { label: 'Mínimo atacado', value: p.quantidade_minima_atacado },
+        { label: 'Status', value: p.status }
+    ]);
+    const adminInfoHTML = renderInfoBlock('Administrativo', [
+        { label: 'ID interno', value: idInterno },
+        { label: 'Descrição completa', value: p.descricao_completa },
+        { label: 'Manual PDF', value: pdfUrl },
+        { label: 'Observações', value: p.observacoes }
+    ]);
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal no-top-bar">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderSearchScreen()')}
+            
+            <main class="container product-detail-screen">
+                <div class="product-detail-card">
+                    <div class="product-detail-top-actions">
+                        ${pdfUrl ? `
+                        <a href="${pdfUrl}" target="_blank" class="product-manual-icon-btn" title="Abrir manual do produto">
+                            <span class="material-symbols-rounded">picture_as_pdf</span>
+                        </a>
+                        ` : ''}
+                        
+                        <!-- Botão Editar Produto -->
+                        <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="product-edit-btn" title="Editar Produto">
+                            <span class="material-symbols-rounded">edit</span>
+                            <span>Editar</span>
+                        </button>
+
+                        <div class="product-status-chip" title="Status: ${statusText}">
+                            <span class="status-indicator-dot" style="background-color: ${statusColor};"></span>
+                        </div>
+                    </div>
+                    <!-- CABEÇALHO PRINCIPAL -->
+                    <div class="product-detail-header">
+                        <div class="product-detail-img">
+                            ${(p.url_imagem || p.image_path) ? `<img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="cursor:zoom-in">` : `<span class="material-symbols-rounded" style="font-size: 48px; color: #d1d5db;">inventory_2</span>`}
+                        </div>
+                        <div class="product-detail-title-block">
+                            <h1 class="product-detail-title">${p.descricao_completa || p.descricao_base || 'Sem descrição'}</h1>
+                            <div class="product-detail-meta-row">
+                                ${renderProductMetaItem('barcode', 'SKU', p.sku_fornecedor || p.sku || idInterno)}
+                                ${renderProductMetaItem('sell', 'Marca', p.marca)}
+                                ${renderProductMetaItem('qr_code_2', 'EAN', p.ean)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARDS DE PREÇO E ESTOQUE TOTAL -->
+                    <div class="product-detail-prices">
+                        <div class="product-price-card product-price-card-varejo">
+                            <span class="product-price-icon material-symbols-rounded">sell</span>
+                            <span class="product-price-ghost material-symbols-rounded">sell</span>
+                            <div class="product-price-label">PREÇO DE VENDA (VAREJO)</div>
+                            <div class="product-price-value product-price-main">${formatPrice(p.preco_varejo)}</div>
+                        </div>
+                        <div class="product-price-card product-stock-main-card ${stockStatusClass}" title="Térreo + 1º Andar">
+                            <span class="product-price-icon material-symbols-rounded">inventory_2</span>
+                            <span class="product-price-ghost material-symbols-rounded">inventory_2</span>
+                            <div class="product-price-label">ESTOQUE DISPONÍVEL</div>
+                            <div class="product-price-value product-stock-value ${stockStatusClass}">${disponivel} <span class="product-stock-unit">${unitLabel}</span></div>
+                        </div>
+                        <div class="product-price-card product-price-card-atacado collapsible-mobile">
+                            <span class="product-price-icon material-symbols-rounded">shopping_cart</span>
+                            <span class="product-price-ghost material-symbols-rounded">shopping_cart</span>
+                            <div class="product-price-label">PREÇO ATACADO</div>
+                            <div class="product-price-value product-price-atacado">${formatPrice(p.preco_atacado)}</div>
+                        </div>
+                    </div>
+
+                    ${stockAlertsHTML}
+                    ${stockLocationsHTML}
+                    ${camadasEstoqueHTML}
+                    ${packagingHTML}
+                    ${false ? (() => {
+                        const t = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'TERREO')?.saldo_total || 0);
+                        const m = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'MOSTRUARIO')?.saldo_total || 0);
+                        const p1 = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'PRIMEIRO_ANDAR')?.saldo_total || 0);
+                        
+                        if (false && t === 0 && m === 0 && p1 > 0) {
+                            return `
+                            <div style="margin-top: 20px; padding: 14px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 14px; display: flex; align-items: center; gap: 12px;">
+                                <div style="width: 40px; height: 40px; background: rgba(251, 191, 36, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                    <span class="material-symbols-rounded" style="color: #fbbf24; font-size: 24px;">local_shipping</span>
+                                </div>
+                                <div>
+                                    <div style="color: #fbbf24; font-weight: 800; font-size: 0.85rem;">SEM ESTOQUE NO TÉRREO/MOSTRUÁRIO</div>
+                                    <div style="color: rgba(255,255,255,0.7); font-size: 0.75rem;">Disponível no 1º andar: <b>${p1}</b></div>
+                                    <div style="color: #fbbf24; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin-top: 2px;">Transferir para venda</div>
+                                </div>
+                            </div>
+                            `;
+                        }
+                        return '';
+                    })() : ''}
+
+                    <!-- ESTOQUE POR LOCAL (DETALHADO) -->
+                    <div class="product-stock-locations legacy-product-stock-locations" style="margin-top: 24px;">
+                        <div class="product-stock-title" style="font-size: 0.9rem; margin-bottom: 12px; color: var(--muted); font-weight: 700;">ESTOQUE POR LOCAL</div>
+                        <div class="product-stock-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            ${(() => {
+                                const localMap = {
+                                    'TERREO': 'Térreo',
+                                    'MOSTRUARIO': 'Mostruário',
+                                    'PRIMEIRO_ANDAR': '1º Andar',
+                                    'DEFEITO': 'Defeito',
+                                    'EM_GARANTIA': 'Em Garantia',
+                                    'EM_TRANSPORTE': 'Em Transporte',
+                                    'FULL_ML': 'FULL ML'
+                                };
+                                return Object.keys(localMap).map(key => {
+                                    const entry = productStockEntries.find(e => normalizeLocal(e.local) === key);
+                                    const saldo = entry ? parseFloat(entry.saldo_total || entry.saldo || 0) : 0;
+                                    const label = localMap[key];
+                                    return `
+                                        <div class="product-stock-location" style="${saldo === 0 ? 'opacity: 0.4;' : ''} background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 12px; border-radius: 12px;">
+                                            <span class="product-stock-location-name" style="font-size: 0.75rem; color: var(--muted);">${label}</span>
+                                            <span class="product-stock-location-qty" style="font-size: 1.1rem; font-weight: 800; display: block; margin-top: 4px;">${saldo}</span>
+                                        </div>
+                                    `;
+                                }).join('');
+                            })()}
+                        </div>
+                    </div>
+
+                    <!-- PRODUTOS EQUIVALENTES (Collapsible on mobile) -->
+                    <div class="collapsible-mobile">
+                        ${equivalentes.length > 0 ? `
+                        <div class="product-related-section" style="margin-top: 32px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 24px;">
+                            <div class="product-related-title" style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
+                                <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">compare_arrows</span>
+                                Produtos Equivalentes / Por Marca
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                ${equivalentes.map(eq => {
+                                    const eqStock = getAvailableStockCache(eq.id_interno);
+                                    const eqMostruario = getProductShowroomStockCache(eq.id_interno);
+                                    return `
+                                        <div class="related-product-card" onclick="renderProductDetails(${JSON.stringify(eq).replace(/"/g, '&quot;')})" style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s ease;">
+                                            <div style="width: 44px; height: 44px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);">
+                                                ${(eq.image_path || eq.url_imagem) ? `<img src="${formatImageUrl(eq.image_path || eq.url_imagem)}" style="width: 100%; height: 100%; object-fit: contain;">` : '<span class="material-symbols-rounded" style="font-size: 20px; color: var(--muted);">inventory_2</span>'}
+                                            </div>
+                                            <div style="flex: 1; min-width: 0;">
+                                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                                    <span style="font-size: 0.7rem; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">${eq.marca || 'S/M'}</span>
+                                                    <span style="font-size: 0.65rem; color: var(--muted);">ID: ${eq.id_interno}</span>
+                                                </div>
+                                                <div style="font-size: 0.85rem; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0;">${eq.descricao_completa || eq.descricao_base}</div>
+                                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                    <span style="font-size: 0.8rem; color: #4ade80; font-weight: 700;">${formatPrice(eq.preco_varejo)} ç ${eqStock} disp.${eqMostruario > 0 ? ` ç ${eqMostruario} most.` : ''}</span>
+                                                    <span class="related-product-action">VER PRODUTO</span>
+                                                    <span class="material-symbols-rounded" style="font-size: 18px; color: var(--muted);">chevron_right</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- BLOCO + INFORMACOES (RECOLHÍVEL) -->
+                    <div class="product-more-info-section">
+                        <button type="button" onclick="toggleMoreInfo()" class="product-more-info-btn" aria-expanded="false" aria-controls="more-info-content">
+                            <span class="material-symbols-rounded">info</span>
+                            <span id="more-info-label">Info</span>
+                        </button>
+                        
+                        <div id="more-info-content" class="hidden" style="padding: 20px 10px 0;">
+                            <div class="product-info-blocks">
+                                ${commercialInfoHTML}
+                                ${technicalInfoHTML}
+                                ${operationalInfoHTML}
+                                ${adminInfoHTML}
+                            </div>
+                            <!-- CUSTO -->
+                            <div style="margin-bottom: 24px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 14px; border: 1px dashed rgba(255,255,255,0.1);">
+                                <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div>
+                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÇO DE CUSTO</span>
+                                        <span style="font-size: 1.1rem; color: white; font-weight: 700; letter-spacing: 2px;">------</span>
+                                    </div>
+                                    <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+                                        MOSTRAR
+                                    </button>
+                                </div>
+                                <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div>
+                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÇO DE CUSTO</span>
+                                        <span class="product-custo-amount" style="font-size: 1.2rem; color: #fbbf24; font-weight: 800;">${formatPrice(p.preco_custo)}</span>
+                                    </div>
+                                    <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+                                        OCULTAR
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- DADOS ADICIONAIS -->
+                            <div class="product-detail-id-section" style="background: transparent; padding: 0; border: none; margin-bottom: 24px;">
+                                ${p.sku_fornecedor ? `
+                                <div class="product-id-item">
+                                    <span class="product-id-label">SKU Fornecedor</span>
+                                    <span class="product-id-value">${p.sku_fornecedor}</span>
+                                </div>
+                                ` : ''}
+                                ${p.quantidade_minima_atacado ? `
+                                <div class="product-id-item">
+                                    <span class="product-id-label">Mínimo Atacado</span>
+                                    <span class="product-id-value">${p.quantidade_minima_atacado} ${p.unidade || 'UN'}</span>
+                                </div>
+                                ` : ''}
+                                ${p.estoque_minimo ? `
+                                <div class="product-id-item">
+                                    <span class="product-id-label">Estoque Mínimo</span>
+                                    <span class="product-id-value">${p.estoque_minimo}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+
+                            <!-- ATRIBUTOS TÉCNICOS -->
+                            ${attrs.length > 0 ? `
+                            <div class="product-attrs-section" style="margin-bottom: 24px;">
+                                <div class="product-attrs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; font-weight: 800;">Atributos Técnicos</div>
+                                <div class="product-attrs-grid">
+                                    ${attrs.map(attr => `
+                                        <div class="product-attr-chip">
+                                            <span class="product-attr-name">${formatAttributeName(attr.nome)}:</span>
+                                            <span class="product-attr-value">${formatAttributeValue(attr.valor)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            <!-- OBSERVACOES -->
+                            ${p.observacoes ? `
+                            <div class="product-obs-section" style="margin-bottom: 24px;">
+                                <div class="product-obs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 800;">Observações Internas</div>
+                                <div class="product-obs-text" style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.7);">${p.observacoes}</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+    window.scrollTo(0, 0);
+}
+
+window.toggleCusto = function() {
+    const locked = document.getElementById('custo-locked');
+    const display = document.getElementById('custo-display');
+    if (locked && display) {
+        locked.classList.toggle('hidden');
+        display.classList.toggle('hidden');
+    }
+};
+
+function getRelatedProducts(p) {
+    if (!appData.products) return [];
+    return appData.products.filter(other => {
+        // Don't include itself
+        if (other.ean === p.ean && other.id_interno === p.id_interno) return false;
+
+        // Match rule: description, color, category
+        const matchDesc = (other.descricao_base || '').toLowerCase() === (p.descricao_base || '').toLowerCase();
+        const matchColor = (other.cor || '').toLowerCase() === (p.cor || '').toLowerCase();
+        const matchCategory = (other.categoria || '').toLowerCase() === (p.categoria || '').toLowerCase();
+
+        return matchDesc && matchColor && matchCategory;
+    }).slice(0, 5); // Limit to 5 related products
+}
+
+function renderAddProduct(initialEan = '') {
+    const currentUser = localStorage.getItem('currentUser');
+    const nextId = getNextInternalId();
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderProductSubMenu()')}
+
+            <main class="container product-form-screen">
+                <div class="sub-menu-header">
+                    <h2 style="font-size: 1.2rem; font-weight: 700;">CADASTRAR PRODUTO</h2>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-section-title">Identificação</div>
+                    <div class="input-group">
+                        <label>ID Interno (Automático)</label>
+                        <input type="text" class="input-field" value="${nextId}" readonly disabled style="background: rgba(255,255,255,0.02); color: var(--primary); font-weight: 800; opacity: 1; cursor: not-allowed;">
+                    </div>
+                    <div class="input-group">
+                        <label>EAN / Código de Barras</label>
+                        <input type="text" id="add-ean" class="input-field" placeholder="EAN13" value="${initialEan}">
+                    </div>
+                    <div class="input-group">
+                        <label>SKU Fornecedor</label>
+                        <input type="text" id="add-sku" class="input-field" placeholder="Código do Fornecedor">
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Descrição Base</label>
+                        <input type="text" id="add-desc" class="input-field" placeholder="Nome principal do produto">
+                    </div>
+
+                    <div class="form-section-title">Características</div>
+                    <div class="input-group">
+                        <label>Marca</label>
+                        <input type="text" id="add-marca" class="input-field" placeholder="Ex: Cofap">
+                    </div>
+                    <div class="input-group">
+                        <label>Cor</label>
+                        <input type="text" id="add-cor" class="input-field" placeholder="Ex: Preto">
+                    </div>
+                    <div class="input-group">
+                        <label>Categoria</label>
+                        <input type="text" id="add-cat" class="input-field" placeholder="Ex: Suspensão">
+                    </div>
+                    <div class="input-group">
+                        <label>Subcategoria</label>
+                        <input type="text" id="add-subcat" class="input-field" placeholder="Ex: Amortecedores">
+                    </div>
+                    <div class="input-group">
+                        <label>Unidade</label>
+                        <select id="add-uni" class="input-field">
+                            <option value="UN">UN - Unidade</option>
+                            <option value="PC">PC - Peça</option>
+                            <option value="KG">KG - Quilograma</option>
+                            <option value="LT">LT - Litro</option>
+                            <option value="MT">MT - Metro</option>
+                            <option value="JG">JG - Jogo</option>
+                            <option value="KIT">KIT - Kit</option>
+                            <option value="PAR">PAR - Par</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Qtd por Embalagem</label>
+                        <input type="number" id="add-qtd-emb" class="input-field" value="1" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Quantidade por caixa</label>
+                        <input type="number" id="add-qtd-caixa" class="input-field" value="1" min="1" step="1" placeholder="Ex: 50">
+                    </div>
+
+                    <div class="form-section-title">Atributos Técnicos (JSON)</div>
+                    <div class="input-group full-width">
+                        <label>Atributos (JSON Array)</label>
+                        <textarea id="add-atributos" class="input-field" style="min-height: 100px; font-family: monospace; font-size: 0.85rem;" placeholder='[{"nome":"voltagem","valor":"12v","ordem":1}]'></textarea>
+                    </div>
+
+                    <div class="form-section-title">Preços e Estoque</div>
+                    <div class="input-group">
+                        <label>Preço de Custo (R$)</label>
+                        <input type="number" id="add-custo" step="0.01" class="input-field" placeholder="0,00">
+                    </div>
+                    <div class="input-group">
+                        <label>Preço Varejo (R$)</label>
+                        <input type="number" id="add-varejo" step="0.01" class="input-field" placeholder="0,00">
+                    </div>
+                    <div class="input-group">
+                        <label>Preço Atacado (R$)</label>
+                        <input type="number" id="add-atacado" step="0.01" class="input-field" placeholder="0,00">
+                    </div>
+                    <div class="input-group">
+                        <label>Estoque Mínimo</label>
+                        <input type="number" id="add-min" class="input-field" placeholder="0">
+                    </div>
+                    <div class="input-group">
+                        <label>Qtd Mínima Atacado</label>
+                        <input type="number" id="add-min-at" class="input-field" value="1">
+                    </div>
+
+                    <div class="form-section-title">Status e Observações</div>
+                    <div class="input-group">
+                        <label>Status</label>
+                        <select id="add-status" class="input-field" style="width: 100%; appearance: none;">
+                            <option value="ativo">Ativo</option>
+                            <option value="inativo">Inativo</option>
+                        </select>
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Observações</label>
+                        <textarea id="add-obs" class="input-field" style="min-height: 80px; resize: vertical;" placeholder="Detalhes adicionais..."></textarea>
+                    </div>
+
+                    <div class="form-section-title">Mídia e Documentação</div>
+                    <div class="input-group full-width">
+                        <label>Imagem do Produto</label>
+                        <input type="file" id="add-img-file" class="input-field" accept="image/*">
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Manual / PDF</label>
+                        <input type="file" id="add-pdf-file" class="input-field" accept="application/pdf">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 16px; margin-top: 20px; padding-bottom: 40px;">
+                    <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderProductSubMenu()">
+                        Cancelar
+                    </button>
+                    <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveNewProduct()">
+                        <span class="material-symbols-rounded">save</span>
+                        Salvar Produto
+                    </button>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+async function saveNewProduct() {
+    const nextId = getNextInternalId();
+    
+    let image_path = null;
+    let manual_path = null;
+    let url_imagem = null;
+    let url_pdf = null;
+    
+    const imgFile = document.getElementById('add-img-file').files[0];
+    const pdfFile = document.getElementById('add-pdf-file').files[0];
+    
+    try {
+        if (imgFile) {
+            console.log('[PRODUTO] Arquivo imagem selecionado:', imgFile.name);
+            image_path = await uploadFile(imgFile, 'produto');
+            url_imagem = getPublicUrl(image_path);
+            console.log('[PRODUTO] Imagem salva. path:', image_path, 'URL:', url_imagem);
+        }
+        
+        if (pdfFile) {
+            console.log('[PRODUTO] Arquivo PDF selecionado:', pdfFile.name);
+            manual_path = await uploadFile(pdfFile, 'manual');
+            url_pdf = getPublicUrl(manual_path);
+            console.log('[PRODUTO] PDF salvo. path:', manual_path, 'URL:', url_pdf);
+        }
+    } catch (err) {
+        console.error('[PRODUTO] Erro ao fazer upload:', err);
+        showToast('Erro ao enviar arquivo: ' + err.message);
+        return;
+    }
+
+    const attrsInput = document.getElementById('add-atributos').value.trim();
+    let attrsArray = [];
+    if (attrsInput) {
+        try {
+            attrsArray = JSON.parse(attrsInput);
+            if (!Array.isArray(attrsArray)) {
+                showToast('Atributos deve ser um array JSON');
+                return;
+            }
+        } catch (e) {
+            showToast('JSON de atributos inválido');
+            return;
+        }
+    }
+    
+    const qtdPorCaixa = readQtdPorCaixaInput('add-qtd-caixa');
+    if (qtdPorCaixa === null) return;
+
+    const product = {
+        id_interno: nextId,
+        ean: document.getElementById('add-ean').value.trim(),
+        sku_fornecedor: document.getElementById('add-sku').value.trim(),
+        descricao_base: document.getElementById('add-desc').value.trim(),
+        descricao_completa: document.getElementById('add-desc').value.trim(),
+        marca: document.getElementById('add-marca').value.trim(),
+        cor: document.getElementById('add-cor').value.trim(),
+        categoria: document.getElementById('add-cat').value.trim(),
+        subcategoria: document.getElementById('add-subcat').value.trim(),
+        unidade: document.getElementById('add-uni').value.trim(),
+        quantidade_embalagem: parseInt(document.getElementById('add-qtd-emb').value) || 1,
+        qtd_por_caixa: qtdPorCaixa,
+        preco_custo: parseFloat(document.getElementById('add-custo').value) || 0,
+        preco_varejo: parseFloat(document.getElementById('add-varejo').value) || 0,
+        preco_atacado: parseFloat(document.getElementById('add-atacado').value) || 0,
+        estoque_minimo: parseInt(document.getElementById('add-min').value) || 0,
+        qtd_minima_atacado: parseInt(document.getElementById('add-min-at').value) || 1,
+        status: document.getElementById('add-status').value,
+        observacoes: document.getElementById('add-obs').value.trim(),
+        url_imagem: url_imagem || '',
+        url_pdf_manual: url_pdf || '',
+        atributos: attrsArray
+    };
+
+    if (!product.descricao_base) {
+        showToast("A descrição base é obrigatória.");
+        return;
+    }
+
+    console.log('[PRODUTO] Salvando produto:', product);
+    showToast("Salvando produto...");
+
+    try {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client
+            .from('produtos')
+            .insert([product])
+            .select('*')
+            .single();
+        if (error) throw error;
+        appData.products.push(data || product);
+        DataClient.invalidateCache?.('produtos');
+        showToast("Produto salvo no Supabase!");
+    } catch (e) {
+        console.error("Error saving product on Supabase:", e);
+        showToast("Erro ao salvar produto: " + (e.message || e), "error");
+        return;
+    }
+
+    if (SCRIPT_URL) {
+        try {
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'append',
+                    sheet: 'produtos',
+                    data: product
+                })
+            });
+        } catch (e) {
+            console.error("Error saving product:", e);
+        }
+    }
+
+    playBeep('success');
+    setTimeout(() => renderProductSubMenu(), 1500);
+}
+
+let removeImageFlag = false;
+let removePDFFlag = false;
+
+function markRemoveImage() {
+    removeImageFlag = true;
+    const preview = document.getElementById('edit-img-preview');
+    if (preview) {
+        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">Imagem será removida ao salvar</span>';
+    }
+    console.log('[REMOVE] Imagem marcada para remoção');
+}
+
+function markRemovePDF() {
+    removePDFFlag = true;
+    const preview = document.getElementById('edit-pdf-preview');
+    if (preview) {
+        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">PDF será removido ao salvar</span>';
+    }
+    console.log('[REMOVE] PDF marcado para remoção');
+}
+
+async function saveEditProduct(originalId) {
+    const existingProduct = appData.products.find(p => (p.id_interno || p.col_A) == originalId);
+    
+    let newImagePath = existingProduct?.image_path || null;
+    let newManualPath = existingProduct?.manual_path || null;
+    let url_imagem = existingProduct?.url_imagem || null;
+    let url_pdf = existingProduct?.url_pdf_manual || null;
+    
+    const oldImagePath = existingProduct?.image_path || null;
+    const oldManualPath = existingProduct?.manual_path || null;
+    
+    const newImgFile = document.getElementById('edit-img-file')?.files[0];
+    const newPdfFile = document.getElementById('edit-pdf-file')?.files[0];
+    
+    try {
+        if (newImgFile) {
+            newImagePath = await uploadFile(newImgFile, 'produto');
+            url_imagem = getPublicUrl(newImagePath);
+            removeImageFlag = false;
+            
+            if (oldImagePath && oldImagePath !== newImagePath) {
+                await deleteFile(oldImagePath);
+            }
+        } else if (removeImageFlag && oldImagePath) {
+            await deleteFile(oldImagePath);
+            newImagePath = null;
+            url_imagem = null;
+        }
+        
+        if (newPdfFile) {
+            newManualPath = await uploadFile(newPdfFile, 'manual');
+            url_pdf = getPublicUrl(newManualPath);
+            removePDFFlag = false;
+            
+            if (oldManualPath && oldManualPath !== newManualPath) {
+                await deleteFile(oldManualPath);
+            }
+        } else if (removePDFFlag && oldManualPath) {
+            await deleteFile(oldManualPath);
+            newManualPath = null;
+            url_pdf = null;
+        }
+    } catch (err) {
+        console.error('[EDIT] Erro ao processar arquivos:', err);
+        showToast('Erro ao processar arquivos: ' + err.message);
+        return;
+    }
+
+    const attrsInput = document.getElementById('edit-atributos').value.trim();
+    let attrsArray = [];
+    if (attrsInput) {
+        try {
+            attrsArray = JSON.parse(attrsInput);
+            if (!Array.isArray(attrsArray)) {
+                showToast('Atributos deve ser um array JSON');
+                return;
+            }
+        } catch (e) {
+            showToast('JSON de atributos inválido');
+            return;
+        }
+    }
+
+    const qtdPorCaixa = readQtdPorCaixaInput('edit-qtd-caixa');
+    if (qtdPorCaixa === null) return;
+    
+    const product = {
+        id_interno: document.getElementById('edit-id').value.trim(),
+        ean: document.getElementById('edit-ean').value.trim(),
+        sku_fornecedor: document.getElementById('edit-sku').value.trim(),
+        descricao_base: document.getElementById('edit-desc').value.trim(),
+        descricao_completa: document.getElementById('edit-desc').value.trim(),
+        marca: document.getElementById('edit-marca').value.trim(),
+        cor: document.getElementById('edit-cor').value.trim(),
+        categoria: document.getElementById('edit-cat').value.trim(),
+        subcategoria: document.getElementById('edit-subcat').value.trim(),
+        unidade: document.getElementById('edit-uni').value.trim(),
+        quantidade_embalagem: parseInt(document.getElementById('edit-qtd-emb').value) || 1,
+        qtd_por_caixa: qtdPorCaixa,
+        preco_custo: parseFloat(document.getElementById('edit-custo').value) || 0,
+        preco_varejo: parseFloat(document.getElementById('edit-varejo').value) || 0,
+        preco_atacado: parseFloat(document.getElementById('edit-atacado').value) || 0,
+        estoque_minimo: parseInt(document.getElementById('edit-min').value) || 0,
+        qtd_minima_atacado: parseInt(document.getElementById('edit-min-at').value) || 1,
+        status: document.getElementById('edit-status').value,
+        observacoes: document.getElementById('edit-obs').value.trim(),
+        url_imagem: url_imagem || '',
+        url_pdf_manual: url_pdf || '',
+        atributos: attrsArray
+    };
+
+    showToast("Atualizando produto...");
+
+    try {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client
+            .from('produtos')
+            .update(product)
+            .eq('id_interno', originalId)
+            .select('*')
+            .single();
+        if (error) throw error;
+
+        const index = appData.products.findIndex(p => (p.id_interno || p.col_A) == originalId);
+        if (index !== -1) {
+            appData.products[index] = { ...appData.products[index], ...(data || product) };
+        }
+        if (window.currentProductDetailForEdit && String(window.currentProductDetailForEdit.id_interno || '') === String(originalId)) {
+            window.currentProductDetailForEdit = { ...window.currentProductDetailForEdit, ...(data || product) };
+        }
+        DataClient.invalidateCache?.('produtos');
+    } catch (e) {
+        console.error("Error updating product on Supabase:", e);
+        showToast("Erro ao atualizar produto: " + (e.message || e), "error");
+        return;
+    }
+
+    playBeep('success');
+    setTimeout(() => renderEditProductSearch(), 1500);
+}
+function renderEditProductSearch() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+
+    // Garantir produtos carregados
+    ensureProdutosLoaded();
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal product-search-screen">
+            ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
+            
+            <main class="container product-search-center">
+                <div class="screen-mini-title">
+                    <div class="mini-icon">
+                        ${menu3DIcons.editar}
+                    </div>
+                    <span>EDITAR</span>
+                </div>
+
+                <div class="product-search-bar">
+                    <span class="material-symbols-rounded" style="color: var(--muted); font-size: 24px; margin-right: 12px;">search</span>
+                    <input
+                        type="search"
+                        id="edit-search-input"
+                        class="product-search-input"
+                        placeholder="Buscar produto para editar..."
+                        autocomplete="off"
+                        inputmode="search"
+                        oninput="debouncedEditSearch()"
+                    />
+                    <button class="product-search-camera-btn" type="button" onclick="startScanner(false, false, false, false, true)" style="margin-left: 10px;">
+                        <span class="material-symbols-rounded" style="font-size: 24px; color: var(--primary);">qr_code_scanner</span>
+                    </button>
+                </div>
+
+                <div id="scanner-container-edit" class="hidden" style="margin-top: 24px; overflow: hidden; border-radius: 20px; border: 2px solid var(--primary); background: #000; position: relative; width: 100%; max-width: 600px;">
+                    <div id="reader-edit" style="width: 100%;"></div>
+                    <div style="position: absolute; top: 15px; right: 15px; z-index: 10;">
+                        <button class="btn-action" style="padding: 10px; min-width: auto; border-radius: 50%; background: rgba(0,0,0,0.6);" onclick="stopScanner()">
+                            <span class="material-symbols-rounded">close</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="edit-search-results" class="product-search-results">
+                    <!-- Resultados -->
+                </div>
+            </main>
+        </div>
+    `;
+    setTimeout(() => document.getElementById('edit-search-input')?.focus(), 100);
+}
+
+// Lógica de Busca para Edição
+let lastEditSearchQuery = '';
+window.debouncedEditSearch = debounce(async () => {
+    const input = document.getElementById('edit-search-input');
+    if (!input) return;
+    const query = input.value.trim();
+    if (query === lastEditSearchQuery) return;
+    lastEditSearchQuery = query;
+
+    if (query.length < 2) {
+        document.getElementById('edit-search-results').innerHTML = '';
+        return;
+    }
+
+    const normQuery = normalizeProductSearchTerm(query);
+    const results = appData.products.filter(p => p._searchIndex.includes(normQuery)).slice(0, 30);
+    renderEditSearchResults(results);
+}, 300);
+
+function renderEditSearchResults(results) {
+    const container = document.getElementById('edit-search-results');
+    if (!container) return;
+
+    if (results.length === 0) {
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--muted);">Nenhum produto encontrado</div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="product-result-list">
+            ${results.map(p => `
+                <div class="product-result-item" onclick="renderEditProductFormByEan('${p.ean || p.id_interno}')">
+                    <div class="product-result-img">
+                        <span class="material-symbols-rounded" style="color: #d1d5db; font-size: 24px;">inventory_2</span>
+                    </div>
+                    <div class="product-result-info">
+                        <div class="product-result-title" style="color: #101018; font-weight: 700;">${p.descricao_completa || p.descricao_base || p.id_interno}</div>
+                        <div style="font-size: 0.75rem; color: #666;">ID: ${p.id_interno} | EAN: ${p.ean || '-'}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderEditProductFormByEan(code) {
+    const lookup = String(code || '').trim();
+    const p = (appData.products || []).find(prod =>
+        String(prod.ean || '').trim() === lookup ||
+        String(prod.id_interno || prod.col_A || '').trim() === lookup ||
+        String(prod.sku_fornecedor || prod.sku || '').trim() === lookup
+    ) || (
+        window.currentProductDetailForEdit &&
+        (
+            String(window.currentProductDetailForEdit.ean || '').trim() === lookup ||
+            String(window.currentProductDetailForEdit.id_interno || window.currentProductDetailForEdit.col_A || '').trim() === lookup ||
+            String(window.currentProductDetailForEdit.sku_fornecedor || window.currentProductDetailForEdit.sku || '').trim() === lookup
+        )
+            ? window.currentProductDetailForEdit
+            : null
+    );
+    if (p) {
+        renderEditProductForm(p);
+    } else {
+        console.warn('[EDIT] Produto não encontrado para edição:', code);
+        showToast('Não foi possível abrir a edição deste produto.', 'warning');
+    }
+}
+
+function openProductCreate() {
+    currentScreen = 'internal';
+    renderAddProduct();
+    return;
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal">
+            ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
+            
+            <main class="container" style="display: flex; flex-direction: column; align-items: center; padding-top: 60px;">
+                <div class="screen-mini-title">
+                    <div class="mini-icon">
+                        ${menu3DIcons.cadastrar}
+                    </div>
+                    <span>CADASTRAR</span>
+                </div>
+                
+                <div style="margin-top: 40px; text-align: center; color: var(--muted);">
+                    <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px;">construction</span>
+                    <p style="font-size: 1.1rem; font-weight: 600;">Módulo em desenvolvimento</p>
+                    <p style="font-size: 0.85rem; margin-top: 8px;">Aguarde as próximas atualizações.</p>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+
+function renderEditProductForm(p) {
+    const currentUser = localStorage.getItem('currentUser');
+    const existingAttrs = safeParseAtributos(p.atributos);
+    const attrsString = existingAttrs.length > 0 ? JSON.stringify(existingAttrs, null, 2) : '';
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), `showProductDetails('${p.id_interno}')`)}
+
+            <main class="container product-form-screen">
+                <div class="sub-menu-header">
+                    <h2 style="font-size: 1.2rem; font-weight: 700;">EDITAR: ${p.descricao_base || p.id_interno}</h2>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-section-title">Identificação</div>
+                    <div class="input-group">
+                        <label>ID Interno</label>
+                        <input type="text" id="edit-id" class="input-field" value="${p.id_interno || p.col_A || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>EAN / Código de Barras</label>
+                        <input type="text" id="edit-ean" class="input-field" value="${p.ean || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>SKU Fornecedor</label>
+                        <input type="text" id="edit-sku" class="input-field" value="${p.sku_fornecedor || ''}">
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Descrição Base</label>
+                        <input type="text" id="edit-desc" class="input-field" value="${p.descricao_base || ''}">
+                    </div>
+
+                    <div class="form-section-title">Características</div>
+                    <div class="input-group">
+                        <label>Marca</label>
+                        <input type="text" id="edit-marca" class="input-field" value="${p.marca || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Cor</label>
+                        <input type="text" id="edit-cor" class="input-field" value="${p.cor || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Categoria</label>
+                        <input type="text" id="edit-cat" class="input-field" value="${p.categoria || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Subcategoria</label>
+                        <input type="text" id="edit-subcat" class="input-field" value="${p.subcategoria || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Unidade</label>
+                        <select id="edit-uni" class="input-field">
+                            <option value="UN" ${p.unidade === 'UN' ? 'selected' : ''}>UN - Unidade</option>
+                            <option value="PC" ${p.unidade === 'PC' ? 'selected' : ''}>PC - Peça</option>
+                            <option value="KG" ${p.unidade === 'KG' ? 'selected' : ''}>KG - Quilograma</option>
+                            <option value="LT" ${p.unidade === 'LT' ? 'selected' : ''}>LT - Litro</option>
+                            <option value="MT" ${p.unidade === 'MT' ? 'selected' : ''}>MT - Metro</option>
+                            <option value="JG" ${p.unidade === 'JG' ? 'selected' : ''}>JG - Jogo</option>
+                            <option value="KIT" ${p.unidade === 'KIT' ? 'selected' : ''}>KIT - Kit</option>
+                            <option value="PAR" ${p.unidade === 'PAR' ? 'selected' : ''}>PAR - Par</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Qtd por Embalagem</label>
+                        <input type="number" id="edit-qtd-emb" class="input-field" value="${p.quantidade_embalagem || 1}" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Quantidade por caixa</label>
+                        <input type="number" id="edit-qtd-caixa" class="input-field" value="${normalizeQtdPorCaixa(p.qtd_por_caixa)}" min="1" step="1" placeholder="Ex: 50">
+                    </div>
+
+                    <div class="form-section-title">Atributos Técnicos (JSON)</div>
+                    <div class="input-group full-width">
+                        <label>Atributos (JSON Array)</label>
+                        <textarea id="edit-atributos" class="input-field" style="min-height: 100px; font-family: monospace; font-size: 0.85rem;">${attrsString}</textarea>
+                    </div>
+
+                    <div class="form-section-title">Preços e Estoque</div>
+                    <div class="input-group">
+                        <label>Preço de Custo (R$)</label>
+                        <input type="number" id="edit-custo" step="0.01" class="input-field" value="${p.preco_custo || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Preço Varejo (R$)</label>
+                        <input type="number" id="edit-varejo" step="0.01" class="input-field" value="${p.preco_varejo || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Preço Atacado (R$)</label>
+                        <input type="number" id="edit-atacado" step="0.01" class="input-field" value="${p.preco_atacado || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Estoque Mínimo</label>
+                        <input type="number" id="edit-min" class="input-field" value="${p.estoque_minimo || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Qtd Mínima Atacado</label>
+                        <input type="number" id="edit-min-at" class="input-field" value="${p.qtd_minima_atacado || 1}">
+                    </div>
+
+                    <div class="form-section-title">Status e Observações</div>
+                    <div class="input-group">
+                        <label>Status</label>
+                        <select id="edit-status" class="input-field" style="width: 100%; appearance: none;">
+                            <option value="ativo" ${p.status === 'ativo' ? 'selected' : ''}>Ativo</option>
+                            <option value="inativo" ${p.status === 'inativo' ? 'selected' : ''}>Inativo</option>
+                        </select>
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Observações</label>
+                        <textarea id="edit-obs" class="input-field" style="min-height: 80px; resize: vertical;">${p.observacoes || ''}</textarea>
+                    </div>
+
+                    <div class="form-section-title">Mídia e Documentação</div>
+                    <div class="input-group full-width">
+                        <label>URL da Imagem</label>
+                        <input type="text" id="edit-img-url" class="input-field" value="${p.url_imagem || ''}" placeholder="https://...">
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Fazer upload de nova imagem</label>
+                        <input type="file" id="edit-img-file" class="input-field" accept="image/*" style="margin-top: 8px;">
+                    </div>
+
+                    <div class="form-section-title">Manual / PDF</div>
+                    <div class="input-group full-width">
+                        <label>URL do PDF</label>
+                        <input type="text" id="edit-pdf-url" class="input-field" value="${p.url_pdf_manual || p.url_pdf || ''}" placeholder="https://...">
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Fazer upload de novo PDF</label>
+                        <input type="file" id="edit-pdf-file" class="input-field" accept="application/pdf" style="margin-top: 8px;">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 16px; margin-top: 20px; padding-bottom: 40px;">
+                    <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderEditProductSearch()">
+                        Voltar
+                    </button>
+                    <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveEditProduct('${p.id_interno || p.col_A}')">
+                        <span class="material-symbols-rounded">save</span>
+                        Salvar Alterações
+                    </button>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+function handleBackgroundImageUpload(event, deviceType) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('Por favor, selecione uma imagem válida.');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result;
+        const storageKey = deviceType === 'mobile' ? 'loginBackgroundMobile' : 'loginBackgroundDesktop';
+        localStorage.setItem(storageKey, base64);
+        showToast(`Imagem de fundo ${deviceType} salva! Ir para login para ver.`);
+        renderConfigSubMenu();
+    };
+    reader.onerror = function() {
+        showToast('Erro ao ler a imagem.');
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleFontUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const validExtensions = ['.ttf', '.otf', '.woff', '.woff2'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validExtensions.includes(ext)) {
+        showToast('Por favor, selecione um arquivo de fonte válido (TTF, OTF, WOFF, WOFF2).');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const fontData = e.target.result;
+        const fontName = 'CustomFont_' + Date.now();
+        
+        const fontFace = new FontFace(fontName, `url(${fontData})`);
+        fontFace.load().then(function(loadedFace) {
+            document.fonts.add(loadedFace);
+            localStorage.setItem('appFontFamily', fontName);
+            localStorage.setItem('appFontData', fontData);
+            applyAppFont();
+            showToast('Fonte aplicada com sucesso!');
+            renderConfigSubMenu();
+        }).catch(function(err) {
+            showToast('Erro ao carregar fonte: ' + err.message);
+        });
+    };
+    reader.onerror = function() {
+        showToast('Erro ao ler a fonte.');
+    };
+    reader.readAsDataURL(file);
+}
+
+function applyAppFont() {
+    const fontName = localStorage.getItem('appFontFamily');
+    if (fontName) {
+        document.documentElement.style.setProperty('--app-font-family', fontName);
+    }
+}
+
+function updateLoginColor(type, value) {
+    localStorage.setItem('login' + type.charAt(0).toUpperCase() + type.slice(1) + 'Color', value);
+    showToast('Cor atualizada!');
+}
+
+function handleLoginBgImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const maxWidth = 1920;
+            const maxHeight = 1080;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            saveToIndexedDB('loginBgImage', dataUrl);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function saveToIndexedDB(key, data) {
+    const dbName = 'DYAUTO_DB';
+    const storeName = 'files';
+    
+    const request = indexedDB.open(dbName, 1);
+    
+    request.onerror = function() {
+        try {
+            localStorage.setItem(key, data);
+            showToast('Imagem salva!');
+        } catch (e) {
+            showToast('Erro ao salvar imagem.');
+        }
+        renderConfigSubMenu();
+    };
+    
+    request.onupgradeneeded = function(e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(storeName)) {
+            db.createObjectStore(storeName);
+        }
+    };
+    
+    request.onsuccess = function(e) {
+        const db = e.target.result;
+        try {
+            if (!db.objectStoreNames.contains(storeName)) {
+                localStorage.setItem(key, data);
+                showToast('Imagem salva!');
+                renderConfigSubMenu();
+                return;
+            }
+            
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            store.put(data, key);
+            tx.oncomplete = function() {
+                showToast('Imagem salva!');
+                renderConfigSubMenu();
+            };
+            tx.onerror = function() {
+                try {
+                    localStorage.setItem(key, data);
+                    showToast('Imagem salva!');
+                } catch (e) {
+                    showToast('Erro ao salvar imagem.');
+                }
+                renderConfigSubMenu();
+            };
+        } catch (err) {
+            try {
+                localStorage.setItem(key, data);
+                showToast('Imagem salva!');
+            } catch (e) {
+                showToast('Erro ao salvar imagem.');
+            }
+            renderConfigSubMenu();
+        }
+    };
+}
+
+function loadFromIndexedDB(key, callback) {
+    const dbName = 'DYAUTO_DB';
+    const storeName = 'files';
+    
+    const defaultData = null;
+    const fallbackData = localStorage.getItem(key);
+    
+    const request = indexedDB.open(dbName);
+    
+    request.onerror = function() {
+        callback(fallbackData);
+    };
+    
+    request.onupgradeneeded = function(e) {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(storeName)) {
+            db.createObjectStore(storeName);
+        }
+    };
+    
+    request.onsuccess = function(e) {
+        try {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                callback(fallbackData);
+                return;
+            }
+            
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const getRequest = store.get(key);
+            
+            getRequest.onsuccess = function() {
+                const data = getRequest.result;
+                callback(data || fallbackData);
+            };
+            getRequest.onerror = function() {
+                callback(fallbackData);
+            };
+        } catch (err) {
+            callback(fallbackData);
+        }
+    };
+}
+
+function removeLoginBgImage() {
+    localStorage.removeItem('loginBackgroundDesktop');
+    localStorage.removeItem('loginBackgroundMobile');
+    showToast('Imagem de fundo removida!');
+    renderConfigSubMenu();
+}
+
+function resetLoginVisual() {
+    localStorage.removeItem('loginBgColor');
+    localStorage.removeItem('loginTextColor');
+    localStorage.removeItem('loginCardColor');
+    localStorage.removeItem('loginBackgroundDesktop');
+    localStorage.removeItem('loginBackgroundMobile');
+    window.loginCustomBgImage = null;
+    
+    const request = indexedDB.deleteDatabase('DYAUTO_DB');
+    request.onsuccess = function() {
+        showToast('Visual resetado para padrão!');
+        renderConfigSubMenu();
+    };
+    request.onerror = function() {
+        showToast('Visual resetado para padrão!');
+        renderConfigSubMenu();
+    };
+}
+
+function applyLoginStyles() {
+    const bgColor = localStorage.getItem('loginBgColor');
+    const textColor = localStorage.getItem('loginTextColor');
+    const cardColor = localStorage.getItem('loginCardColor');
+    
+    if (bgColor) document.documentElement.style.setProperty('--login-bg-color', bgColor);
+    if (textColor) document.documentElement.style.setProperty('--login-text-color', textColor);
+    if (cardColor) document.documentElement.style.setProperty('--login-card-color', cardColor);
+}
+
+function adjustColor(color, amount) {
+    const hex = color.replace('#', '');
+    const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+const FINANCEIRO_EMPTY_MESSAGE = 'Nenhuma parcela financeira encontrada. Ao lançar uma nota fiscal com parcelas, os vencimentos aparecerão aqui.';
+const FINANCEIRO_STATUS_ABERTOS = ['pendente', 'parcial'];
+
+function normalizarStatusFinanceiro(status) {
+    return String(status || '').trim().toLowerCase();
+}
+
+function getFinanceiroDataVencimento(item) {
+    return item?.data_vencimento || item?.vencimento || item?.dt_vencimento || null;
+}
+
+function getFinanceiroParcelasBase() {
+    return appData.financeiroParcelas ||
+        appData.contas_pagar ||
+        appData.contasPagar ||
+        appData.financeiro ||
+        [];
+}
+
+function getFinanceiroHoje() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return hoje;
+}
+
+function parseFinanceiroDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function isFinanceiroStatusAberto(item) {
+    return FINANCEIRO_STATUS_ABERTOS.includes(normalizarStatusFinanceiro(item?.status));
+}
+
+function calcularFinanceiroAVencer(parcelas = getFinanceiroParcelasBase()) {
+    const hoje = getFinanceiroHoje();
+    return (parcelas || []).filter(item => {
+        const vencimento = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+        return vencimento && vencimento >= hoje && isFinanceiroStatusAberto(item);
+    });
+}
+
+function calcularFinanceiroVencidas(parcelas = getFinanceiroParcelasBase()) {
+    const hoje = getFinanceiroHoje();
+    return (parcelas || []).filter(item => {
+        const vencimento = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+        return vencimento && vencimento < hoje && isFinanceiroStatusAberto(item);
+    });
+}
+
+function calcularFinanceiroPendentes(parcelas = getFinanceiroParcelasBase()) {
+    return (parcelas || []).filter(item => isFinanceiroStatusAberto(item));
+}
+
+function calcularFinanceiroPagasMes(parcelas = getFinanceiroParcelasBase()) {
+    const hoje = new Date();
+    const mes = hoje.getMonth();
+    const ano = hoje.getFullYear();
+    return (parcelas || []).filter(item => {
+        if (normalizarStatusFinanceiro(item?.status) !== 'pago') return false;
+        const pagamento = parseFinanceiroDate(item?.data_pagamento || item?.pagamento_em);
+        return pagamento && pagamento.getMonth() === mes && pagamento.getFullYear() === ano;
+    });
+}
+
+async function ensureFinanceiroParcelasLoaded() {
+    if (appData.financeiroParcelasLoaded) return appData.financeiroParcelas || [];
+    appData.financeiroParcelasLoaded = true;
+    appData.financeiroParcelas = getFinanceiroParcelasBase();
+
+    const client = window.supabaseClient;
+    if (!client) return appData.financeiroParcelas;
+
+    try {
+        const { data, error } = await client
+            .from('contas_pagar')
+            .select('*')
+            .order('data_vencimento', { ascending: true });
+        if (error) throw error;
+        appData.financeiroParcelas = data || [];
+    } catch (error) {
+        console.warn('[FINANCEIRO] fonte contas_pagar indisponivel, usando fallback vazio/lista local.', error);
+        appData.financeiroParcelas = appData.financeiroParcelas || [];
+    }
+
+    return appData.financeiroParcelas;
+}
+
+function getFinanceiroFiltroConfig(filtro) {
+    const configs = {
+        a_vencer: {
+            titulo: 'A VENCER',
+            descricao: 'Consultar parcelas de notas fiscais com vencimento futuro.',
+            icon: 'financeiro_avencer',
+            calcular: calcularFinanceiroAVencer
+        },
+        vencidas: {
+            titulo: 'VENCIDAS',
+            descricao: 'Ver parcelas vencidas e valores em atraso.',
+            icon: 'financeiro_vencidas',
+            calcular: calcularFinanceiroVencidas
+        },
+        pendentes: {
+            titulo: 'PENDENTES',
+            descricao: 'Acompanhar todas as parcelas ainda em aberto.',
+            icon: 'financeiro_pendentes',
+            calcular: calcularFinanceiroPendentes
+        },
+        pagas_mes: {
+            titulo: 'PAGAS NO MÊS',
+            descricao: 'Consultar parcelas pagas dentro do mês atual.',
+            icon: 'financeiro_pagas_mes',
+            calcular: calcularFinanceiroPagasMes
+        }
+    };
+    return configs[filtro] || configs.pendentes;
+}
+
+function formatFinanceiroMoney(value) {
+    const number = Number(String(value ?? 0).replace(',', '.'));
+    return (Number.isFinite(number) ? number : 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatFinanceiroDate(value) {
+    const date = parseFinanceiroDate(value);
+    return date ? date.toLocaleDateString('pt-BR') : '-';
+}
+
+async function renderFinanceiroSubMenu() {
+    await ensureFinanceiroParcelasLoaded();
+    const currentUser = localStorage.getItem('currentUser');
+    const subItems = [
+        { id: 'fin_a_vencer', label: 'A VENCER', icon: 'financeiro_avencer', onclick: "renderFinanceiroLista('a_vencer')", description: 'Consultar parcelas de notas fiscais com vencimento futuro.' },
+        { id: 'fin_vencidas', label: 'VENCIDAS', icon: 'financeiro_vencidas', onclick: "renderFinanceiroLista('vencidas')", description: 'Ver parcelas vencidas e valores em atraso.' },
+        { id: 'fin_pendentes', label: 'PENDENTES', icon: 'financeiro_pendentes', onclick: "renderFinanceiroLista('pendentes')", description: 'Acompanhar todas as parcelas ainda em aberto.' },
+        { id: 'fin_pagas_mes', label: 'PAGAS NO MÊS', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Consultar parcelas pagas dentro do mês atual.' }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('financeiro')}
+            <main class="container">
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+async function renderFinanceiroLista(filtro = 'pendentes') {
+    const parcelas = await ensureFinanceiroParcelasLoaded();
+    const config = getFinanceiroFiltroConfig(filtro);
+    const itens = config.calcular(parcelas);
+    const currentUser = localStorage.getItem('currentUser');
+    const total = itens.reduce((sum, item) => sum + Number(String(item.valor ?? 0).replace(',', '.')), 0);
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+            ${getModuleSidebarHTML('financeiro')}
+            <main class="container financeiro-list-workspace">
+                <section class="financeiro-list-panel">
+                    <header class="financeiro-list-header">
+                        <span class="standard-module-card-icon">${menu3DIcons[config.icon] || menu3DIcons.financeiro || ''}</span>
+                        <span>
+                            <strong>${config.titulo}</strong>
+                            <small>${config.descricao}</small>
+                        </span>
+                    </header>
+
+                    <div class="financeiro-list-summary">
+                        <div>
+                            <small>PARCELAS</small>
+                            <strong>${itens.length}</strong>
+                        </div>
+                        <div>
+                            <small>TOTAL</small>
+                            <strong>${formatFinanceiroMoney(total)}</strong>
+                        </div>
+                    </div>
+
+                    ${itens.length ? `
+                        <div class="financeiro-list">
+                            ${itens.map(item => `
+                                <article class="financeiro-row">
+                                    <div>
+                                        <strong>${item.descricao || `NF ${item.numero_nf || '-'}`}</strong>
+                                        <small>NF ${item.numero_nf || '-'} • Parcela ${item.parcela || '-'}</small>
+                                    </div>
+                                    <div>
+                                        <strong>${formatFinanceiroMoney(item.valor)}</strong>
+                                        <small>Venc. ${formatFinanceiroDate(getFinanceiroDataVencimento(item))}</small>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div class="financeiro-empty-state">
+                            <span class="material-symbols-rounded">receipt_long</span>
+                            <strong>${FINANCEIRO_EMPTY_MESSAGE}</strong>
+                        </div>
+                    `}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+
+function getChannelConfig(label) {
+    const l = String(label).toUpperCase();
+    if (l.includes('FLEX')) return { icon: 'bolt', color: 'flex', svgIcon: channel3DIcons.flex };
+    if (l.includes('SHOPEE')) return { icon: 'shopping_bag', color: 'shopee', svgIcon: channel3DIcons.shopee };
+    if (l.includes('MERCADO') || l.includes('ML')) return { icon: 'local_shipping', color: 'ml', svgIcon: channel3DIcons.ml };
+    if (l.includes('MAGALU')) return { icon: 'inventory_2', color: 'magalu', svgIcon: channel3DIcons.magalu };
+    if (l.includes('AMAZON')) return { icon: 'shopping_cart', color: 'amazon', svgIcon: channel3DIcons.amazon || channel3DIcons.pdv };
+    if (l.includes('CORREIOS')) return { icon: 'mail', color: 'correios', svgIcon: channel3DIcons.correios };
+    if (l.includes('ULTRA')) return { icon: 'speed', color: 'ultra', svgIcon: channel3DIcons.ultra };
+    if (l.includes('FULL')) return { icon: 'flash_on', color: 'full', svgIcon: channel3DIcons.full };
+    if (l.includes('PDV') || l.includes('BALCÃO')) return { icon: 'store', color: 'pdv', svgIcon: channel3DIcons.pdv };
+    return { icon: 'storefront', color: 'pdv', svgIcon: channel3DIcons.pdv };
+}
+
+const PICK_CHANNEL_CARD_BLUEPRINTS = [
+    {
+        key: 'correios',
+        label: 'Correios',
+        description: 'Separe pedidos destinados ao fluxo dos Correios.',
+        aliases: ['CORREIOS']
+    },
+    {
+        key: 'flex',
+        label: 'Flex',
+        description: 'Organize separações rápidas do canal Flex.',
+        aliases: ['FLEX']
+    },
+    {
+        key: 'magalu',
+        label: 'Magalu',
+        description: 'Separe pedidos vinculados ao marketplace Magalu.',
+        aliases: ['MAGALU']
+    },
+    {
+        key: 'ml',
+        label: 'Mercado Livre Coleta',
+        description: 'Prepare coletas do Mercado Livre com conferência posterior.',
+        aliases: ['MERCADO LIVRE COLETA', 'MERCADO LIVRE', 'ML COLETA', 'ML']
+    },
+    {
+        key: 'pdv',
+        label: 'PDV / Balcao',
+        description: 'Separe vendas de balcão e retirada direta.',
+        aliases: ['PDV', 'BALCAO', 'BALCÃO']
+    },
+    {
+        key: 'shopee',
+        label: 'Shopee Agencia',
+        description: 'Separe remessas destinadas à agência Shopee.',
+        aliases: ['SHOPEE AGENCIA', 'SHOPEE AGÊNCIA', 'SHOPEE']
+    },
+    {
+        key: 'ultra',
+        label: 'Ultra Rapido / Turbo',
+        description: 'Priorize pedidos urgentes dos fluxos ultra rápido e turbo.',
+        aliases: ['ULTRA RAPIDO', 'ULTRA RÁPIDO', 'TURBO', 'ULTRA']
+    }
+];
+
+function normalizeOperationalLabel(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, ' ')
+        .trim();
+}
+
+function findPickChannelForBlueprint(channels, blueprint) {
+    const aliases = (blueprint.aliases || [blueprint.label]).map(normalizeOperationalLabel);
+    return (channels || []).find(channel => {
+        const label = normalizeOperationalLabel(channel.label || channel.nome || channel.canal_nome || '');
+        return aliases.some(alias => label === alias || label.includes(alias) || alias.includes(label));
+    });
+}
+
+function buildPickChannelCards(channels = []) {
+    return PICK_CHANNEL_CARD_BLUEPRINTS.map(blueprint => {
+        const matched = findPickChannelForBlueprint(channels, blueprint);
+        const label = matched?.label || matched?.nome || blueprint.label;
+        const config = getChannelConfig(label);
+        return {
+            id: matched?.id || matched?.canal_id || blueprint.key,
+            label: blueprint.label,
+            actualLabel: label,
+            description: blueprint.description,
+            color: config.color || blueprint.key,
+            icon: config.icon,
+            svgIcon: config.svgIcon || channel3DIcons[blueprint.key] || channel3DIcons.pdv
+        };
+    });
+}
+
+function getSeparationItemCount(session) {
+    const sessionId = getPackSeparationSessionId(session);
+    if (!sessionId) return Number(session.total_itens || session.qtd_itens || session.itens || 0) || 0;
+    const count = (appData.separacao_itens || []).filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId)).length;
+    return count || Number(session.total_itens || session.qtd_itens || session.itens || 0) || 0;
+}
+
+async function renderPickMenu() {
+    if (isModoRapidoAtivo()) {
+        showToast("Modo rápido ativo. Use Conferência/Saída direta.", "info");
+        // Opcional: Impedir abertura ou abrir com aviso
+    }
+    const currentUser = localStorage.getItem('currentUser');
+    document.body.classList.remove('menu-active');
+    
+    // Garantir carregamento real do Supabase
+    await ensureCanaisLoaded();
+    
+    console.log(`[CANAIS DEBUG] renderizando canais: ${(appData.channels || []).length} registros`);
+
+    let channels = (appData.channels || []).map(c => {
+        const label = c.nome || c.col_B || '';
+        const id = c.canal_id || c.id || c.col_A || '';
+        const type = c.tipo || c.col_C || '';
+        const config = getChannelConfig(label);
+        return {
+            ...config,
+            id: id,
+            label: label,
+            type: type
+        };
+    });
+
+
+    // FULL é depósito externo, NÃO canal operacional de separação
+    channels = channels.filter(c => !String(c.label).toUpperCase().includes('FULL'));
+
+    const channelCards = buildPickChannelCards(channels);
+
+    app.innerHTML = `
+                <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen">
+                    ${getTopBarHTML(currentUser, 'renderMenu()')}
+                    ${getModuleSidebarHTML('pick')}
+
+                    <main class="container">
+                        <div class="standard-module-card-grid operational-card-grid">
+                            ${channelCards.map(item => `
+                                <button type="button" class="standard-module-card operational-menu-card" onclick="startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)})">
+                                    <span class="standard-module-card-icon">${item.svgIcon || `<span class="material-symbols-rounded">${item.icon}</span>`}</span>
+                                    <span class="standard-module-card-copy">
+                                        <strong>${escapeKitAttribute(item.label)}</strong>
+                                        <small>${escapeKitAttribute(item.description)}</small>
+                                    </span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function renderPickHistory() {
+    const currentUser = localStorage.getItem('currentUser');
+    const history = (appData.separacao || []).sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal picking-screen">
+                    ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderPickMenu()')}
+                    ${getOperationalIdentityHTML('PICKING')}
+
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÓRICO DE SEPARACAO</h2>
+                        </div>
+
+                        ${history.length === 0 ? `
+                            <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
+                                <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">history</span>
+                                <p style="color: var(--muted);">Nenhuma separação encontrada.</p>
+                            </div>
+                        ` : `
+                            <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
+                                ${history.map(item => `
+                                    <div style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                                            <div>
+                                                <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item.rom_id || '-'}</div>
+                                                <div style="font-size: 0.65rem; color: var(--muted);">${new Date(item.criado_em).toLocaleString('pt-BR')}</div>
+                                            </div>
+                                            <div style="background: ${item.status === 'CONCLUÍDO' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)'}; color: ${item.status === 'CONCLUÍDO' ? '#22c55e' : '#eab308'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
+                                                ${item.status || 'PENDENTE'}
+                                            </div>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: white; font-weight: 600;">Canal: ${item.canal_nome || '-'}</div>
+                                        <div style="font-size: 0.65rem; color: var(--muted); margin-top: 4px;">Por: ${item.criado_por || '-'}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </main>
+                </div>
+            `;
+}
+
+// Variável global para armazenar o contexto da sessão antes de ser persistida
+let currentPickingContext = null;
+const PICK_STATUS_DRAFT = 'em_separacao';
+const PICK_STATUS_READY_FOR_PACK = 'aberta';
+const PICK_STATUS_FINISHED = 'finalizada';
+
+function getDraftPickSession() {
+    try {
+        const draft = JSON.parse(localStorage.getItem('draft_pick_session') || 'null');
+        return draft && typeof draft === 'object' ? draft : null;
+    } catch (error) {
+        console.warn('[PICKING] draft_pick_session invalido. Limpando rascunho local.', error);
+        localStorage.removeItem('draft_pick_session');
+        return null;
+    }
+}
+
+function saveDraftPickSession(draftPatch) {
+    const draft = {
+        ...(getDraftPickSession() || {}),
+        ...(draftPatch || {}),
+        timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('draft_pick_session', JSON.stringify(draft));
+    return draft;
+}
+
+function markDraftPickSaveStatus(status, error = null) {
+    const draft = getDraftPickSession();
+    if (!draft) return null;
+    draft.saveStatus = status;
+    draft.lastSaveAttemptAt = new Date().toISOString();
+    if (error) draft.lastSaveError = error?.message || String(error);
+    else delete draft.lastSaveError;
+    localStorage.setItem('draft_pick_session', JSON.stringify(draft));
+    return draft;
+}
+
+function warnIfDraftPickWasNotSynced(draft) {
+    if (!draft || !Array.isArray(draft.items) || draft.items.length === 0) return;
+    if (draft.saveStatus === 'failed') {
+        showToast("Rascunho local retomado, mas a ultima tentativa de salvar no servidor falhou.", "warning");
+    } else if (draft.saveStatus === 'saving' || draft.saveStatus === 'local_only') {
+        showToast("Rascunho local retomado. Nao foi confirmado o salvamento no servidor.", "warning");
+    }
+}
+
+function generatePickSessionId(channelLabel) {
+    const now = new Date();
+    const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
+    const todayStr = now.toLocaleDateString('pt-BR');
+    const cleanChannel = channelLabel.split(' ')[0].toUpperCase();
+
+    let countInSheet = 0;
+    if (appData.separacao && Array.isArray(appData.separacao)) {
+        countInSheet = appData.separacao.filter(row => {
+            const rowDate = row.data_separacao || row.col_d || row.col_D;
+            const rowChannel = row.canal_nome || row.col_c || row.col_C;
+            return rowDate === todayStr && rowChannel === channelLabel;
+        }).length;
+    }
+
+    const seq = countInSheet + 1;
+    return `SEP-${cleanChannel}-${ddmm}-${seq.toString().padStart(2, '0')}`;
+}
+
+function buildPickingSessionPayload(sessionId, channelId, channelLabel, status = PICK_STATUS_DRAFT, createdAt = null) {
+    const now = new Date().toISOString();
+    const currentUser = localStorage.getItem('currentUser') || 'N/A';
+    return {
+        separacao_id: sessionId,
+        pedido_referencia: '',
+        canal_id: channelId || '',
+        canal_nome: channelLabel || '',
+        status,
+        criado_por: currentUser,
+        criado_em: createdAt || now,
+        atualizado_em: now,
+        observacao: 'SEPARACAO MANUAL'
+    };
+}
+
+function buildPickingItemPayload(item) {
+    const qty = Number(item?.qty || item?.qtd_separada || 1);
+    return {
+        id_interno: item?.id_interno || item?.col_a || item?.col_A || '',
+        ean: item?.ean || '',
+        descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
+        qtd_solicitada: qty,
+        qtd_separada: qty
+    };
+}
+
+function getPickingProductId(item) {
+    return normalizePickCode(item?.id_interno || item?.col_a || item?.col_A || '');
+}
+
+function getPickItemTitle(item) {
+    return item?.descricao_completa || item?.descricao_base || item?.descricao || item?.col_aa || 'PRODUTO';
+}
+
+function getPickItemMetaHTML(item) {
+    const id = item?.id_interno || item?.col_a || item?.col_A || '-';
+    const ean = item?.ean || '-';
+    const sku = item?.sku_fornecedor || item?.sku || '-';
+    return `
+        <div>ID interno: ${id}</div>
+        <div>EAN: ${ean}</div>
+        <div>SKU: ${sku}</div>
+    `;
+}
+
+async function persistPickingDraftItem(draft, item) {
+    const sessionPayload = buildPickingSessionPayload(
+        draft.sessionId,
+        draft.channelId,
+        draft.channelLabel,
+        PICK_STATUS_DRAFT,
+        draft.createdAt
+    );
+    const itemPayload = buildPickingItemPayload(item);
+    const payload = {
+        session: sessionPayload,
+        item: itemPayload,
+        executionId: draft.executionId || draft.sessionId
+    };
+
+    console.log('[SEP] produto bipado', {
+        separacao_id: draft.sessionId,
+        id_interno: itemPayload.id_interno,
+        ean: itemPayload.ean,
+        qtd_separada: itemPayload.qtd_separada
+    });
+
+    if (!navigator.onLine) {
+        await queueOperation('supabase_pick_draft', payload, {
+            module: 'separacao',
+            sessionId: draft.sessionId,
+            itemId: itemPayload.id_interno
+        });
+        return { queued: true };
+    }
+
+    try {
+        return await DataClient.savePickingDraftSupabase(payload);
+    } catch (error) {
+        if (isRetryableConferenceSyncError(error)) {
+            await queueOperation('supabase_pick_draft', payload, {
+                module: 'separacao',
+                sessionId: draft.sessionId,
+                itemId: itemPayload.id_interno,
+                lastOnlineError: error.message || String(error)
+            });
+            return { queued: true, error };
+        }
+        throw error;
+    }
+}
+
+async function persistPickingDraftSession(draft) {
+    if (!draft?.sessionId) return null;
+    const sessionPayload = buildPickingSessionPayload(
+        draft.sessionId,
+        draft.channelId,
+        draft.channelLabel,
+        draft.status || PICK_STATUS_DRAFT,
+        draft.createdAt
+    );
+    const payload = {
+        session: sessionPayload,
+        executionId: draft.executionId || draft.sessionId
+    };
+
+    if (!navigator.onLine) {
+        await queueOperation('supabase_pick_draft', payload, {
+            module: 'separacao',
+            sessionId: draft.sessionId
+        });
+        return { queued: true };
+    }
+
+    try {
+        return await DataClient.savePickingDraftSupabase(payload);
+    } catch (error) {
+        if (isRetryableConferenceSyncError(error)) {
+            await queueOperation('supabase_pick_draft', payload, {
+                module: 'separacao',
+                sessionId: draft.sessionId,
+                lastOnlineError: error.message || String(error)
+            });
+            return { queued: true, error };
+        }
+        throw error;
+    }
+}
+
+async function persistPickingFinal(sessionId) {
+    const payload = {
+        sessionId,
+        status: PICK_STATUS_READY_FOR_PACK,
+        executionId: generateExecutionId()
+    };
+
+    if (!navigator.onLine) {
+        await queueOperation('supabase_pick_finalize', payload, {
+            module: 'separacao',
+            sessionId
+        });
+        return { queued: true };
+    }
+
+    try {
+        return await DataClient.finalizePickingDraftSupabase(payload);
+    } catch (error) {
+        if (isRetryableConferenceSyncError(error)) {
+            await queueOperation('supabase_pick_finalize', payload, {
+                module: 'separacao',
+                sessionId,
+                lastOnlineError: error.message || String(error)
+            });
+            return { queued: true, error };
+        }
+        throw error;
+    }
+}
+
+async function startPickingSession(channelId, channelLabel, channelColor) {
+    const currentUser = localStorage.getItem('currentUser');
+    const draft = getDraftPickSession();
+    
+    console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
+
+    if (draft) {
+        const hasItems = draft.items && draft.items.length > 0;
+        
+        if (hasItems) {
+            console.log(`[PICKING DEBUG] rascunho com itens detectado: ${draft.channelLabel}`);
+            // Se o rascunho for de OUTRO canal, oferece Retomar ou Limpar
+            if (draft.channelId !== channelId) {
+                const msg = `Sessao ativa detectada em ${draft.channelLabel}.\n\nPara iniciar em ${channelLabel}, você deve descartar o rascunho anterior.\n\nDeseja LIMPAR o rascunho de ${draft.channelLabel} e começar ${channelLabel}?`;
+                if (confirm(msg)) {
+                    localStorage.removeItem('draft_pick_session');
+                    console.log(`[PICKING DEBUG] rascunho de ${draft.channelLabel} descartado`);
+                } else {
+                    if (confirm(`Deseja RETOMAR a sessão de ${draft.channelLabel} agora?`)) {
+                        currentSessionItems = draft.items || [];
+                        renderPickingScreen(draft.sessionId, draft.channelId, draft.channelLabel, draft.channelColor);
+                        updatePickItemsList();
+                        warnIfDraftPickWasNotSynced(draft);
+                    }
+                    return;
+                }
+            } else {
+                // Mesmo canal, retoma direto
+                currentSessionItems = draft.items || [];
+                renderPickingScreen(draft.sessionId, draft.channelId, draft.channelLabel, draft.channelColor);
+                updatePickItemsList();
+                warnIfDraftPickWasNotSynced(draft);
+                return;
+            }
+        } else {
+            console.log(`[PICKING DEBUG] rascunho vazio ignorado`);
+            localStorage.removeItem('draft_pick_session');
+        }
+    }
+
+    console.log(`[PICKING DEBUG] abriu bipagem sem criar rascunho`);
+    
+    // Define contexto para criação futura no primeiro item
+    currentPickingContext = {
+        channelId, 
+        channelLabel, 
+        channelColor,
+        sessionId: generatePickSessionId(channelLabel),
+        executionId: generateExecutionId(),
+        createdAt: new Date().toISOString()
+    };
+    
+    currentSessionItems = [];
+    const newDraft = saveDraftPickSession({
+        sessionId: currentPickingContext.sessionId,
+        channelId,
+        channelLabel,
+        channelColor,
+        items: [],
+        operatorId: currentUser,
+        status: PICK_STATUS_DRAFT,
+        createdAt: currentPickingContext.createdAt,
+        executionId: currentPickingContext.executionId,
+        saveStatus: 'saving'
+    });
+
+    try {
+        const result = await persistPickingDraftSession(newDraft);
+        markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
+    } catch (error) {
+        markDraftPickSaveStatus('failed', error);
+        console.warn('[SEP] nao foi possivel criar separacao em aberto ao abrir a tela:', error);
+        showToast("Separacao aberta localmente. Servidor sera sincronizado depois.", "warning");
+    }
+
+    renderPickingScreen(currentPickingContext.sessionId, channelId, channelLabel, channelColor);
+}
+
+function getPickOperatorInitials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '--';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0] || ''}${parts[parts.length - 1][0] || ''}`.toUpperCase();
+}
+
+function getPickChannelSubtitle(channelLabel) {
+    const label = String(channelLabel || '').toUpperCase();
+    if (label.includes('FLEX')) return 'Flex Atacado';
+    if (label.includes('MERCADO') || label.includes('ML')) return 'Marketplace';
+    if (label.includes('SHOPEE') || label.includes('AGENCIA') || label.includes('AGÊNCIA')) return 'Agencia';
+    if (label.includes('MAGALU') || label.includes('AMAZON')) return 'Marketplace';
+    if (label.includes('PDV') || label.includes('BALC')) return 'Venda direta';
+    return 'Canal operacional';
+}
+
+function formatPickCreatedAt(value) {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getPickProductImage(item) {
+    const rawUrl = item?.image_path || item?.url_imagem || item?.imagem || '';
+    return rawUrl ? formatImageUrl(rawUrl) : '';
+}
+
+function getPickItemBrand(item) {
+    return item?.marca || item?.brand || item?.fornecedor || 'SEM MARCA';
+}
+
+function getPickMainCode(item) {
+    return item?.id_interno || item?.col_a || item?.col_A || item?.ean || item?.sku_fornecedor || item?.sku || '-';
+}
+
+function getPickTotalQuantity() {
+    return currentSessionItems.reduce((total, item) => total + (Number(item.qty) || 0), 0);
+}
+
+function updatePickSummaryUI() {
+    const differentItems = currentSessionItems.length;
+    const totalQuantity = getPickTotalQuantity();
+    const itemsEl = document.getElementById('pick-summary-items');
+    const qtyEl = document.getElementById('pick-summary-qty');
+    const progressEl = document.getElementById('pick-summary-progress');
+    if (itemsEl) itemsEl.textContent = String(differentItems);
+    if (qtyEl) qtyEl.textContent = String(totalQuantity);
+    if (progressEl) progressEl.textContent = differentItems > 0 ? '100%' : '0%';
+}
+
+function focusPickManualInput() {
+    const input = document.getElementById('pick-ean-input');
+    if (!input) return;
+    input.focus();
+    input.select?.();
+    showToast("Digite o codigo e pressione Enter.", "info");
+}
+
+function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
+    const currentUser = localStorage.getItem('currentUser');
+    currentPickingContext = {
+        sessionId,
+        channelId,
+        channelLabel,
+        channelColor,
+        executionId: currentPickingContext?.executionId || generateExecutionId(),
+        createdAt: currentPickingContext?.createdAt || new Date().toISOString()
+    };
+    const channelIcon = getChannelConfig(channelLabel).svgIcon || menu3DIcons?.[channelId] || '<span class="material-symbols-rounded">inventory_2</span>';
+    const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
+    const operatorInitials = getPickOperatorInitials(currentUser);
+    
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal no-top-bar picking-screen pick-workflow-screen">
+            ${getModuleSidebarHTML('pick')}
+
+            <main class="pick-workflow-shell">
+                <header class="pick-workflow-header">
+                    <button class="pick-back-btn" type="button" onclick="renderPickMenu()" aria-label="Voltar">
+                        <span class="material-symbols-rounded">arrow_back</span>
+                    </button>
+
+                    <div class="pick-workflow-title">
+                        <span class="pick-title-icon">${channelIcon}</span>
+                        <div>
+                            <h1>SEPARACAO (PICK)</h1>
+                            <p>Escaneie o produto para adicionar</p>
+                        </div>
+                    </div>
+
+                    <button class="pick-manual-code-btn" type="button" onclick="focusPickManualInput()">
+                        <span class="material-symbols-rounded">keyboard</span>
+                        Informar Codigo
+                    </button>
+                </header>
+
+                <section class="pick-scan-panel">
+                    <div class="pick-scan-field">
+                        <span class="material-symbols-rounded">search</span>
+                        <input type="text" id="pick-ean-input" class="product-search-input" 
+                               placeholder="EAN, SKU OU CODIGO INTERNO" 
+                               onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPickItem(); }" autocomplete="off" autofocus>
+                        <button class="pick-scanner-btn" onclick="startScanner(true)" title="Abrir Scanner" type="button">
+                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section class="pick-info-grid">
+                    <article class="pick-info-card">
+                        <span>CANAL</span>
+                        <strong>${escapeKitAttribute(channelLabel || '-')}</strong>
+                        <small>${escapeKitAttribute(getPickChannelSubtitle(channelLabel))}</small>
+                    </article>
+                    <article class="pick-info-card">
+                        <span>ID DA SEPARACAO</span>
+                        <strong>${escapeKitAttribute(sessionId)}</strong>
+                        <small>Gerado pela regra atual</small>
+                    </article>
+                    <article class="pick-info-card">
+                        <span>OPERADOR</span>
+                        <strong>${escapeKitAttribute(currentUser || '-')}</strong>
+                        <small>${escapeKitAttribute(operatorInitials)}</small>
+                    </article>
+                </section>
+
+                <div id="scanner-container-pick" class="hidden pick-scanner-container">
+                    <div id="reader-pick"></div>
+                    <div id="scanner-feedback" class="pick-scanner-feedback">
+                        <div id="scanner-feedback-icon" class="material-symbols-rounded"></div>
+                    </div>
+                    <button class="pick-scanner-close" type="button" onclick="stopScanner()" aria-label="Fechar scanner">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+
+                <section class="pick-work-area">
+                    <div class="pick-list-panel">
+                        <div class="pick-list-header">
+                            <h2>PRODUTOS NA SEPARACAO</h2>
+                            <span id="pick-list-count">${currentSessionItems.length} itens</span>
+                        </div>
+
+                        <div class="pick-table-head">
+                            <span>Produto</span>
+                            <span>Codigo</span>
+                            <span>Quantidade bipada</span>
+                            <span>Acoes</span>
+                        </div>
+
+                        <div id="pick-items-list" class="pick-items-list"></div>
+                    </div>
+
+                    <aside class="pick-summary-panel">
+                        <h2>RESUMO DA SEPARACAO</h2>
+                        <div class="pick-summary-metrics">
+                            <div><span>Itens</span><strong id="pick-summary-items">${currentSessionItems.length}</strong></div>
+                            <div><span>Quantidade total</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
+                            <div><span>Progresso</span><strong id="pick-summary-progress">${currentSessionItems.length ? '100%' : '0%'}</strong></div>
+                        </div>
+                        <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+                            FINALIZAR SEPARACAO
+                        </button>
+                        <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+                            PAUSAR SEPARACAO
+                        </button>
+                    </aside>
+                </section>
+
+                <footer class="pick-workflow-footer">
+                    <span>ID separacao: <strong>${escapeKitAttribute(sessionId)}</strong></span>
+                    <span>Canal: <strong>${escapeKitAttribute(channelLabel || '-')}</strong></span>
+                    <span>Criado em: <strong>${escapeKitAttribute(createdAtLabel)}</strong></span>
+                </footer>
+            </main>
+        </div>
+    `;
+
+    updatePickItemsList();
+    setTimeout(() => document.getElementById('pick-ean-input')?.focus(), 80);
+}
+
+function showInputFeedback(inputId, type) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    
+    const color = type === 'success' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+    const borderColor = type === 'success' ? '#22C55E' : '#EF4444';
+    
+    // Remove inline styles previously set if any
+    input.style.transition = 'none';
+    input.style.boxShadow = `0 0 0 4px ${color}`;
+    input.style.borderColor = borderColor;
+    
+    // Force reflow
+    void input.offsetWidth;
+    
+    input.style.transition = 'all 0.3s ease';
+    input.style.boxShadow = '';
+    input.style.borderColor = '';
+
+    setTimeout(() => {
+        if (input) {
+            input.focus();
+            console.log(`[BIP CONTINUO DEBUG] input limpo e foco restaurado no ${inputId}`);
+        }
+    }, 300);
+}
+
+function normalizePickCode(rawValue) {
+    return String(rawValue || '').trim().replace(/\s+/g, '');
+}
+
+function findProductInLocalCacheByCode(cleanCode) {
+    console.log('[SEP] buscando cache', cleanCode);
+    const code = normalizePickCode(cleanCode);
+    const product = (appData.products || []).find(p =>
+        (normalizePickCode(p.ean) && normalizePickCode(p.ean) === code) ||
+        (getPickingProductId(p) && getPickingProductId(p) === code) ||
+        (normalizePickCode(p.sku_fornecedor || p.sku) && normalizePickCode(p.sku_fornecedor || p.sku) === code)
+    );
+
+    if (product) {
+        console.log('[SEP] produto encontrado cache', {
+            id_interno: product.id_interno || product.col_a || product.col_A || '',
+            ean: product.ean || '',
+            sku_fornecedor: product.sku_fornecedor || product.sku || ''
+        });
+    }
+
+    return product || null;
+}
+
+function upsertProductIntoLocalCache(product) {
+    if (!product) return null;
+    const indexed = hydrateProdutosForSearch([product])[0];
+    if (!indexed) return null;
+
+    if (!Array.isArray(appData.products)) appData.products = [];
+    const indexedId = getPickingProductId(indexed);
+    const idx = indexedId ? appData.products.findIndex(p => getPickingProductId(p) === indexedId) : -1;
+
+    if (idx >= 0) appData.products[idx] = { ...appData.products[idx], ...indexed };
+    else appData.products.unshift(indexed);
+
+    console.log('[SEP] total produtos carregados', appData.products.length);
+    return indexed;
+}
+
+async function findProductForPicking(cleanCode) {
+    let product = findProductInLocalCacheByCode(cleanCode);
+    if (product) return product;
+
+    try {
+        const supabaseProduct = await DataClient.findProdutoByCodeSupabase(cleanCode);
+        if (supabaseProduct) return upsertProductIntoLocalCache(supabaseProduct);
+    } catch (error) {
+        console.warn('[SEP] refresh supabase erro', {
+            message: error?.message,
+            details: error?.details,
+            hint: error?.hint,
+            code: error?.code,
+            value: cleanCode
+        });
+    }
+
+    console.log('[SEP] produto nao encontrado', cleanCode);
+    return null;
+}
+
+async function addPickItem(scannedEan = null) {
+    const input = document.getElementById('pick-ean-input');
+    const rawCode = (scannedEan ?? input?.value ?? '').toString();
+    const ean = normalizePickCode(rawCode);
+    console.log('[SEP] codigo bruto', rawCode);
+    console.log('[SEP] codigo normalizado', ean);
+    if (!ean) return;
+
+    const product = await findProductForPicking(ean);
+
+    if (product) {
+        const productId = getPickingProductId(product);
+        if (!productId) {
+            playBeep('error');
+            showToast(`PRODUTO SEM ID INTERNO: ${ean}`);
+            input.value = '';
+            showInputFeedback('pick-ean-input', 'error');
+            return;
+        }
+
+        const allowNegative = isSaidaEstoqueZeroPermitida();
+        const stockEntries = (appData.estoque || []).filter(e => String(e.id_interno || e.col_a || e.id || '') === String(product.id_interno || product.col_a || ''));
+        const stock = calcularEstoqueDisponivel(stockEntries);
+        const existingItemForQty = currentSessionItems.find(item => getPickingProductId(item) === productId);
+        const currentDraftQty = existingItemForQty ? existingItemForQty.qty : 0;
+
+        if (stock < (currentDraftQty + 1)) {
+            if (!allowNegative) {
+                playBeep('error');
+                showToast(`ESTOQUE INSUFICIENTE para ${product.descricao_base || 'este item'}`);
+                input.value = '';
+                showInputFeedback('pick-ean-input', 'error');
+                return;
+            } else {
+                if (!window.pickNegativeStockWarnings) window.pickNegativeStockWarnings = new Set();
+                const warningKey = `${currentPickSession?.id || currentPickSession?.channelId || 'pick'}:${product.id_interno || product.ean || ean}`;
+                if (!window.pickNegativeStockWarnings.has(warningKey)) {
+                    window.pickNegativeStockWarnings.add(warningKey);
+                    showToast(`AVISO: Estoque negativo para ${product.descricao_base || 'este item'}`);
+                }
+            }
+        }
+
+        playBeep('success');
+        console.log('[SEP] produto bipado', {
+            ean,
+            id_interno: product.id_interno || product.col_a || product.col_A || '',
+            descricao: getPickItemTitle(product)
+        });
+
+        const existingItem = currentSessionItems.find(item => getPickingProductId(item) === productId);
+        if (existingItem) {
+            existingItem.qty = (existingItem.qty || 1) + 1;
+            existingItem.scanTime = new Date().toLocaleTimeString();
+            existingItem.lastAddedAt = Date.now();
+        } else {
+            currentSessionItems.unshift({
+                ...product,
+                qty: 1,
+                scanTime: new Date().toLocaleTimeString(),
+                lastAddedAt: Date.now()
+            });
+        }
+
+        const draftStr = localStorage.getItem('draft_pick_session');
+        let draft;
+        
+        if (!draftStr) {
+            console.log(`[PICKING DEBUG] primeiro item bipado, criando rascunho`);
+            const now = new Date();
+            draft = {
+                sessionId: currentPickingContext ? currentPickingContext.sessionId : `SEP-TEMP-${now.getTime()}`,
+                channelId: currentPickingContext ? currentPickingContext.channelId : '',
+                channelLabel: currentPickingContext ? currentPickingContext.channelLabel : 'OUTROS',
+                channelColor: currentPickingContext ? currentPickingContext.channelColor : 'pdv',
+                items: [],
+                operatorId: localStorage.getItem('currentUser'),
+                status: PICK_STATUS_DRAFT,
+                timestamp: now.toISOString(),
+                createdAt: currentPickingContext?.createdAt || now.toISOString(),
+                executionId: currentPickingContext?.executionId || generateExecutionId()
+            };
+        } else {
+            draft = getDraftPickSession() || {};
+        }
+
+        draft.items = currentSessionItems;
+        draft.status = PICK_STATUS_DRAFT;
+        draft.timestamp = new Date().toISOString();
+        draft.createdAt = draft.createdAt || new Date().toISOString();
+        draft.executionId = draft.executionId || currentPickingContext?.executionId || generateExecutionId();
+        draft.saveStatus = 'saving';
+        draft.lastSaveAttemptAt = new Date().toISOString();
+        localStorage.setItem('draft_pick_session', JSON.stringify(draft));
+
+        try {
+            const itemToPersist = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
+            const persistResult = await persistPickingDraftItem(draft, itemToPersist);
+            markDraftPickSaveStatus(persistResult?.queued ? 'queued' : 'synced');
+            if (persistResult?.queued) {
+                showToast("Item salvo localmente para sincronizar.");
+            }
+        } catch (error) {
+            markDraftPickSaveStatus('failed', error);
+            console.error('[SEP] erro ao salvar item', {
+                message: error?.message,
+                details: error?.details,
+                hint: error?.hint,
+                code: error?.code
+            });
+            showToast(`Erro ao salvar item: ${error?.message || error}`, "error");
+        }
+
+        showToast(`Item adicionado: ${getPickItemTitle(product)}`);
+        if (currentPackSession) {
+            currentPackSession.items = currentSessionItems;
+            localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
+        }
+    } else {
+        playBeep('error');
+        showToast(`PRODUTO NÃO CADASTRADO: ${ean}`);
+    }
+
+    input.value = '';
+    updatePickItemsList();
+    showInputFeedback('pick-ean-input', product ? 'success' : 'error');
+}
+
+function updatePickItemsList() {
+    const container = document.getElementById('pick-items-list');
+    const countEl = document.getElementById('pick-list-count');
+    updatePickSummaryUI();
+    if (countEl) countEl.textContent = `${currentSessionItems.length} ${currentSessionItems.length === 1 ? 'item' : 'itens'}`;
+    if (!container) return;
+    
+    if (currentSessionItems.length === 0) {
+        container.innerHTML = `
+            <div class="pick-empty-state">
+                <span class="material-symbols-rounded">barcode_scanner</span>
+                <strong>Nenhum produto bipado</strong>
+                <small>Use o campo acima para iniciar a separacao.</small>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = currentSessionItems.map((item, index) => `
+        <article class="pick-product-row fade-in ${Date.now() - Number(item.lastAddedAt || 0) < 1600 ? 'recently-added' : ''}">
+            <div class="pick-product-main" data-label="Produto">
+                <div class="pick-product-image">
+                    ${getPickProductImage(item) ? `<img src="${escapeKitAttribute(getPickProductImage(item))}" alt="${escapeKitAttribute(getPickItemTitle(item))}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+                </div>
+                <div>
+                    <strong>${escapeKitAttribute(getPickItemTitle(item))}</strong>
+                    <small>${escapeKitAttribute(getPickItemBrand(item))}</small>
+                </div>
+            </div>
+            <div class="pick-product-code" data-label="Codigo">
+                <strong>${escapeKitAttribute(getPickMainCode(item))}</strong>
+                <small>EAN ${escapeKitAttribute(item.ean || '-')} • SKU ${escapeKitAttribute(item.sku_fornecedor || item.sku || '-')}</small>
+            </div>
+            <div class="pick-product-qty" data-label="Quantidade bipada">${Number(item.qty) || 0}</div>
+            <button class="pick-product-delete" onclick="removePickItem(${index})" type="button" aria-label="Remover item">
+                <span class="material-symbols-rounded">delete</span>
+            </button>
+        </article>
+    `).join('');
+}
+
+function removePickItem(index) {
+    currentSessionItems.splice(index, 1);
+    updatePickItemsList();
+    if (currentSessionItems.length === 0) {
+        saveDraftPickSession({ items: [], saveStatus: 'local_only' });
+    } else {
+        saveDraftPickSession({ items: currentSessionItems, saveStatus: 'local_only' });
+    }
+    setTimeout(() => document.getElementById('pick-ean-input')?.focus(), 80);
+}
+
+async function pausePickingSession(sessionId, channelId, channelLabel, channelColor) {
+    const draft = saveDraftPickSession({
+        sessionId,
+        channelId,
+        channelLabel,
+        channelColor,
+        items: currentSessionItems,
+        status: PICK_STATUS_DRAFT,
+        operatorId: localStorage.getItem('currentUser'),
+        createdAt: currentPickingContext?.createdAt || new Date().toISOString(),
+        executionId: currentPickingContext?.executionId || generateExecutionId(),
+        saveStatus: 'saving'
+    });
+
+    try {
+        const result = await persistPickingDraftSession(draft);
+        markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
+        showToast(result?.queued ? "Separacao pausada localmente para sincronizar." : "Separacao pausada.");
+    } catch (error) {
+        markDraftPickSaveStatus('failed', error);
+        showToast("Separacao pausada localmente. Sincronizacao pendente.", "warning");
+    }
+
+    renderPickMenu();
+}
+
+
+async function finishPickingSession(sessionId, channelId, channelLabel, channelColor) {
+    if (isFinalizing) return;
+    isFinalizing = true;
+
+    const submitBtn = document.querySelector(`button[onclick^="finishPickingSession"]`);
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Salvando...'; }
+
+    try {
+        if (currentSessionItems.length === 0) {
+            showToast("Adicione pelo menos um item para finalizar.");
+            return;
+        }
+
+        const currentUser = localStorage.getItem('currentUser');
+        const now = new Date().toISOString();
+        const modoRapidoAtivo = isModoRapidoAtivo();
+
+        const pickingData = {
+            separacao_id: sessionId,
+            canal_id: channelId,
+            canal_nome: channelLabel,
+            data_separacao: new Date().toLocaleDateString('pt-BR'),
+            status: 'em_separacao',
+            criado_por: currentUser,
+            criado_em: now,
+            finalizado_em: now,
+            data_hora: now,
+            origem_operacional: 'manual_nf',
+            pedido_origem_id: '',
+            marketplace_order_id: '',
+            observacao: modoRapidoAtivo ? 'SAIDA_RAPIDA AUTOMATICA' : 'SEPARACAO MANUAL POR NF'
+        };
+
+        const groupedItems = currentSessionItems.reduce((acc, item) => {
+            const key = getPickingProductId(item) || 'unknown';
+            if (!acc[key]) acc[key] = { ...item, qty: 0 };
+            acc[key].qty += (item.qty || 1);
+            return acc;
+        }, {});
+
+        const conferenceRows = Object.values(groupedItems).map(item => ({
+            separacao_id: sessionId,
+            id_interno: item.id_interno || '',
+            ean: item.ean,
+            descricao: item.descricao_base,
+            qtd_separada: item.qty,
+            qtd_conferida: modoRapidoAtivo ? item.qty : 0,
+            divergencia: modoRapidoAtivo ? 'OK' : 'FALTA',
+            conferido_por: modoRapidoAtivo ? currentUser : '',
+            conferido_em: modoRapidoAtivo ? now : '',
+            processed: false
+        }));
+
+        const session = {
+            id: sessionId,
+            channel: channelLabel,
+            channelColor: channelColor,
+            items: currentSessionItems,
+            user: currentUser,
+            time: now,
+            pickingData,
+            conferenceRows
+        };
+
+        currentPickSession = session;
+        isFinalizing = false;
+        await savePickResultFinal(sessionId, channelId, channelLabel, channelColor);
+
+
+    } catch (error) {
+        console.error("Error preparing picking result:", error);
+        showToast("Erro ao processar separação!");
+    } finally {
+        isFinalizing = false;
+        const submitBtn = document.querySelector(`button[onclick^="finishPickingSession"]`);
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'FINALIZAR SEPARACAO'; }
+    }
+}
+
+function renderPickResult(sessionId, channelId, channelLabel, channelColor) {
+    const currentUser = localStorage.getItem('currentUser');
+    const hasDivergence = currentPickSession && currentPickSession.divergence;
+    const channelTitle = (channelLabel || 'SEPARACAO').toUpperCase();
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal picking-active-minimal">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), `renderPickingScreen('${sessionId}', '${channelId}', '${channelLabel}', '${channelColor}')`)}
+
+            <main class="container sep-review-container">
+                <div class="sep-review-header">
+                    <div>
+                        <div class="sep-review-kicker">REVISAO DA SEPARACAO</div>
+                        <h2>${channelTitle}</h2>
+                    </div>
+                    <div class="sep-review-session">${sessionId}</div>
+                </div>
+
+                <div class="sep-review-list">
+                    ${currentPickSession.items.map((item, index) => `
+                        <div class="op-card sep-review-card fade-in">
+                            <div class="sep-review-card-main">
+                                <div class="sep-review-title">${getPickItemTitle(item)}</div>
+                                <div class="sep-review-meta">${getPickItemMetaHTML(item)}</div>
+                            </div>
+
+                            <div class="sep-review-qty-row">
+                                <div class="sep-review-qty-label">QUANTIDADE</div>
+                                <div class="sep-review-stepper">
+                                    <button class="sep-review-stepper-btn" onclick="adjustPickRow(${index}, -1, '${sessionId}', '${channelId}', '${channelLabel}', '${channelColor}')">
+                                        <span class="material-symbols-rounded">remove</span>
+                                    </button>
+                                    <div class="sep-review-qty-value">${item.qty}</div>
+                                    <button class="sep-review-stepper-btn" onclick="adjustPickRow(${index}, 1, '${sessionId}', '${channelId}', '${channelLabel}', '${channelColor}')">
+                                        <span class="material-symbols-rounded">add</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+
+                    <button class="btn-action sep-review-manual-btn" onclick="openManualAddProductToSession('${sessionId}', 'PICK')">
+                        <span class="material-symbols-rounded">add_circle</span>
+                        ADICIONAR MANUAL
+                    </button>
+                </div>
+
+                <div class="sep-review-actions">
+                    ${!hasDivergence ? `
+                    <button class="btn-action sep-review-finish-btn" onclick="savePickResultFinal('${sessionId}', '${channelId}', '${channelLabel}', '${channelColor}')">
+                        <span class="material-symbols-rounded">check_circle</span>
+                        FINALIZAR SEPARACAO
+                    </button>
+                    ` : `
+                    <div class="sep-review-blocked">
+                        <div>OPERACAO BLOQUEADA</div>
+                        <p>Divergencia detectada.</p>
+                    </div>
+                    `}
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+function adjustPickRow(index, delta, sessionId, channelId, channelLabel, channelColor) {
+    const item = currentPickSession.items[index];
+    item.qty = Math.max(0, item.qty + delta);
+    if (item.qty === 0) {
+        currentPickSession.items.splice(index, 1);
+    }
+    currentSessionItems = currentPickSession.items;
+    saveDraftPickSession({
+        sessionId,
+        channelId,
+        channelLabel,
+        channelColor,
+        items: currentSessionItems,
+        saveStatus: 'local_only'
+    });
+    renderPickResult(sessionId, channelId, channelLabel, channelColor);
+}
+
+function buildFastPickingFinalRows(items, sessionId) {
+    const grouped = (items || []).reduce((acc, item) => {
+        const key = getPickingProductId(item);
+        if (!key) return acc;
+        if (!acc[key]) {
+            acc[key] = {
+                id_interno: item.id_interno || item.col_a || item.col_A || key,
+                ean: item.ean || '',
+                descricao: getPickItemTitle(item),
+                qtd_separada: 0,
+                qtd_conferida: 0,
+                separacao_id: sessionId
+            };
+        }
+        const qty = Number(item.qty || item.qtd_separada || 1);
+        acc[key].qtd_separada += qty;
+        acc[key].qtd_conferida += qty;
+        return acc;
+    }, {});
+
+    return Object.values(grouped);
+}
+
+async function finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now) {
+    const currentUser = localStorage.getItem('currentUser');
+
+    for (const item of currentPickSession.items) {
+        await persistPickingDraftItem({
+            ...draft,
+            sessionId,
+            channelId,
+            channelLabel,
+            channelColor
+        }, item);
+    }
+
+    const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
+    if (rows.length === 0) {
+        throw new Error('Nenhum item valido para finalizar no modo rapido.');
+    }
+
+    const finalizationResult = await submitConferenceFinalization({
+        action: 'finalizar_conferencia',
+        sessionId,
+        user: currentUser,
+        rows,
+        executionId: draft.executionId || generateExecutionId()
+    });
+
+    if (!appData.separacao) appData.separacao = [];
+    const localSession = {
+        ...buildPickingSessionPayload(
+            sessionId,
+            channelId,
+            channelLabel,
+            finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
+            draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+        ),
+        separacao_id: sessionId,
+        canal_nome: channelLabel,
+        status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
+        finalizado_em: now,
+        observacao: 'SAIDA_RAPIDA AUTOMATICA'
+    };
+    const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+    if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
+    else appData.separacao.unshift(localSession);
+
+    const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+    setActivePickSessions(activeSessions);
+    localStorage.removeItem('draft_pick_session');
+
+    showToast(finalizationResult?.queued
+        ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
+        : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
+    playBeep('success');
+    renderMenu();
+}
+
+async function savePickResultFinal(sessionId, channelId, channelLabel, channelColor) {
+    if (isFinalizing) return;
+    isFinalizing = true;
+    showToast("Finalizando separação...");
+
+    try {
+        if (!currentPickSession?.items || currentPickSession.items.length === 0) {
+            showToast("Adicione pelo menos um item para finalizar.");
+            return;
+        }
+
+        const now = new Date().toISOString();
+        const draft = getDraftPickSession() || {
+            sessionId,
+            channelId,
+            channelLabel,
+            channelColor,
+            createdAt: currentPickSession?.pickingData?.criado_em || now,
+            executionId: generateExecutionId()
+        };
+
+        if (isModoRapidoAtivo()) {
+            await finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now);
+            return;
+        }
+
+        const pickingData = {
+            ...buildPickingSessionPayload(
+                sessionId,
+                channelId,
+                channelLabel,
+                PICK_STATUS_READY_FOR_PACK,
+                draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+            ),
+            finalizado_em: now
+        };
+
+        console.log("[savePickResultFinal] currentPickSession.items:", currentPickSession.items);
+
+        for (const item of currentPickSession.items) {
+            await persistPickingDraftItem({
+                ...draft,
+                sessionId,
+                channelId,
+                channelLabel,
+                channelColor
+            }, item);
+        }
+
+        const finalResult = await persistPickingFinal(sessionId);
+
+        if (!appData.separacao) appData.separacao = [];
+        const localSession = {
+            ...pickingData,
+            separacao_id: sessionId,
+            canal_nome: channelLabel,
+            status: PICK_STATUS_READY_FOR_PACK
+        };
+        const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+        if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
+        else appData.separacao.unshift(localSession);
+
+        const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+        activeSessions.unshift({
+            ...currentPickSession,
+            id: sessionId,
+            pickingData: localSession,
+            status: PICK_STATUS_READY_FOR_PACK
+        });
+        setActivePickSessions(activeSessions);
+
+        localStorage.removeItem('draft_pick_session');
+        showToast(finalResult?.queued
+            ? `Separacao ${sessionId} salva localmente para sincronizar.`
+            : `Separacao ${sessionId} enviada para conferencia!`);
+        renderMenu();
+    } catch (e) {
+        console.error('[SEP] erro ao finalizar separacao', {
+            message: e?.message,
+            details: e?.details,
+            hint: e?.hint,
+            code: e?.code,
+            sessionId,
+            channelId,
+            channelLabel
+        });
+        showToast(`Erro ao salvar finalizacao: ${e?.message || e}`);
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+async function renderPackMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    const modoRapidoAtivo = isModoRapidoAtivo();
+
+    if (modoRapidoAtivo) {
+        showToast("Acesso negado: Conferência desativada no Modo Rápido.");
+        renderMenu();
+        return;
+    }
+
+    // Filtrar separações abertas vindas do Supabase/cache local.
+    try {
+        const data = await DataClient.loadModule('conferencia', true);
+        if (data) {
+            appData.separacao = data.separacao || appData.separacao || [];
+            appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+            appData.conferencia = data.conferencia || appData.conferencia || [];
+        }
+    } catch (error) {
+        console.warn('[PACK] Falha ao atualizar separacoes do Supabase:', error);
+    }
+
+    const activeSessions = (appData.separacao || []).filter(s => {
+        const st = String(s.status || '').toLowerCase();
+        return st === 'aberta' || st === 'pendente' || st === 'pronta_conferencia';
+    });
+
+    app.innerHTML = `
+                <div class="dashboard-screen internal fade-in pack-screen module-screen standard-card-menu-screen">
+                    ${getTopBarHTML(currentUser, 'renderMenu()')}
+                    ${getModuleSidebarHTML('pack')}
+
+                    <main class="container">
+                        <div class="operational-counter-row">
+                            <span class="operational-counter-pill">
+                                <span class="material-symbols-rounded">fact_check</span>
+                                Separacoes pendentes: <strong>${activeSessions.length}</strong>
+                            </span>
+                        </div>
+
+                        ${activeSessions.length === 0 ? `
+                            <div class="operational-empty-card">
+                                <span class="material-symbols-rounded">fact_check</span>
+                                <strong>Nenhuma separacao pendente para conferencia.</strong>
+                            </div>
+                        ` : `
+                            <div class="standard-module-card-grid operational-card-grid operational-conference-grid">
+                                ${activeSessions.map(session => {
+                                    const channelName = session.canal_nome || session.col_c || session.canal || 'Outros';
+                                    const config = getChannelConfig(channelName);
+                                    const uniqueId = getPackSeparationUniqueId(session);
+                                    const displayId = getPackSeparationDisplayId(session);
+                                    const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
+                                    const itemCount = getSeparationItemCount(session);
+                                    const statusRaw = String(session.status || 'aberta');
+                                    const statusLabel = statusRaw.toLowerCase().includes('pend') ? 'Pendente' : 'Aberta';
+                                    return `
+                                        <button type="button" class="standard-module-card operational-menu-card operational-conference-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
+                                            <span class="standard-module-card-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
+                                            <span class="standard-module-card-copy operational-conference-copy">
+                                                <strong>${escapeKitAttribute(displayId)}</strong>
+                                                <small>${escapeKitAttribute(channelName)}</small>
+                                                <span class="operational-card-meta">
+                                                    <em>${escapeKitAttribute(createdAt)}</em>
+                                                    <em>${itemCount ? `${itemCount} item(ns)` : 'Itens não informados'}</em>
+                                                    <b>${escapeKitAttribute(statusLabel)}</b>
+                                                </span>
+                                                <span class="operational-open-indicator">
+                                                    <span class="material-symbols-rounded">arrow_forward</span>
+                                                    Abrir conferencia
+                                                </span>
+                                            </span>
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+                        `}
+                    </main>
+                </div>
+            `;
+}
+
+function renderPackHistory() {
+    const currentUser = localStorage.getItem('currentUser');
+    const history = (appData.conferencia || []).sort((a, b) => new Date(b.conferido_em) - new Date(a.conferido_em));
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal pack-screen">
+                    ${getTopBarHTML(currentUser, 'renderPackMenu()')}
+                    ${getOperationalIdentityHTML('PACK')}
+
+                    <main class="container">
+                        <div class="sub-menu-header">
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÓRICO de CONFERÊNCIA</h2>
+                        </section>
+
+                        ${history.length === 0 ? `
+                            <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
+                                <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">history</span>
+                                <p style="color: var(--muted);">Nenhuma conferência encontrada.</p>
+                            </div>
+                        ` : `
+                            <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
+                                ${history.map(item => `
+                                    <div style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                                            <div>
+                                                <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item.rom_id || '-'}</div>
+                                                <div style="font-size: 0.65rem; color: var(--muted);">${new Date(item.conferido_em).toLocaleString('pt-BR')}</div>
+                                            </div>
+                                            <div style="background: ${item.divergencia === 'OK' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${item.divergencia === 'OK' ? '#22c55e' : '#ef4444'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
+                                                ${item.divergencia || 'OK'}
+                                            </div>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: white; font-weight: 600;">${item.descricao || '-'}</div>
+                                        <div style="font-size: 0.65rem; color: var(--muted); margin-top: 4px;">Qtd: ${item.qtd_conferida || 0} | Por: ${item.conferido_por || '-'}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </main>
+                </div>
+            `;
+}
+
+function getPackSeparationUniqueId(session) {
+    return session?.id || session?.separacao_uuid || session?.uuid || session?.row_id || session?.separacao_id || session?.col_a || '';
+}
+
+function quotePackInlineArg(value) {
+    return escapeKitAttribute(JSON.stringify(String(value ?? '')));
+}
+
+function getPackSeparationSessionId(session) {
+    return session?.separacao_id || session?.codigo_separacao || session?.col_a || getPackSeparationUniqueId(session);
+}
+
+function getPackSeparationDisplayId(session) {
+    const raw = session?.codigo_separacao || session?.separacao_id || getPackSeparationUniqueId(session);
+    const text = String(raw || '');
+    if (session?.codigo_separacao || session?.separacao_id || text.length <= 12) return text || '-';
+    return text.slice(0, 8).toUpperCase();
+}
+
+function formatPackSeparationDate(value) {
+    if (!value) return 'Data não informada';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+async function renderPackSessionsList(channelName) {
+    const currentUser = localStorage.getItem('currentUser');
+    let activeSessions = [];
+    let usedFreshSupabase = false;
+    try {
+        if (DataClient.fetchSeparacoesAbertasPorCanalSupabase) {
+            activeSessions = await DataClient.fetchSeparacoesAbertasPorCanalSupabase(channelName);
+            usedFreshSupabase = true;
+            appData.separacao = [
+                ...activeSessions,
+                ...(appData.separacao || []).filter(s => {
+                    const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
+                    return chan !== channelName;
+                })
+            ];
+        }
+    } catch (error) {
+        console.warn('[PACK] Falha ao buscar separacoes abertas por canal no Supabase:', error);
+    }
+
+    if (!usedFreshSupabase && !activeSessions.length) {
+        activeSessions = (appData.separacao || []).filter(s => {
+            const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
+            const st = String(s.status || '').toLowerCase();
+            return chan === channelName && st === 'aberta';
+        });
+    }
+
+    activeSessions = activeSessions.filter(s => {
+        const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
+        const st = String(s.status || '').toLowerCase();
+        return chan === channelName && st === 'aberta';
+    });
+
+    const channelConfig = getChannelConfig(channelName);
+    const channelIcon = channelConfig.svgIcon || menu3DIcons?.pack || '<span class="material-symbols-rounded">fact_check</span>';
+    const getSessionStatusClass = (status) => {
+        const st = String(status || '').toLowerCase();
+        if (st.includes('diverg')) return 'danger';
+        if (st.includes('conferencia') || st.includes('pronta')) return 'active';
+        return 'ready';
+    };
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal pack-sessions-screen pack-screen">
+                    ${getTopBarHTML(currentUser, 'renderPackMenu()')}
+                    ${getOperationalIdentityHTML('PACK')}
+
+                    <main class="container pack-sessions-workspace">
+                        <section class="pack-sessions-hero">
+                            <div class="pack-sessions-title">
+                                <div class="pack-sessions-icon">${channelIcon}</div>
+                                <div>
+                                    <span>Conferência / Pack</span>
+                                    <h1>${channelName}</h1>
+                                </div>
+                            </div>
+                            <div class="pack-sessions-summary">
+                                <div>
+                                    <span>Abertas</span>
+                                    <strong>${activeSessions.length}</strong>
+                                </div>
+                                <div>
+                                    <span>Canal</span>
+                                    <strong>${channelName}</strong>
+                                </div>
+                            </div>
+                        </section>
+
+                        ${activeSessions.length === 0 ? `
+                            <div class="pack-sessions-empty">
+                                <span class="material-symbols-rounded">fact_check</span>
+                                <strong>Nenhuma separação aberta para este canal.</strong>
+                            </div>
+                        ` : `
+                        <div class="pack-sessions-list">
+                            ${activeSessions.map(session => {
+                                const uniqueId = getPackSeparationUniqueId(session);
+                                const displayId = getPackSeparationDisplayId(session);
+                                const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
+                                const status = session.status || 'aberta';
+                                const statusClass = getSessionStatusClass(status);
+                                return `
+                                <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
+                                    <div class="pack-session-card-main">
+                                        <div class="pack-session-card-icon">
+                                            <span class="material-symbols-rounded">assignment_turned_in</span>
+                                        </div>
+                                        <div class="pack-session-card-text">
+                                            <span class="pack-session-card-kicker">Separação</span>
+                                            <strong>${displayId}</strong>
+                                            <small>${createdAt}</small>
+                                        </div>
+                                    </div>
+                                    <div class="pack-session-card-meta">
+                                        <div class="pack-session-pill ${statusClass}">Aberta</div>
+                                    </div>
+                                    <button class="pack-session-action" onclick="event.stopPropagation(); renderPackSessionDetails(${quotePackInlineArg(uniqueId)})" title="Conferir">
+                                        <span class="material-symbols-rounded">fact_check</span>
+                                        <span>Conferir</span>
+                                    </button>
+                                </article>
+                                `;
+                            }).join('')}
+                        </div>
+                        `}
+                    </main>
+                </div>
+            `;
+}
+
+function deletePickingSession(sessionId, channelName) {
+    if (!confirm(`Tem certeza que deseja excluir a separação ${sessionId}?\nEsta ação não pode ser desfeita.`)) {
+        return;
+    }
+
+    let activeSessions = getActivePickSessions();
+    activeSessions = activeSessions.filter(s => s.id !== sessionId);
+    setActivePickSessions(activeSessions);
+
+    showToast(`Separação ${sessionId} excluída.`);
+
+    // Re-render the list or the menu
+    if (channelName) {
+        renderPackSessionsList(channelName);
+    } else {
+        renderPackMenu();
+    }
+}
+
+function getActivePickSessions() {
+    try {
+        const sessions = JSON.parse(localStorage.getItem('active_pick_sessions') || '[]');
+        return Array.isArray(sessions) ? sessions : [];
+    } catch (error) {
+        console.warn('[PACK] active_pick_sessions invalido. Limpando cache local.', error);
+        localStorage.removeItem('active_pick_sessions');
+        return [];
+    }
+}
+
+function setActivePickSessions(sessions) {
+    localStorage.setItem('active_pick_sessions', JSON.stringify(Array.isArray(sessions) ? sessions : []));
+}
+
+// Global Session State moved to top for hoisting safety
+async function renderPackSessionDetails(sessionId) {
+    const currentUser = localStorage.getItem('currentUser');
+    const activeSessions = getActivePickSessions();
+    const requestedId = String(sessionId || '');
+    
+    // Verificar se o mesmo usuário que fez a Separação está tentando fazer a Conferência
+    const separacaoSession = (appData.separacao || []).find(s => 
+        String(getPackSeparationUniqueId(s)) === requestedId || String(getPackSeparationSessionId(s)) === requestedId
+    );
+    const packSessionId = getPackSeparationSessionId(separacaoSession) || requestedId;
+    const separacaoRowId = getPackSeparationUniqueId(separacaoSession) || requestedId;
+    const session = activeSessions.find(s =>
+        String(s.id) === String(packSessionId)
+        || String(s.separacaoRowId || '') === String(separacaoRowId)
+        || String(s.pickingData?.separacao_row_id || '') === String(separacaoRowId)
+    );
+    
+    if (separacaoSession) {
+        const criadoPor = (separacaoSession.criado_por || separacaoSession.col_e || '').trim().toLowerCase();
+        const usuarioAtual = (currentUser || '').trim().toLowerCase();
+        
+        if (criadoPor && criadoPor === usuarioAtual) {
+            showToast("Esta conferência deve ser realizada por outro usuário. O mesmo usuário que fez a separação não pode conferir esta sessão.", "error");
+            playBeep('error');
+            return;
+        }
+    }
+    
+    // Extrair o canal para manter a cor na conferência
+    const channelName = separacaoSession ? (separacaoSession.canal_nome || separacaoSession.col_d || '') : '';
+    const channelConfig = getChannelConfig(channelName);
+    const channelColorClass = channelConfig.color || '';
+
+    // INICIALIZAR SESSÃO IMEDIATAMENTE para permitir bipagem sem depender de sync
+    currentPackSession = session || {
+        id: packSessionId,
+        separacaoRowId,
+        items: [],
+        pickingData: { separacao_id: packSessionId, separacao_row_id: separacaoRowId, canal_nome: channelName },
+        conferenceRows: []
+    };
+    
+    // 0. Renderizar a Moldura Imediatamente com sessão inicializada
+    renderPackSessionFrame(packSessionId, currentUser, channelColorClass, channelName);
+
+    // 1. Buscar itens da planilha em BACKGROUND (não bloqueante)
+    try {
+        let expectedItems = (appData.separacao_itens || []).filter(item => String(item.separacao_id) === String(packSessionId));
+        if (expectedItems.length === 0) {
+            const freshData = await DataClient.loadModule('conferencia', true);
+            if (freshData) {
+                appData.separacao = freshData.separacao || appData.separacao || [];
+                appData.separacao_itens = freshData.separacao_itens || appData.separacao_itens || [];
+                appData.conferencia = freshData.conferencia || appData.conferencia || [];
+                expectedItems = (appData.separacao_itens || []).filter(item => String(item.separacao_id) === String(packSessionId));
+            }
+        }
+        if (expectedItems.length === 0) {
+            const itemsRes = await safeGet(`action=find&sheet=separacao_itens&field=separacao_id&value=${encodeURIComponent(packSessionId)}`);
+            expectedItems = itemsRes.data || [];
+        }
+        if (expectedItems.length === 0 && session && Array.isArray(session.items) && session.items.length > 0) {
+            expectedItems = session.items;
+        }
+        
+        // Reconstruir conferenceRows baseando-se no que está na planilha
+        const groupedExpected = expectedItems.reduce((acc, item) => {
+            const key = getPickingProductId(item);
+            if (!key) return acc;
+            if (!acc[key]) {
+                acc[key] = {
+                    ...item,
+                    descricao: item.descricao || item.descri_ao || item.descricao_base || item.nome || key,
+                    qtd_separada: 0,
+                    qtd_conferida: 0,
+                    divergencia: 'FALTA'
+                };
+            }
+            acc[key].qtd_separada += parseFloat(item.quantidade ?? item.qty ?? item.qtd_separada ?? 0);
+            return acc;
+        }, {});
+
+        // Se já existia cache local com conferência em andamento, mesclar quantidades
+        if (session && session.conferenceRows) {
+            session.conferenceRows.forEach(row => {
+                const key = row.ean || row.id_interno;
+                if (groupedExpected[key]) {
+                    groupedExpected[key].qtd_conferida = row.qtd_conferida;
+                }
+            });
+        }
+
+        const conferenceRows = Object.keys(groupedExpected).length > 0
+            ? Object.values(groupedExpected)
+            : (session && Array.isArray(session.conferenceRows) ? session.conferenceRows : []);
+
+        currentPackSession = {
+            id: packSessionId,
+            separacaoRowId,
+            items: expectedItems,
+            pickingData: {
+                separacao_id: packSessionId,
+                separacao_row_id: separacaoRowId,
+                canal_nome: channelName || (expectedItems.length > 0 ? (expectedItems[0].canal_nome || packSessionId.split('-')[1] || '') : '')
+            },
+            conferenceRows
+        };
+
+        // Salvar no local para persistência de sessão ativa
+        if (!session) {
+            activeSessions.push(currentPackSession);
+        } else {
+            const idx = activeSessions.findIndex(s =>
+                String(s.id) === String(packSessionId)
+                || String(s.separacaoRowId || '') === String(separacaoRowId)
+                || String(s.pickingData?.separacao_row_id || '') === String(separacaoRowId)
+            );
+            if (idx >= 0) activeSessions[idx] = currentPackSession;
+        }
+        setActivePickSessions(activeSessions);
+
+        // Atualizar lista após carregar dados
+        const packList = document.getElementById('pack-items-list');
+        if (packList) packList.innerHTML = renderPackItemsListHTML();
+        
+    } catch (err) {
+        console.error("Erro ao carregar sessão:", err);
+        showToast("Erro ao carregar dados da planilha.", "error");
+    }
+}
+
+/**
+ * Renderiza apenas a moldura da tela de conferência para resposta imediata
+ */
+function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
+    const icon = getChannelConfig(channelName).svgIcon || menu3DIcons?.conferencia || '<span class="material-symbols-rounded">fact_check</span>';
+    const title = channelName ? channelName.toUpperCase() : 'CONFERÊNCIA';
+    const createdAt = currentPackSession?.pickingData?.criado_em || currentPackSession?.time || new Date().toISOString();
+    const createdAtLabel = formatPackSeparationDate(createdAt);
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen ${channelColorClass}">
+            ${getModuleSidebarHTML('pack')}
+
+            <main class="pack-blind-shell">
+                <header class="pack-blind-header">
+                    <button class="pack-blind-back-btn" type="button" onclick="renderPackMenu()" aria-label="Voltar">
+                        <span class="material-symbols-rounded">arrow_back</span>
+                    </button>
+
+                    <div class="pack-blind-title">
+                        <span class="pack-blind-title-icon">${icon}</span>
+                        <div>
+                            <h1>CONFERÊNCIA (CEGA)</h1>
+                            <p>Escaneie o produto para conferir</p>
+                        </div>
+                    </div>
+
+                    <button class="pack-blind-manual-btn" type="button" onclick="focusPackManualInput()">
+                        <span class="material-symbols-rounded">barcode</span>
+                        Informar Codigo
+                    </button>
+                </header>
+
+                <section class="pack-blind-scan-panel">
+                    <div class="pack-blind-scan-field">
+                        <span class="material-symbols-rounded">search</span>
+                        <input type="text" id="pack-ean-input" class="product-search-input"
+                               placeholder="Escaneie o produto (EAN, SKU ou codigo interno)"
+                               onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPackScan(); }" autocomplete="off" autofocus>
+                        <button class="pack-blind-scanner-btn" onclick="startScanner(false, true)" title="Abrir Scanner" type="button">
+                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                        </button>
+                    </div>
+                </section>
+
+                <div id="scanner-container-pack" class="hidden pack-blind-scanner-container">
+                    <div id="reader-pack"></div>
+                    <button class="pack-blind-scanner-close" type="button" onclick="stopScanner()" aria-label="Fechar scanner">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+
+                <section class="pack-blind-info-grid">
+                    <article class="pack-blind-info-card">
+                        <span class="material-symbols-rounded">assignment</span>
+                        <div>
+                            <small>ID DA CONFERÊNCIA</small>
+                            <strong>${escapeKitAttribute(sessionId)}</strong>
+                            <em>Cega</em>
+                        </div>
+                    </article>
+                    <article class="pack-blind-info-card">
+                        <span class="material-symbols-rounded">hub</span>
+                        <div>
+                            <small>CANAL</small>
+                            <strong>${escapeKitAttribute(title)}</strong>
+                            <em>${escapeKitAttribute(getPickChannelSubtitle(channelName || title))}</em>
+                        </div>
+                    </article>
+                    <article class="pack-blind-info-card">
+                        <span class="material-symbols-rounded">visibility_off</span>
+                        <div>
+                            <small>CONFERÊNCIA</small>
+                            <strong>CEGA</strong>
+                            <em>Sem visualização dos itens</em>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="pack-blind-work-area">
+                    <div class="pack-blind-list-panel">
+                        <div class="pack-blind-list-header">
+                            <h2>PRODUTOS PARA CONFERÊNCIA</h2>
+                            <span id="pack-blind-list-count">0</span>
+                        </div>
+                        <div class="pack-blind-table-head">
+                            <span>Item</span>
+                            <span>Status</span>
+                            <span>Quantidade</span>
+                        </div>
+                        <div id="pack-divergence-alert" class="pack-divergence-alert hidden"></div>
+                        <div id="pack-items-list" class="pack-blind-items-list"></div>
+                        <div class="pack-blind-warning">
+                            <span class="material-symbols-rounded">info</span>
+                            <div>
+                                <strong>Nesta conferência você não verá a descrição dos produtos.</strong>
+                                <small>Apenas ao finalizar será exibido o resultado da conferência.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="pack-blind-summary-panel">
+                        <h2>RESUMO DA CONFERÊNCIA</h2>
+                        <div class="pack-blind-summary-metrics">
+                            <div><span class="material-symbols-rounded">assignment_turned_in</span><small>Itens</small><strong id="pack-summary-items">0</strong><em>itens</em></div>
+                            <div><span class="material-symbols-rounded">inventory_2</span><small>Unidades</small><strong id="pack-summary-units">0</strong><em>unidades</em></div>
+                        </div>
+                        <div class="pack-blind-progress">
+                            <small>Progresso</small>
+                            <div class="pack-blind-progress-ring">
+                                <strong id="pack-summary-progress">0%</strong>
+                                <span>Conferido</span>
+                            </div>
+                            <em id="pack-summary-ratio">0 / 0 itens</em>
+                        </div>
+                        <button class="pack-blind-finish-btn" id="btn-finish-pack" disabled>
+                            <span class="material-symbols-rounded">check_circle</span>
+                            Finalizar Conferência
+                        </button>
+                        <button class="pack-blind-pause-btn" type="button" onclick="pauseConferenceSession()">
+                            <span class="material-symbols-rounded">pause</span>
+                            Pausar Conferência
+                        </button>
+                    </aside>
+                </section>
+
+                <footer class="pack-blind-footer">
+                    <span>ID conferência: <strong>${escapeKitAttribute(sessionId)}</strong></span>
+                    <span>Canal: <strong>${escapeKitAttribute(title)}</strong></span>
+                    <span>Tipo: <strong>CEGA</strong></span>
+                    <span>Criado em: <strong>${escapeKitAttribute(createdAtLabel)}</strong></span>
+                </footer>
+            </main>
+        </div>
+    `;
+    
+    const eanInput = document.getElementById('pack-ean-input');
+    if (eanInput) eanInput.focus();
+}
+
+function focusPackManualInput() {
+    const input = document.getElementById('pack-ean-input');
+    if (!input) return;
+    input.focus();
+    input.select?.();
+    showToast("Digite o codigo e pressione Enter.", "info");
+}
+
+function pauseConferenceSession() {
+    if (currentPackSession?.id) {
+        const sessions = getActivePickSessions();
+        const idx = sessions.findIndex(s => String(s.id) === String(currentPackSession.id));
+        if (idx >= 0) sessions[idx] = currentPackSession;
+        else sessions.unshift(currentPackSession);
+        setActivePickSessions(sessions);
+    }
+    showToast("Conferência pausada.");
+    renderPackMenu();
+}
+
+function getProductForConferenceRow(row) {
+    return (appData.products || []).find(p =>
+        (row.ean && String(p.ean || '') === String(row.ean)) ||
+        (row.id_interno && String(p.id_interno || p.col_A || p.col_a || '') === String(row.id_interno))
+    ) || {};
+}
+
+function getConferenceRowState(row) {
+    const expected = parseFloat(row.qtd_separada || 0);
+    const checked = parseFloat(row.qtd_conferida || 0);
+    if (row.divergencia === 'SOBRA' || checked > expected) return { key: 'divergent', label: expected === 0 ? 'Extra' : 'Divergente', tone: 'danger' };
+    if (checked <= 0) return { key: 'pending', label: 'Pendente', tone: 'muted' };
+    if (checked === expected) return { key: 'ok', label: 'Conferido', tone: 'success' };
+    return { key: 'partial', label: 'Parcial', tone: 'warning' };
+}
+
+function getPackStats() {
+    const rows = currentPackSession?.conferenceRows || [];
+    const total = rows.length;
+    const checkedItems = rows.filter(r => parseFloat(r.qtd_conferida || 0) > 0).length;
+    const pending = rows.filter(r => parseFloat(r.qtd_conferida || 0) <= 0).length;
+    const divergences = rows.filter(r => {
+        const expected = parseFloat(r.qtd_separada || 0);
+        const checked = parseFloat(r.qtd_conferida || 0);
+        return checked > 0 && (checked !== expected || r.divergencia === 'SOBRA');
+    }).length;
+    const expectedQty = rows.reduce((sum, r) => sum + parseFloat(r.qtd_separada || 0), 0);
+    const checkedQty = rows.reduce((sum, r) => sum + parseFloat(r.qtd_conferida || 0), 0);
+    return { total, checkedItems, pending, divergences, expectedQty, checkedQty };
+}
+
+function updatePackChrome() {
+    const stats = getPackStats();
+    const alertEl = document.getElementById('pack-divergence-alert');
+    if (alertEl) {
+        alertEl.classList.add('hidden');
+        alertEl.innerHTML = '';
+    }
+
+    const expectedItems = stats.total || stats.checkedItems || 0;
+    const progress = expectedItems > 0 ? Math.min(100, Math.round((stats.checkedItems / expectedItems) * 100)) : 0;
+    const itemsEl = document.getElementById('pack-summary-items');
+    const unitsEl = document.getElementById('pack-summary-units');
+    const progressEl = document.getElementById('pack-summary-progress');
+    const ratioEl = document.getElementById('pack-summary-ratio');
+    const listCountEl = document.getElementById('pack-blind-list-count');
+
+    if (itemsEl) itemsEl.textContent = String(stats.checkedItems);
+    if (unitsEl) unitsEl.textContent = String(stats.checkedQty);
+    if (progressEl) progressEl.textContent = `${progress}%`;
+    if (ratioEl) ratioEl.textContent = `${stats.checkedItems} / ${expectedItems} itens`;
+    if (listCountEl) listCountEl.textContent = String(stats.checkedItems);
+}
+
+function renderPackItemsListHTML() {
+    if (!currentPackSession || !currentPackSession.conferenceRows) return '';
+    
+    // Atualizar estado do botão de finalizar se já carregou
+    const btnFinish = document.getElementById('btn-finish-pack');
+    if (btnFinish) {
+        btnFinish.disabled = false;
+        btnFinish.setAttribute('onclick', 'finishConferenceSession()');
+    }
+
+    updatePackChrome();
+
+    const rowsToShow = currentPackSession.conferenceRows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
+
+    if (rowsToShow.length === 0) {
+        if (btnFinish) btnFinish.disabled = true;
+        return `
+            <div class="pack-blind-empty-state">
+                <span class="material-symbols-rounded">barcode_scanner</span>
+                <strong>Nenhum produto conferido ainda.</strong>
+                <small>Escaneie os produtos para iniciar a conferência cega.</small>
+            </div>
+        `;
+    }
+
+    if (btnFinish) btnFinish.disabled = !rowsToShow.some(row => parseFloat(row.qtd_conferida || 0) > 0);
+
+    return rowsToShow.map((row, visibleIndex) => {
+        const index = currentPackSession.conferenceRows.indexOf(row);
+        const checked = parseFloat(row.qtd_conferida || 0);
+        const state = getConferenceRowState(row);
+        return `
+            <div class="pack-blind-row fade-in">
+                <div data-label="Item">
+                    <strong>Item conferido ${String(visibleIndex + 1).padStart(2, '0')}</strong>
+                    <small>Dados ocultos até finalizar</small>
+                </div>
+                <div data-label="Status">
+                    <span class="pack-blind-status ${state.tone}">${state.label}</span>
+                </div>
+                <div class="pack-blind-qty" data-label="Quantidade">Oculta</div>
+                <button class="pack-blind-row-adjust" onclick="adjustConferenceRowDirect(${index}, -1)" type="button" aria-label="Remover uma unidade">
+                    <span class="material-symbols-rounded">remove</span>
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+function adjustConferenceRowDirect(index, delta) {
+    const row = currentPackSession.conferenceRows[index];
+    row.qtd_conferida = Math.max(0, row.qtd_conferida + delta);
+    
+    if (row.qtd_conferida === row.qtd_separada) {
+        row.divergencia = 'OK';
+    } else if (row.qtd_conferida > row.qtd_separada) {
+        row.divergencia = 'SOBRA';
+    } else {
+        row.divergencia = 'FALTA';
+    }
+    
+    document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
+}
+
+/**
+ * Fun?o Compartilhada para Busca Manual de Produto
+ */
+function openManualAddProduct(callback) {
+    const term = prompt("Digite o EAN ou C?digo do produto para adicionar:");
+    if (!term) return;
+
+    const product = appData.products.find(p =>
+        (p.ean && p.ean.toString() === term) ||
+        (p.id_interno && p.id_interno.toString() === term) ||
+        (p.sku_fornecedor && p.sku_fornecedor.toString() === term)
+    );
+
+    if (!product) {
+        playBeep('error');
+        showToast("Produto n?o encontrado!");
+        return;
+    }
+
+    playBeep('success');
+    callback(product);
+}
+
+function openManualAddProductToSession(sessionId, type = 'PACK') {
+    openManualAddProduct((product) => {
+        if (type === 'PACK') {
+            manualAddItemToConference(product);
+        } else {
+            // L?gica para Separa?o
+            const productId = getPickingProductId(product);
+            if (!productId) {
+                showToast("Produto sem ID interno. Nao foi adicionado.", "error");
+                return;
+            }
+            const existing = currentSessionItems.find(item => getPickingProductId(item) === productId);
+            if (existing) {
+                existing.qty = (existing.qty || 0) + 1;
+            } else {
+                currentSessionItems.unshift({
+                    ...product,
+                    qty: 1,
+                    scanTime: new Date().toLocaleTimeString()
+                });
+            }
+            updatePickItemsList();
+            showToast(`Item adicionado: ${product.descricao_base}`);
+            
+            if (currentPickSession && currentPickSession.id === sessionId) {
+                currentPickSession.items = currentSessionItems;
+                renderPickResult(sessionId, currentPickSession.channelId, currentPickSession.channelLabel, currentPickSession.channelColor);
+            }
+        }
+    });
+}
+
+function manualAddItemToConference(product) {
+    const productId = getPickingProductId(product);
+    if (!productId) {
+        showToast("Produto sem ID interno. Nao foi adicionado.", "error");
+        return;
+    }
+
+    let row = currentPackSession.conferenceRows.find(r => getPickingProductId(r) === productId);
+    if (row) {
+        row.qtd_conferida++;
+    } else {
+        row = {
+            separacao_id: currentPackSession.pickingData.separacao_id,
+            rom_id: currentPackSession.id,
+            id_interno: product.id_interno || '',
+            ean: product.ean || '',
+            descricao: product.descricao_base || 'Produto Adicionado',
+            qtd_separada: 0,
+            qtd_conferida: 1,
+            divergencia: 'SOBRA'
+        };
+        currentPackSession.conferenceRows.push(row);
+    }
+    // Atualizar lista de conferidos
+    const packList = document.getElementById('pack-items-list');
+    if (packList) packList.innerHTML = renderPackItemsListHTML();
+    
+    // Atualizar botão de finalizar
+    const btnFinish = document.getElementById('btn-finish-pack');
+    if (btnFinish) {
+        btnFinish.style.opacity = '1';
+        btnFinish.style.cursor = 'pointer';
+        btnFinish.setAttribute('onclick', 'finishConferenceSession()');
+    }
+}
+
+
+
+
+function addPackScan(scannedEan = null) {
+    const input = document.getElementById('pack-ean-input');
+    const ean = (scannedEan || input.value.trim()).toString();
+    if (!ean) return;
+
+    let row = currentPackSession.conferenceRows.find(r =>
+        (r.ean && r.ean.toString() === ean) ||
+        (r.id_interno && r.id_interno.toString() === ean)
+    );
+
+    if (row) {
+        playBeep('success');
+        console.log(`[BIP CONTINUO DEBUG] produto adicionado (conferência): ${row.id_interno || ean}`);
+        row.qtd_conferida++;
+
+        // Update divergence
+        if (row.qtd_conferida === row.qtd_separada) {
+            row.divergencia = 'OK';
+        } else if (row.qtd_conferida > row.qtd_separada) {
+            row.divergencia = 'SOBRA';
+        } else {
+            row.divergencia = 'FALTA';
+        }
+        showToast("Produto conferido.");
+    } else {
+        // Item scanned but not in picking session (SOBRA)
+        playBeep('error');
+        showToast("Item não encontrado nesta separação. Registrado para validação ao finalizar.");
+
+        // Try to find product info in appData.products
+        const product = appData.products.find(p =>
+            (p.ean && p.ean.toString() === ean) ||
+            (p.sku_fornecedor && p.sku_fornecedor.toString() === ean) ||
+            (p.id_interno && p.id_interno.toString() === ean) ||
+            (p.col_a && p.col_a.toString() === ean) ||
+            (p.col_A && p.col_A.toString() === ean)
+        );
+
+        row = {
+            rom_id: currentPackSession.id,
+            id_interno: product ? (product.id_interno || product.col_a || product.col_A || '') : '',
+            ean: ean,
+            descricao: product ? (product.descricao_base || product.col_aa || 'PRODUTO NÃO IDENTIFICADO') : 'PRODUTO NÃO IDENTIFICADO',
+            qtd_separada: 0,
+            qtd_conferida: 1,
+            divergencia: 'SOBRA',
+            conferido_por: '',
+            conferido_em: ''
+        };
+        currentPackSession.conferenceRows.push(row);
+    }
+
+    input.value = '';
+    document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
+    showInputFeedback('pack-ean-input', row && row.divergencia !== 'SOBRA' ? 'success' : 'error');
+}
+
+/**
+ * TELA DE CORRECAO DE DIVERGÊNCIA (Obrigatória se houver erro)
+ */
+function renderConferenceCorrection() {
+    const currentUser = localStorage.getItem('currentUser');
+    const hasDivergence = currentPackSession.conferenceRows.some(r => r.divergencia !== 'OK');
+    const isStarted = currentPackSession.conferenceRows.some(r => r.qtd_conferida > 0);
+    
+    // [BLOQUEIO DE DIVERG?NCIA] - Somente permitimos finalizar se hasDivergence for false
+    
+    let conferenceStatus = 'EM CONFERÊNCIA';
+    if (hasDivergence && isStarted) conferenceStatus = 'COM DIVERG?NCIA';
+    if (!hasDivergence) conferenceStatus = 'CONFERIDO';
+
+
+    // Rolar para o primeiro erro se houver divergência
+    if (hasDivergence) {
+        setTimeout(() => {
+            const firstError = document.querySelector('.conference-item-error');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstError.style.boxShadow = '0 0 20px rgba(227, 6, 19, 0.3)';
+                setTimeout(() => firstError.style.boxShadow = '', 2000);
+            }
+        }, 300);
+    }
+
+    app.innerHTML = `
+                <div class="dashboard-screen fade-in internal">
+                    ${getTopBarHTML(currentUser, "renderPackSessionDetails('" + currentPackSession.id + "')")}
+
+                    <main class="container">
+                        <div class="sub-menu-header" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                            <div style="font-size: 0.7rem; color: var(--primary); font-weight: 800; letter-spacing: 0.1em;">RESULTADO DA CONFERÊNCIA</div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h2 style="font-size: 1.2rem; font-weight: 700;">${currentPackSession.id}</h2>
+                                <span class="status-pill" style="background: ${hasDivergence ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)'}; color: ${hasDivergence ? '#ef4444' : '#22c55e'}; font-size: 0.6rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; border: 1px solid ${hasDivergence ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)'};">
+                                    ${conferenceStatus}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 24px; padding: 20px; border-radius: 20px; background: ${hasDivergence ? 'rgba(239, 68, 68, 0.05)' : 'rgba(34, 197, 94, 0.1)'}; border: 1px solid ${hasDivergence ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)'}; text-align: center;">
+                            <span class="material-symbols-rounded" style="font-size: 48px; color: ${hasDivergence ? '#ef4444' : '#22c55e'}; margin-bottom: 12px;">
+                                ${hasDivergence ? 'report' : 'task_alt'}
+                            </span>
+                            <h3 style="font-size: 1.1rem; font-weight: 700; color: white;">
+                                ${hasDivergence ? 'Atenção: Divergência Detectada' : 'Fluxo Validado com Sucesso'}
+                            </h3>
+                            <p style="font-size: 0.8rem; color: var(--muted); margin-top: 4px;">
+                                ${hasDivergence ? 'Há uma diferença entre o separado e o conferido. Ajuste obrigatório para liberar.' : 'Tudo em ordem. O status final será gravado como CONFERIDO.'}
+                            </p>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px;">
+                            ${currentPackSession.conferenceRows.map((row, index) => {
+        if (row.divergencia === 'OK' && !hasDivergence) return ''; // Hide OK rows if everything is OK to keep it clean
+
+        let statusColor = '#ef4444'; // FALTA
+        if (row.divergencia === 'OK') statusColor = '#22c55e';
+        if (row.divergencia === 'SOBRA') statusColor = '#f59e0b';
+
+        return `
+                                    <div class="fade-in ${row.divergencia !== 'OK' ? 'conference-item-error' : ''}" 
+                                         id="conf-res-item-${index}"
+                                         style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid ${row.divergencia !== 'OK' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255,255,255,0.05)'}; transition: all 0.3s ease;">
+                                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                                            <div style="width: 32px; height: 32px; background: ${row.divergencia === 'SOBRA' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid ${row.divergencia === 'SOBRA' ? 'rgba(245, 158, 11, 0.2)' : 'transparent'};">
+                                                <span class="material-symbols-rounded" style="font-size: 18px; color: ${statusColor}">${row.divergencia === 'OK' ? 'check_circle' : (row.divergencia === 'SOBRA' ? 'priority_high' : 'error')}</span>
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 700; font-size: 0.85rem; color: white;">${row.descricao}</div>
+                                                <div style="font-size: 0.65rem; color: var(--muted);">EAN: ${row.ean}</div>
+                                            </div>
+                                            <div style="text-align: right; font-size: 0.7rem; font-weight: 900; color: ${statusColor}; background: ${statusColor}1A; padding: 2px 8px; border-radius: 4px;">
+                                                ${row.divergencia}
+                                            </div>
+                                        </div>
+                                        
+                                        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
+                                            <div style="font-size: 0.7rem; color: var(--muted);">
+                                                Esperado: <span style="color: white; font-weight: 700;">${row.qtd_separada}</span>
+                                            </div>
+                                            
+                                            <div style="display: flex; align-items: center; gap: 15px;">
+                                                <button onclick="adjustConferenceRow(${index}, -1)" style="width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; display: flex; align-items: center; justify-content: center;">
+                                                    <span class="material-symbols-rounded" style="font-size: 18px;">remove</span>
+                                                </button>
+                                                <div style="font-weight: 800; font-size: 1rem; color: var(--primary); min-width: 20px; text-align: center;">
+                                                    ${row.qtd_conferida}
+                                                </div>
+                                                <button onclick="adjustConferenceRow(${index}, 1)" style="width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; display: flex; align-items: center; justify-content: center;">
+                                                    <span class="material-symbols-rounded" style="font-size: 18px;">add</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+    }).join('')}
+                        
+                        ${hasDivergence ? `
+                        <div style="margin: 20px 0; padding: 16px; background: rgba(234, 179, 8, 0.1); border-radius: 12px; border: 1px solid rgba(234, 179, 8, 0.3); text-align: center;">
+                            <p style="color: #facc15; font-weight: 600; margin-bottom: 16px;">Deseja corrigir as divergências?</p>
+                            <button onclick="confirm('Clique OK para confirmar a correção e prosseguir') && renderConferenceCorrection()" class="btn-action" style="width: 100%; background: #f59e0b;">
+                                <span class="material-symbols-rounded">edit</span>
+                                CORRIGIR E CONTINUAR
+                            </button>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Botão Adicionar Produto Extra -->
+                        <button onclick="openManualAddProductToSession('${currentPackSession.id}', 'PACK')" class="btn-action" style="width: 100%; border: 1px dashed var(--primary); background: transparent; margin-bottom: 20px;">
+                            <span class="material-symbols-rounded">add_circle</span>
+                            Adicionar Produto
+                        </button>
+
+                        <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
+                            <button class="btn-action" style="width: 100%; justify-content: center; background: var(--surface);" onclick="renderPackSessionDetails('${currentPackSession.id}')">
+                                <span class="material-symbols-rounded">barcode_scanner</span>
+                                VOLTAR PARA BIPAGEM
+                            </button>
+                            
+                            <button class="btn-action" id="btn-finish-atomic"
+                                    style="width: 100%; justify-content: center; background: #22c55e; ${hasDivergence ? 'opacity: 0.5; cursor: not-allowed;' : ''}" 
+                                    ${hasDivergence ? 'disabled onclick="showToast(\'Corrija as divergências para finalizar\', \'warning\')"' : 'onclick="confirmFinishConference()"'}>
+                                <span class="material-symbols-rounded">check_circle</span>
+                                FINALIZAR E DAR BAIXA
+                            </button>
+
+                            ${hasDivergence ? `
+                            <div style="text-align: center; color: #ef4444; font-size: 0.75rem; font-weight: 800; padding: 18px; background: rgba(239, 68, 68, 0.1); border-radius: 12px; border: 2px solid rgba(239, 68, 68, 0.3);">
+                                <span class="material-symbols-rounded" style="vertical-align: middle; font-size: 24px; margin-bottom: 8px; display: block;">lock_clock</span>
+                                <span style="display: block; font-size: 1rem; letter-spacing: 0.1em;">CORRECAO PENDENTE</span>
+                                <p style="font-weight: 500; margin-top: 4px; opacity: 0.8;">Ajuste as quantidades para baterem com o esperado.</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </main>
+                </div>
+            `;
+}
+
+function adjustConferenceRow(index, delta) {
+    const row = currentPackSession.conferenceRows[index];
+    const prevDivergence = row.divergencia;
+    row.qtd_conferida = Math.max(0, row.qtd_conferida + delta);
+
+    // Update divergence
+    if (row.qtd_conferida === row.qtd_separada) {
+        row.divergencia = 'OK';
+    } else if (row.qtd_conferida > row.qtd_separada) {
+        row.divergencia = 'SOBRA';
+    } else {
+        row.divergencia = 'FALTA';
+    }
+
+    // Registrar log interno caso tenha corrigido uma divergência
+    if (prevDivergence !== 'OK' && row.divergencia === 'OK') {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            session: currentPackSession.id,
+            item: row.ean,
+            description: row.descricao,
+            action: 'RECONCILIACAO',
+            from: prevDivergence,
+            original_qtd: row.qtd_separada,
+            final_qtd: row.qtd_conferida,
+            user: localStorage.getItem('currentUser')
+        };
+        const logs = JSON.parse(localStorage.getItem('conference_correction_logs') || '[]');
+        logs.push(logEntry);
+        localStorage.setItem('conference_correction_logs', JSON.stringify(logs));
+        console.log('Divergência corrigida logada:', logEntry);
+    }
+
+    // Persistência imediata no localStorage para evitar perda em F5
+    let activeSessions = getActivePickSessions();
+    const sIndex = activeSessions.findIndex(s => s.id === currentPackSession.id);
+    if (sIndex !== -1) {
+        activeSessions[sIndex] = currentPackSession;
+        setActivePickSessions(activeSessions);
+    }
+
+    renderConferenceCorrection();
+}
+
+async function finishConferenceSession() {
+    // 1. Validar se há divergência (Comparação de Ouro)
+    const hasDivergence = currentPackSession.conferenceRows.some(row => 
+        parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
+    );
+
+    if (hasDivergence) {
+        showToast("Divergência detectada! Abrindo tela de correção.", "warning");
+        playBeep('error');
+        renderConferenceCorrection();
+    } else {
+        // Se bater 100%, já oferece finalizar
+        if (confirm("Conferência perfeita! Deseja finalizar e dar baixa no estoque agora?")) {
+            await confirmFinishConference();
+        } else {
+            renderConferenceCorrection(); // Mostra o resumo mesmo assim
+        }
+    }
+}
+
+function startFastPackSession(channelLabel, channelColor) {
+    const currentUser = localStorage.getItem('currentUser');
+    const now = new Date();
+    const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
+    const todayStr = now.toLocaleDateString('pt-BR');
+    const cleanChannel = channelLabel.split(' ')[0].toUpperCase();
+
+    let countInSheet = 0;
+    if (appData.conferencia && Array.isArray(appData.conferencia)) {
+        // Approximate by looking at unique rom_ids in conferencia today
+        const todayConf = appData.conferencia.filter(row => row.rom_id && row.rom_id.includes(`SEP-${cleanChannel}-${ddmm}`));
+        const uniques = new Set(todayConf.map(r => r.rom_id));
+        countInSheet = uniques.size;
+    }
+    const seq = countInSheet + 1;
+    const sessionId = `SEP-${cleanChannel}-${ddmm}-${seq.toString().padStart(2, '0')}`;
+
+    currentPackSession = {
+        id: sessionId,
+        channel: channelLabel,
+        channelColor: channelColor || 'var(--primary)',
+        items: [],
+        pickingData: {
+            separacao_id: sessionId,
+            canal_id: channelColor || '',
+            canal_nome: channelLabel,
+            data_separacao: todayStr,
+            status: 'rascunho',
+            criado_por: currentUser,
+            criado_em: now.toISOString(),
+            finalizado_em: now.toISOString(), data_hora: now.toISOString(),
+            observacao: 'MODO CONFERÊNCIA DIRETA'
+        },
+        conferenceRows: [],
+        isFastMode: true
+    };
+
+    renderPackSessionDetails(sessionId);
+}
+
+async function submitConferenceFinalization(payload) {
+    if (!navigator.onLine) {
+        await queueOperation('supabase_rpc', payload, {
+            rpcName: 'finalizar_conferencia',
+            module: 'conferencia'
+        });
+        return { queued: true };
+    }
+
+    try {
+        await DataClient.finalizarConferenciaSupabase(payload);
+        return { synced: true };
+    } catch (error) {
+        if (isRetryableConferenceSyncError(error)) {
+            console.error('[CONFERENCIA] Falha de rede, mantendo operacao na outbox:', error);
+            await queueOperation('supabase_rpc', payload, {
+                rpcName: 'finalizar_conferencia',
+                module: 'conferencia',
+                lastOnlineError: error.message || String(error)
+            });
+            return { queued: true, error };
+        }
+
+        console.error('[CONFERENCIA] RPC rejeitada pelo Supabase:', error);
+        throw error;
+    }
+}
+
+function isRetryableConferenceSyncError(error) {
+    if (!navigator.onLine) return true;
+    const message = String(error?.message || error || '').toLowerCase();
+    const retryableMessages = [
+        'failed to fetch',
+        'networkerror',
+        'network request failed',
+        'load failed',
+        'timeout',
+        'abort'
+    ];
+    return error?.name === 'TypeError'
+        || error?.name === 'AbortError'
+        || retryableMessages.some(text => message.includes(text));
+}
+
+function formatConferenceFinalizationError(error) {
+    const message = String(error?.message || error || '').trim();
+
+    if (error?.code === 'PGRST202' || error?.code === '42883' || message.toLowerCase().includes('finalizar_conferencia')) {
+        return 'RPC finalizar_conferencia ainda nao foi aplicada no Supabase remoto.';
+    }
+
+    return message || 'Erro desconhecido ao finalizar conferencia.';
+}
+
+async function confirmFinishConference() {
+    if (isFinalizing) return;
+    isFinalizing = true;
+
+    const btn = document.getElementById('btn-finish-atomic');
+    const originalHTML = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-rounded spin">sync</span> BAIXANDO...';
+    }
+
+    try {
+        const currentUser = localStorage.getItem('currentUser');
+        const sessionId = currentPackSession.id;
+        const executionId = generateExecutionId();
+
+        // Formatar linhas para o backend processar movimentos atomicos
+        const rows = currentPackSession.conferenceRows.map(row => ({
+            id_interno: row.id_interno,
+            ean: row.ean,
+            descricao: row.descricao,
+            qtd_separada: row.qtd_separada,
+            qtd_conferida: row.qtd_conferida,
+            separacao_id: sessionId
+        }));
+
+        const finalizationResult = await submitConferenceFinalization({
+            action: 'finalizar_conferencia',
+            sessionId: sessionId,
+            user: currentUser,
+            rows: rows,
+            executionId
+        });
+
+        showToast(finalizationResult.queued ? "Conferencia salva localmente para sincronizar." : "Conferencia finalizada e estoque baixado!");
+        playBeep('success');
+
+        // Limpar sessões locais e cache
+        localStorage.removeItem('draft_pack_session');
+        let activeSessions = getActivePickSessions();
+        activeSessions = activeSessions.filter(s => s.id !== sessionId);
+        setActivePickSessions(activeSessions);
+
+        // Atualizar appData local com status final para não aparecer mais como pendente
+        const sIdx = (appData.separacao || []).findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+        if (sIdx !== -1) {
+            appData.separacao[sIdx].status = finalizationResult.queued ? 'pendente_sync' : 'finalizada';
+        }
+
+        renderMenu();
+    } catch (err) {
+        console.error("Erro na finalizacao:", err);
+        showToast("Erro: " + formatConferenceFinalizationError(err));
+    } finally {
+        isFinalizing = false;
+        if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+    }
+}
+
+
+
+async function backFromConference() {
+    renderPackMenu();
+}
+
+function handleMenuClick(label) {
+    console.log('Menu clicked:', label);
+}
+
+function toggleQuickActions() {
+    const menu = document.getElementById('quick-actions-menu');
+    const overlay = document.getElementById('quick-actions-overlay');
+    
+    if (menu) {
+        const isHidden = menu.classList.contains('hidden');
+        
+        if (isHidden) {
+            menu.classList.remove('hidden');
+            if (overlay) overlay.classList.remove('hidden');
+        } else {
+            menu.classList.add('hidden');
+            if (overlay) overlay.classList.add('hidden');
+        }
+    }
+}
+
+function quickActionToggleFastMode() {
+    const config = getAppConfig();
+    const enabled = config.modo_rapido === true;
+    setAppConfig({ ...config, modo_rapido: !enabled });
+    renderMenu(false);
+    setTimeout(() => {
+        const menu = document.getElementById('quick-actions-menu');
+        const overlay = document.getElementById('quick-actions-overlay');
+        if (menu) menu.classList.remove('hidden');
+        if (overlay) overlay.classList.remove('hidden');
+    }, 0);
+}
+
+function startFastMode() {
+    console.log('[FastMode] Iniciando modo rápido...');
+    const config = getAppConfig();
+    setAppConfig({ ...config, modo_rapido: true });
+    ensureFreshData(() => renderPickMenu());
+}
+
+function stopFastMode() {
+    console.log('[FastMode] Desativando modo rápido...');
+    const config = getAppConfig();
+    setAppConfig({ ...config, modo_rapido: false });
+    renderMenu();
+}
+
+let labelTemplateOptions = [];
+let labelTemplatesLoaded = false;
+let labelPreviewResizeBound = false;
+let labelPreviewResizeTimer = null;
+const LABEL_DRAFT_STORAGE_KEY = 'labelGeneratorDraft';
+
+let labelGeneratorState = {
+    viewMode: 'edit',
+    activeLoteId: null,
+    nomeLote: '',
+    observacoes: '',
+    status: 'rascunho',
+    lastSavedAt: null,
+    template: '',
+    paperType: 'A4',
+    repeatToFill: false,
+    showGuides: true,
+    pageWidth: 0,
+    pageHeight: 0,
+    cols: 0,
+    rows: 0,
+    labelWidth: 0,
+    labelHeight: 0,
+    pitchX: 0,
+    pitchY: 0,
+    gapX: 0,
+    gapY: 0,
+    marginTop: 0,
+    marginLeft: 0,
+    offsetX: 0,
+    offsetY: 0,
+    items: []
+};
+
+async function quickActionGerarEtiquetas() {
+    toggleQuickActions();
+    if (!appData.products || appData.products.length === 0) {
+        app.innerHTML = `
+            <div class="dashboard-screen internal fade-in label-generator-screen">
+                ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+                <main class="label-generator-loading">
+                    <div class="loading-spinner"></div>
+                    <strong>Carregando produtos...</strong>
+                </main>
+            </div>
+        `;
+        await Promise.all([
+            ensureProdutosLoaded(true),
+            ensureLabelTemplatesLoaded(true)
+        ]);
+    } else {
+        await ensureLabelTemplatesLoaded();
+    }
+    loadLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+const QUOTE_STATUSES = ['Rascunho', 'Aguardando aprovação', 'Aprovado', 'Cancelado', 'Expirado'];
+const CLIENT_QUOTES_STORAGE_KEY = 'clientQuotes';
+const CLIENT_QUOTES_COMPANY_STORAGE_KEY = 'clientQuotesCompany';
+
+let clientQuotesState = {
+    loaded: false,
+    quotes: [],
+    company: null,
+    activeQuoteId: null
+};
+
+const DEFAULT_QUOTE_COMPANY = {
+    id: 'dy-autoparts',
+    name: 'DY Auto Parts',
+    legal_name: 'DY Auto Parts',
+    cnpj: '',
+    email: '',
+    phone: '',
+    whatsapp: '',
+    logo_url: ''
+};
+
+function quickActionOrcamentoCliente() {
+    toggleQuickActions();
+    renderClientQuotesList();
+}
+
+function quoteEscape(value) {
+    if (typeof escapeKitAttribute === 'function') return escapeKitAttribute(value);
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function quoteInlineArg(value) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+}
+
+function quoteMoney(value) {
+    return formatPrice(Number(value) || 0);
+}
+
+function quoteDateInput(daysFromNow = 0) {
+    const date = new Date();
+    date.setDate(date.getDate() + daysFromNow);
+    return date.toISOString().slice(0, 10);
+}
+
+function quoteDateDisplay(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('pt-BR');
+}
+
+function getClientQuotesLocal() {
+    try {
+        return JSON.parse(localStorage.getItem(CLIENT_QUOTES_STORAGE_KEY) || '[]');
+    } catch (error) {
+        console.warn('[ORCAMENTO CLIENTE] Cache local inválido:', error);
+        return [];
+    }
+}
+
+function setClientQuotesLocal(quotes) {
+    localStorage.setItem(CLIENT_QUOTES_STORAGE_KEY, JSON.stringify(quotes || []));
+}
+
+function getQuoteCompanyLocal() {
+    try {
+        return JSON.parse(localStorage.getItem(CLIENT_QUOTES_COMPANY_STORAGE_KEY) || 'null') || DEFAULT_QUOTE_COMPANY;
+    } catch (error) {
+        return DEFAULT_QUOTE_COMPANY;
+    }
+}
+
+function normalizeQuoteItem(item = {}) {
+    const requestedQty = Math.max(0, Number(item.requested_qty ?? item.qty ?? 0) || 0);
+    const unitPrice = Math.max(0, Number(item.unit_price ?? item.price ?? 0) || 0);
+    return {
+        id_interno: String(item.id_interno || '').trim(),
+        item_code: String(item.item_code || item.code || item.id_interno || '').trim(),
+        description: String(item.description || item.descricao_completa || item.name || '').trim(),
+        requested_qty: requestedQty,
+        unit_price: unitPrice,
+        total_price: Number((requestedQty * unitPrice).toFixed(2))
+    };
+}
+
+function normalizeQuote(row = {}) {
+    const items = Array.isArray(row.items) ? row.items.map(normalizeQuoteItem) : [];
+    const subtotal = Number(row.subtotal ?? items.reduce((sum, item) => sum + item.total_price, 0)) || 0;
+    const discount = Number(row.discount ?? 0) || 0;
+    const freight = Number(row.freight ?? 0) || 0;
+    return {
+        id_interno: String(row.id_interno || row.id || `quote_${Date.now()}`),
+        quote_number: String(row.quote_number || ''),
+        created_at: row.created_at || new Date().toISOString(),
+        expires_at: row.expires_at || quoteDateInput(7),
+        status: QUOTE_STATUSES.includes(row.status) ? row.status : 'Rascunho',
+        company_id: row.company_id || DEFAULT_QUOTE_COMPANY.id,
+        client_name: row.client_name || '',
+        client_cep: row.client_cep || '',
+        client_address: row.client_address || '',
+        client_number: row.client_number || '',
+        client_complement: row.client_complement || '',
+        client_neighborhood: row.client_neighborhood || '',
+        client_city: row.client_city || '',
+        client_state: row.client_state || '',
+        user_name: row.user_name || localStorage.getItem('currentUser') || '',
+        payment_method: row.payment_method || '',
+        notes: row.notes || '',
+        availability_notes: row.availability_notes || '',
+        subtotal,
+        discount,
+        freight,
+        total: Number(row.total ?? (subtotal - discount + freight)) || 0,
+        items
+    };
+}
+
+async function ensureClientQuotesLoaded(force = false) {
+    if (clientQuotesState.loaded && !force) return clientQuotesState;
+
+    let quotes = getClientQuotesLocal().map(normalizeQuote);
+    let company = getQuoteCompanyLocal();
+
+    try {
+        if (window.supabaseClientReady) await window.supabaseClientReady;
+        const client = window.supabaseClient;
+        if (client?.from) {
+            const [{ data: companyRows, error: companyError }, { data: quoteRows, error: quoteError }] = await Promise.all([
+                client.from('companies').select('*').limit(1),
+                client.from('client_quotes').select('*').order('created_at', { ascending: false })
+            ]);
+
+            if (!companyError && Array.isArray(companyRows) && companyRows.length) {
+                company = { ...DEFAULT_QUOTE_COMPANY, ...companyRows[0] };
+                localStorage.setItem(CLIENT_QUOTES_COMPANY_STORAGE_KEY, JSON.stringify(company));
+            }
+
+            if (!quoteError && Array.isArray(quoteRows)) {
+                quotes = quoteRows.map(normalizeQuote);
+                setClientQuotesLocal(quotes);
+            } else if (quoteError) {
+                console.warn('[ORCAMENTO CLIENTE] Usando cache local. Supabase:', quoteError.message);
+            }
+        }
+    } catch (error) {
+        console.warn('[ORCAMENTO CLIENTE] Supabase indisponível, usando localStorage:', error?.message || error);
+    }
+
+    clientQuotesState = { ...clientQuotesState, loaded: true, quotes, company };
+    return clientQuotesState;
+}
+
+function buildNextQuoteNumber(quotes = clientQuotesState.quotes) {
+    const year = new Date().getFullYear();
+    const prefix = `ORC-${year}-`;
+    const max = (quotes || []).reduce((acc, quote) => {
+        const number = String(quote.quote_number || '');
+        if (!number.startsWith(prefix)) return acc;
+        return Math.max(acc, Number(number.slice(prefix.length)) || 0);
+    }, 0);
+    return `${prefix}${String(max + 1).padStart(4, '0')}`;
+}
+
+function getQuoteById(id) {
+    return (clientQuotesState.quotes || []).find(quote => String(quote.id_interno) === String(id));
+}
+
+async function saveClientQuote(quote) {
+    const normalized = normalizeQuote(quote);
+    const localQuotes = clientQuotesState.quotes.filter(item => item.id_interno !== normalized.id_interno);
+    clientQuotesState.quotes = [normalized, ...localQuotes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setClientQuotesLocal(clientQuotesState.quotes);
+
+    try {
+        if (window.supabaseClientReady) await window.supabaseClientReady;
+        const client = window.supabaseClient;
+        if (client?.from) {
+            const { error } = await client
+                .from('client_quotes')
+                .upsert(normalized, { onConflict: 'id_interno' });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.warn('[ORCAMENTO CLIENTE] Salvo localmente. Falha Supabase:', error?.message || error);
+    }
+
+    return normalized;
+}
+
+function getQuoteStatusClass(status) {
+    if (status === 'Aprovado') return 'approved';
+    if (status === 'Cancelado' || status === 'Expirado') return 'danger';
+    if (status === 'Aguardando aprovação') return 'pending';
+    return 'draft';
+}
+
+function renderQuoteStatusBadge(status) {
+    return `<span class="quote-status-badge ${getQuoteStatusClass(status)}">${quoteEscape(status)}</span>`;
+}
+
+async function renderClientQuotesList(push = true) {
+    if (push) pushNav('client-quotes');
+    currentScreen = 'client-quotes';
+    document.body.classList.remove('menu-active');
+    await ensureClientQuotesLoaded();
+    const currentUser = localStorage.getItem('currentUser');
+    const quotes = clientQuotesState.quotes || [];
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in client-quotes-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            <main class="client-quotes-workspace">
+                <header class="client-quotes-head">
+                    <div>
+                        <p>CLIENTES</p>
+                        <h1>Orçamento cliente</h1>
+                    </div>
+                    <button class="client-quote-primary" type="button" onclick="renderClientQuoteForm()">
+                        <span class="material-symbols-rounded">add</span>
+                        Novo orçamento
+                    </button>
+                </header>
+
+                <section class="client-quotes-table-shell">
+                    ${quotes.length ? `
+                        <div class="client-quotes-table">
+                            <div class="client-quotes-row head">
+                                <span>Número</span>
+                                <span>Cliente</span>
+                                <span>Data</span>
+                                <span>Total</span>
+                                <span>Status</span>
+                            </div>
+                            ${quotes.map(quote => `
+                                <button class="client-quotes-row" type="button" onclick="renderClientQuoteDetail('${quoteInlineArg(quote.id_interno)}')">
+                                    <span><strong>${quoteEscape(quote.quote_number)}</strong></span>
+                                    <span>${quoteEscape(quote.client_name || 'Cliente sem nome')}</span>
+                                    <span>${quoteDateDisplay(quote.created_at)}</span>
+                                    <span>${quoteMoney(quote.total)}</span>
+                                    <span>${renderQuoteStatusBadge(quote.status)}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div class="client-quotes-empty">
+                            <span class="material-symbols-rounded">request_quote</span>
+                            <strong>Nenhum orçamento cliente criado</strong>
+                            <p>Use este módulo para orçamento em papel timbrado. A cotação de fornecedores continua em Compras.</p>
+                            <button class="client-quote-primary" type="button" onclick="renderClientQuoteForm()">Criar primeiro orçamento</button>
+                        </div>
+                    `}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+function createBlankQuote() {
+    const now = new Date().toISOString();
+    return normalizeQuote({
+        id_interno: `quote_${Date.now()}`,
+        quote_number: buildNextQuoteNumber(),
+        created_at: now,
+        expires_at: quoteDateInput(7),
+        status: 'Rascunho',
+        company_id: clientQuotesState.company?.id || DEFAULT_QUOTE_COMPANY.id,
+        user_name: localStorage.getItem('currentUser') || '',
+        payment_method: 'PIX',
+        notes: 'Frete por conta do cliente. Cotação válida por 7 dias.',
+        availability_notes: '',
+        items: [normalizeQuoteItem({ requested_qty: 1 })]
+    });
+}
+
+async function renderClientQuoteForm(id = null) {
+    await ensureClientQuotesLoaded();
+    const currentUser = localStorage.getItem('currentUser');
+    const quote = id ? getQuoteById(id) : createBlankQuote();
+    clientQuotesState.activeQuoteId = quote.id_interno;
+    clientQuotesState.formDraft = JSON.parse(JSON.stringify(quote));
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in client-quotes-screen">
+            ${getTopBarHTML(currentUser, id ? `renderClientQuoteDetail('${quoteInlineArg(id)}')` : 'renderClientQuotesList()')}
+            <main class="client-quotes-workspace">
+                <header class="client-quotes-head compact">
+                    <div>
+                        <p>${id ? 'EDITAR' : 'NOVO'}</p>
+                        <h1>${quoteEscape(quote.quote_number)}</h1>
+                    </div>
+                    <div class="client-quote-actions">
+                        <button class="client-quote-secondary" type="button" onclick="renderClientQuotesList()">Cancelar</button>
+                        <button class="client-quote-primary" type="button" onclick="submitClientQuoteForm()">
+                            <span class="material-symbols-rounded">save</span>
+                            Salvar
+                        </button>
+                    </div>
+                </header>
+
+                <form id="client-quote-form" class="client-quote-form" onsubmit="event.preventDefault(); submitClientQuoteForm();">
+                    <input type="hidden" name="id_interno" value="${quoteEscape(quote.id_interno)}">
+                    <input type="hidden" name="quote_number" value="${quoteEscape(quote.quote_number)}">
+                    <input type="hidden" name="created_at" value="${quoteEscape(quote.created_at)}">
+
+                    <section class="client-quote-section">
+                        <div class="client-quote-section-title">Cliente</div>
+                        <div class="client-quote-grid four">
+                            ${renderClientQuoteField('client_name', 'Nome do cliente', quote.client_name, 'text', true)}
+                            ${renderClientQuoteField('client_cep', 'CEP', quote.client_cep)}
+                            ${renderClientQuoteField('client_address', 'Endereço', quote.client_address, 'text', true)}
+                            ${renderClientQuoteField('client_number', 'Número', quote.client_number)}
+                            ${renderClientQuoteField('client_complement', 'Complemento', quote.client_complement)}
+                            ${renderClientQuoteField('client_neighborhood', 'Bairro', quote.client_neighborhood)}
+                            ${renderClientQuoteField('client_city', 'Cidade', quote.client_city)}
+                            ${renderClientQuoteField('client_state', 'UF', quote.client_state)}
+                        </div>
+                    </section>
+
+                    <section class="client-quote-section">
+                        <div class="client-quote-section-title">Condições</div>
+                        <div class="client-quote-grid four">
+                            ${renderClientQuoteField('user_name', 'Preparado por', quote.user_name)}
+                            ${renderClientQuoteField('expires_at', 'Validade', String(quote.expires_at).slice(0, 10), 'date')}
+                            <label class="client-quote-field">
+                                <span>Status</span>
+                                <select name="status">
+                                    ${QUOTE_STATUSES.map(status => `<option value="${status}" ${quote.status === status ? 'selected' : ''}>${status}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="client-quote-field">
+                                <span>Pagamento</span>
+                                <select name="payment_method">
+                                    ${['PIX', 'Cartão', 'Boleto', 'Dinheiro', 'Transferência'].map(method => `<option value="${method}" ${quote.payment_method === method ? 'selected' : ''}>${method}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="client-quote-section">
+                        <div class="client-quote-section-title with-action">
+                            <span>Itens</span>
+                            <button class="client-quote-secondary" type="button" onclick="addClientQuoteItemRow()">
+                                <span class="material-symbols-rounded">add</span>
+                                Item
+                            </button>
+                        </div>
+                        <div class="client-quote-items" id="client-quote-items">
+                            ${(quote.items.length ? quote.items : [normalizeQuoteItem({ requested_qty: 1 })]).map((item, index) => renderClientQuoteItemRow(item, index)).join('')}
+                        </div>
+                    </section>
+
+                    <section class="client-quote-bottom-grid">
+                        <div class="client-quote-section">
+                            <div class="client-quote-section-title">Anotações</div>
+                            <label class="client-quote-field">
+                                <span>Disponibilidade / reposição</span>
+                                <textarea name="availability_notes" rows="4">${quoteEscape(quote.availability_notes)}</textarea>
+                            </label>
+                            <label class="client-quote-field">
+                                <span>Condições padrão</span>
+                                <textarea name="notes" rows="5">${quoteEscape(quote.notes)}</textarea>
+                            </label>
+                        </div>
+                        <div class="client-quote-section client-quote-total-box">
+                            <div class="client-quote-section-title">Totais</div>
+                            <label class="client-quote-field">
+                                <span>Subtotal</span>
+                                <input id="quote-subtotal" name="subtotal" type="number" step="0.01" value="${quote.subtotal.toFixed(2)}" readonly>
+                            </label>
+                            ${renderClientQuoteField('discount', 'Desconto', quote.discount.toFixed(2), 'number')}
+                            ${renderClientQuoteField('freight', 'Frete', quote.freight.toFixed(2), 'number')}
+                            <div class="client-quote-grand-total">
+                                <span>Valor total</span>
+                                <strong id="quote-total-display">${quoteMoney(quote.total)}</strong>
+                                <input id="quote-total" name="total" type="hidden" value="${quote.total.toFixed(2)}">
+                            </div>
+                        </div>
+                    </section>
+                </form>
+            </main>
+        </div>
+    `;
+
+    updateClientQuoteTotals();
+}
+
+function renderClientQuoteField(name, label, value = '', type = 'text', wide = false) {
+    return `
+        <label class="client-quote-field ${wide ? 'wide' : ''}">
+            <span>${label}</span>
+            <input name="${name}" type="${type}" ${type === 'number' ? 'step="0.01"' : ''} value="${quoteEscape(value)}" ${['discount', 'freight'].includes(name) ? 'oninput="updateClientQuoteTotals()"' : ''}>
+        </label>
+    `;
+}
+
+function renderClientQuoteItemRow(item, index) {
+    return `
+        <div class="client-quote-item-row" data-index="${index}">
+            <input name="item_code_${index}" value="${quoteEscape(item.item_code)}" placeholder="Código" onchange="applyClientQuoteProduct(${index}, this.value)">
+            <input name="description_${index}" value="${quoteEscape(item.description)}" placeholder="Descrição do produto">
+            <input name="requested_qty_${index}" type="number" min="0" step="1" value="${Number(item.requested_qty) || 0}" oninput="updateClientQuoteTotals()">
+            <input name="unit_price_${index}" type="number" min="0" step="0.01" value="${Number(item.unit_price || 0).toFixed(2)}" oninput="updateClientQuoteTotals()">
+            <input name="total_price_${index}" type="text" value="${quoteMoney(item.total_price)}" readonly>
+            <button type="button" onclick="removeClientQuoteItemRow(${index})" title="Remover item">
+                <span class="material-symbols-rounded">delete</span>
+            </button>
+        </div>
+    `;
+}
+
+function addClientQuoteItemRow() {
+    const container = document.getElementById('client-quote-items');
+    if (!container) return;
+    const index = container.querySelectorAll('.client-quote-item-row').length;
+    container.insertAdjacentHTML('beforeend', renderClientQuoteItemRow(normalizeQuoteItem({ requested_qty: 1 }), index));
+    updateClientQuoteTotals();
+}
+
+function removeClientQuoteItemRow(index) {
+    const row = document.querySelector(`.client-quote-item-row[data-index="${index}"]`);
+    if (row) row.remove();
+    reindexClientQuoteRows();
+    updateClientQuoteTotals();
+}
+
+function reindexClientQuoteRows() {
+    document.querySelectorAll('.client-quote-item-row').forEach((row, index) => {
+        row.dataset.index = index;
+        row.querySelectorAll('input').forEach(input => {
+            const base = input.name.replace(/_\d+$/, '');
+            input.name = `${base}_${index}`;
+        });
+        const button = row.querySelector('button');
+        if (button) button.setAttribute('onclick', `removeClientQuoteItemRow(${index})`);
+        const codeInput = row.querySelector('[name^="item_code_"]');
+        if (codeInput) codeInput.setAttribute('onchange', `applyClientQuoteProduct(${index}, this.value)`);
+    });
+}
+
+function updateClientQuoteTotals() {
+    const form = document.getElementById('client-quote-form');
+    if (!form) return;
+    let subtotal = 0;
+    form.querySelectorAll('.client-quote-item-row').forEach(row => {
+        const qty = Number(row.querySelector('[name^="requested_qty_"]')?.value || 0) || 0;
+        const unit = Number(row.querySelector('[name^="unit_price_"]')?.value || 0) || 0;
+        const total = qty * unit;
+        subtotal += total;
+        const totalInput = row.querySelector('[name^="total_price_"]');
+        if (totalInput) totalInput.value = quoteMoney(total);
+    });
+    const discount = Number(form.elements.discount?.value || 0) || 0;
+    const freight = Number(form.elements.freight?.value || 0) || 0;
+    const total = Math.max(0, subtotal - discount + freight);
+    document.getElementById('quote-subtotal')?.setAttribute('value', subtotal.toFixed(2));
+    if (document.getElementById('quote-subtotal')) document.getElementById('quote-subtotal').value = subtotal.toFixed(2);
+    if (document.getElementById('quote-total')) document.getElementById('quote-total').value = total.toFixed(2);
+    if (document.getElementById('quote-total-display')) document.getElementById('quote-total-display').textContent = quoteMoney(total);
+}
+
+async function applyClientQuoteProduct(index, code) {
+    const clean = String(code || '').trim();
+    if (!clean) return;
+    let product = null;
+    try {
+        product = (appData.products || []).find(p => [p.id_interno, p.ean, p.sku_fornecedor].some(value => String(value || '').toLowerCase() === clean.toLowerCase()));
+        if (!product) {
+            product = await DataClient.findProdutoByCodeSupabase(clean);
+            if (product && typeof upsertProductIntoLocalCache === 'function') upsertProductIntoLocalCache(product);
+        }
+    } catch (error) {
+        console.warn('[ORCAMENTO CLIENTE] Produto não encontrado:', error?.message || error);
+    }
+    if (!product) return;
+    const row = document.querySelector(`.client-quote-item-row[data-index="${index}"]`);
+    if (!row) return;
+    row.querySelector(`[name="item_code_${index}"]`).value = product.id_interno || clean;
+    row.querySelector(`[name="description_${index}"]`).value = product.descricao_completa || product.descricao_base || product.nome || '';
+    updateClientQuoteTotals();
+}
+
+function collectClientQuoteForm() {
+    const form = document.getElementById('client-quote-form');
+    if (!form) return null;
+    updateClientQuoteTotals();
+    const data = new FormData(form);
+    const items = [...form.querySelectorAll('.client-quote-item-row')].map((row, index) => normalizeQuoteItem({
+        item_code: data.get(`item_code_${index}`),
+        id_interno: data.get(`item_code_${index}`),
+        description: data.get(`description_${index}`),
+        requested_qty: data.get(`requested_qty_${index}`),
+        unit_price: data.get(`unit_price_${index}`)
+    })).filter(item => item.description || item.item_code);
+
+    return normalizeQuote({
+        id_interno: data.get('id_interno'),
+        quote_number: data.get('quote_number'),
+        created_at: data.get('created_at'),
+        expires_at: data.get('expires_at'),
+        status: data.get('status'),
+        company_id: clientQuotesState.company?.id || DEFAULT_QUOTE_COMPANY.id,
+        client_name: data.get('client_name'),
+        client_cep: data.get('client_cep'),
+        client_address: data.get('client_address'),
+        client_number: data.get('client_number'),
+        client_complement: data.get('client_complement'),
+        client_neighborhood: data.get('client_neighborhood'),
+        client_city: data.get('client_city'),
+        client_state: data.get('client_state'),
+        user_name: data.get('user_name'),
+        payment_method: data.get('payment_method'),
+        notes: data.get('notes'),
+        availability_notes: data.get('availability_notes'),
+        subtotal: data.get('subtotal'),
+        discount: data.get('discount'),
+        freight: data.get('freight'),
+        total: data.get('total'),
+        items
+    });
+}
+
+async function submitClientQuoteForm() {
+    const quote = collectClientQuoteForm();
+    if (!quote) return;
+    if (!quote.client_name.trim()) {
+        showToast('Informe o nome do cliente.');
+        return;
+    }
+    if (!quote.items.length) {
+        showToast('Adicione pelo menos um item.');
+        return;
+    }
+    await saveClientQuote(quote);
+    showToast('Orçamento salvo.');
+    renderClientQuoteDetail(quote.id_interno);
+}
+
+async function renderClientQuoteDetail(id) {
+    await ensureClientQuotesLoaded();
+    const currentUser = localStorage.getItem('currentUser');
+    const quote = getQuoteById(id);
+    if (!quote) {
+        showToast('Orçamento não encontrado.');
+        renderClientQuotesList();
+        return;
+    }
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in client-quotes-screen">
+            ${getTopBarHTML(currentUser, 'renderClientQuotesList()')}
+            <main class="client-quotes-workspace">
+                <header class="client-quotes-head compact">
+                    <div>
+                        <p>${quoteEscape(quote.status)}</p>
+                        <h1>${quoteEscape(quote.quote_number)}</h1>
+                    </div>
+                    <div class="client-quote-actions">
+                        <select class="client-quote-status-select" onchange="updateClientQuoteStatus('${quoteInlineArg(quote.id_interno)}', this.value)">
+                            ${QUOTE_STATUSES.map(status => `<option value="${status}" ${quote.status === status ? 'selected' : ''}>${status}</option>`).join('')}
+                        </select>
+                        <button class="client-quote-secondary" type="button" onclick="renderClientQuoteForm('${quoteInlineArg(quote.id_interno)}')">
+                            <span class="material-symbols-rounded">edit</span>
+                            Editar
+                        </button>
+                        <button class="client-quote-primary" type="button" onclick="generateQuotePDFById('${quoteInlineArg(quote.id_interno)}')">
+                            <span class="material-symbols-rounded">picture_as_pdf</span>
+                            Baixar PDF
+                        </button>
+                    </div>
+                </header>
+
+                <section class="client-quote-detail-card">
+                    <div class="client-quote-detail-top">
+                        <div>
+                            <span>Preparado para</span>
+                            <strong>${quoteEscape(quote.client_name)}</strong>
+                            <p>${quoteEscape([quote.client_address, quote.client_number, quote.client_complement, quote.client_neighborhood, quote.client_city, quote.client_state, quote.client_cep].filter(Boolean).join(', '))}</p>
+                        </div>
+                        <div>
+                            ${renderQuoteStatusBadge(quote.status)}
+                            <strong>${quoteMoney(quote.total)}</strong>
+                            <p>Emissão ${quoteDateDisplay(quote.created_at)} | Validade ${quoteDateDisplay(quote.expires_at)}</p>
+                        </div>
+                    </div>
+                    <div class="client-quote-detail-items">
+                        <div class="client-quote-detail-row head"><span>Item</span><span>Descrição</span><span>Qtd</span><span>Unit.</span><span>Total</span></div>
+                        ${quote.items.map(item => `
+                            <div class="client-quote-detail-row">
+                                <span>${quoteEscape(item.item_code || item.id_interno)}</span>
+                                <span>${quoteEscape(item.description)}</span>
+                                <span>${Number(item.requested_qty)}</span>
+                                <span>${quoteMoney(item.unit_price)}</span>
+                                <span>${quoteMoney(item.total_price)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="client-quote-detail-footer">
+                        <div>
+                            <span>Disponibilidade / reposição</span>
+                            <p>${quoteEscape(quote.availability_notes || 'Sem observações.')}</p>
+                            <span>Condições</span>
+                            <p>${quoteEscape(quote.notes || 'Sem condições adicionais.')}</p>
+                        </div>
+                        <div class="client-quote-summary">
+                            <span>Subtotal <strong>${quoteMoney(quote.subtotal)}</strong></span>
+                            <span>Desconto <strong>${quoteMoney(quote.discount)}</strong></span>
+                            <span>Frete <strong>${quoteMoney(quote.freight)}</strong></span>
+                            <b>Total ${quoteMoney(quote.total)}</b>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+async function updateClientQuoteStatus(id, status) {
+    const quote = getQuoteById(id);
+    if (!quote || !QUOTE_STATUSES.includes(status)) return;
+    const saved = await saveClientQuote({ ...quote, status });
+    showToast('Status atualizado.');
+    renderClientQuoteDetail(saved.id_interno);
+}
+
+async function generateQuotePDFById(id) {
+    await ensureClientQuotesLoaded();
+    const quote = getQuoteById(id);
+    if (!quote) return showToast('Orçamento não encontrado.');
+    await generateQuotePDF({ ...quote, company: clientQuotesState.company || DEFAULT_QUOTE_COMPANY });
+}
+
+async function generateQuotePDF(quote) {
+    try {
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) throw new Error('jsPDF não carregado');
+        const doc = new jsPDF();
+        const company = { ...DEFAULT_QUOTE_COMPANY, ...(quote.company || clientQuotesState.company || {}) };
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const primary = [225, 6, 0];
+        const dark = [30, 30, 30];
+        const money = value => quoteMoney(value).replace('R$ ', 'R$ ');
+        const split = (text, width) => doc.splitTextToSize(String(text || ''), width);
+
+        doc.setFillColor(...primary);
+        doc.rect(0, 0, pageWidth, 8, 'F');
+        doc.setFillColor(...primary);
+        doc.roundedRect(15, 16, 22, 22, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('DY', 26, 30, { align: 'center' });
+
+        doc.setTextColor(...dark);
+        doc.setFontSize(18);
+        doc.text(company.name || 'DY Auto Parts', 42, 22);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(75, 75, 82);
+        doc.text([company.cnpj && `CNPJ ${company.cnpj}`, company.email, company.phone || company.whatsapp].filter(Boolean).join(' | '), 42, 29);
+        doc.text(company.legal_name || company.name || '', 42, 35);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...dark);
+        doc.setFontSize(18);
+        doc.text('ORÇAMENTO', pageWidth - 15, 22, { align: 'right' });
+        doc.setTextColor(...primary);
+        doc.setFontSize(11);
+        doc.text(`Nº ${quote.quote_number}`, pageWidth - 15, 30, { align: 'right' });
+        doc.setDrawColor(225, 225, 230);
+        doc.line(15, 45, pageWidth - 15, 45);
+
+        doc.setDrawColor(...primary);
+        doc.setLineWidth(1);
+        doc.line(15, 56, 15, 91);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(...primary);
+        doc.text('PREPARADO PARA:', 19, 58);
+        doc.setTextColor(...dark);
+        doc.setFontSize(12);
+        doc.text(quote.client_name || '-', 19, 66);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`A/C ${quote.user_name || '-'}`, 19, 72);
+        const address = [quote.client_address, quote.client_number, quote.client_complement, quote.client_neighborhood, quote.client_city, quote.client_state, quote.client_cep].filter(Boolean).join(', ');
+        doc.text(split(address, 105), 19, 78);
+
+        doc.setFillColor(248, 248, 250);
+        doc.roundedRect(pageWidth - 74, 55, 59, 32, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(90, 90, 98);
+        doc.setFontSize(8);
+        doc.text('EMISSÃO', pageWidth - 68, 64);
+        doc.text('VALIDADE', pageWidth - 68, 78);
+        doc.setTextColor(...dark);
+        doc.setFontSize(10);
+        doc.text(quoteDateDisplay(quote.created_at), pageWidth - 22, 64, { align: 'right' });
+        doc.text(quoteDateDisplay(quote.expires_at), pageWidth - 22, 78, { align: 'right' });
+
+        doc.autoTable({
+            startY: 100,
+            head: [['Item', 'Descrição', 'Qtd', 'V. Unit', 'Total']],
+            body: quote.items.map(item => [
+                item.item_code || item.id_interno || '-',
+                item.description || '-',
+                String(item.requested_qty || 0),
+                money(item.unit_price),
+                money(item.total_price)
+            ]),
+            theme: 'grid',
+            headStyles: { fillColor: dark, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left' },
+            bodyStyles: { textColor: [38, 38, 42], lineColor: [232, 232, 236], lineWidth: 0.1 },
+            alternateRowStyles: { fillColor: [252, 252, 253] },
+            styles: { fontSize: 7.2, cellPadding: 1, overflow: 'linebreak' },
+            columnStyles: {
+                0: { cellWidth: 18 },
+                1: { cellWidth: 65 },
+                2: { cellWidth: 12, halign: 'center' },
+                3: { cellWidth: 22, halign: 'right' },
+                4: { cellWidth: 22, halign: 'right' }
+            },
+            margin: { top: 22, right: 15, bottom: 28, left: 15 }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 12;
+        let leftY = Math.min(finalY, pageHeight - 82);
+        if (quote.availability_notes) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(...primary);
+            doc.text('DISPONIBILIDADE / REPOSIÇÃO', 15, leftY);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(80, 80, 88);
+            doc.text(split(quote.availability_notes, 105), 15, leftY + 6);
+            leftY += 24;
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...dark);
+        doc.text('CONDIÇÕES', 15, leftY);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(90, 90, 98);
+        const pixNote = String(quote.payment_method || '').toUpperCase() === 'PIX'
+            ? `\nPagamento PIX. Chave: ${company.pix_key || company.cnpj || company.email || '-'}`
+            : '';
+        doc.text(split(`${quote.notes || ''}${pixNote}`, 105), 15, leftY + 6);
+
+        const totalX = pageWidth - 75;
+        const totalY = Math.min(finalY, pageHeight - 72);
+        doc.setFontSize(9);
+        [['Subtotal', quote.subtotal], ['(-) Desconto', quote.discount], ['(+) Frete', quote.freight]].forEach((row, idx) => {
+            const y = totalY + idx * 8;
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(90, 90, 98);
+            doc.text(row[0], totalX, y);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text(money(row[1]), pageWidth - 15, y, { align: 'right' });
+        });
+        doc.setFillColor(238, 238, 241);
+        doc.roundedRect(totalX - 2, totalY + 28, 62, 15, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(...dark);
+        doc.text('VALOR TOTAL', totalX + 2, totalY + 37);
+        doc.setTextColor(...primary);
+        doc.text(money(quote.total), pageWidth - 18, totalY + 37, { align: 'right' });
+
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page++) {
+            doc.setPage(page);
+            if (page > 1) {
+                doc.setFillColor(...primary);
+                doc.rect(15, 10, pageWidth - 30, 8, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(255, 255, 255);
+                doc.text(`${company.name || 'DY Auto Parts'} | Orçamento ${quote.quote_number}`, 18, 15.5);
+            }
+            doc.setDrawColor(...primary);
+            doc.line(15, pageHeight - 16, pageWidth - 15, pageHeight - 16);
+            doc.setFontSize(7.5);
+            doc.setTextColor(90, 90, 98);
+            doc.text('Frete por conta do cliente - Envio Sedex | Cotação válida por 7 dias', 15, pageHeight - 10);
+            doc.setFont('helvetica', 'bold');
+            doc.text(company.legal_name || company.name || '', pageWidth / 2, pageHeight - 10, { align: 'center' });
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Página ${page} de ${pageCount}`, pageWidth - 15, pageHeight - 10, { align: 'right' });
+        }
+
+        doc.save(`${quote.quote_number || 'orcamento-cliente'}.pdf`);
+        showToast('PDF gerado.');
+    } catch (error) {
+        console.error('[ORCAMENTO CLIENTE] Erro PDF:', error);
+        showToast('Falha ao gerar PDF.');
+    }
+}
+
+function pickFirstValue(source, keys = []) {
+    for (const key of keys) {
+        if (source?.[key] !== undefined && source?.[key] !== null && source?.[key] !== '') return source[key];
+    }
+    return undefined;
+}
+
+function saveLabelDraft() {
+    try {
+        const draft = {
+            template: labelGeneratorState.template,
+            paperType: labelGeneratorState.paperType,
+            repeatToFill: labelGeneratorState.repeatToFill,
+            showGuides: labelGeneratorState.showGuides,
+            offsetX: labelGeneratorState.offsetX,
+            offsetY: labelGeneratorState.offsetY,
+            activeLoteId: labelGeneratorState.activeLoteId || null,
+            nomeLote: labelGeneratorState.nomeLote || '',
+            observacoes: labelGeneratorState.observacoes || '',
+            status: labelGeneratorState.status || 'rascunho',
+            lastSavedAt: labelGeneratorState.lastSavedAt || null,
+            items: labelGeneratorState.items || []
+        };
+        localStorage.setItem(LABEL_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (error) {
+        console.warn('[ETIQUETAS] Nao foi possivel salvar rascunho:', error);
+    }
+}
+
+function loadLabelDraft() {
+    try {
+        const raw = localStorage.getItem(LABEL_DRAFT_STORAGE_KEY);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (!draft || typeof draft !== 'object') return;
+        const items = Array.isArray(draft.items) ? draft.items : [];
+        labelGeneratorState = {
+            ...labelGeneratorState,
+            repeatToFill: !!draft.repeatToFill,
+            showGuides: draft.showGuides !== false,
+            offsetX: Number(draft.offsetX) || 0,
+            offsetY: Number(draft.offsetY) || 0,
+            activeLoteId: draft.activeLoteId || null,
+            nomeLote: draft.nomeLote || '',
+            observacoes: draft.observacoes || '',
+            status: draft.status || 'rascunho',
+            lastSavedAt: draft.lastSavedAt || null,
+            items
+        };
+        if (draft.paperType) labelGeneratorState.paperType = normalizeLabelPaperType(draft.paperType);
+        if (draft.template && labelTemplateOptions.some(template => template.key === draft.template)) {
+            applyLabelTemplate(draft.template);
+        }
+    } catch (error) {
+        console.warn('[ETIQUETAS] Nao foi possivel carregar rascunho:', error);
+    }
+}
+
+function readTemplateCm(row, key) {
+    const value = pickFirstValue(row, [key]);
+    const parsed = Number(String(value ?? '').replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed * 10 : 0;
+}
+
+function normalizeLabelPaperType(value) {
+    const normalized = safeText(value || 'A4').toUpperCase();
+    if (normalized.includes('CARTA') || normalized.includes('LETTER')) return 'CARTA';
+    return 'A4';
+}
+
+function normalizeLabelTemplateRow(row) {
+    const code = String(pickFirstValue(row, ['codigo', 'code', 'modelo']) || '').trim();
+    const description = String(pickFirstValue(row, ['descricao', 'description', 'nome', 'label']) || code || 'Gabarito').trim();
+    const cols = Math.max(1, Math.floor(Number(row?.etiquetas_por_linha) || 0));
+    const rows = Math.max(1, Math.floor(Number(row?.linhas_por_pagina) || 0));
+    const labelWidth = readTemplateCm(row, 'largura_etiqueta_cm');
+    const labelHeight = readTemplateCm(row, 'altura_etiqueta_cm');
+    const pitchX = readTemplateCm(row, 'densidade_horizontal_cm');
+    const pitchY = readTemplateCm(row, 'densidade_vertical_cm');
+
+    return {
+        key: `db_${String(code || description).replace(/[^a-z0-9_-]/gi, '_')}`,
+        codigo: code,
+        descricao: description,
+        label: code ? `${code} - ${description}` : description,
+        paperType: normalizeLabelPaperType(row?.tipo_folha),
+        isDefault: row?.padrao === true,
+        source: 'supabase',
+        pageWidth: readTemplateCm(row, 'largura_pagina_cm'),
+        pageHeight: readTemplateCm(row, 'altura_pagina_cm'),
+        cols,
+        rows,
+        labelWidth,
+        labelHeight,
+        pitchX,
+        pitchY,
+        gapX: Math.max(0, pitchX - labelWidth),
+        gapY: Math.max(0, pitchY - labelHeight),
+        marginTop: readTemplateCm(row, 'margem_superior_cm'),
+        marginLeft: readTemplateCm(row, 'margem_lateral_cm'),
+        totalLabels: Math.max(1, Math.floor(Number(row?.total_etiquetas) || (cols * rows)))
+    };
+}
+
+async function ensureLabelTemplatesLoaded(force = false) {
+    if (labelTemplatesLoaded && !force) return labelTemplateOptions;
+    labelTemplateOptions = [];
+
+    try {
+        if (window.supabaseClientReady) await window.supabaseClientReady;
+        const client = window.supabaseClient;
+        if (!client?.from) {
+            labelTemplatesLoaded = true;
+            return labelTemplateOptions;
+        }
+
+        const { data, error } = await client
+            .from('label_templates')
+            .select('*')
+            .eq('ativo', true);
+
+        if (error) throw error;
+
+        const supabaseTemplates = (Array.isArray(data) ? data : [])
+            .map(normalizeLabelTemplateRow)
+            .filter(template => template.codigo && template.pageWidth && template.pageHeight && template.labelWidth && template.labelHeight && template.cols && template.rows);
+
+        if (supabaseTemplates.length) {
+            labelTemplateOptions = supabaseTemplates;
+            applyDefaultLabelTemplate();
+            console.log('[ETIQUETAS] Gabaritos carregados do Supabase:', supabaseTemplates.length);
+        } else {
+            console.warn('[ETIQUETAS] label_templates sem registros visiveis para o app.');
+        }
+    } catch (error) {
+        console.warn('[ETIQUETAS] Nao foi possivel carregar label_templates:', error?.message || error);
+    }
+
+    labelTemplatesLoaded = true;
+    return labelTemplateOptions;
+}
+
+function getLabelTemplatesByPaper() {
+    return labelTemplateOptions.filter(template => template.paperType === labelGeneratorState.paperType);
+}
+
+function applyDefaultLabelTemplate() {
+    const current = labelTemplateOptions.find(template => template.key === labelGeneratorState.template);
+    const defaultTemplate = labelTemplateOptions.find(template => template.isDefault) || labelTemplateOptions[0];
+    const selected = current || defaultTemplate;
+    if (!selected) return;
+    labelGeneratorState.paperType = selected.paperType;
+    applyLabelTemplate(selected.key, false);
+}
+
+function applyLabelTemplate(key, keepPaper = true) {
+    const template = labelTemplateOptions.find(item => item.key === key);
+    if (!template) return;
+    labelGeneratorState = {
+        ...labelGeneratorState,
+        ...template,
+        template: template.key,
+        paperType: keepPaper ? labelGeneratorState.paperType : template.paperType,
+        offsetX: labelGeneratorState.offsetX,
+        offsetY: labelGeneratorState.offsetY,
+        items: labelGeneratorState.items
+    };
+}
+
+function getLabelTemplateConfig() {
+    return {
+        paperType: labelGeneratorState.paperType,
+        pageWidth: Number(labelGeneratorState.pageWidth) || 0,
+        pageHeight: Number(labelGeneratorState.pageHeight) || 0,
+        cols: Math.max(1, Number(labelGeneratorState.cols) || 1),
+        rows: Math.max(1, Number(labelGeneratorState.rows) || 1),
+        labelWidth: Math.max(1, Number(labelGeneratorState.labelWidth) || 0),
+        labelHeight: Math.max(1, Number(labelGeneratorState.labelHeight) || 0),
+        pitchX: Number(labelGeneratorState.pitchX) || 0,
+        pitchY: Number(labelGeneratorState.pitchY) || 0,
+        gapX: Math.max(0, Number(labelGeneratorState.gapX) || 0),
+        gapY: Math.max(0, Number(labelGeneratorState.gapY) || 0),
+        marginTop: Number(labelGeneratorState.marginTop) || 0,
+        marginLeft: Number(labelGeneratorState.marginLeft) || 0,
+        offsetX: Number(labelGeneratorState.offsetX) || 0,
+        offsetY: Number(labelGeneratorState.offsetY) || 0
+    };
+}
+
+function getExpandedLabelItems(includeFill = true) {
+    const result = [];
+    (labelGeneratorState.items || []).forEach(item => {
+        const qty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+        const name = String(item.name || '').trim();
+        const idInterno = String(item.idInterno || item.id_interno || item.code || '').trim();
+        if (!name && !idInterno) return;
+        for (let i = 0; i < qty; i++) result.push({ name, idInterno });
+    });
+    if (includeFill && labelGeneratorState.repeatToFill && result.length) {
+        const cfg = getLabelTemplateConfig();
+        const totalCells = cfg.cols * cfg.rows;
+        const remaining = (totalCells - (result.length % totalCells)) % totalCells;
+        const source = [...result];
+        for (let i = 0; i < remaining; i++) result.push(source[i % source.length]);
+    }
+    return result;
+}
+
+function getLabelLoteDefaultName() {
+    const now = new Date();
+    const date = now.toLocaleDateString('pt-BR');
+    const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `Etiquetas ${date} ${time}`;
+}
+
+function formatLabelDateTime(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return `${date.toLocaleDateString('pt-BR')} ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function getLabelProductByInternalId(idInterno) {
+    const normalized = String(idInterno || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return (Array.isArray(appData.products) ? appData.products : [])
+        .find(product => getProductLabelId(product).toLowerCase() === normalized) || null;
+}
+
+function normalizeLabelLoteItemFromDb(item = {}) {
+    const idInterno = String(item.id_interno || item.codigo_barra || '').trim();
+    return {
+        productId: item.produto_id || idInterno,
+        idInterno,
+        name: String(item.texto_etiqueta || item.descricao_completa || item.descricao_base || '').trim(),
+        quantity: Math.max(1, Math.floor(Number(item.quantidade_etiquetas) || 1)),
+        ean: item.ean || '',
+        descricao_base: item.descricao_base || '',
+        descricao_completa: item.descricao_completa || '',
+        codigo_barra: item.codigo_barra || idInterno,
+        ordem: item.ordem || 1
+    };
+}
+
+function buildEtiquetaLotePayload() {
+    const items = (labelGeneratorState.items || [])
+        .map((item, index) => {
+            const idInterno = String(item.idInterno || item.id_interno || item.code || '').trim();
+            const product = getLabelProductByInternalId(idInterno);
+            const name = String(item.name || (product ? getProductLabelName(product) : '') || '').trim();
+            const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+            return {
+                productId: item.productId || product?.id || idInterno,
+                idInterno,
+                name,
+                quantity,
+                ean: item.ean || product?.ean || '',
+                descricao_base: item.descricao_base || product?.descricao_base || name,
+                descricao_completa: item.descricao_completa || product?.descricao_completa || name,
+                codigo_barra: item.codigo_barra || idInterno,
+                ordem: index + 1
+            };
+        })
+        .filter(item => item.quantity > 0 && (item.name || item.idInterno));
+
+    return {
+        lote: {
+            nome_lote: String(labelGeneratorState.nomeLote || '').trim() || getLabelLoteDefaultName(),
+            modelo_etiqueta: labelGeneratorState.template || '',
+            usuario_id: localStorage.getItem('currentUserId') || '',
+            usuario_nome: localStorage.getItem('currentUser') || '',
+            status: labelGeneratorState.status || 'rascunho',
+            observacoes: labelGeneratorState.observacoes || ''
+        },
+        items
+    };
+}
+
+function updateLabelLoteMeta(key, value) {
+    if (key === 'nomeLote') labelGeneratorState.nomeLote = value;
+    if (key === 'observacoes') labelGeneratorState.observacoes = value;
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    saveLabelDraft();
+}
+
+function applyEtiquetaLoteToState(lote, options = {}) {
+    const items = (lote?.itens || []).map(normalizeLabelLoteItemFromDb);
+    labelGeneratorState = {
+        ...labelGeneratorState,
+        activeLoteId: lote?.id || null,
+        nomeLote: lote?.nome_lote || '',
+        observacoes: lote?.observacoes || '',
+        status: lote?.status || 'rascunho',
+        lastSavedAt: lote?.atualizado_em || null,
+        items,
+        viewMode: options.preview ? 'preview' : 'edit'
+    };
+
+    if (lote?.modelo_etiqueta && labelTemplateOptions.some(template => template.key === lote.modelo_etiqueta)) {
+        applyLabelTemplate(lote.modelo_etiqueta);
+    }
+    saveLabelDraft();
+}
+
+function getProductLabelName(product) {
+    return String(product?.descricao_completa || product?.nome || product?.name || 'Produto sem nome').trim();
+}
+
+function getProductLabelCode(product) {
+    return getProductLabelId(product);
+}
+
+function getProductLabelId(product) {
+    return String(product?.id_interno || product?.col_A || product?.col_a || product?.id || '').trim();
+}
+
+function findLabelSelectedIndexById(productId) {
+    return (labelGeneratorState.items || []).findIndex(item => String(item.productId || '') === String(productId || ''));
+}
+
+function getFilteredLabelProducts() {
+    const query = safeText(labelGeneratorState.search || '');
+    const products = Array.isArray(appData.products) ? appData.products : [];
+    const source = query
+        ? products.filter(product => safeText([
+            getProductLabelName(product),
+            getProductLabelCode(product),
+            getProductLabelId(product),
+            product?.marca || ''
+        ].join(' ')).includes(query))
+        : products;
+
+    return source.slice(0, 80);
+}
+
+function compareLabelProductIds(a, b) {
+    const idA = String(a?.idInterno || a || '');
+    const idB = String(b?.idInterno || b || '');
+    const numA = Number((idA.match(/\d+/g) || ['0']).join(''));
+    const numB = Number((idB.match(/\d+/g) || ['0']).join(''));
+    if (Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB) return numA - numB;
+    return idA.localeCompare(idB, 'pt-BR', { numeric: true, sensitivity: 'base' });
+}
+
+function getLabelCatalogProducts() {
+    const map = new Map();
+    (Array.isArray(appData.products) ? appData.products : []).forEach(product => {
+        const idInterno = getProductLabelId(product);
+        const name = getProductLabelName(product);
+        if (!idInterno || !name) return;
+        map.set(idInterno.toLowerCase(), { name, idInterno, source: 'catalog' });
+    });
+    getSavedLabelProducts().forEach(product => {
+        const idInterno = String(product.idInterno || product.id_interno || product.code || '').trim();
+        const name = String(product.name || '').trim();
+        if (!idInterno || !name || map.has(idInterno.toLowerCase())) return;
+        map.set(idInterno.toLowerCase(), { name, idInterno, source: 'saved' });
+    });
+    return [...map.values()].sort(compareLabelProductIds);
+}
+
+function findLabelCatalogProductById(idInterno) {
+    const normalized = String(idInterno || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return getLabelCatalogProducts().find(product => product.idInterno.toLowerCase() === normalized) || null;
+}
+
+function findLabelCatalogProductByName(name) {
+    const normalized = safeText(name);
+    if (!normalized) return null;
+    return getLabelCatalogProducts().find(product => safeText(product.name) === normalized) || null;
+}
+
+function formatLabelMm(valueMm) {
+    return Number((Number(valueMm) || 0).toFixed(2));
+}
+
+function renderLabelMmField(key, label, step = 0.1) {
+    return `
+        <label>
+            <span>${label}</span>
+            <input type="number" step="${step}" value="${escapeKitAttribute(formatLabelMm(labelGeneratorState[key]))}" oninput="updateLabelOffsetMm('${key}', this.value)">
+        </label>
+    `;
+}
+
+function renderLabelGeneratorScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    const cfg = getLabelTemplateConfig();
+    const baseLabels = getExpandedLabelItems(false);
+    const labels = getExpandedLabelItems(true);
+    const hasTemplate = !!(cfg.pageWidth && cfg.pageHeight);
+    const totalCells = hasTemplate ? cfg.cols * cfg.rows : 0;
+    const pageCount = hasTemplate ? Math.max(1, Math.ceil(labels.length / totalCells)) : 0;
+    const remainingSlots = hasTemplate ? (labels.length ? ((totalCells - (labels.length % totalCells)) % totalCells) : totalCells) : 0;
+    const paperTemplates = getLabelTemplatesByPaper();
+    updateLabelPrintPageStyle(cfg);
+    const isPreview = labelGeneratorState.viewMode === 'preview';
+    const currentLoteName = String(labelGeneratorState.nomeLote || '').trim();
+    const loteStatus = labelGeneratorState.status || 'rascunho';
+    const savedLabel = labelGeneratorState.activeLoteId
+        ? `${loteStatus.toUpperCase()} | salvo ${formatLabelDateTime(labelGeneratorState.lastSavedAt)}`
+        : 'Novo lote ainda não salvo no Supabase';
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in label-generator-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            <main class="label-generator-workspace ${isPreview ? 'is-preview' : 'is-editor'}">
+                <div class="label-generator-page-head no-print">
+                    <div class="label-generator-heading">
+                        <span class="material-symbols-rounded">barcode</span>
+                        <div>
+                            <h1>ETIQUETAS PRODUTOS</h1>
+                            <p>Geração de etiquetas profissional com gabaritos Pimaco.</p>
+                        </div>
+                    </div>
+                    <div class="label-page-actions">
+                        <button type="button" class="label-tool-btn secondary" onclick="renderLabelHistoryScreen()">
+                            <span class="material-symbols-rounded">history</span>
+                            Histórico
+                        </button>
+                        <button type="button" class="label-tool-btn secondary" onclick="saveCurrentEtiquetaLote()">
+                            <span class="material-symbols-rounded">save</span>
+                            Salvar Lote
+                        </button>
+                        ${isPreview ? `
+                            <button type="button" class="label-tool-btn secondary" onclick="editLabelList()">
+                                <span class="material-symbols-rounded">edit</span>
+                                Editar lista
+                            </button>
+                            <button type="button" class="label-tool-btn secondary" onclick="duplicateCurrentEtiquetaLote()">
+                                <span class="material-symbols-rounded">content_copy</span>
+                                Duplicar Lote
+                            </button>
+                            <button type="button" class="label-tool-btn" onclick="reprintCurrentEtiquetaLote()">
+                                <span class="material-symbols-rounded">print</span>
+                                Reimprimir
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+
+                ${isPreview ? `
+                    <section class="label-preview-panel label-generator-card">
+                        <div class="label-preview-head no-print">
+                            <div>
+                                <div class="label-section-title">Preview da folha</div>
+                                <p class="label-helper-text">${labels.length} etiqueta(s) | ${hasTemplate ? `${totalCells} por folha | ${pageCount} folha(s)` : 'Sem gabarito selecionado'}</p>
+                            </div>
+                            <div class="label-preview-options">
+                                <label class="label-repeat-option">
+                                    <input type="checkbox" ${labelGeneratorState.repeatToFill ? 'checked' : ''} onchange="toggleLabelRepeatToFill(this.checked)">
+                                    <span>Repetir até preencher</span>
+                                </label>
+                                <label class="label-repeat-option">
+                                    <input type="checkbox" ${labelGeneratorState.showGuides ? 'checked' : ''} onchange="toggleLabelGuides(this.checked)">
+                                    <span>Mostrar guias</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="label-print-area" class="label-print-area ${labelGeneratorState.showGuides ? '' : 'hide-guides'}">
+                            ${renderLabelPrintPages(labels, cfg)}
+                        </div>
+                    </section>
+                ` : `
+                    <div class="label-editor-layout">
+                        <aside class="label-editor-side no-print">
+                            <div class="label-generator-card label-lote-card">
+                                <div class="label-section-title">Lote salvo</div>
+                                <div class="label-config-grid one">
+                                    <label>
+                                        <span>Nome do lote</span>
+                                        <input type="text" value="${escapeKitAttribute(currentLoteName)}" placeholder="${escapeKitAttribute(getLabelLoteDefaultName())}" oninput="updateLabelLoteMeta('nomeLote', this.value)">
+                                    </label>
+                                    <label>
+                                        <span>Observações</span>
+                                        <input type="text" value="${escapeKitAttribute(labelGeneratorState.observacoes || '')}" placeholder="Opcional" oninput="updateLabelLoteMeta('observacoes', this.value)">
+                                    </label>
+                                </div>
+                                <p class="label-helper-text">${escapeKitAttribute(savedLabel)}</p>
+                            </div>
+
+                            <div class="label-generator-card">
+                                <div class="label-section-title">Gabarito</div>
+                                <div class="label-config-grid one">
+                                    <label>
+                                        <span>Tipo de folha</span>
+                                        <select onchange="setLabelPaperType(this.value)">
+                                            <option value="A4" ${labelGeneratorState.paperType === 'A4' ? 'selected' : ''}>A4</option>
+                                            <option value="CARTA" ${labelGeneratorState.paperType === 'CARTA' ? 'selected' : ''}>CARTA</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>Código Pimaco</span>
+                                        <select onchange="setLabelTemplatePreset(this.value)" ${paperTemplates.length ? '' : 'disabled'}>
+                                            ${paperTemplates.map(template => `<option value="${template.key}" ${labelGeneratorState.template === template.key ? 'selected' : ''}>${escapeKitAttribute(template.codigo)} - ${escapeKitAttribute(template.descricao || '')} (${template.totalLabels || (template.cols * template.rows)})</option>`).join('')}
+                                        </select>
+                                    </label>
+                                </div>
+                                <p class="label-helper-text">${paperTemplates.length ? escapeKitAttribute(labelGeneratorState.descricao || '') : 'Nenhum gabarito ativo encontrado para este tipo de folha.'}</p>
+                            </div>
+
+                            <div class="label-generator-card">
+                                <div class="label-section-title">Ajuste fino (mm)</div>
+                                <div class="label-config-grid two">
+                                    ${renderLabelMmField('offsetX', 'Offset X')}
+                                    ${renderLabelMmField('offsetY', 'Offset Y')}
+                                </div>
+                                <p class="label-helper-text">Corrija pequenos desvios da impressora sem alterar o gabarito.</p>
+                            </div>
+                        </aside>
+
+                        <section class="label-generator-card label-list-panel no-print">
+                            <div class="label-section-title">Lista de impressão</div>
+                            ${renderSavedLabelProductsDatalist()}
+                            <div class="label-items-table">
+                                <div class="label-items-head">
+                                    <span>Produto</span>
+                                    <span>ID interno</span>
+                                    <span>Qtd.</span>
+                                    <span></span>
+                                </div>
+                                <div id="label-items-list">
+                                    ${(labelGeneratorState.items || []).length ? (labelGeneratorState.items || []).map((item, index) => renderLabelItemRow(item, index)).join('') : renderLabelItemRow({ name: '', idInterno: '', quantity: 1 }, 0)}
+                                </div>
+                            </div>
+                            <div class="label-list-footer">
+                                <span><i></i> Rascunho salvo automaticamente</span>
+                                <button type="button" class="label-tool-btn" onclick="generateLabelPreview()">
+                                    <span class="material-symbols-rounded">visibility</span>
+                                    Gerar etiquetas
+                                </button>
+                            </div>
+                        </section>
+                    </div>
+                `}
+            </main>
+        </div>
+    `;
+
+    ensureLabelPreviewResizeHandler();
+    setTimeout(refreshLabelPreview, 0);
+}
+
+function renderLabelItemRow(item, index) {
+    const isLastRow = index >= ((labelGeneratorState.items || []).length || 1) - 1;
+    const canRemove = (labelGeneratorState.items || []).length > 1 && !isLastRow;
+    return `
+        <div class="label-item-row">
+            <input list="label-product-names" value="${escapeKitAttribute(item.name || '')}" placeholder="Produto" oninput="updateLabelItem(${index}, 'name', this.value)" onchange="applyLabelProductByName(${index}, this.value)" onkeydown="handleLabelRowKeydown(event, ${index})">
+            <input list="label-product-ids" value="${escapeKitAttribute(item.idInterno || item.id_interno || item.code || '')}" placeholder="ID interno" oninput="updateLabelItem(${index}, 'idInterno', this.value)" onchange="applyLabelProductById(${index}, this.value)" onkeydown="handleLabelRowKeydown(event, ${index})">
+            <input type="number" min="0" step="1" value="${Number(item.quantity) || 0}" oninput="updateLabelItem(${index}, 'quantity', this.value)" onkeydown="handleLabelRowKeydown(event, ${index})">
+            ${isLastRow ? `
+                <button type="button" class="label-row-add-btn" onclick="addLabelGeneratorRow()" title="Adicionar próxima linha">
+                    <span class="material-symbols-rounded">add</span>
+                </button>
+            ` : canRemove ? `
+                <button type="button" class="label-row-remove-btn" onclick="removeLabelGeneratorRow(${index})" title="Remover linha">
+                    <span class="material-symbols-rounded">delete</span>
+                </button>
+            ` : `<span class="label-row-action-spacer" aria-hidden="true"></span>`}
+        </div>
+    `;
+}
+
+function renderLabelProductOption(product) {
+    const productId = getProductLabelId(product);
+    const name = getProductLabelName(product);
+    const code = getProductLabelCode(product);
+    const selectedIndex = findLabelSelectedIndexById(productId);
+    const selectedItem = selectedIndex >= 0 ? labelGeneratorState.items[selectedIndex] : null;
+    const quantity = Math.max(0, Math.floor(Number(selectedItem?.quantity) || 0));
+    const encodedId = encodeURIComponent(productId);
+
+    return `
+        <div class="label-product-option ${selectedIndex >= 0 && quantity > 0 ? 'selected' : ''}">
+            <button type="button" onclick="addProductToLabels('${escapeKitAttribute(encodedId)}')">
+                <strong>${escapeKitAttribute(name)}</strong>
+                <small>ID: ${escapeKitAttribute(productId || '-')} | Código: ${escapeKitAttribute(code || '-')}</small>
+            </button>
+            <input type="number" min="0" step="1" value="${quantity}" title="Quantidade" oninput="setProductLabelQuantity('${escapeKitAttribute(encodedId)}', this.value)">
+        </div>
+    `;
+}
+
+function renderLabelPrintPages(labels, cfg) {
+    if (!cfg.pageWidth || !cfg.pageHeight) {
+        return `<div class="label-empty-products no-print">Selecione um gabarito ativo do Supabase para gerar o preview.</div>`;
+    }
+    const totalCells = cfg.cols * cfg.rows;
+    const pages = [];
+    const labelList = labels.length ? labels : [];
+    const pageCount = Math.max(1, Math.ceil(labelList.length / totalCells));
+    const previewScale = getLabelPreviewScale(cfg);
+
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+        const pageLabels = labelList.slice(pageIndex * totalCells, (pageIndex + 1) * totalCells);
+        const cells = [];
+        for (let i = 0; i < totalCells; i++) {
+            cells.push(renderPrintLabelCell(pageLabels[i], cfg));
+        }
+
+        pages.push(`
+            <div class="label-print-page-frame" style="
+                --label-preview-scale:${previewScale};
+                width: calc(${cfg.pageWidth}mm * ${previewScale});
+                height: calc(${cfg.pageHeight}mm * ${previewScale});
+            ">
+                <div class="label-print-page" style="width:${cfg.pageWidth}mm;height:${cfg.pageHeight}mm;">
+                    <div class="label-print-grid" style="
+                        grid-template-columns: repeat(${cfg.cols}, ${cfg.labelWidth}mm);
+                        grid-template-rows: repeat(${cfg.rows}, ${cfg.labelHeight}mm);
+                        gap: ${cfg.gapY}mm ${cfg.gapX}mm;
+                        transform: translate(${cfg.offsetX}mm, ${cfg.offsetY}mm);
+                        margin-left: ${cfg.marginLeft}mm;
+                        margin-top: ${cfg.marginTop}mm;
+                    ">
+                        ${cells.join('')}
+                    </div>
+                </div>
+            </div>
+        `);
+    }
+    return pages.join('');
+}
+
+function getLabelPreviewScale(cfg = getLabelTemplateConfig()) {
+    const mmToPx = 96 / 25.4;
+    const pageWidthPx = (Number(cfg.pageWidth) || 210) * mmToPx;
+    const panel = document.querySelector('.label-preview-panel');
+    let availableWidth = panel ? panel.clientWidth - 6 : 0;
+
+    if (!availableWidth && typeof window !== 'undefined') {
+        if (window.innerWidth >= 1180) {
+            availableWidth = window.innerWidth - 72 - 24 - 360 - 430 - 48;
+        } else {
+            availableWidth = window.innerWidth - 36;
+        }
+    }
+
+    const rawScale = availableWidth > 0 ? availableWidth / pageWidthPx : 1;
+    return Math.min(1, Math.max(0.34, Number(rawScale.toFixed(3))));
+}
+
+function ensureLabelPreviewResizeHandler() {
+    if (labelPreviewResizeBound) return;
+    labelPreviewResizeBound = true;
+    window.addEventListener('resize', () => {
+        if (!document.querySelector('.label-generator-screen')) return;
+        clearTimeout(labelPreviewResizeTimer);
+        labelPreviewResizeTimer = setTimeout(refreshLabelPreview, 120);
+    });
+}
+
+function renderPrintLabelCell(label, cfg) {
+    if (!label) return `<div class="print-label-cell empty" style="width:${cfg.labelWidth}mm;height:${cfg.labelHeight}mm;"></div>`;
+
+    const name = String(label.name || '');
+    const idInterno = String(label.idInterno || label.id_interno || label.code || '').trim();
+    const bottomPadding = cfg.labelHeight > 30 ? '1.5mm' : cfg.labelHeight > 20 ? '0.8mm' : '0.6mm';
+    const nameFontSize = cfg.labelHeight > 30 ? '12px' : cfg.labelHeight > 20 ? '11px' : '10px';
+    const codeFontSize = cfg.labelHeight > 30 ? '11px' : cfg.labelHeight > 20 ? '10.5px' : '10px';
+
+    return `
+        <div class="print-label-cell" style="
+            width:${cfg.labelWidth}mm;
+            height:${cfg.labelHeight}mm;
+            padding: 0.2mm 0.5mm ${bottomPadding} 0.5mm;
+        ">
+            <div class="print-label-name multi" style="font-size:${nameFontSize};">
+                ${escapeKitAttribute(name)}
+            </div>
+            <div class="print-label-barcode">
+                <canvas data-label-code="${escapeKitAttribute(idInterno)}"></canvas>
+            </div>
+            <div class="print-label-code" style="font-size:${codeFontSize};">
+                ${escapeKitAttribute(idInterno)}
+            </div>
+        </div>
+    `;
+}
+
+function updateLabelItem(index, field, value) {
+    if (!labelGeneratorState.items[index]) {
+        labelGeneratorState.items[index] = { name: '', idInterno: '', quantity: 1 };
+    }
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.items[index][field] = field === 'quantity' ? Math.max(0, Math.floor(Number(value) || 0)) : value;
+    if (field === 'name') {
+        const match = findLabelCatalogProductByName(value);
+        if (match) {
+            labelGeneratorState.items[index].idInterno = match.idInterno;
+            const row = document.querySelectorAll('.label-item-row')[index];
+            const idInput = row?.querySelector('input[list="label-product-ids"]');
+            if (idInput) idInput.value = match.idInterno;
+        }
+    }
+    if (field === 'idInterno') {
+        const match = findLabelCatalogProductById(value);
+        if (match) {
+            labelGeneratorState.items[index].name = match.name;
+            const row = document.querySelectorAll('.label-item-row')[index];
+            const nameInput = row?.querySelector('input[list="label-product-names"]');
+            if (nameInput) nameInput.value = match.name;
+        }
+    }
+    saveLabelDraft();
+    refreshLabelPreview();
+}
+
+function updateLabelOffsetMm(key, value) {
+    labelGeneratorState[key] = Number(value) || 0;
+    saveLabelDraft();
+    refreshLabelPreview();
+}
+
+function updateLabelProductSearch(value) {
+    labelGeneratorState.search = value;
+    const list = document.querySelector('.label-product-list');
+    if (list) {
+        const products = getFilteredLabelProducts();
+        list.innerHTML = products.length ? products.map(product => renderLabelProductOption(product)).join('') : `
+            <div class="label-empty-products">Nenhum produto encontrado.</div>
+        `;
+    }
+}
+
+function addProductToLabels(productIdEncoded) {
+    const productId = decodeURIComponent(String(productIdEncoded || ''));
+    const product = (appData.products || []).find(item => String(getProductLabelId(item)) === String(productId));
+    if (!product) return;
+    const index = findLabelSelectedIndexById(productId);
+    if (index >= 0) {
+        labelGeneratorState.items[index].quantity = Math.max(1, Math.floor(Number(labelGeneratorState.items[index].quantity) || 0) + 1);
+    } else {
+        labelGeneratorState.items.push({
+            productId,
+            name: getProductLabelName(product),
+            idInterno: getProductLabelId(product),
+            quantity: 1
+        });
+    }
+    renderLabelGeneratorScreen();
+}
+
+function setProductLabelQuantity(productIdEncoded, value) {
+    const productId = decodeURIComponent(String(productIdEncoded || ''));
+    const product = (appData.products || []).find(item => String(getProductLabelId(item)) === String(productId));
+    if (!product) return;
+    const quantity = Math.max(0, Math.floor(Number(value) || 0));
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    const index = findLabelSelectedIndexById(productId);
+    if (index >= 0) {
+        labelGeneratorState.items[index].quantity = quantity;
+    } else {
+        labelGeneratorState.items.push({
+            productId,
+            name: getProductLabelName(product),
+            idInterno: getProductLabelId(product),
+            quantity
+        });
+    }
+    refreshLabelPreview();
+    updateLabelProductSearch(labelGeneratorState.search || '');
+}
+
+function setLabelTemplatePreset(key) {
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    applyLabelTemplate(key);
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+function generateLabelPreview() {
+    const cfg = getLabelTemplateConfig();
+    const labels = getExpandedLabelItems(false);
+    if (!cfg.pageWidth || !cfg.pageHeight) {
+        showToast('Selecione um gabarito Pimaco antes de gerar.');
+        return;
+    }
+    if (!labels.length) {
+        showToast('Adicione pelo menos um produto para gerar etiquetas.');
+        return;
+    }
+    saveLabelDraft();
+    labelGeneratorState.viewMode = 'preview';
+    renderLabelGeneratorScreen();
+}
+
+function editLabelList() {
+    labelGeneratorState.viewMode = 'edit';
+    renderLabelGeneratorScreen();
+}
+
+function setLabelPaperType(value) {
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.paperType = normalizeLabelPaperType(value);
+    const templates = getLabelTemplatesByPaper();
+    const template = templates.find(item => item.isDefault) || templates[0];
+    if (template) {
+        applyLabelTemplate(template.key);
+    } else {
+        labelGeneratorState = {
+            ...labelGeneratorState,
+            template: '',
+            codigo: '',
+            descricao: '',
+            pageWidth: 0,
+            pageHeight: 0,
+            cols: 0,
+            rows: 0,
+            labelWidth: 0,
+            labelHeight: 0,
+            pitchX: 0,
+            pitchY: 0,
+            gapX: 0,
+            gapY: 0,
+            marginTop: 0,
+            marginLeft: 0
+        };
+    }
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+function toggleLabelRepeatToFill(checked) {
+    labelGeneratorState.repeatToFill = !!checked;
+    saveLabelDraft();
+    refreshLabelPreview();
+}
+
+function toggleLabelGuides(checked) {
+    labelGeneratorState.showGuides = !!checked;
+    saveLabelDraft();
+    const area = document.getElementById('label-print-area');
+    if (area) area.classList.toggle('hide-guides', !labelGeneratorState.showGuides);
+}
+
+function addLabelGeneratorRow() {
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.items.push({ name: '', idInterno: '', quantity: 1 });
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+function handleLabelRowKeydown(event, index) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (index === labelGeneratorState.items.length - 1) {
+        if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+        labelGeneratorState.items.push({ name: '', idInterno: '', quantity: 1 });
+    }
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+    setTimeout(() => {
+        const rows = document.querySelectorAll('.label-item-row');
+        rows[index + 1]?.querySelector('input')?.focus();
+    }, 0);
+}
+
+function getSavedLabelProducts() {
+    try {
+        return JSON.parse(localStorage.getItem('labelSavedProducts') || '[]').filter(item => item?.idInterno || item?.code);
+    } catch (error) {
+        return [];
+    }
+}
+
+function setSavedLabelProducts(products) {
+    localStorage.setItem('labelSavedProducts', JSON.stringify(products.slice(0, 500)));
+}
+
+function getLabelReusableProducts() {
+    return getLabelCatalogProducts();
+}
+
+function renderSavedLabelProductsDatalist() {
+    const products = getLabelReusableProducts();
+    const nameOptions = products
+        .map(item => `<option value="${escapeKitAttribute(item.name)}">${escapeKitAttribute(item.idInterno)}</option>`)
+        .join('');
+    const idOptions = products
+        .map(item => `<option value="${escapeKitAttribute(item.idInterno)}">${escapeKitAttribute(item.name)}</option>`)
+        .join('');
+    return `
+        <datalist id="label-product-names">${nameOptions}</datalist>
+        <datalist id="label-product-ids">${idOptions}</datalist>
+    `;
+}
+
+function applyLabelProductToRow(index, match) {
+    if (!match || !labelGeneratorState.items[index]) return;
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.items[index].name = match.name;
+    labelGeneratorState.items[index].idInterno = match.idInterno;
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+function applyLabelProductByName(index, name) {
+    applyLabelProductToRow(index, findLabelCatalogProductByName(name));
+}
+
+function applyLabelProductById(index, idInterno) {
+    applyLabelProductToRow(index, findLabelCatalogProductById(idInterno));
+}
+
+function saveLabelProductForReuse(index) {
+    const item = labelGeneratorState.items[index];
+    const name = String(item?.name || '').trim();
+    const idInterno = String(item?.idInterno || item?.id_interno || item?.code || '').trim();
+    if (!name || !idInterno) {
+        showToast('Informe Produto e ID interno para salvar.');
+        return;
+    }
+    const products = getSavedLabelProducts().filter(product => String(product.idInterno || product.code || '').trim().toLowerCase() !== idInterno.toLowerCase());
+    products.unshift({ name, idInterno });
+    setSavedLabelProducts(products);
+    showToast('Produto salvo para reutilização.');
+    renderLabelGeneratorScreen();
+}
+
+function removeLabelGeneratorRow(index) {
+    if (labelGeneratorState.activeLoteId) labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.items.splice(index, 1);
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+function clearLabelGeneratorRows() {
+    labelGeneratorState.items = [];
+    labelGeneratorState.activeLoteId = null;
+    labelGeneratorState.nomeLote = '';
+    labelGeneratorState.observacoes = '';
+    labelGeneratorState.status = 'rascunho';
+    labelGeneratorState.lastSavedAt = null;
+    saveLabelDraft();
+    renderLabelGeneratorScreen();
+}
+
+async function saveCurrentEtiquetaLote({ silent = false } = {}) {
+    const payload = buildEtiquetaLotePayload();
+    if (!payload.items.length) {
+        showToast('Adicione pelo menos um produto para salvar o lote.', 'warning');
+        return null;
+    }
+    if (!payload.lote.modelo_etiqueta) {
+        showToast('Selecione um gabarito antes de salvar o lote.', 'warning');
+        return null;
+    }
+
+    try {
+        if (!silent) showToast(labelGeneratorState.activeLoteId ? 'Atualizando lote de etiquetas...' : 'Salvando lote de etiquetas...');
+        const saved = labelGeneratorState.activeLoteId
+            ? await DataClient.atualizarEtiquetaLote(labelGeneratorState.activeLoteId, payload)
+            : await DataClient.salvarEtiquetaLote(payload);
+
+        labelGeneratorState.activeLoteId = saved.id;
+        labelGeneratorState.nomeLote = saved.nome_lote || payload.lote.nome_lote;
+        labelGeneratorState.observacoes = saved.observacoes || payload.lote.observacoes || '';
+        labelGeneratorState.status = saved.status || 'rascunho';
+        labelGeneratorState.lastSavedAt = saved.atualizado_em || new Date().toISOString();
+        saveLabelDraft();
+
+        if (!silent) {
+            await showAppAlert({
+                title: 'Lote salvo',
+                message: `${labelGeneratorState.nomeLote || 'Lote de etiquetas'} foi salvo no Supabase.`,
+                detail: 'Outro usuário autorizado já pode abrir pelo histórico e reimprimir.',
+                icon: 'check_circle'
+            });
+            renderLabelGeneratorScreen();
+        }
+        return saved;
+    } catch (error) {
+        console.error('[ETIQUETAS] falha ao salvar lote:', error);
+        showToast('Erro ao salvar lote: ' + (error.message || error), 'error');
+        return null;
+    }
+}
+
+async function reprintCurrentEtiquetaLote() {
+    const saved = labelGeneratorState.activeLoteId
+        ? await saveCurrentEtiquetaLote({ silent: true })
+        : await saveCurrentEtiquetaLote({ silent: false });
+    if (!saved) return;
+    labelGeneratorState.activeLoteId = saved.id;
+    await printLabelSheet();
+}
+
+async function duplicateCurrentEtiquetaLote() {
+    const payload = buildEtiquetaLotePayload();
+    if (!payload.items.length) {
+        showToast('Adicione produtos antes de duplicar.', 'warning');
+        return;
+    }
+
+    try {
+        showToast('Duplicando lote...');
+        let duplicated;
+        if (labelGeneratorState.activeLoteId) {
+            duplicated = await DataClient.duplicarEtiquetaLote(labelGeneratorState.activeLoteId, {
+                nome_lote: `${labelGeneratorState.nomeLote || 'Lote'} - copia`,
+                modelo_etiqueta: labelGeneratorState.template,
+                observacoes: labelGeneratorState.observacoes
+            });
+        } else {
+            duplicated = await DataClient.salvarEtiquetaLote({
+                ...payload,
+                lote: {
+                    ...payload.lote,
+                    nome_lote: `${payload.lote.nome_lote || 'Lote'} - copia`,
+                    status: 'rascunho'
+                }
+            });
+        }
+
+        applyEtiquetaLoteToState(duplicated, { preview: false });
+        await showAppAlert({
+            title: 'Lote duplicado',
+            message: `${duplicated.nome_lote || 'Novo lote'} foi criado como rascunho.`,
+            icon: 'content_copy'
+        });
+        renderLabelGeneratorScreen();
+    } catch (error) {
+        console.error('[ETIQUETAS] erro ao duplicar lote:', error);
+        showToast('Erro ao duplicar lote: ' + (error.message || error), 'error');
+    }
+}
+
+async function openEtiquetaLoteFromHistory(loteId, options = {}) {
+    try {
+        showToast('Carregando lote salvo...');
+        await ensureLabelTemplatesLoaded();
+        const lote = await DataClient.buscarEtiquetaLotePorId(loteId);
+        if (!lote) {
+            showToast('Lote não encontrado.', 'error');
+            return;
+        }
+
+        applyEtiquetaLoteToState(lote, { preview: !!options.preview });
+        renderLabelGeneratorScreen();
+
+        if (options.autoPrint) {
+            setTimeout(() => reprintCurrentEtiquetaLote(), 250);
+        }
+    } catch (error) {
+        console.error('[ETIQUETAS] erro ao abrir lote:', error);
+        showToast('Erro ao abrir lote: ' + (error.message || error), 'error');
+    }
+}
+
+async function duplicateEtiquetaLoteFromHistory(loteId) {
+    try {
+        showToast('Duplicando lote salvo...');
+        const duplicated = await DataClient.duplicarEtiquetaLote(loteId);
+        await ensureLabelTemplatesLoaded();
+        applyEtiquetaLoteToState(duplicated, { preview: false });
+        renderLabelGeneratorScreen();
+        showToast('Lote duplicado.');
+    } catch (error) {
+        console.error('[ETIQUETAS] erro ao duplicar lote do histórico:', error);
+        showToast('Erro ao duplicar lote: ' + (error.message || error), 'error');
+    }
+}
+
+async function renderLabelHistoryScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in label-generator-screen label-history-screen">
+            ${getTopBarHTML(currentUser, 'renderLabelGeneratorScreen()')}
+            <main class="label-generator-workspace">
+                <div class="label-generator-page-head no-print">
+                    <div class="label-generator-heading">
+                        <span class="material-symbols-rounded">history</span>
+                        <div>
+                            <h1>HISTÓRICO DE ETIQUETAS</h1>
+                            <p>Lotes salvos no Supabase para edição e reimpressão multiusuário.</p>
+                        </div>
+                    </div>
+                    <div class="label-page-actions">
+                        <button type="button" class="label-tool-btn secondary" onclick="renderLabelGeneratorScreen()">
+                            <span class="material-symbols-rounded">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                </div>
+                <section class="label-generator-card label-history-panel">
+                    <div class="label-history-loading">
+                        <div class="loading-spinner"></div>
+                        <strong>Carregando lotes salvos...</strong>
+                    </div>
+                </section>
+            </main>
+        </div>
+    `;
+
+    try {
+        const lotes = await DataClient.listarEtiquetaLotes();
+        const panel = document.querySelector('.label-history-panel');
+        if (!panel) return;
+        panel.innerHTML = lotes.length ? `
+            <div class="label-history-grid">
+                ${lotes.map(renderEtiquetaLoteHistoryCard).join('')}
+            </div>
+        ` : `
+            <div class="label-empty-products">Nenhum lote de etiquetas salvo ainda.</div>
+        `;
+    } catch (error) {
+        console.error('[ETIQUETAS] erro ao listar histórico:', error);
+        const panel = document.querySelector('.label-history-panel');
+        if (panel) {
+            panel.innerHTML = `<div class="label-empty-products">Erro ao carregar histórico: ${escapeKitAttribute(error.message || error)}</div>`;
+        }
+    }
+}
+
+function renderEtiquetaLoteHistoryCard(lote) {
+    const status = String(lote.status || 'rascunho').toLowerCase();
+    const totalProdutos = Number(lote.quantidade_produtos || 0);
+    const totalEtiquetas = Number(lote.quantidade_total_etiquetas || 0);
+    return `
+        <article class="label-history-card">
+            <div class="label-history-card-main">
+                <span class="label-history-status ${status === 'impresso' ? 'printed' : ''}">${escapeKitAttribute(status)}</span>
+                <h2>${escapeKitAttribute(lote.nome_lote || 'Lote sem nome')}</h2>
+                <p>${escapeKitAttribute(formatLabelDateTime(lote.atualizado_em || lote.criado_em))} | ${escapeKitAttribute(lote.usuario_nome || 'Usuário não informado')}</p>
+            </div>
+            <div class="label-history-metrics">
+                <span><strong>${totalProdutos}</strong> produtos</span>
+                <span><strong>${totalEtiquetas}</strong> etiquetas</span>
+            </div>
+            <div class="label-history-actions">
+                <button type="button" onclick="openEtiquetaLoteFromHistory('${escapeKitAttribute(lote.id)}')">
+                    <span class="material-symbols-rounded">edit</span>
+                    Editar
+                </button>
+                <button type="button" onclick="openEtiquetaLoteFromHistory('${escapeKitAttribute(lote.id)}', { preview: true, autoPrint: true })">
+                    <span class="material-symbols-rounded">print</span>
+                    Imprimir
+                </button>
+                <button type="button" onclick="duplicateEtiquetaLoteFromHistory('${escapeKitAttribute(lote.id)}')">
+                    <span class="material-symbols-rounded">content_copy</span>
+                    Duplicar
+                </button>
+            </div>
+        </article>
+    `;
+}
+
+function refreshLabelPreview() {
+    const cfg = getLabelTemplateConfig();
+    const baseLabels = getExpandedLabelItems(false);
+    const labels = getExpandedLabelItems(true);
+    const hasTemplate = !!(cfg.pageWidth && cfg.pageHeight);
+    const totalCells = hasTemplate ? cfg.cols * cfg.rows : 0;
+    const pageCount = hasTemplate ? Math.max(1, Math.ceil(labels.length / totalCells)) : 0;
+    const remainingSlots = hasTemplate ? (labels.length ? ((totalCells - (labels.length % totalCells)) % totalCells) : totalCells) : 0;
+    const toolbar = document.getElementById('label-preview-toolbar');
+    const area = document.getElementById('label-print-area');
+    if (!area) return;
+    updateLabelPrintPageStyle(cfg);
+    if (toolbar) {
+        toolbar.innerHTML = `<strong>${labels.length} etiqueta(s) no preview</strong><span>${hasTemplate ? `${totalCells} por folha | ${pageCount} folha(s)` : 'Sem gabarito selecionado'}</span>`;
+    }
+    document.querySelectorAll('.label-summary-grid strong').forEach((el, idx) => {
+        if (idx === 0) el.textContent = baseLabels.length;
+        if (idx === 1) el.textContent = pageCount;
+        if (idx === 2) el.textContent = remainingSlots;
+    });
+    const repeat = document.querySelector('.label-repeat-option input');
+    if (repeat) {
+        repeat.checked = !!labelGeneratorState.repeatToFill;
+    }
+    area.innerHTML = renderLabelPrintPages(labels, cfg);
+    renderLabelBarcodes();
+}
+
+function updateLabelPrintPageStyle(cfg = getLabelTemplateConfig()) {
+    let style = document.getElementById('label-dynamic-print-style');
+    if (!style) {
+        style = document.createElement('style');
+        style.id = 'label-dynamic-print-style';
+        document.head.appendChild(style);
+    }
+
+    const pageSize = cfg.paperType === 'CARTA' ? 'Letter' : 'A4';
+    style.textContent = `
+        @media print {
+            @page {
+                size: ${pageSize};
+                margin: 0;
+            }
+        }
+    `;
+}
+
+function renderLabelBarcodes() {
+    document.querySelectorAll('canvas[data-label-code]').forEach(canvas => {
+        const code = String(canvas.dataset.labelCode || '').trim();
+        const ctx = canvas.getContext('2d');
+        if (!code) {
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            return;
+        }
+
+        try {
+            if (typeof JsBarcode === 'function') {
+                JsBarcode(canvas, code, {
+                    format: 'CODE128',
+                    width: 3,
+                    height: 100,
+                    displayValue: false,
+                    margin: 0
+                });
+                return;
+            }
+
+            renderCode128BarcodeFallback(canvas, code, {
+                format: 'CODE128',
+                width: 3,
+                height: 100,
+                displayValue: false,
+                margin: 0
+            });
+        } catch (error) {
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            console.warn('[ETIQUETAS] codigo invalido para CODE128:', code, error);
+        }
+    });
+}
+
+function renderCode128BarcodeFallback(canvas, code, options = {}) {
+    const patterns = [
+        '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+        '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+        '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+        '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+        '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+        '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+        '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+        '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+        '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+        '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+        '114131','311141','411131','211412','211214','211232','2331112'
+    ];
+
+    const normalized = String(code || '').trim();
+    if (!normalized) throw new Error('Codigo vazio');
+
+    const codes = [104]; // CODE128-B
+    for (const char of normalized) {
+        const value = char.charCodeAt(0) - 32;
+        if (value < 0 || value > 94) throw new Error('Caractere fora do CODE128-B');
+        codes.push(value);
+    }
+
+    let checksum = codes[0];
+    for (let i = 1; i < codes.length; i++) checksum += codes[i] * i;
+    codes.push(checksum % 103, 106);
+
+    const barWidth = Number(options.width) || 3;
+    const height = Number(options.height) || 100;
+    const totalModules = codes.reduce((sum, value) => {
+        return sum + patterns[value].split('').reduce((acc, digit) => acc + Number(digit), 0);
+    }, 0);
+
+    canvas.width = totalModules * barWidth;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+
+    let x = 0;
+    codes.forEach(value => {
+        const pattern = patterns[value];
+        for (let i = 0; i < pattern.length; i++) {
+            const width = Number(pattern[i]) * barWidth;
+            if (i % 2 === 0) ctx.fillRect(x, 0, width, height);
+            x += width;
+        }
+    });
+}
+
+async function printLabelSheet() {
+    const cfg = getLabelTemplateConfig();
+    if (!cfg.pageWidth || !cfg.pageHeight) {
+        showToast('Selecione um gabarito ativo antes de imprimir.');
+        return;
+    }
+    updateLabelPrintPageStyle();
+    renderLabelBarcodes();
+    if (labelGeneratorState.activeLoteId) {
+        try {
+            const printed = await DataClient.marcarEtiquetaLoteComoImpresso(labelGeneratorState.activeLoteId);
+            labelGeneratorState.status = printed?.status || 'impresso';
+            labelGeneratorState.lastSavedAt = printed?.atualizado_em || new Date().toISOString();
+            saveLabelDraft();
+        } catch (error) {
+            console.warn('[ETIQUETAS] nao foi possivel marcar lote como impresso:', error);
+            showToast('Etiqueta vai imprimir, mas não consegui marcar como impresso.', 'warning');
+        }
+    }
+    setTimeout(() => window.print(), 120);
+}
+
+function quickActionNewMov() {
+    toggleQuickActions();
+    renderMovimentacoesSubMenu();
+}
+
+function quickActionSearch() {
+    toggleQuickActions();
+    renderSearchScreen();
+}
+
+function quickActionEntrada() {
+    toggleQuickActions();
+    ensureFreshData(() => renderPickMenu());
+}
+
+function quickActionSaida() {
+    toggleQuickActions();
+    ensureFreshData(() => renderPickMenu());
+}
+
+function quickActionAjuste() {
+    toggleQuickActions();
+    renderAjusteEstoqueScreen();
+}
+
+function quickActionNovoProduto() {
+    toggleQuickActions();
+    renderAddProduct();
+}
+
+// renderSearchScreen (versão operacional unificada no topo do arquivo)
+
+
+
+
+
+/**
+ * KIT LAMPADA - Módulo de consulta de veículos (Supabase)
+ */
+
+function safeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+
+async function ensureKitLampadaLoaded(force = false) {
+    if (!force && Array.isArray(window.kitLampadaCache) && window.kitLampadaCache.length > 0) {
+        console.log('[KIT] cache já existe:', window.kitLampadaCache.length);
+        return window.kitLampadaCache;
+    }
+
+    console.log('[KIT] abrindo tela kit_lampada');
+    console.log('[KIT] supabaseClient existe?', !!window.supabaseClient);
+
+    const client = window.supabaseClient;
+    if (!client) {
+        console.error('[KIT] Supabase client não inicializado');
+        return [];
+    }
+    
+    try {
+        const { data, error } = await client
+            .from('kit_lampada')
+            .select('*')
+            .order('kit_lampada_id', { ascending: true });
+
+        console.log('[KIT] data:', data);
+        console.log('[KIT] error:', error);
+        console.log('[KIT] total recebido:', data?.length || 0);
+
+        if (error) {
+            console.error('[KIT] erro ao buscar:', error);
+            throw error;
+        }
+
+        const rows = data || [];
+        if (rows.length === 0) {
+            console.warn('[KIT] Nenhum dado retornado. Verifique RLS/policy da tabela kit_lampada.');
+        }
+        
+        const normalizedRows = rows.map(item => ({
+            ...item,
+            _search: safeText([
+                item.kit_lampada_id,
+                item.montadora,
+                item.modelo,
+                item.observacao,
+                item.status,
+                item.lampada_baixo,
+                item.lampada_alto,
+                item.lampada_neblina,
+                item.ano_inicio,
+                item.ano_fim
+            ].join(' '))
+        }));
+
+        window.kitLampadaCache = normalizedRows;
+        appData.kit_lampada = normalizedRows;
+        
+        console.log('[KIT] cache criado:', window.kitLampadaCache.length);
+        console.log('[KIT] exemplos:', window.kitLampadaCache.slice(0, 5));
+        console.log('[KIT] teste civic:', window.kitLampadaCache.filter(x => x._search.includes('civic')));
+
+        return normalizedRows;
+    } catch (err) {
+        console.error('[KIT] erro ao carregar:', err);
+        throw err;
+    }
+}
+
+function getKitLampadaSource() {
+    return Array.isArray(window.kitLampadaCache) ? window.kitLampadaCache : [];
+}
+
+const KIT_LAMPADA_BRANDS = [
+    { id: 'todos', label: 'Todos', short: 'Todos' },
+    { id: 'audi', label: 'Audi', short: 'AU' },
+    { id: 'chrysler', label: 'Chrysler', short: 'CR' },
+    { id: 'chevrolet', label: 'Chevrolet', short: 'GM' },
+    { id: 'volkswagen', label: 'Volkswagen', short: 'VW' },
+    { id: 'fiat', label: 'Fiat', short: 'FI' },
+    { id: 'ford', label: 'Ford', short: 'FO' },
+    { id: 'toyota', label: 'Toyota', short: 'TY' },
+    { id: 'hyundai', label: 'Hyundai', short: 'HY' },
+    { id: 'honda', label: 'Honda', short: 'HO' },
+    { id: 'jac', label: 'JAC', short: 'JAC' },
+    { id: 'kia', label: 'Kia', short: 'KIA' },
+    { id: 'renault', label: 'Renault', short: 'RN' },
+    { id: 'jeep', label: 'Jeep', short: 'JP' },
+    { id: 'nissan', label: 'Nissan', short: 'NI' },
+    { id: 'peugeot', label: 'Peugeot', short: 'PG' },
+    { id: 'citroen', label: 'Citroen', short: 'CT' }
+];
+
+const KIT_LAMPADA_FEATURED_BRANDS = ['chevrolet', 'volkswagen', 'fiat', 'ford'];
+
+window.kitLampadaUiState = window.kitLampadaUiState || {
+    term: '',
+    montadora: 'todos'
+};
+
+function getKitLampadaBrandOptions(source = getKitLampadaSource()) {
+    const byId = new Map();
+
+    (Array.isArray(source) ? source : []).forEach(item => {
+        const label = String(item?.montadora || '').trim();
+        const id = safeText(label);
+        if (!id || byId.has(id)) return;
+        byId.set(id, {
+            id,
+            label,
+            short: label.slice(0, 2).toUpperCase() || 'DY'
+        });
+    });
+
+    const brands = Array.from(byId.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })
+    );
+
+    return [
+        { id: 'todos', label: 'Todos', short: 'Todos' },
+        ...brands
+    ];
+}
+
+function getKitBrandConfig(montadora) {
+    const normalized = safeText(montadora);
+    const dynamicBrand = getKitLampadaBrandOptions().find(brand => brand.id === normalized || safeText(brand.label) === normalized);
+    return dynamicBrand || KIT_LAMPADA_BRANDS.find(brand => brand.id === normalized || safeText(brand.label) === normalized) || null;
+}
+
+function getKitBrandMarkHTML(brand, extraClass = '') {
+    const brandId = brand?.id || safeText(brand?.label) || 'generic';
+    const assetId = brandId === 'todos' ? 'todos' : slugifyKitAsset(brand?.label || brandId);
+    const classId = brandId === 'todos' ? 'todos' : assetId || 'generic';
+    const label = brand?.short || brand?.label || 'DY';
+    const content = brandId === 'todos'
+        ? '<span class="material-symbols-rounded">grid_view</span>'
+        : `<img src="/assets/images/montadoras/${assetId}.png" alt="${escapeKitAttribute(brand?.label || label)}" loading="eager" onerror="if(!this.dataset.svgFallback){this.dataset.svgFallback='1';this.src='/assets/images/montadoras/${assetId}.svg';return;}this.style.display='none';this.nextElementSibling.style.display='inline-flex';"><span style="display:none;">${label}</span>`;
+    return `<span class="kit-brand-mark kit-brand-${classId} ${extraClass}">${content}</span>`;
+}
+
+function getKitBrandPreviewUrl(brandId) {
+    const source = getKitLampadaSource();
+    const match = source.find(item => safeText(item.montadora) === safeText(brandId) && getKitImageUrl(item));
+    return match ? getKitImageUrl(match) : '';
+}
+
+function slugifyKitAsset(value) {
+    return safeText(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function getKitYearText(item) {
+    if (item.ano_inicio && item.ano_fim) return `${item.ano_inicio} - ${item.ano_fim}`;
+    if (item.ano_inicio) return `${item.ano_inicio} - Atual`;
+    if (item.ano_fim) return `Ate ${item.ano_fim}`;
+    return 'Todos os anos';
+}
+
+function getKitImageUrl(item) {
+    const rawUrl = item?.url || item?.url_imagem || item?.image_path || '';
+    return rawUrl && typeof formatImageUrl === 'function' ? formatImageUrl(rawUrl) : rawUrl;
+}
+
+function getKitVehicleImageUrl(item) {
+    const rawUrl = item?.url_carro || item?.carro_url || item?.imagem_carro || item?.veiculo_url || '';
+    if (rawUrl) return typeof formatImageUrl === 'function' ? formatImageUrl(rawUrl) : rawUrl;
+
+    const brandSlug = slugifyKitAsset(item?.montadora);
+    const modelSlug = slugifyKitAsset(item?.modelo);
+    if (!brandSlug || !modelSlug) return '';
+    return `/assets/images/kit-lampadas/carros/${brandSlug}/${modelSlug}.png`;
+}
+
+function getKitPositionLamp(item) {
+    return item?.lampada_posicao || item?.posicao || item?.observacao_posicao || 'N/A';
+}
+
+function getKitStatusInfo(status) {
+    const normalized = safeText(status || 'verificar');
+    if (normalized === 'postado') return { key: 'postado', label: 'Postado' };
+    if (normalized === 'revisar') return { key: 'revisar', label: 'Revisar' };
+    return { key: 'verificar', label: 'Verificar' };
+}
+
+function escapeKitAttribute(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function quoteKitInlineArg(value) {
+    return escapeKitAttribute(JSON.stringify(String(value ?? '')));
+}
+
+function searchKitLampada(term, montadora = 'todos') {
+    const query = safeText(term);
+    const brandQuery = safeText(montadora);
+
+    const source = getKitLampadaSource();
+    if (!source.length) {
+        console.warn('[KIT] busca bloqueada: cache vazio');
+        return [];
+    }
+
+    // Extrair potencial ano do termo de busca
+    let searchYear = null;
+    const yearMatch = String(term || '').match(/\b(20|19)\d{2}\b/);
+    if (yearMatch) {
+        searchYear = parseInt(yearMatch[0]);
+    }
+
+    return source
+        .filter(item => {
+            if (brandQuery && brandQuery !== 'todos' && safeText(item.montadora) !== brandQuery) {
+                return false;
+            }
+
+            // Regra de Ano
+            if (searchYear) {
+                const anoInicio = item.ano_inicio ? Number(item.ano_inicio) : null;
+                const anoFim = item.ano_fim ? Number(item.ano_fim) : null;
+                
+                let yearOk = false;
+                if (!anoInicio && !anoFim) yearOk = true;
+                else if (anoInicio && !anoFim) yearOk = searchYear >= anoInicio;
+                else if (!anoInicio && anoFim) yearOk = searchYear <= anoFim;
+                else if (anoInicio && anoFim) yearOk = searchYear >= anoInicio && searchYear <= anoFim;
+                
+                if (!yearOk) return false;
+            }
+
+            if (!query) return true;
+
+            // Busca por texto (palavras-chave)
+            const words = query.split(/\s+/).filter(w => w.length > 0);
+            return words.every(word => {
+                if (word === searchYear?.toString()) return true;
+                return safeText(item._search).includes(word);
+            });
+        })
+        .sort((a, b) => {
+            const aModelo = safeText(a.modelo);
+            const bModelo = safeText(b.modelo);
+            const aMontadora = safeText(a.montadora);
+            const bMontadora = safeText(b.montadora);
+
+            const score = (item, modelo, montadora) => {
+                let s = 0;
+                if (modelo.startsWith(query)) s += 100;
+                if (modelo.includes(query)) s += 80;
+                if (montadora.includes(query)) s += 40;
+                if (safeText(item._search).includes(query)) s += 10;
+                return s;
+            };
+
+            const scoreA = score(a, aModelo, aMontadora);
+            const scoreB = score(b, bModelo, bMontadora);
+
+            if (scoreA !== scoreB) return scoreB - scoreA;
+            return aModelo.localeCompare(bModelo);
+        });
+}
+
+
+async function renderGuiaLampada(push = true) {
+    const currentUser = localStorage.getItem('currentUser');
+    if (!currentUser) return renderLogin();
+    
+    currentScreen = 'kit_lampada';
+    if (push) pushNav('kit_lampada');
+    window.kitLampadaUiState = { term: '', montadora: 'todos' };
+    
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal product-search-screen kit-lampada-screen kit-v2-screen module-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('kit_lampada')}
+            <div class="kit-v2-sidebar-right" aria-hidden="true"><span>KIT LAMPADAS</span></div>
+            <main class="container product-search-center kit-v2-container">
+                <div id="kit-content-area">
+                    <div class="kit-premium-state">
+                        <span class="material-symbols-rounded spin">sync</span>
+                        <h2>Carregando dados...</h2>
+                        <p>Sincronizando guia de lampadas com o Supabase</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+
+    try {
+        // 2. Garantir carregamento dos dados
+        const data = await ensureKitLampadaLoaded();
+        
+        // 3. Renderizar interface de busca
+        const contentArea = document.getElementById('kit-content-area');
+        if (!contentArea) return;
+
+        if (!data || data.length === 0) {
+            contentArea.innerHTML = `
+                <div class="kit-premium-state">
+                    <span class="material-symbols-rounded">database_off</span>
+                    <h2>Sem dados disponiveis</h2>
+                    <p>Nenhum dado foi retornado pelo Supabase. Verifique RLS/policy da tabela "kit_lampada".</p>
+                    <button class="kit-premium-filter-action" onclick="renderGuiaLampada(false)">
+                        <span class="material-symbols-rounded">refresh</span>
+                        Tentar Novamente
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        const brandOptions = getKitLampadaBrandOptions(data);
+
+        contentArea.innerHTML = `
+            <div class="kit-mobile-title">KIT LAMPADAS</div>
+
+            <section class="kit-premium-top">
+                <div class="kit-premium-search">
+                    <span class="material-symbols-rounded kit-premium-search-icon">search</span>
+                    <input
+                        type="search"
+                        id="kit-search-input"
+                        class="kit-premium-search-input"
+                        placeholder="Buscar veiculo, modelo, ano ou lampada..."
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="none"
+                        spellcheck="false"
+                        inputmode="search"
+                    />
+                    <button class="kit-premium-scan-btn" type="button" aria-label="Escanear" onclick="startScanner()">
+                        <span class="material-symbols-rounded">qr_code_scanner</span>
+                    </button>
+                </div>
+            </section>
+
+            <div id="scanner-container" class="hidden kit-premium-scanner">
+                <div id="reader"></div>
+                <div class="kit-premium-scanner-close">
+                    <button class="btn-action" onclick="stopScanner()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <section class="kit-premium-section kit-premium-brand-section" id="kit-brand-filter-section">
+                <div class="kit-premium-section-head">
+                    <h2>MONTADORA</h2>
+                    <div class="kit-premium-count" id="kit-results-count">${data.length} kits encontrados</div>
+                </div>
+                <div class="kit-premium-brand-nav">
+                    <button class="kit-premium-scroll-arrow kit-premium-scroll-left" type="button" aria-label="Voltar montadoras" onclick="scrollKitBrandStrip(-1)">
+                        <span class="material-symbols-rounded">chevron_left</span>
+                    </button>
+                    <div class="kit-premium-brand-strip" id="kit-brand-filter">
+                        ${brandOptions.map(brand => `
+                            <button class="kit-premium-brand-btn ${brand.id === 'todos' ? 'active' : ''}" type="button" data-brand="${escapeKitAttribute(brand.id)}" onclick="setKitLampadaBrandFilter(${quoteKitInlineArg(brand.id)})">
+                                ${getKitBrandMarkHTML(brand)}
+                                <small>${brand.label}</small>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button class="kit-premium-scroll-arrow kit-premium-scroll-right" type="button" aria-label="Avancar montadoras" onclick="scrollKitBrandStrip(1)">
+                        <span class="material-symbols-rounded">chevron_right</span>
+                        </button>
+                </div>
+            </section>
+
+            <section class="kit-premium-section">
+                <div class="kit-premium-section-head kit-premium-section-title-icon">
+                    <span class="material-symbols-rounded">qr_code_scanner</span>
+                    <h2>KITS ENCONTRADOS</h2>
+                </div>
+                <div id="kit-results" class="kit-premium-results-grid"></div>
+            </section>
+        `;
+        
+        const kitSearchInput = document.getElementById('kit-search-input');
+        if (kitSearchInput) {
+            kitSearchInput.addEventListener('input', (e) => {
+                handleKitLampadaSearch(e.target.value);
+            });
+            setTimeout(() => kitSearchInput.focus(), 100);
+        }
+        handleKitLampadaSearch('');
+
+    } catch (err) {
+        const contentArea = document.getElementById('kit-content-area');
+        if (!contentArea) return;
+        
+        contentArea.innerHTML = `
+            <div class="kit-premium-state kit-premium-state-error">
+                <span class="material-symbols-rounded">error</span>
+                <h2>Erro ao carregar Kit Lampada</h2>
+                <p>Nao foi possivel conectar ao banco de dados. Verifique permissoes/RLS do Supabase.</p>
+                <button class="kit-premium-filter-action" onclick="renderGuiaLampada(false)">
+                    <span class="material-symbols-rounded">refresh</span>
+                    Tentar Novamente
+                </button>
+            </div>
+        `;
+    }
+}
+
+window.debouncedKitSearch = debounce(() => {
+    const term = document.getElementById('kit-search-input')?.value;
+    handleKitLampadaSearch(term);
+}, 250);
+
+function handleKitLampadaSearch(term) {
+    const resultsContainer = document.getElementById('kit-results');
+    if (!resultsContainer) return;
+
+    window.kitLampadaUiState.term = term || '';
+    const filtered = searchKitLampada(window.kitLampadaUiState.term, window.kitLampadaUiState.montadora);
+
+    if (filtered.length > 0) {
+        showPageSearchSignal('success');
+    } else if ((term || '').trim().length >= 3) {
+        showScanFeedback('warning', 'ITEM NAO ENCONTRADO');
+    }
+
+    renderKitLampadaResults(filtered, window.kitLampadaUiState.term);
+    updateKitLampadaBrandButtons();
+    updateKitLampadaCount(filtered.length);
+}
+
+function setKitLampadaBrandFilter(brandId) {
+    window.kitLampadaUiState.montadora = brandId || 'todos';
+    const term = document.getElementById('kit-search-input')?.value || '';
+    handleKitLampadaSearch(term);
+    moveKitResultsIntoView();
+}
+
+function scrollKitBrandStrip(direction = 1) {
+    const strip = document.getElementById('kit-brand-filter');
+    if (!strip) return;
+    const amount = Math.max(260, Math.floor(strip.clientWidth * 0.72));
+    strip.scrollBy({ left: amount * direction, behavior: 'smooth' });
+}
+
+function updateKitLampadaBrandButtons() {
+    const activeBrand = window.kitLampadaUiState.montadora || 'todos';
+    document.querySelectorAll('.kit-premium-brand-btn').forEach(button => {
+        button.classList.toggle('active', button.dataset.brand === activeBrand);
+    });
+}
+
+function updateKitLampadaCount(count) {
+    const countEl = document.getElementById('kit-results-count');
+    if (countEl) countEl.textContent = `${count} kits encontrados`;
+}
+
+function toggleKitFilters() {
+    const filters = document.getElementById('kit-brand-filter-section');
+    if (!filters) return;
+    filters.classList.toggle('kit-filters-expanded');
+    const strip = document.getElementById('kit-brand-filter');
+    if (strip) strip.scrollTo({ left: 0, behavior: 'smooth' });
+    filters.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    filters.classList.add('kit-premium-section-pulse');
+    setTimeout(() => filters.classList.remove('kit-premium-section-pulse'), 650);
+}
+
+function moveKitResultsIntoView() {
+    const results = document.getElementById('kit-results');
+    if (!results || window.innerWidth < 760) return;
+    requestAnimationFrame(() => {
+        results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+}
+
+function renderKitLampadaResults(results, term) {
+    const resultsContainer = document.getElementById('kit-results');
+    if (!resultsContainer) return;
+
+    const activeBrand = window.kitLampadaUiState?.montadora || 'todos';
+    const isEmptyInitialView = !safeText(term) && activeBrand === 'todos';
+
+    if (isEmptyInitialView) {
+        resultsContainer.innerHTML = `
+            <div class="kit-premium-no-results kit-premium-start-empty">
+                <span class="material-symbols-rounded">touch_app</span>
+                <p>Selecione uma montadora ou digite uma busca para encontrar os kits.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (results.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="kit-premium-no-results">
+                <span class="material-symbols-rounded">search_off</span>
+                <p>Nenhum kit encontrado para essa busca.</p>
+            </div>
+        `;
+        return;
+    }
+
+    resultsContainer.innerHTML = `
+        ${results.map(item => {
+        const anoStr = getKitYearText(item);
+        const imgUrl = getKitVehicleImageUrl(item);
+        const itemData = escapeKitAttribute(JSON.stringify(item));
+        const brand = getKitBrandConfig(item.montadora);
+        const fallbackText = brand?.short || safeText(item.montadora).slice(0, 2).toUpperCase() || 'DY';
+        const fallbackBrand = brand || { id: safeText(item.montadora) || 'generic', label: item.montadora || 'Montadora', short: fallbackText };
+        const statusInfo = getKitStatusInfo(item.status);
+
+        return `
+            <article class="kit-premium-card kit-premium-row-card">
+                <div class="kit-premium-row-vehicle">
+                    ${getKitBrandMarkHTML(fallbackBrand, 'kit-premium-card-logo')}
+                    <div class="kit-premium-row-title">
+                        <div class="kit-premium-card-brand">${item.montadora || 'Montadora'}</div>
+                        <h3>${highlightText(item.modelo || 'Modelo nao informado', term || '')}</h3>
+                    </div>
+                </div>
+                <div class="kit-premium-row-year">
+                    <span>Ano</span>
+                    <strong>${anoStr}</strong>
+                </div>
+                <div class="kit-premium-row-specs">
+                    <div class="kit-info-baixo"><span class="material-symbols-rounded">light_mode</span><small>Baixo</small><strong>${item.lampada_baixo || 'N/A'}</strong></div>
+                    <div class="kit-info-alto"><span class="material-symbols-rounded">flashlight_on</span><small>Alto</small><strong>${item.lampada_alto || 'N/A'}</strong></div>
+                    <div class="kit-info-milha"><span class="material-symbols-rounded">foggy</span><small>Milha</small><strong>${item.lampada_neblina || 'N/A'}</strong></div>
+                </div>
+                <div class="kit-premium-row-media">
+                    ${imgUrl ? `<img src="${escapeKitAttribute(imgUrl)}" alt="${escapeKitAttribute(item.modelo || 'Veiculo')}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+                    <div class="kit-premium-card-fallback" style="${imgUrl ? 'display:none;' : ''}">
+                        <span class="material-symbols-rounded">directions_car</span>
+                    </div>
+                </div>
+                <div class="kit-premium-row-action">
+                    <button class="kit-premium-eye-btn" type="button" title="${statusInfo.label}" aria-label="Ver kit - ${statusInfo.label}" onclick='renderKitDetailsCard(${itemData})'>
+                        <span class="kit-status-dot kit-status-${statusInfo.key}"></span>
+                        <span class="material-symbols-rounded">visibility</span>
+                    </button>
+                </div>
+            </article>
+        `;
+    }).join('')}
+    `;
+}
+
+window.openKitImageViewer = function(url) {
+    if (!url) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay fade-in kit-image-viewer-overlay';
+    overlay.onclick = () => overlay.remove();
+    
+    overlay.innerHTML = `
+        <div class="kit-image-viewer-frame" onclick="event.stopPropagation()">
+            <button class="kit-image-viewer-close" onclick="this.closest('.kit-image-viewer-overlay').remove()">
+                <span class="material-symbols-rounded" style="color: #111;">close</span>
+            </button>
+            <img src="${escapeKitAttribute(url)}" class="kit-image-viewer-img">
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+};
+
+window.renderKitDetailsCard = function(item) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay fade-in';
+    const kitImgUrl = getKitImageUrl(item);
+    
+    modal.innerHTML = `
+        <div class="kit-detail-modal kit-image-only-modal" id="kit-modal-content">
+            <button class="modal-close-btn" onclick="this.closest('.modal-overlay').remove()">
+                <span class="material-symbols-rounded">close</span>
+            </button>
+
+            <div class="kit-modal-image-area kit-modal-image-only" onclick="openKitImageViewer('${escapeKitAttribute(kitImgUrl)}')">
+                ${kitImgUrl ? 
+                    `<img src="${escapeKitAttribute(kitImgUrl)}" alt="${escapeKitAttribute(item.modelo || 'Kit lampadas')}" onerror="this.outerHTML='<div class=&quot;kit-image-only-empty&quot;><span class=&quot;material-symbols-rounded&quot;>image_not_supported</span><p>Imagem do kit nao cadastrada.</p></div>'">` : 
+                    `<div class="kit-image-only-empty"><span class="material-symbols-rounded">image_not_supported</span><p>Imagem do kit nao cadastrada.</p></div>`
+                }
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    
+    // Pequeno delay para disparar a transição CSS
+    setTimeout(() => {
+        const innerModal = modal.querySelector('.kit-detail-modal');
+        if (innerModal) innerModal.classList.add('open');
+    }, 10);
+};
+
+function renderProductSubMenu() {
+  const container = document.getElementById("app");
+
+  if (!container) {
+    console.error("Container principal não encontrado para renderProductSubMenu");
+    return;
+  }
+
+  const subItems = [
+    { id: 'prod_buscar', label: 'BUSCAR', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, ID, EAN, SKU e conferir estoque disponível.' },
+    { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", description: 'Criar um novo cadastro de produto com dados comerciais, imagens e atributos.' }
+  ];
+
+  container.innerHTML = `
+    <div class="dashboard-screen internal fade-in product-submenu-screen module-screen standard-card-menu-screen">
+      ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+      ${getModuleSidebarHTML('produtos')}
+
+      <main class="container">
+          ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
+}
+
+function renderConfigSubMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    const config = getAppConfig();
+    currentScreen = 'internal';
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in config-screen module-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('configuracoes')}
+            
+            <main class="container" style="padding-top: 100px;">
+                <div style="padding: 0 20px;">
+
+                    
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <section class="config-theme-card" aria-label="Tema do App">
+                            <div class="config-theme-copy">
+                                <div class="config-theme-title">TEMA DO APP</div>
+                                <div class="config-theme-subtitle">Escolha a aparência das telas operacionais.</div>
+                            </div>
+                            <div class="theme-segmented-control" role="group" aria-label="Tema do App">
+                                <button type="button" data-theme-option="auto" onclick="setAppTheme('auto')" aria-pressed="false">
+                                    <span class="material-symbols-rounded">routine</span>
+                                    Automático
+                                </button>
+                                <button type="button" data-theme-option="light" onclick="setAppTheme('light')" aria-pressed="false">
+                                    <span class="material-symbols-rounded">light_mode</span>
+                                    Claro
+                                </button>
+                                <button type="button" data-theme-option="dark" onclick="setAppTheme('dark')" aria-pressed="false">
+                                    <span class="material-symbols-rounded">dark_mode</span>
+                                    Escuro
+                                </button>
+                            </div>
+                        </section>
+
+                        <!-- OPCAO 1 -->
+                        <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
+                            <div style="flex: 1;">
+                                <div style="color: var(--text-main); font-weight: 700; font-size: 1rem;">SAÍDA COM ESTOQUE ZERO</div>
+                                <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">Permitir finalizar saídas mesmo sem saldo em estoque.</div>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="toggle-estoque-zero" ${config.permitir_saida_estoque_zero ? 'checked' : ''} onchange="toggleConfig('permitir_saida_estoque_zero', this.checked)">
+                                <label for="toggle-estoque-zero"></label>
+                            </div>
+                        </div>
+
+                        <!-- OPCAO 2 -->
+                        <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
+                            <div style="flex: 1;">
+                                <div style="color: var(--text-main); font-weight: 700; font-size: 1rem;">MODO RÁPIDO</div>
+                                <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">Simplifica fluxos e desabilita Separação manual.</div>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="toggle-modo-rapido" ${config.modo_rapido ? 'checked' : ''} onchange="toggleConfig('modo_rapido', this.checked)">
+                                <label for="toggle-modo-rapido"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 40px; text-align: center; color: var(--muted); font-size: 0.75rem;">
+                        <p>DY AUTO PARTS - v2.0.0</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+
+    updateThemeControlsUI();
+}
+
+function toggleConfig(key, value) {
+    const config = getAppConfig();
+    config[key] = value;
+    setAppConfig(config);
+    showToast(`Configuração atualizada`, 'success');
+    
+    // Se for modo rápido, recarregar menu se necessário para feedback imediato
+    if (key === 'modo_rapido') {
+        renderMenu(false);
+    }
+}
+
+async function renderGarantiaEnvioForm() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+
+    // Garantir que produtos e estoque estejam carregados
+    if (!appData.products || !appData.estoque) {
+        showToast('Carregando dados...', 'info');
+        await DataClient.loadModule('produtos', true);
+    }
+
+    let selectedProduct = null;
+    let selectedSource = 'DEFEITO';
+
+    const formatGarantiaMoney = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const getGarantiaProductImage = product => product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '/imagens/placeholder-item.png';
+
+    function updateGarantiaSummary() {
+        const qty = Number(document.getElementById('garantia-quantidade')?.value || 1);
+        const unit = Number(document.getElementById('garantia-custo-unitario')?.value || 0);
+        const fornecedor = document.getElementById('garantia-fornecedor')?.value || '-';
+        const tipo = document.getElementById('garantia-tipo-operacao')?.selectedOptions?.[0]?.textContent || '-';
+        const origem = document.getElementById('garantia-origem-estoque')?.selectedOptions?.[0]?.textContent || selectedSource || '-';
+        const total = qty * unit;
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+
+        setText('garantia-summary-product', selectedProduct?.descricao || 'Produto não selecionado');
+        setText('garantia-summary-id', selectedProduct?.id_interno ? `ID: ${selectedProduct.id_interno}` : 'ID: -');
+        setText('garantia-summary-sku', selectedProduct?.sku_fornecedor ? `SKU: ${selectedProduct.sku_fornecedor}` : 'SKU: -');
+        setText('garantia-summary-type', tipo);
+        setText('garantia-summary-origin', origem);
+        setText('garantia-summary-provider', fornecedor || '-');
+        setText('garantia-summary-qty', `${qty || 0} ${qty === 1 ? 'unidade' : 'unidades'}`);
+        setText('garantia-summary-unit', formatGarantiaMoney(unit));
+        setText('garantia-summary-total', formatGarantiaMoney(total));
+        setText('garantia-unit-display', formatGarantiaMoney(unit));
+        setText('garantia-total-display', formatGarantiaMoney(total));
+        setText('garantia-qty-display', qty || 1);
+
+        const summaryImg = document.getElementById('garantia-summary-image');
+        if (summaryImg && selectedProduct) summaryImg.src = getGarantiaProductImage(selectedProduct);
+    }
+
+    function updateProductCard() {
+        const cardContainer = document.getElementById('garantia-product-card-container');
+        if (!selectedProduct) {
+            cardContainer.innerHTML = '';
+            return;
+        }
+
+        // Buscar estoque do produto por local
+        const productEstoque = appData.estoque.filter(e => e.id_interno === selectedProduct.id_interno);
+        const sourceStock = productEstoque.find(e => e.local === selectedSource)?.saldo_disponivel || 0;
+        const garantiaStock = productEstoque.find(e => e.local === 'EM_GARANTIA')?.saldo_disponivel || 0;
+
+        // Preencher campos automáticos
+        const fornecedorInput = document.getElementById('garantia-fornecedor');
+        if (fornecedorInput) fornecedorInput.value = selectedProduct.marca || selectedProduct.fornecedor || '';
+
+        const custoInput = document.getElementById('garantia-custo-unitario');
+        if (custoInput) custoInput.value = selectedProduct.preco_custo || 0;
+
+        updateTotalCost();
+
+        cardContainer.innerHTML = `
+            <article class="garantia-selected-product fade-in">
+                <div class="garantia-product-image">
+                    <img src="${escapeKitAttribute(getGarantiaProductImage(selectedProduct))}" alt="${escapeKitAttribute(selectedProduct.descricao || 'Produto')}" onerror="this.src='/imagens/placeholder-item.png'">
+                </div>
+                <div class="garantia-product-main">
+                    <strong>${escapeKitAttribute(selectedProduct.descricao || 'Produto')}</strong>
+                    <small>${escapeKitAttribute(selectedProduct.marca || 'SEM MARCA')}</small>
+                    <em>ID: ${escapeKitAttribute(selectedProduct.id_interno || '-')} <b>•</b> EAN: ${escapeKitAttribute(selectedProduct.ean || 'SEM EAN')} <b>•</b> SKU: ${escapeKitAttribute(selectedProduct.sku_fornecedor || selectedProduct.sku || '-')}</em>
+                    <span class="${sourceStock > 0 ? 'is-ok' : 'is-alert'}">${sourceStock > 0 ? 'Em estoque' : 'Sem saldo na origem'}</span>
+                </div>
+                <div class="garantia-product-metrics">
+                    <div>
+                        <span>Estoque atual</span>
+                        <strong>${formatStockNumber(sourceStock)} <small>un</small></strong>
+                    </div>
+                    <div>
+                        <span>Local</span>
+                        <strong>${escapeKitAttribute(prettyLocal(selectedSource) || selectedSource)}</strong>
+                    </div>
+                    <div>
+                        <span>Em garantia</span>
+                        <strong>${formatStockNumber(garantiaStock)} <small>un</small></strong>
+                    </div>
+                </div>
+            </article>
+        `;
+        updateGarantiaSummary();
+    }
+
+    function updateTotalCost() {
+        const qty = parseFloat(document.getElementById('garantia-quantidade')?.value || 0);
+        const unit = parseFloat(document.getElementById('garantia-custo-unitario')?.value || 0);
+        const totalInput = document.getElementById('garantia-custo-total');
+        if (totalInput) totalInput.value = (qty * unit).toFixed(2);
+        updateGarantiaSummary();
+    }
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in garantia-screen garantia-ops-screen no-top-bar">
+            <button type="button" class="garantia-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+
+            <main class="garantia-ops-shell">
+                <header class="garantia-ops-header">
+                    <div class="garantia-ops-icon">
+                        <span class="material-symbols-rounded">health_and_safety</span>
+                    </div>
+                    <div>
+                        <h1>ENVIAR PARA GARANTIA</h1>
+                        <p>Controle de devoluções e análise técnica.</p>
+                    </div>
+                </header>
+
+                <section class="garantia-ops-grid">
+                    <div class="garantia-main-flow">
+                        <article class="garantia-card garantia-search-card">
+                            <label for="garantia-search-input">Buscar produto (EAN, SKU, ID, nome)</label>
+                            <div class="garantia-search-shell">
+                                <span class="material-symbols-rounded">qr_code_scanner</span>
+                                <input type="text" id="garantia-search-input" placeholder="BIPAR EAN, SKU OU PRODUTO..." autocomplete="off">
+                                <button type="button" onclick="console.log('[GARANTIA BUSCA DEBUG] scanner/camera input'); startScanner(false, false, false, true)" aria-label="Abrir scanner">
+                                    <span class="material-symbols-rounded">keyboard</span>
+                                </button>
+                            </div>
+                            <small><span class="material-symbols-rounded">help</span>Dica: bipe ou digite o código do produto para iniciar.</small>
+                            <div id="garantia-search-dropdown" class="garantia-search-dropdown"></div>
+
+                            <div id="scanner-container-garantia" class="hidden garantia-scanner-container">
+                                <div id="reader-garantia"></div>
+                                <button onclick="stopScanner()" type="button" aria-label="Fechar scanner">
+                                    <span class="material-symbols-rounded">close</span>
+                                </button>
+                            </div>
+
+                            <div class="garantia-selected-label">Produto selecionado</div>
+                            <div id="garantia-product-card-container"></div>
+                        </article>
+
+                        <article class="garantia-card">
+                            <div class="garantia-card-title">
+                                <span class="material-symbols-rounded">assignment</span>
+                                <h2>INFORMAÇÕES DA GARANTIA</h2>
+                            </div>
+                            <div class="garantia-form-grid">
+                                <div class="garantia-field">
+                                    <label for="garantia-tipo-operacao">Tipo da operação</label>
+                                    <select id="garantia-tipo-operacao">
+                                        <option value="GARANTIA_TECNICA">Garantia Técnica</option>
+                                        <option value="TROCA_COMERCIAL">Troca Comercial</option>
+                                        <option value="DEVOLUCAO_FORNECEDOR">Devolução Fornecedor</option>
+                                        <option value="RETORNO_CLIENTE">Retorno Cliente</option>
+                                        <option value="ERRO_OPERACIONAL">Erro Operacional</option>
+                                    </select>
+                                </div>
+
+                                <div class="garantia-field">
+                                    <label for="garantia-origem-estoque">Origem do estoque</label>
+                                    <select id="garantia-origem-estoque">
+                                        <option value="TERREO">TERREO</option>
+                                        <option value="MOSTRUARIO">MOSTRUARIO</option>
+                                        <option value="PRIMEIRO_ANDAR">PRIMEIRO ANDAR</option>
+                                        <option value="DEFEITO" selected>DEFEITO</option>
+                                        <option value="EM_GARANTIA">EM GARANTIA</option>
+                                    </select>
+                                </div>
+
+                                <div class="garantia-field">
+                                    <label for="garantia-fornecedor">Fornecedor / destino</label>
+                                    <input type="text" id="garantia-fornecedor" placeholder="Nome do fornecedor">
+                                </div>
+
+                                <div class="garantia-field">
+                                    <label>Quantidade</label>
+                                    <div class="garantia-qty-control">
+                                        <button type="button" id="garantia-qty-minus">−</button>
+                                        <span id="garantia-qty-display">1</span>
+                                        <button type="button" id="garantia-qty-plus">+</button>
+                                    </div>
+                                    <input type="number" id="garantia-quantidade" value="1" min="1" hidden>
+                                </div>
+
+                                <div class="garantia-cost-card">
+                                    <span>Custo unitário</span>
+                                    <strong id="garantia-unit-display">R$ 0,00</strong>
+                                    <input type="number" id="garantia-custo-unitario" value="0" readonly hidden>
+                                </div>
+
+                                <div class="garantia-cost-card is-total">
+                                    <span>Custo total</span>
+                                    <strong id="garantia-total-display">R$ 0,00</strong>
+                                    <input type="number" id="garantia-custo-total" value="0" readonly hidden>
+                                </div>
+                            </div>
+                        </article>
+
+                        <article class="garantia-card">
+                            <div class="garantia-card-title">
+                                <span class="material-symbols-rounded">description</span>
+                                <h2>OBSERVAÇÃO TÉCNICA</h2>
+                            </div>
+                            <div class="garantia-note-grid">
+                                <div class="garantia-field">
+                                    <label for="garantia-motivo">Motivo</label>
+                                    <select id="garantia-motivo">
+                                        <option>Defeito de fábrica</option>
+                                        <option>Queimado</option>
+                                        <option>Avaria</option>
+                                        <option>Troca autorizada</option>
+                                        <option>Produto incorreto</option>
+                                        <option>Cliente devolveu</option>
+                                        <option>Outros</option>
+                                    </select>
+                                </div>
+                                <div class="garantia-field">
+                                    <label for="garantia-observacao">Detalhes técnicos</label>
+                                    <textarea id="garantia-observacao" placeholder="Descreva o problema, condição do produto e evidências técnicas..."></textarea>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+
+                    <aside class="garantia-summary-panel">
+                        <div class="garantia-summary-title">
+                            <span class="material-symbols-rounded">assignment_return</span>
+                            <h2>RESUMO DA GARANTIA</h2>
+                        </div>
+                        <div class="garantia-summary-product">
+                            <img id="garantia-summary-image" src="/imagens/placeholder-item.png" alt="Produto" onerror="this.src='/imagens/placeholder-item.png'">
+                            <div>
+                                <strong id="garantia-summary-product">Produto não selecionado</strong>
+                                <small id="garantia-summary-id">ID: -</small>
+                                <small id="garantia-summary-sku">SKU: -</small>
+                            </div>
+                        </div>
+
+                        <div class="garantia-summary-list">
+                            <div><span class="material-symbols-rounded">fact_check</span><small>Tipo da operação</small><strong id="garantia-summary-type">Garantia Técnica</strong></div>
+                            <div><span class="material-symbols-rounded">sync_alt</span><small>Origem do estoque</small><strong id="garantia-summary-origin">DEFEITO</strong></div>
+                            <div><span class="material-symbols-rounded">local_shipping</span><small>Fornecedor / destino</small><strong id="garantia-summary-provider">-</strong></div>
+                            <div><span class="material-symbols-rounded">bar_chart</span><small>Quantidade</small><strong id="garantia-summary-qty">1 unidade</strong></div>
+                            <div><span class="material-symbols-rounded">payments</span><small>Custo unitário</small><strong id="garantia-summary-unit">R$ 0,00</strong></div>
+                            <div class="is-total"><span class="material-symbols-rounded">receipt_long</span><small>Custo total</small><strong id="garantia-summary-total">R$ 0,00</strong></div>
+                        </div>
+
+                        <div class="garantia-status-box">
+                            <small>Status</small>
+                            <strong>Aguardando envio</strong>
+                        </div>
+
+                        <p class="garantia-summary-tip">
+                            <span class="material-symbols-rounded">info</span>
+                            Após enviar, o produto será registrado e disponível para acompanhamento.
+                        </p>
+                    </aside>
+                </section>
+
+                <footer class="garantia-action-footer">
+                    <button type="button" class="garantia-cancel-btn" onclick="renderMovimentacoesSubMenu()">
+                        <span class="material-symbols-rounded">close</span>
+                        Cancelar
+                    </button>
+                    <button id="btn-save-garantia" type="button" class="garantia-send-btn">
+                        <span class="material-symbols-rounded">send</span>
+                        Enviar para Garantia
+                    </button>
+                </footer>
+            </main>
+        </div>
+    `;
+
+    const searchInput = document.getElementById('garantia-search-input');
+    const dropdown = document.getElementById('garantia-search-dropdown');
+    const qtyInput = document.getElementById('garantia-quantidade');
+    const sourceSelect = document.getElementById('garantia-origem-estoque');
+    const btnSave = document.getElementById('btn-save-garantia');
+    const tipoSelect = document.getElementById('garantia-tipo-operacao');
+    const fornecedorInput = document.getElementById('garantia-fornecedor');
+    const qtyMinus = document.getElementById('garantia-qty-minus');
+    const qtyPlus = document.getElementById('garantia-qty-plus');
+
+    // Lógica de Seleção Global (acessível pelo handleProductScan)
+    window.selectGarantiaProduct = function(product) {
+        console.log(`[GARANTIA BUSCA DEBUG] produto selecionado:`, product);
+        selectedProduct = product;
+        searchInput.value = selectedProduct.descricao || selectedProduct.descricao_base || selectedProduct.nome || '';
+        updateProductCard();
+    };
+
+    // Lógica de Busca Inteligente
+    searchInput.addEventListener('input', async (e) => {
+        const rawValue = e.target.value;
+        console.log(`[GARANTIA BUSCA DEBUG] termo digitado: "${rawValue}"`);
+
+        const term = normalizeProductSearchTerm(rawValue);
+        
+        if (term.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        await ensureProdutosLoaded();
+        console.log(`[GARANTIA BUSCA DEBUG] produtos carregados: ${appData.products?.length || 0}`);
+
+        // 1. Classificar Input (ID Interno, EAN, SKU)
+        const classification = classifyProductInput(rawValue);
+        console.log(`[GARANTIA BUSCA DEBUG] classificação:`, classification);
+
+        let matches = [];
+
+        if (classification.type !== 'text' && classification.type !== 'empty' && classification.type !== 'invalid') {
+            // Busca por Match Exato (ID, EAN, SKU)
+            const val = classification.value;
+            matches = appData.products.filter(p => {
+                const pEan = String(p.ean || '').trim();
+                const pId = normalizeDyId(p.id_interno);
+                const pIdClean = String(p.id_interno || '').replace(/\D/g, '');
+                const valClean = String(val || '').replace(/\D/g, '');
+                const pSku = String(p.sku_fornecedor || '').toUpperCase().trim();
+
+                if (classification.type === 'ean') return pEan === val;
+                if (classification.type === 'id_interno') {
+                    return pId === val || pIdClean === valClean;
+                }
+                if (classification.type === 'code128') {
+                    return pEan === val || pSku === val || pId === val || pIdClean === valClean;
+                }
+                return false;
+            });
+        }
+
+        // 2. Se não houver matches exatos ou for texto, busca por campos de texto
+        if (matches.length === 0) {
+            matches = appData.products.filter(p => {
+                const searchFields = [
+                    p.descricao,
+                    p.id_interno,
+                    p.id_interno ? p.id_interno.replace(/\D/g, '') : '',
+                    p.ean,
+                    p.sku_fornecedor,
+                    p.marca,
+                    p.categoria,
+                    p.subcategoria,
+                    p.atributos
+                ];
+
+                return searchFields.some(f => normalizeProductSearchTerm(f).includes(term));
+            }).slice(0, 15);
+        }
+
+        console.log(`[GARANTIA BUSCA DEBUG] resultados encontrados: ${matches.length}`);
+
+        if (matches.length > 0) {
+            dropdown.innerHTML = matches.map(p => `
+                <div class="search-item garantia-search-item" data-id="${escapeKitAttribute(p.id_interno)}">
+                    <img src="${escapeKitAttribute(getGarantiaProductImage(p))}" onerror="this.src='/imagens/placeholder-item.png'">
+                    <div>
+                        <strong>${escapeKitAttribute(p.descricao || p.descricao_base || p.nome || 'Produto')}</strong>
+                        <small>${escapeKitAttribute(p.id_interno || '-')} | ${escapeKitAttribute(p.marca || 'S/M')} | Stock: ${formatStockNumber(appData.estoque?.filter(e => e.id_interno === p.id_interno).reduce((acc, curr) => acc + (curr.saldo_disponivel || 0), 0) || 0)}</small>
+                    </div>
+                </div>
+            `).join('');
+            dropdown.style.display = 'block';
+
+            dropdown.querySelectorAll('.search-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const id = item.dataset.id;
+                    const product = appData.products.find(p => p.id_interno === id);
+                    if (product) window.selectGarantiaProduct(product);
+                    dropdown.style.display = 'none';
+                });
+            });
+        } else {
+            dropdown.innerHTML = `
+                <div class="garantia-search-empty">
+                    <span class="material-symbols-rounded">search_off</span>
+                    Nenhum produto encontrado
+                </div>
+            `;
+            dropdown.style.display = 'block';
+        }
+    });
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    qtyInput.addEventListener('input', updateTotalCost);
+    qtyMinus?.addEventListener('click', () => {
+        qtyInput.value = Math.max(1, Number(qtyInput.value || 1) - 1);
+        updateTotalCost();
+    });
+    qtyPlus?.addEventListener('click', () => {
+        qtyInput.value = Math.max(1, Number(qtyInput.value || 1) + 1);
+        updateTotalCost();
+    });
+    tipoSelect?.addEventListener('change', updateGarantiaSummary);
+    fornecedorInput?.addEventListener('input', updateGarantiaSummary);
+    sourceSelect.addEventListener('change', (e) => {
+        selectedSource = e.target.value;
+        updateProductCard();
+    });
+
+    // Lógica de Salvar
+    btnSave.addEventListener('click', async () => {
+        if (!selectedProduct) {
+            showToast('Selecione um produto primeiro', 'warning');
+            return;
+        }
+
+        const qty = parseFloat(qtyInput.value);
+        if (qty <= 0) {
+            showToast('Quantidade inválida', 'warning');
+            return;
+        }
+
+        // Validar estoque na origem
+        const productEstoque = appData.estoque.filter(e => e.id_interno === selectedProduct.id_interno);
+        const sourceStock = productEstoque.find(e => e.local === selectedSource)?.saldo_disponivel || 0;
+
+        if (qty > sourceStock) {
+            showToast(`Estoque insuficiente em ${selectedSource} (Disponível: ${sourceStock})`, 'warning');
+            return;
+        }
+
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<span class="material-symbols-rounded spin">sync</span> PROCESSANDO...';
+
+        try {
+            const garantiaData = {
+                id_interno: selectedProduct.id_interno,
+                descricao_produto: selectedProduct.descricao,
+                fornecedor: document.getElementById('garantia-fornecedor').value,
+                tipo_operacao: document.getElementById('garantia-tipo-operacao').value,
+                motivo: document.getElementById('garantia-motivo').value,
+                observacao: document.getElementById('garantia-observacao').value,
+                origem_estoque: selectedSource,
+                quantidade: qty,
+                custo_unitario: parseFloat(document.getElementById('garantia-custo-unitario').value),
+                custo_total: parseFloat(document.getElementById('garantia-custo-total').value)
+            };
+
+            // 1. Salvar na tabela garantias
+            const result = await DataClient.saveGarantiaSupabase(garantiaData);
+            if (!result) throw new Error('Erro ao salvar registro de garantia');
+
+            // 2. Registrar movimento de saída da origem
+            await DataClient.saveMovimentoSupabase({
+                tipo: 'transferencia',
+                id_interno: selectedProduct.id_interno,
+                local_origem: selectedSource,
+                local_destino: 'EM_GARANTIA',
+                quantidade: qty,
+                usuario: currentUser,
+                origem: 'MODULO_GARANTIA',
+                observacao: `${garantiaData.tipo_operacao}: Enviado de ${selectedSource} para EM_GARANTIA. Motivo: ${garantiaData.motivo}`
+            });
+
+            // 3. Atualizar estoque (Subtrair origem, Somar destino)
+            const subOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, selectedSource, 'subtrai', qty);
+            const addOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty);
+
+            if (subOk && addOk) {
+                showToast('Garantia registrada e estoque movido!', 'success');
+                // Recarregar dados do módulo para atualizar UI global
+                await DataClient.loadModule('produtos', true);
+                renderMovimentacoesSubMenu();
+            } else {
+                throw new Error('Erro ao atualizar saldos de estoque');
+            }
+
+        } catch (err) {
+            console.error('Erro no fluxo de garantia:', err);
+            showToast('Falha no processo: ' + err.message, 'error');
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<span class="material-symbols-rounded">send</span> Enviar para Garantia';
+        }
+    });
+    updateGarantiaSummary();
+    setTimeout(() => searchInput?.focus(), 300);
+}
+
+
+function renderNFSubMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+    document.body.classList.remove('menu-active');
+    const subItems = [
+        { id: 'nf_xml', label: 'RECEBER POR XML', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML da NF-e, validar fornecedor e preparar os itens da entrada.' },
+        { id: 'nf_abertas', label: 'NOTAS EM ABERTO', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Continuar notas importadas, pendentes de vínculo ou conferência.' },
+        { id: 'nf_historico', label: 'HIST\u00d3RICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas concluídas, financeiras ou canceladas.' }
+    ];
+    
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('nf')}
+
+            <main class="container">
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+let entradaNfXmlState = null;
+
+const NF_XML_WIZARD_STEPS = [
+    { id: 'xml', label: 'XML' },
+    { id: 'fornecedor', label: 'Fornecedor' },
+    { id: 'financeiro', label: 'Financeiro' },
+    { id: 'produtos', label: 'Produtos' },
+    { id: 'revisao', label: 'Revisão' }
+];
+
+function getNFXmlWizardStepIndex(stepId) {
+    return Math.max(0, NF_XML_WIZARD_STEPS.findIndex(step => step.id === stepId));
+}
+
+function getNFXmlCurrentStep() {
+    return entradaNfXmlState?.currentStep || 'xml';
+}
+
+function setNFXmlCurrentStep(stepId) {
+    if (entradaNfXmlState) entradaNfXmlState.currentStep = stepId;
+}
+
+function nfXmlOnlyDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function nfXmlMoney(value) {
+    return parseFloat(String(value || '0').replace(',', '.')) || 0;
+}
+
+function nfXmlText(node, tagName) {
+    const found = node?.getElementsByTagName(tagName)?.[0];
+    return found?.textContent?.trim() || '';
+}
+
+function nfXmlDate(value) {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+}
+
+function nfXmlFormatDate(value) {
+    if (!value) return '-';
+    const date = new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR');
+}
+
+function nfXmlFormatMoney(value) {
+    return nfXmlMoney(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function closeAppCenterModal() {
+    document.getElementById('app-center-modal')?.remove();
+}
+
+function showAppConfirmModal({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', onConfirm } = {}) {
+    closeAppCenterModal();
+    const modal = document.createElement('div');
+    modal.id = 'app-center-modal';
+    modal.className = 'app-center-modal-backdrop';
+    modal.innerHTML = `
+        <div class="app-center-modal-card" role="dialog" aria-modal="true" aria-label="${escapeKitAttribute(title || 'Confirmação')}">
+            <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+                <span class="material-symbols-rounded">close</span>
+            </button>
+            <h3>${escapeKitAttribute(title || 'Confirmar ação')}</h3>
+            <p>${escapeKitAttribute(message || '')}</p>
+            <div class="app-center-modal-actions">
+                <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">${escapeKitAttribute(cancelLabel)}</button>
+                <button type="button" class="app-center-modal-primary" id="app-center-modal-confirm">${escapeKitAttribute(confirmLabel)}</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('app-center-modal-confirm')?.addEventListener('click', async () => {
+        closeAppCenterModal();
+        if (typeof onConfirm === 'function') await onConfirm();
+    }, { once: true });
+}
+
+const NF_XML_CUSTO_CONFIG = {
+    incluir_icms_no_custo: false
+};
+
+function nfXmlRoundMoney(value, decimals = 6) {
+    const factor = Math.pow(10, decimals);
+    return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+function normalizarTributosItemXML(det) {
+    const prod = det?.getElementsByTagName('prod')?.[0];
+    const imposto = det?.getElementsByTagName('imposto')?.[0];
+    return {
+        valor_ipi: nfXmlMoney(nfXmlText(imposto, 'vIPI')),
+        valor_icms: nfXmlMoney(nfXmlText(imposto, 'vICMS')),
+        valor_icms_st: nfXmlMoney(nfXmlText(imposto, 'vICMSST')),
+        valor_frete_item: nfXmlMoney(nfXmlText(prod, 'vFrete')),
+        valor_seguro_item: nfXmlMoney(nfXmlText(prod, 'vSeg')),
+        valor_outras_despesas_item: nfXmlMoney(nfXmlText(prod, 'vOutro')),
+        valor_desconto_item: nfXmlMoney(nfXmlText(prod, 'vDesc'))
+    };
+}
+
+function calcularRateioCustosNF(nota, itens) {
+    const lista = itens || [];
+    const valorBrutoTotal = lista.reduce((sum, item) => sum + nfXmlMoney(item.valor_total), 0);
+    const totais = nota?.totais || {};
+    const componentes = [
+        ['valor_frete', 'valor_frete_item', 'valor_frete_rateado'],
+        ['valor_seguro', 'valor_seguro_item', 'valor_seguro_rateado'],
+        ['valor_outras_despesas', 'valor_outras_despesas_item', 'valor_outras_despesas_rateado'],
+        ['valor_desconto', 'valor_desconto_item', 'valor_desconto_rateado']
+    ];
+
+    const usaValorItem = componentes.reduce((acc, [totalKey, itemKey]) => {
+        acc[totalKey] = lista.some(item => nfXmlMoney(item[itemKey]) > 0);
+        return acc;
+    }, {});
+
+    const rateiosPorItem = {};
+    lista.forEach(item => {
+        const proporcao = valorBrutoTotal > 0 ? nfXmlMoney(item.valor_total) / valorBrutoTotal : 0;
+        const itemRateios = {};
+        componentes.forEach(([totalKey, itemKey, outputKey]) => {
+            itemRateios[outputKey] = usaValorItem[totalKey]
+                ? nfXmlMoney(item[itemKey])
+                : nfXmlRoundMoney(nfXmlMoney(totais[totalKey]) * proporcao);
+        });
+        rateiosPorItem[item.numero_item] = itemRateios;
+    });
+
+    return rateiosPorItem;
+}
+
+function calcularCustoRealItem(item, rateios = {}) {
+    const quantidade = nfXmlMoney(item.quantidade);
+    const custoNotaTotal = nfXmlMoney(item.valor_total);
+    const valorIcms = nfXmlMoney(item.valor_icms);
+    const custoRealTotal =
+        custoNotaTotal +
+        nfXmlMoney(item.valor_ipi) +
+        nfXmlMoney(item.valor_icms_st) +
+        nfXmlMoney(rateios.valor_frete_rateado) +
+        nfXmlMoney(rateios.valor_seguro_rateado) +
+        nfXmlMoney(rateios.valor_outras_despesas_rateado) +
+        (NF_XML_CUSTO_CONFIG.incluir_icms_no_custo ? valorIcms : 0) -
+        nfXmlMoney(rateios.valor_desconto_rateado);
+
+    return {
+        custo_nota_unitario: nfXmlRoundMoney(nfXmlMoney(item.valor_unitario)),
+        custo_nota_total: nfXmlRoundMoney(custoNotaTotal),
+        valor_frete_rateado: nfXmlRoundMoney(rateios.valor_frete_rateado),
+        valor_seguro_rateado: nfXmlRoundMoney(rateios.valor_seguro_rateado),
+        valor_outras_despesas_rateado: nfXmlRoundMoney(rateios.valor_outras_despesas_rateado),
+        valor_desconto_rateado: nfXmlRoundMoney(rateios.valor_desconto_rateado),
+        custo_real_total: nfXmlRoundMoney(custoRealTotal),
+        custo_real_unitario: quantidade > 0 ? nfXmlRoundMoney(custoRealTotal / quantidade) : 0
+    };
+}
+
+function aplicarCustosReaisNF(nota) {
+    const rateios = calcularRateioCustosNF(nota, nota.itens);
+    nota.itens = (nota.itens || []).map(item => {
+        const resumo = calcularCustoRealItem(item, rateios[item.numero_item] || {});
+        return { ...item, ...resumo };
+    });
+    return nota;
+}
+
+function formatarResumoCustoReal(item) {
+    const despesas = nfXmlMoney(item.valor_frete_rateado) +
+        nfXmlMoney(item.valor_seguro_rateado) +
+        nfXmlMoney(item.valor_outras_despesas_rateado);
+    return {
+        custoNota: nfXmlFormatMoney(item.custo_nota_unitario ?? item.valor_unitario),
+        ipi: nfXmlFormatMoney(item.valor_ipi),
+        icmsSt: nfXmlFormatMoney(item.valor_icms_st),
+        despesasRateadas: nfXmlFormatMoney(despesas),
+        desconto: nfXmlFormatMoney(item.valor_desconto_rateado),
+        custoRealUnitario: nfXmlFormatMoney(item.custo_real_unitario),
+        custoRealTotal: nfXmlFormatMoney(item.custo_real_total)
+    };
+}
+
+const NF_XML_COST_COLUMNS = [
+    'custo_nota_unitario',
+    'custo_nota_total',
+    'valor_ipi',
+    'valor_icms',
+    'valor_icms_st',
+    'valor_frete_rateado',
+    'valor_seguro_rateado',
+    'valor_outras_despesas_rateado',
+    'valor_desconto_rateado',
+    'custo_real_unitario',
+    'custo_real_total'
+];
+
+function stripNFXmlCostColumns(payloads) {
+    return (payloads || []).map(payload => {
+        const clean = { ...payload };
+        NF_XML_COST_COLUMNS.forEach(column => delete clean[column]);
+        return clean;
+    });
+}
+
+function isMissingColumnError(error) {
+    const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+    return error?.code === '42703' || text.includes('column') || text.includes('schema cache');
+}
+
+function createNFXmlFinanceState(duplicatas = [], valorTotal = 0) {
+    const parcelasEditaveis = createNFXmlParcelasFromDuplicatas(duplicatas, valorTotal);
+    return {
+        modoPagamento: duplicatas.length > 0 ? 'xml' : 'editar',
+        confirmarDiferenca: false,
+        parcelasEditaveis,
+        complementares: [],
+        existentes: []
+    };
+}
+
+function createNFXmlParcelasFromDuplicatas(duplicatas = [], valorTotal = 0) {
+    const total = nfXmlMoney(valorTotal);
+    if (duplicatas.length) {
+        return duplicatas.map((dup, index) => ({
+            id: `xml-${index + 1}`,
+            parcela: dup.parcela || String(index + 1).padStart(3, '0'),
+            descricao: `Parcela ${dup.parcela || index + 1}`,
+            valor: nfXmlMoney(dup.valor),
+            vencimento: dup.vencimento || new Date().toISOString().slice(0, 10),
+            forma_pagamento: 'boleto',
+            observacoes: 'Parcela importada do XML',
+            status: 'pendente',
+            pago: false,
+            origem: 'xml'
+        }));
+    }
+
+    return [{
+        id: 'manual-1',
+        parcela: '001',
+        descricao: 'Parcela 001',
+        valor: total,
+        vencimento: new Date().toISOString().slice(0, 10),
+        forma_pagamento: 'boleto',
+        observacoes: '',
+        status: 'pendente',
+        pago: false,
+        origem: 'manual'
+    }];
+}
+
+function getNFXmlFinanceModeLabel(mode) {
+    const labels = {
+        avista: 'Pagamento à vista',
+        xml: 'Parcelas da nota',
+        editar: 'Editar pagamentos'
+    };
+    return labels[mode] || labels.editar;
+}
+
+function getNFXmlTipoConfig(tipo) {
+    const normalizedTipo = normalizeNFXmlTipoLancamento(tipo);
+    const configs = {
+        entrada_normal: {
+            label: 'Entrada normal',
+            badge: 'ESTOQUE + FINANCEIRO',
+            description: 'Usar para notas novas. Lança fornecedor, itens, financeiro e permite finalizar entrada no estoque.',
+            afetaEstoque: true,
+            afetaFinanceiro: true,
+            saveLabel: 'Confirmar importação'
+        },
+        somente_financeiro: {
+            label: 'Somente financeiro',
+            badge: 'NÃO ALTERA ESTOQUE',
+            description: 'Usar para notas antigas já recebidas. Não altera estoque. Apenas cria contas a pagar.',
+            afetaEstoque: false,
+            afetaFinanceiro: true,
+            saveLabel: 'Lançar financeiro'
+        }
+    };
+    return configs[normalizedTipo];
+}
+
+function normalizeNFXmlTipoLancamento(tipo) {
+    const normalized = String(tipo || 'entrada_normal').trim().toLowerCase();
+    if (normalized === 'entrada_normal' || normalized === 'somente_financeiro') return normalized;
+    console.log('[ENTRADA_NF_REMOVER_HISTORICO] tipo de lançamento removido/ignorado', normalized);
+    return 'entrada_normal';
+}
+
+function parseNFeXml(xmlText) {
+    console.log('[ENTRADA_NF_XML] parse iniciado');
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, 'text/xml');
+    const parserError = xml.getElementsByTagName('parsererror')[0];
+    if (parserError) throw new Error('XML inválido ou mal formatado.');
+
+    const infNFe = xml.getElementsByTagName('infNFe')[0];
+    const ide = xml.getElementsByTagName('ide')[0];
+    const emit = xml.getElementsByTagName('emit')[0];
+    const dest = xml.getElementsByTagName('dest')[0];
+    const total = xml.getElementsByTagName('ICMSTot')[0];
+    const infProt = xml.getElementsByTagName('infProt')[0];
+    const chave = nfXmlText(infProt, 'chNFe') || String(infNFe?.getAttribute('Id') || '').replace(/^NFe/, '');
+
+    if (!ide || !emit || !chave) throw new Error('XML de NF-e incompleto. Não encontrei ide, emitente ou chave.');
+
+    const dets = Array.from(xml.getElementsByTagName('det'));
+    const itens = dets.map((det, index) => {
+        const prod = det.getElementsByTagName('prod')[0];
+        const tributos = normalizarTributosItemXML(det);
+        return {
+            numero_item: Number(det.getAttribute('nItem') || index + 1),
+            codigo_produto_fornecedor: nfXmlText(prod, 'cProd'),
+            ean_fornecedor: nfXmlText(prod, 'cEAN') || nfXmlText(prod, 'cEANTrib'),
+            descricao_produto_fornecedor: nfXmlText(prod, 'xProd'),
+            ncm: nfXmlText(prod, 'NCM'),
+            cfop: nfXmlText(prod, 'CFOP'),
+            unidade: nfXmlText(prod, 'uCom'),
+            quantidade: nfXmlMoney(nfXmlText(prod, 'qCom')),
+            valor_unitario: nfXmlMoney(nfXmlText(prod, 'vUnCom')),
+            valor_total: nfXmlMoney(nfXmlText(prod, 'vProd')),
+            ...tributos,
+            id_interno: '',
+            produto_id: null,
+            produto_nome: '',
+            status_vinculo: 'pendente_vinculo',
+            ean_divergente: false,
+            match_source: ''
+        };
+    });
+
+    const duplicatas = Array.from(xml.getElementsByTagName('dup')).map((dup, index) => ({
+        parcela: nfXmlText(dup, 'nDup') || String(index + 1).padStart(3, '0'),
+        vencimento: nfXmlText(dup, 'dVenc'),
+        valor: nfXmlMoney(nfXmlText(dup, 'vDup'))
+    }));
+
+    return aplicarCustosReaisNF({
+        xmlText,
+        chave_acesso: chave,
+        protocolo: nfXmlText(infProt, 'nProt'),
+        numero_nf: nfXmlText(ide, 'nNF'),
+        serie: nfXmlText(ide, 'serie'),
+        data_emissao: nfXmlDate(nfXmlText(ide, 'dhEmi') || nfXmlText(ide, 'dEmi')),
+        fornecedor: {
+            cnpj: nfXmlOnlyDigits(nfXmlText(emit, 'CNPJ')),
+            razao_social: nfXmlText(emit, 'xNome'),
+            nome_fantasia: nfXmlText(emit, 'xFant'),
+            inscricao_estadual: nfXmlText(emit, 'IE'),
+            telefone: nfXmlText(emit, 'fone'),
+            whatsapp: '',
+            email: nfXmlText(emit, 'email'),
+            contato_comercial: '',
+            cep: nfXmlOnlyDigits(nfXmlText(emit, 'CEP')),
+            endereco: nfXmlText(emit, 'xLgr'),
+            numero: nfXmlText(emit, 'nro'),
+            complemento: nfXmlText(emit, 'xCpl'),
+            bairro: nfXmlText(emit, 'xBairro'),
+            cidade: nfXmlText(emit, 'xMun'),
+            uf: nfXmlText(emit, 'UF')
+        },
+        destinatario: {
+            cnpj: nfXmlOnlyDigits(nfXmlText(dest, 'CNPJ')),
+            razao_social: nfXmlText(dest, 'xNome')
+        },
+        totais: {
+            valor_produtos: nfXmlMoney(nfXmlText(total, 'vProd')),
+            valor_total: nfXmlMoney(nfXmlText(total, 'vNF')),
+            valor_icms: nfXmlMoney(nfXmlText(total, 'vICMS')),
+            valor_st: nfXmlMoney(nfXmlText(total, 'vST')),
+            valor_ipi: nfXmlMoney(nfXmlText(total, 'vIPI')),
+            valor_frete: nfXmlMoney(nfXmlText(total, 'vFrete')),
+            valor_seguro: nfXmlMoney(nfXmlText(total, 'vSeg')),
+            valor_desconto: nfXmlMoney(nfXmlText(total, 'vDesc')),
+            valor_outras_despesas: nfXmlMoney(nfXmlText(total, 'vOutro'))
+        },
+        itens,
+        duplicatas,
+        financeiro: createNFXmlFinanceState(duplicatas, nfXmlMoney(nfXmlText(total, 'vNF'))),
+        fornecedorRecord: null,
+        nfExistente: null,
+        savedEntradaId: null,
+        tipo_lancamento: 'entrada_normal',
+        afeta_estoque: true,
+        afeta_financeiro: true,
+        estoque_finalizado: false,
+        financeiro_lancado: false,
+        status: 'importada',
+        currentStep: 'xml'
+    });
+}
+
+async function renderNFXmlUploadScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+    entradaNfXmlState = null;
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            <main class="container">
+                <div class="screen-mini-title">
+                    <div class="mini-icon">${menu3DIcons.xml}</div>
+                    <span>ENTRADA NF - XML</span>
+                </div>
+                <div id="nfxml-wizard-root">
+                    ${renderNFXmlWizardHTML()}
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+function refreshNFXmlWizard() {
+    const root = document.getElementById('nfxml-wizard-root');
+    if (root) {
+        root.innerHTML = renderNFXmlWizardHTML();
+    } else {
+        renderNFXmlWizardScreen();
+    }
+}
+
+function renderNFXmlWizardScreen() {
+    const currentUser = localStorage.getItem('currentUser');
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            <main class="container">
+                <div class="screen-mini-title">
+                    <div class="mini-icon">${menu3DIcons.xml}</div>
+                    <span>ENTRADA NF - XML</span>
+                </div>
+                <div id="nfxml-wizard-root">
+                    ${renderNFXmlWizardHTML()}
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+function getNFXmlStepState(stepId) {
+    const state = entradaNfXmlState;
+    if (!state) return stepId === 'xml' ? 'active' : 'locked';
+    const missingLinks = state.itens?.filter(item => !item.id_interno).length || 0;
+    const financeOk = validateNFXmlFinanceBeforeSave({ allowPrompt: false, silent: true });
+    const checks = {
+        xml: true,
+        fornecedor: !!state.fornecedorRecord,
+        financeiro: financeOk,
+        produtos: state.tipo_lancamento !== 'entrada_normal' || missingLinks === 0,
+        revisao: !!state.fornecedorRecord && financeOk && (state.tipo_lancamento !== 'entrada_normal' || missingLinks === 0)
+    };
+    const currentIndex = getNFXmlWizardStepIndex(getNFXmlCurrentStep());
+    const stepIndex = getNFXmlWizardStepIndex(stepId);
+    if (stepIndex === currentIndex) return 'active';
+    if (checks[stepId]) return 'done';
+    if (stepIndex < currentIndex) return 'warning';
+    return 'pending';
+}
+
+function renderNFXmlStepper() {
+    return `
+        <nav class="nfxml-stepper" aria-label="Etapas da entrada NF">
+            ${NF_XML_WIZARD_STEPS.map((step, index) => {
+                const stateClass = getNFXmlStepState(step.id);
+                return `
+                    <button type="button" class="${stateClass}" onclick="goToNFXmlWizardStep('${step.id}')">
+                        <span>${stateClass === 'done' ? '<span class="material-symbols-rounded">check</span>' : index + 1}</span>
+                        <strong>${step.label}</strong>
+                    </button>
+                `;
+            }).join('')}
+        </nav>
+    `;
+}
+
+function renderNFXmlWizardHTML() {
+    const currentStep = getNFXmlCurrentStep();
+    return `
+        <section class="nfxml-workspace nfxml-wizard-workspace">
+            ${renderNFXmlStepper()}
+            <div class="nfxml-wizard-stage">
+                ${renderNFXmlWizardStepContent(currentStep)}
+            </div>
+            ${renderNFXmlWizardActions()}
+        </section>
+    `;
+}
+
+function renderNFXmlWizardStepContent(stepId) {
+    const state = entradaNfXmlState;
+    if (stepId === 'xml') return renderNFXmlStepXml();
+    if (!state) return renderNFXmlStepXml();
+    if (stepId === 'fornecedor') return renderNFXmlStepFornecedor();
+    if (stepId === 'financeiro') return renderNFXmlFinanceBlock();
+    if (stepId === 'produtos') return renderNFXmlStepProdutos();
+    if (stepId === 'revisao') return renderNFXmlStepRevisao();
+    return renderNFXmlStepXml();
+}
+
+function renderNFXmlStepXml() {
+    return `
+        <div class="nfxml-top-grid">
+            <div class="nfxml-card nfxml-upload-card">
+                <div class="nfxml-card-head">
+                    <div>
+                        <h2 class="nfxml-title">RECEBER POR XML</h2>
+                        <p class="nfxml-text">Importe o XML da NF-e, confira os vínculos e salve a entrada.</p>
+                    </div>
+                    <span class="nfxml-status-pill positive">
+                        <span class="material-symbols-rounded">verified</span>
+                        Pré-cadastro sem atualizar estoque
+                    </span>
+                </div>
+                <label for="nf-xml-file" class="nfxml-file-drop">
+                    <span class="material-symbols-rounded">upload_file</span>
+                    <strong>${entradaNfXmlState ? `NF ${escapeKitAttribute(entradaNfXmlState.numero_nf)} importada` : 'Selecionar arquivo XML da NF-e'}</strong>
+                    <small>${entradaNfXmlState ? 'XML validado. Você pode trocar o arquivo se precisar.' : 'O arquivo será lido localmente no navegador.'}</small>
+                    <input id="nf-xml-file" type="file" accept=".xml,text/xml,application/xml" style="display:none;" onchange="handleNFXmlFileSelected(this)">
+                </label>
+            </div>
+            <div id="nf-xml-launch-slot">
+                ${renderNFXmlTipoLancamentoCards()}
+            </div>
+        </div>
+    `;
+}
+
+function renderNFXmlStepFornecedor() {
+    const state = entradaNfXmlState;
+    const f = { ...(state.fornecedorRecord || {}), ...state.fornecedor };
+    const fields = [
+        ['razao_social', 'Razão social'],
+        ['nome_fantasia', 'Nome fantasia'],
+        ['cnpj', 'CNPJ'],
+        ['inscricao_estadual', 'Inscrição estadual'],
+        ['cep', 'CEP'],
+        ['endereco', 'Endereço'],
+        ['numero', 'Número'],
+        ['complemento', 'Complemento'],
+        ['bairro', 'Bairro'],
+        ['cidade', 'Cidade'],
+        ['uf', 'UF'],
+        ['telefone', 'Telefone'],
+        ['whatsapp', 'WhatsApp'],
+        ['email', 'Email'],
+        ['contato_comercial', 'Contato comercial'],
+        ['observacoes', 'Observações']
+    ];
+    return `
+        <section class="nfxml-card">
+            <div class="nfxml-section-head">
+                <div>
+                    <h3 class="nfxml-title small">DADOS DO FORNECEDOR</h3>
+                    <p class="nfxml-text">Confira os dados vindos da NF e complete contato, WhatsApp e vendedor.</p>
+                </div>
+                ${state.fornecedorRecord ? '<span class="nfxml-status-pill positive"><span class="material-symbols-rounded">check</span>Fornecedor vinculado</span>' : '<span class="nfxml-status-pill warning">Pendente</span>'}
+            </div>
+            <form id="nfxml-fornecedor-form" class="nfxml-form-grid dark">
+                ${fields.map(([key, label]) => `
+                    <label class="${key === 'observacoes' ? 'full' : ''}">
+                        <span>${label}</span>
+                        ${key === 'observacoes'
+                            ? `<textarea id="nfxml-forn-${key}" rows="3">${escapeKitAttribute(f[key] || '')}</textarea>`
+                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}">`}
+                    </label>
+                `).join('')}
+            </form>
+            <div class="nfxml-inline-actions">
+                <button type="button" class="btn-action" onclick="saveNFXmlFornecedorFromModal()">
+                    <span class="material-symbols-rounded">save</span>
+                    Salvar fornecedor
+                </button>
+            </div>
+        </section>
+    `;
+}
+
+function renderNFXmlStepProdutos() {
+    const state = entradaNfXmlState;
+    const missingLinks = state.itens.filter(item => !item.id_interno).length;
+    return `
+        <section class="nfxml-card nfxml-products-card">
+            <div class="nfxml-section-head">
+                <div>
+                    <h3 class="nfxml-title small">PRODUTOS DA NOTA</h3>
+                    <p class="nfxml-text">Confira vínculos, custo NF, impostos, despesas e custo real. Lotes de estoque serão preparados a partir destes itens.</p>
+                </div>
+                <span class="nfxml-status-pill ${missingLinks ? 'warning' : 'positive'}">${missingLinks ? `${missingLinks} pendente(s)` : 'Produtos vinculados'}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${state.itens.map(item => renderNFXmlItemCard(item, state.tipo_lancamento === 'entrada_normal')).join('')}
+            </div>
+        </section>
+    `;
+}
+
+function renderNFXmlStepRevisao() {
+    const state = entradaNfXmlState;
+    const missingLinks = state.itens.filter(item => !item.id_interno).length;
+    const totals = getNFXmlFinanceTotals();
+    const alerts = [];
+    if (!state.fornecedorRecord) alerts.push('Fornecedor ainda não cadastrado/vinculado.');
+    if (Math.abs(totals.diferencaParcelas) > 0.01) alerts.push(`Diferença nas parcelas da nota de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`);
+    if (state.tipo_lancamento === 'entrada_normal' && missingLinks) alerts.push(`${missingLinks} produto(s) sem vínculo interno.`);
+    return `
+        <section class="nfxml-card nfxml-review-card">
+            <div class="nfxml-section-head">
+                <div>
+                    <h3 class="nfxml-title small">REVISÃO FINAL</h3>
+                    <p class="nfxml-text">Confira tudo antes de confirmar a importação.</p>
+                </div>
+                <span class="nfxml-status-pill ${alerts.length ? 'warning' : 'positive'}">${alerts.length ? 'Pendências' : 'Pronto para importar'}</span>
+            </div>
+            <div class="nfxml-review-grid">
+                <div><span>NF</span><strong>${escapeKitAttribute(state.numero_nf)} / Série ${escapeKitAttribute(state.serie)}</strong><small>${escapeKitAttribute(state.chave_acesso)}</small></div>
+                <div><span>Fornecedor</span><strong>${escapeKitAttribute(state.fornecedor.razao_social || '-')}</strong><small>${escapeKitAttribute(state.fornecedor.cnpj || '-')}</small></div>
+                <div><span>Total oficial NF</span><strong>${nfXmlFormatMoney(totals.totalNf)}</strong><small>Não altera estoque nem custo real</small></div>
+                <div><span>Parcelas da nota</span><strong>${nfXmlFormatMoney(totals.totalParcelasNota)}</strong><small>Diferença: ${nfXmlFormatMoney(totals.diferencaParcelas)}</small></div>
+                <div><span>Complementares</span><strong>${nfXmlFormatMoney(totals.totalComplementares)}</strong><small>Vinculados à NF no financeiro</small></div>
+                <div><span>Total financeiro previsto</span><strong>${nfXmlFormatMoney(totals.totalPrevisto)}</strong><small>NF oficial + complementares</small></div>
+                <div><span>Produtos</span><strong>${state.itens.length}</strong><small>${state.itens.length - missingLinks} vinculados / ${missingLinks} pendentes</small></div>
+                <div><span>Total produtos</span><strong>${nfXmlFormatMoney(state.totais.valor_produtos)}</strong></div>
+                <div><span>Total NF</span><strong>${nfXmlFormatMoney(state.totais.valor_total)}</strong></div>
+            </div>
+            <div class="nfxml-alert-list ${alerts.length ? '' : 'ok'}">
+                ${alerts.length ? alerts.map(alert => `<p><span class="material-symbols-rounded">warning</span>${escapeKitAttribute(alert)}</p>`).join('') : '<p><span class="material-symbols-rounded">check_circle</span>Sem alertas pendentes.</p>'}
+            </div>
+        </section>
+    `;
+}
+
+function canAdvanceNFXmlStep(stepId = getNFXmlCurrentStep(), showMessage = true) {
+    const state = entradaNfXmlState;
+    if (stepId === 'xml') {
+        if (!state) {
+            if (showMessage) showToast('Importe e valide um XML antes de avançar.', 'warning');
+            return false;
+        }
+        return true;
+    }
+    if (!state) return false;
+    if (stepId === 'fornecedor') {
+        if (!state.fornecedorRecord) {
+            if (showMessage) showToast('Salve/vincule o fornecedor antes de avançar.', 'warning');
+            return false;
+        }
+        return true;
+    }
+    if (stepId === 'financeiro') {
+        return validateNFXmlFinanceBeforeSave({ allowPrompt: showMessage, silent: !showMessage });
+    }
+    if (stepId === 'produtos') {
+        const missingLinks = state.itens.filter(item => !item.id_interno).length;
+        if (state.tipo_lancamento === 'entrada_normal' && missingLinks) {
+            if (showMessage) showToast(`Ainda existem ${missingLinks} produto(s) sem vínculo.`, 'warning');
+            return false;
+        }
+        return true;
+    }
+    return true;
+}
+
+function goToNFXmlWizardStep(stepId) {
+    const state = entradaNfXmlState;
+    const targetIndex = getNFXmlWizardStepIndex(stepId);
+    const currentIndex = getNFXmlWizardStepIndex(getNFXmlCurrentStep());
+    if (!state && targetIndex > 0) {
+        showToast('Importe o XML primeiro.', 'warning');
+        return;
+    }
+    if (targetIndex > currentIndex) {
+        for (let i = currentIndex; i < targetIndex; i++) {
+            if (!canAdvanceNFXmlStep(NF_XML_WIZARD_STEPS[i].id, true)) return;
+        }
+    }
+    setNFXmlCurrentStep(stepId);
+    refreshNFXmlWizard();
+}
+
+function nextNFXmlWizardStep() {
+    const currentIndex = getNFXmlWizardStepIndex(getNFXmlCurrentStep());
+    const currentStep = NF_XML_WIZARD_STEPS[currentIndex];
+    if (!canAdvanceNFXmlStep(currentStep.id, true)) return;
+    const nextStep = NF_XML_WIZARD_STEPS[Math.min(currentIndex + 1, NF_XML_WIZARD_STEPS.length - 1)];
+    setNFXmlCurrentStep(nextStep.id);
+    refreshNFXmlWizard();
+}
+
+function prevNFXmlWizardStep() {
+    const currentIndex = getNFXmlWizardStepIndex(getNFXmlCurrentStep());
+    const prevStep = NF_XML_WIZARD_STEPS[Math.max(currentIndex - 1, 0)];
+    setNFXmlCurrentStep(prevStep.id);
+    refreshNFXmlWizard();
+}
+
+function canConfirmNFXmlImport(showMessage = true) {
+    return canAdvanceNFXmlStep('xml', showMessage) &&
+        canAdvanceNFXmlStep('fornecedor', showMessage) &&
+        canAdvanceNFXmlStep('financeiro', showMessage) &&
+        canAdvanceNFXmlStep('produtos', showMessage);
+}
+
+function renderNFXmlWizardActions() {
+    const currentIndex = getNFXmlWizardStepIndex(getNFXmlCurrentStep());
+    const isFirst = currentIndex === 0;
+    const isLast = currentIndex === NF_XML_WIZARD_STEPS.length - 1;
+    const state = entradaNfXmlState;
+    const confirmReady = state && !state.savedEntradaId && canConfirmNFXmlImport(false);
+    return `
+        <div class="nfxml-wizard-actions">
+            <button type="button" class="btn-action" onclick="${isFirst ? 'renderNFSubMenu()' : 'prevNFXmlWizardStep()'}" style="background:#333 !important;">
+                <span class="material-symbols-rounded">arrow_back</span>
+                ${isFirst ? 'Voltar' : 'Voltar'}
+            </button>
+            ${isLast ? `
+                <button type="button" onclick="salvarEntradaNFXml()" class="btn-action" ${confirmReady ? '' : 'disabled'} style="opacity:${confirmReady ? '1' : '0.45'}; background:#22c55e !important;">
+                    <span class="material-symbols-rounded">check_circle</span>
+                    ${state?.savedEntradaId ? 'Importação salva' : 'Confirmar importação'}
+                </button>
+            ` : `
+                <button type="button" onclick="nextNFXmlWizardStep()" class="btn-action" ${state || isFirst ? '' : 'disabled'}>
+                    Próximo
+                    <span class="material-symbols-rounded">arrow_forward</span>
+                </button>
+            `}
+        </div>
+    `;
+}
+
+async function handleNFXmlFileSelected(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+        console.log('[ENTRADA_NF_XML] arquivo selecionado', file.name, file.size);
+        const xmlText = await file.text();
+        entradaNfXmlState = parseNFeXml(xmlText);
+        await ensureProdutosLoaded(true);
+        await hydrateNFXmlPreviewFromSupabase();
+        setNFXmlCurrentStep('xml');
+        refreshNFXmlWizard();
+    } catch (error) {
+        console.error('[ENTRADA_NF_XML] erro ao ler XML', error);
+        showToast(error.message || 'Erro ao ler XML', 'error');
+    }
+}
+
+function renderNFXmlLaunchSlot() {
+    const slot = document.getElementById('nf-xml-launch-slot');
+    if (slot) slot.innerHTML = renderNFXmlTipoLancamentoCards();
+}
+
+async function hydrateNFXmlPreviewFromSupabase() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state) return;
+
+    console.log('[ENTRADA_NF_XML] consultando Supabase para chave, fornecedor e vínculos');
+
+    const { data: nfExistente, error: nfError } = await client
+        .from('entradas_nf')
+        .select('id, numero_nf, status, fornecedor_id, fornecedor_cnpj, cnpj_fornecedor, tipo_lancamento, afeta_estoque, afeta_financeiro, estoque_finalizado, financeiro_lancado')
+        .eq('chave_acesso', state.chave_acesso)
+        .maybeSingle();
+    if (nfError) console.warn('[ENTRADA_NF_XML] erro ao verificar chave', nfError);
+    state.nfExistente = nfExistente || null;
+    if (state.nfExistente) {
+        state.savedEntradaId = state.nfExistente.id;
+        state.tipo_lancamento = normalizeNFXmlTipoLancamento(state.nfExistente.tipo_lancamento);
+        const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
+        state.afeta_estoque = tipoConfig.afetaEstoque;
+        state.afeta_financeiro = tipoConfig.afetaFinanceiro;
+        state.estoque_finalizado = !!state.nfExistente.estoque_finalizado;
+        state.financeiro_lancado = !!state.nfExistente.financeiro_lancado;
+        showToast('NF já importada', 'warning');
+        console.warn('[ENTRADA_NF_XML] NF já importada', state.nfExistente);
+        console.log('[ENTRADA_NF_TIPO_LANCAMENTO] tipo existente carregado', state.tipo_lancamento);
+
+        const { data: contas, error: contasError } = await client
+            .from('contas_pagar')
+            .select('*')
+            .eq('entrada_nf_id', state.nfExistente.id)
+            .order('vencimento', { ascending: true });
+        if (contasError) console.warn('[ENTRADA_NF_FINANCEIRO] erro ao carregar financeiro existente', contasError);
+        state.financeiro.existentes = contas || [];
+        console.log('[ENTRADA_NF_FINANCEIRO] lançamentos existentes carregados', state.financeiro.existentes);
+    }
+
+    const { data: fornecedor, error: fornError } = await client
+        .from('fornecedores')
+        .select('*')
+        .eq('cnpj', state.fornecedor.cnpj)
+        .maybeSingle();
+    if (fornError) console.warn('[ENTRADA_NF_XML] fornecedor não localizado ou tabela indisponível', fornError);
+    state.fornecedorRecord = fornecedor || null;
+    state.status = state.fornecedorRecord ? 'pendente_vinculo' : 'pendente_fornecedor';
+
+    let vinculos = [];
+    if (state.fornecedor.cnpj) {
+        const { data, error } = await client
+            .from('fornecedor_produtos')
+            .select('*')
+            .eq('fornecedor_cnpj', state.fornecedor.cnpj);
+        if (error) console.warn('[ENTRADA_NF_XML] erro ao buscar vínculos fornecedor_produtos', error);
+        vinculos = data || [];
+    }
+
+    for (const item of state.itens) {
+        const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '') === String(item.codigo_produto_fornecedor || ''));
+        if (vinculo?.id_interno) {
+            applyNFXmlItemProductLink(item.numero_item, vinculo.id_interno, 'fornecedor+cProd', true);
+            item.ean_divergente = !!vinculo.ean_divergente;
+            continue;
+        }
+
+        const ean = nfXmlOnlyDigits(item.ean_fornecedor);
+        if (ean && !['SEMGTIN', 'ISENTO'].includes(String(item.ean_fornecedor).toUpperCase())) {
+            const product = (appData.products || []).find(p => nfXmlOnlyDigits(p.ean) === ean);
+            if (product) applyNFXmlItemProductLink(item.numero_item, product.id_interno, 'ean', true);
+        }
+    }
+}
+
+function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', silent = false) {
+    const state = entradaNfXmlState;
+    const item = state?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+    if (!item) return false;
+
+    const product = (appData.products || []).find(p => String(p.id_interno || '') === String(idInterno || ''));
+    if (!product) {
+        if (!silent) showToast('Produto interno não encontrado.', 'warning');
+        return false;
+    }
+
+    item.id_interno = product.id_interno;
+    item.produto_id = product.id || null;
+    item.produto_nome = product.descricao_completa || product.descricao_base || product.nome || product.id_interno;
+    item.status_vinculo = 'vinculado';
+    item.match_source = source;
+    console.log('[ENTRADA_NF_XML] vínculo aplicado', { numeroItem, idInterno, source });
+    if (!silent) renderNFXmlPreview();
+    return true;
+}
+
+function updateNFXmlItemManualLink(numeroItem, inputId) {
+    const idInterno = document.getElementById(inputId)?.value?.trim();
+    applyNFXmlItemProductLink(numeroItem, idInterno, 'manual');
+}
+
+function toggleNFXmlEanDivergente(numeroItem, checked) {
+    const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+    if (!item) return;
+    item.ean_divergente = !!checked;
+    console.log('[ENTRADA_NF_XML] ean divergente alterado', { numeroItem, checked });
+}
+
+function searchNFXmlProduct(numeroItem, query) {
+    const results = document.getElementById(`nfxml-results-${numeroItem}`);
+    if (!results) return;
+    const term = String(query || '').trim().toLowerCase();
+    if (term.length < 2) {
+        results.innerHTML = '';
+        return;
+    }
+
+    const found = (appData.products || []).filter(p => {
+        const haystack = [
+            p.id_interno,
+            p.ean,
+            p.sku_fornecedor,
+            p.descricao_completa,
+            p.descricao_base,
+            p.nome,
+            p.marca
+        ].join(' ').toLowerCase();
+        return haystack.includes(term);
+    }).slice(0, 8);
+
+    results.innerHTML = found.length ? `
+        <div style="margin-top: 8px; display:flex; flex-direction:column; gap:6px;">
+            ${found.map(p => `
+                <button type="button" onclick="applyNFXmlItemProductLink(${numeroItem}, '${escapeKitAttribute(p.id_interno)}', 'busca_descricao')" style="text-align:left; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.05); color:white; border-radius:10px; padding:10px; cursor:pointer;">
+                    <strong>${escapeKitAttribute(p.id_interno || '-')}</strong> - ${escapeKitAttribute(p.descricao_completa || p.descricao_base || p.nome || '-')}
+                    <span style="display:block; color:var(--muted); font-size:0.75rem;">SKU ${escapeKitAttribute(p.sku_fornecedor || '-')} | EAN ${escapeKitAttribute(p.ean || '-')} | ${escapeKitAttribute(p.marca || '-')}</span>
+                </button>
+            `).join('')}
+        </div>
+    ` : `<div style="color:var(--muted); font-size:0.8rem; margin-top:8px;">Nenhum produto encontrado.</div>`;
+}
+
+async function cadastrarFornecedorNFXml(options = {}) {
+    openNFXmlFornecedorModal();
+    return null;
+}
+
+function openNFXmlFornecedorModal() {
+    const state = entradaNfXmlState;
+    if (!state?.fornecedor) return;
+    closeAppCenterModal();
+    const f = { ...(state.fornecedorRecord || {}), ...state.fornecedor };
+    const fields = [
+        ['razao_social', 'Razão social'],
+        ['nome_fantasia', 'Nome fantasia'],
+        ['cnpj', 'CNPJ'],
+        ['inscricao_estadual', 'Inscrição estadual'],
+        ['cep', 'CEP'],
+        ['endereco', 'Endereço'],
+        ['numero', 'Número'],
+        ['complemento', 'Complemento'],
+        ['bairro', 'Bairro'],
+        ['cidade', 'Cidade'],
+        ['uf', 'UF'],
+        ['telefone', 'Telefone'],
+        ['whatsapp', 'WhatsApp'],
+        ['email', 'Email'],
+        ['contato_comercial', 'Contato comercial'],
+        ['observacoes', 'Observações']
+    ];
+    const modal = document.createElement('div');
+    modal.id = 'app-center-modal';
+    modal.className = 'app-center-modal-backdrop nfxml-supplier-modal';
+    modal.innerHTML = `
+        <div class="app-center-modal-card wide" role="dialog" aria-modal="true" aria-label="Cadastro de fornecedor">
+            <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+                <span class="material-symbols-rounded">close</span>
+            </button>
+            <h3>CADASTRAR FORNECEDOR</h3>
+            <p>Confira os dados vindos da NF. Todos os campos podem ser ajustados antes de salvar.</p>
+            <form id="nfxml-fornecedor-form" class="nfxml-form-grid">
+                ${fields.map(([key, label]) => `
+                    <label class="${key === 'observacoes' ? 'full' : ''}">
+                        <span>${label}</span>
+                        ${key === 'observacoes'
+                            ? `<textarea id="nfxml-forn-${key}" rows="3">${escapeKitAttribute(f[key] || '')}</textarea>`
+                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}">`}
+                    </label>
+                `).join('')}
+            </form>
+            <div class="app-center-modal-actions">
+                <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+                <button type="button" class="app-center-modal-primary" onclick="saveNFXmlFornecedorFromModal()">Salvar fornecedor</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+async function saveNFXmlFornecedorFromModal() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state) return null;
+    const read = (key) => document.getElementById(`nfxml-forn-${key}`)?.value?.trim() || '';
+    const cnpj = nfXmlOnlyDigits(read('cnpj') || state.fornecedor?.cnpj);
+    if (!cnpj) {
+        showToast('CNPJ do fornecedor não encontrado no XML.', 'error');
+        return null;
+    }
+
+    const payload = {
+        cnpj,
+        razao_social: read('razao_social'),
+        nome_fantasia: read('nome_fantasia'),
+        inscricao_estadual: read('inscricao_estadual'),
+        telefone: read('telefone'),
+        whatsapp: read('whatsapp'),
+        email: read('email'),
+        contato_comercial: read('contato_comercial'),
+        cep: nfXmlOnlyDigits(read('cep')),
+        endereco: read('endereco'),
+        numero: read('numero'),
+        complemento: read('complemento'),
+        bairro: read('bairro'),
+        cidade: read('cidade'),
+        uf: read('uf').toUpperCase(),
+        estado: read('uf').toUpperCase(),
+        observacoes: read('observacoes'),
+        status: 'ativo',
+        atualizado_em: new Date().toISOString()
+    };
+
+    console.log('[ENTRADA_NF_XML] cadastrando fornecedor', payload);
+    let { data, error } = await client
+        .from('fornecedores')
+        .upsert([payload], { onConflict: 'cnpj' })
+        .select()
+        .maybeSingle();
+
+    if (error && isMissingColumnError(error)) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.estado;
+        delete fallbackPayload.observacoes;
+        delete fallbackPayload.whatsapp;
+        delete fallbackPayload.contato_comercial;
+        const retry = await client
+            .from('fornecedores')
+            .upsert([fallbackPayload], { onConflict: 'cnpj' })
+            .select()
+            .maybeSingle();
+        data = retry.data;
+        error = retry.error;
+    }
+
+    if (error) {
+        console.error('[ENTRADA_NF_XML] erro ao cadastrar fornecedor', error);
+        showToast('Erro ao cadastrar fornecedor: ' + error.message, 'error');
+        return null;
+    }
+
+    state.fornecedorRecord = data;
+    state.fornecedor = { ...state.fornecedor, ...payload };
+    state.status = 'pendente_vinculo';
+    window.comprasFornecedoresCache = null;
+    closeAppCenterModal();
+    showToast('Fornecedor salvo e vinculado.', 'success');
+    renderNFXmlPreview();
+    return data;
+}
+
+async function garantirFornecedorNFXml() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state) return null;
+    if (state.fornecedorRecord?.id) return state.fornecedorRecord;
+    if (!state.fornecedor?.cnpj) return null;
+
+    const { data: fornecedor, error } = await client
+        .from('fornecedores')
+        .select('*')
+        .eq('cnpj', state.fornecedor.cnpj)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('[ENTRADA_NF_XML] erro ao reconsultar fornecedor por CNPJ, tentando upsert automatico', error);
+    }
+
+    if (fornecedor?.id) {
+        state.fornecedorRecord = fornecedor;
+        state.status = 'pendente_vinculo';
+        return fornecedor;
+    }
+
+    return null;
+}
+
+function getNFXmlStatus() {
+    const state = entradaNfXmlState;
+    if (!state) return 'importada';
+    if (!state.fornecedorRecord) return 'pendente_fornecedor';
+    if (state.tipo_lancamento === 'somente_financeiro') return state.savedEntradaId ? 'financeiro_lancado' : 'importada';
+    if (state.itens.some(item => !item.id_interno)) return 'pendente_vinculo';
+    return state.savedEntradaId ? 'pronta_para_finalizar' : 'importada';
+}
+
+function setNFXmlTipoLancamento(tipo) {
+    const state = entradaNfXmlState;
+    if (!state) return;
+
+    if (state.savedEntradaId && state.tipo_lancamento === 'entrada_normal' && state.estoque_finalizado && tipo !== 'entrada_normal') {
+        showAppConfirmModal({
+            title: 'Alterar tipo da NF?',
+            message: 'Esta NF já teve estoque finalizado como Entrada normal. Trocar o tipo pode causar divergência. Deseja continuar apenas para visualização desta tela?',
+            confirmLabel: 'Continuar',
+            onConfirm: () => setNFXmlTipoLancamento(tipo)
+        });
+        return;
+    }
+
+    const normalizedTipo = normalizeNFXmlTipoLancamento(tipo);
+    const config = getNFXmlTipoConfig(normalizedTipo);
+    state.tipo_lancamento = normalizedTipo;
+    state.afeta_estoque = config.afetaEstoque;
+    state.afeta_financeiro = config.afetaFinanceiro;
+    console.log('[ENTRADA_NF_TIPO_LANCAMENTO] tipo selecionado', { tipo: normalizedTipo, afeta_estoque: state.afeta_estoque, afeta_financeiro: state.afeta_financeiro });
+    renderNFXmlLaunchSlot();
+    renderNFXmlPreview();
+}
+
+function renderNFXmlTipoLancamentoCards() {
+    const state = entradaNfXmlState;
+    const tipos = ['entrada_normal', 'somente_financeiro'];
+    const selectedTipo = state?.tipo_lancamento || 'entrada_normal';
+    const disabled = !state;
+    return `
+        <section class="nfxml-card nfxml-launch-card ${disabled ? 'is-disabled' : ''}">
+            <div>
+                <h3 class="nfxml-title small">COMO DESEJA LANÇAR ESTA NF?</h3>
+                <p class="nfxml-text">Escolha entre nota nova com estoque e financeiro ou nota antiga apenas para contas a pagar.</p>
+                <div class="nfxml-launch-options">
+                ${tipos.map(tipo => {
+                    const config = getNFXmlTipoConfig(tipo);
+                    const active = selectedTipo === tipo;
+                    return `
+                        <button type="button" class="nfxml-launch-option ${active ? 'active' : ''}" ${disabled ? 'disabled' : ''} onclick="setNFXmlTipoLancamento('${tipo}')">
+                            <span>${config.badge}</span>
+                            <strong>${config.label}</strong>
+                            <small>${config.description}</small>
+                        </button>
+                    `;
+                }).join('')}
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function getNFXmlFinanceTotals() {
+    const state = entradaNfXmlState;
+    const parcelasNota = getNFXmlFinanceParcelas();
+    const complementares = getNFXmlFinanceComplementares();
+    const totalParcelasNota = parcelasNota.reduce((acc, item) => acc + nfXmlMoney(item.valor), 0);
+    const totalComplementares = complementares.reduce((acc, item) => acc + nfXmlMoney(item.valor), 0);
+    const totalNf = nfXmlMoney(state?.totais?.valor_total);
+    return {
+        totalNf,
+        totalParcelas: totalParcelasNota,
+        totalParcelasNota,
+        totalComplementares,
+        diferenca: nfXmlRoundMoney(totalNf - totalParcelasNota, 2),
+        diferencaParcelas: nfXmlRoundMoney(totalNf - totalParcelasNota, 2),
+        totalPrevisto: nfXmlRoundMoney(totalNf + totalComplementares, 2)
+    };
+}
+
+function getNFXmlFinanceParcelas() {
+    const state = entradaNfXmlState;
+    const fin = state?.financeiro;
+    if (!state || !fin) return [];
+    if (fin.modoPagamento === 'avista') {
+        return [{
+            id: 'avista-1',
+            parcela: '001',
+            descricao: `Pagamento à vista NF ${state.numero_nf || ''}`.trim(),
+            valor: nfXmlMoney(state.totais?.valor_total),
+            vencimento: new Date().toISOString().slice(0, 10),
+            forma_pagamento: 'pix',
+            observacoes: 'Pagamento à vista',
+            status: 'pago',
+            pago: true,
+            origem: 'avista'
+        }];
+    }
+    if (fin.modoPagamento === 'xml') {
+        return createNFXmlParcelasFromDuplicatas(state.duplicatas || [], state.totais?.valor_total);
+    }
+    return fin.parcelasEditaveis || [];
+}
+
+function getNFXmlFinanceComplementares() {
+    const fin = entradaNfXmlState?.financeiro;
+    return (fin?.complementares || []).map((item, index) => ({
+        ...item,
+        parcela: item.parcela || `COMP-${String(index + 1).padStart(2, '0')}`,
+        tipo: 'complementar'
+    }));
+}
+
+function updateNFXmlFinanceOption(mode) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    fin.modoPagamento = mode;
+    fin.confirmarDiferenca = false;
+    if (mode === 'editar' && (!fin.parcelasEditaveis || !fin.parcelasEditaveis.length)) {
+        fin.parcelasEditaveis = createNFXmlParcelasFromDuplicatas(entradaNfXmlState.duplicatas || [], entradaNfXmlState.totais?.valor_total);
+    }
+    console.log('[ENTRADA_NF_FINANCEIRO] modo atualizado', { mode });
+    renderNFXmlPreview();
+}
+
+function updateNFXmlFinanceParcelField(id, field, value) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    const parcela = (fin.parcelasEditaveis || []).find(item => item.id === id);
+    if (!parcela) return;
+    parcela[field] = field === 'valor' ? nfXmlMoney(value) : field === 'pago' ? !!value : value;
+    if (field === 'pago') parcela.status = value ? 'pago' : 'pendente';
+    fin.confirmarDiferenca = false;
+    renderNFXmlFinanceBlockOnly();
+}
+
+function setNFXmlFinanceParcelCount(count) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    const total = nfXmlMoney(entradaNfXmlState?.totais?.valor_total);
+    const qty = Math.max(1, Math.min(36, parseInt(count, 10) || 1));
+    const current = fin.parcelasEditaveis || [];
+    const baseDate = new Date();
+    const value = nfXmlRoundMoney(total / qty, 2);
+    fin.parcelasEditaveis = Array.from({ length: qty }, (_, index) => {
+        const existing = current[index];
+        const due = new Date(baseDate);
+        due.setMonth(due.getMonth() + index);
+        return existing || {
+            id: `manual-${Date.now()}-${index + 1}`,
+            parcela: String(index + 1).padStart(3, '0'),
+            descricao: `Parcela ${String(index + 1).padStart(3, '0')}`,
+            valor: index === qty - 1 ? nfXmlRoundMoney(total - (value * (qty - 1)), 2) : value,
+            vencimento: due.toISOString().slice(0, 10),
+            forma_pagamento: 'boleto',
+            observacoes: '',
+            status: 'pendente',
+            pago: false,
+            origem: 'manual'
+        };
+    });
+    fin.modoPagamento = 'editar';
+    fin.confirmarDiferenca = false;
+    renderNFXmlPreview();
+}
+
+function addNFXmlPagamentoEspecial() {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    const next = (fin.parcelasEditaveis || []).length + 1;
+    fin.parcelasEditaveis = fin.parcelasEditaveis || [];
+    fin.parcelasEditaveis.push({
+        id: `manual-${Date.now()}-${next}`,
+        parcela: String(next).padStart(3, '0'),
+        descricao: `Parcela ${String(next).padStart(3, '0')}`,
+        valor: 0,
+        vencimento: new Date().toISOString().slice(0, 10),
+        forma_pagamento: 'boleto',
+        observacoes: '',
+        status: 'pendente',
+        pago: false,
+        origem: 'manual'
+    });
+    fin.modoPagamento = 'editar';
+    fin.confirmarDiferenca = false;
+    renderNFXmlPreview();
+}
+
+function removeNFXmlPagamentoEspecial(id) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    fin.parcelasEditaveis = (fin.parcelasEditaveis || []).filter(item => item.id !== id);
+    fin.confirmarDiferenca = false;
+    renderNFXmlPreview();
+}
+
+function addNFXmlLancamentoComplementar() {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    const next = (fin.complementares || []).length + 1;
+    fin.complementares = fin.complementares || [];
+    fin.complementares.push({
+        id: `complementar-${Date.now()}-${next}`,
+        parcela: `COMP-${String(next).padStart(2, '0')}`,
+        descricao: 'Lançamento complementar',
+        valor: 0,
+        vencimento: new Date().toISOString().slice(0, 10),
+        forma_pagamento: 'boleto',
+        observacoes: '',
+        status: 'pendente',
+        pago: false,
+        tipo: 'complementar',
+        origem: 'complementar'
+    });
+    renderNFXmlPreview();
+}
+
+function updateNFXmlComplementarField(id, field, value) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    const item = (fin.complementares || []).find(row => row.id === id);
+    if (!item) return;
+    item[field] = field === 'valor' ? nfXmlMoney(value) : field === 'pago' ? !!value : value;
+    if (field === 'pago') item.status = value ? 'pago' : 'pendente';
+    if (field === 'status') item.pago = value === 'pago';
+    renderNFXmlFinanceBlockOnly();
+}
+
+function removeNFXmlLancamentoComplementar(id) {
+    const fin = entradaNfXmlState?.financeiro;
+    if (!fin) return;
+    fin.complementares = (fin.complementares || []).filter(item => item.id !== id);
+    renderNFXmlPreview();
+}
+
+function renderNFXmlFinanceBlockOnly() {
+    const target = document.getElementById('nfxml-finance-block');
+    if (target) target.outerHTML = renderNFXmlFinanceBlock();
+}
+
+function validateNFXmlFinanceBeforeSave({ allowPrompt = true, silent = false } = {}) {
+    const state = entradaNfXmlState;
+    if (!state?.afeta_financeiro) return true;
+    const parcelas = getNFXmlFinanceParcelas();
+    const complementares = getNFXmlFinanceComplementares();
+    if (!parcelas.length) {
+        if (!silent) showToast('Crie ao menos uma parcela no financeiro.', 'warning');
+        return false;
+    }
+    for (const parcela of parcelas) {
+        if (nfXmlMoney(parcela.valor) <= 0 || !parcela.vencimento || !parcela.forma_pagamento) {
+            if (!silent) showToast('Todas as parcelas precisam de valor, vencimento e forma de pagamento.', 'warning');
+            return false;
+        }
+    }
+    for (const item of complementares) {
+        if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
+            if (!silent) showToast('Lançamento complementar exige descrição, valor, vencimento e forma de pagamento.', 'warning');
+            return false;
+        }
+    }
+    const totals = getNFXmlFinanceTotals();
+    if (Math.abs(totals.diferencaParcelas) > 0.01 && !state.financeiro.confirmarDiferenca) {
+        if (!silent) showToast(`Ajuste as parcelas da nota: diferença de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`, 'warning');
+        return false;
+    }
+    return true;
+}
+
+function buildNFXmlFinancePayload(entradaId) {
+    const state = entradaNfXmlState;
+    const fin = state?.financeiro;
+    if (!state?.fornecedorRecord) throw new Error('Vincule/cadastre o fornecedor antes de salvar o financeiro.');
+    if (!state.afeta_financeiro) return [];
+    if (!fin) return [];
+
+    const now = new Date().toISOString();
+    const base = {
+        entrada_nf_id: entradaId,
+        nf_id: entradaId,
+        fornecedor_id: state.fornecedorRecord?.id || null,
+        fornecedor_cnpj: state.fornecedor.cnpj,
+        cnpj_fornecedor: state.fornecedor.cnpj,
+        fornecedor_nome: state.fornecedor.razao_social,
+        numero_nf: state.numero_nf,
+        origem: 'entrada_nf',
+        atualizado_em: now
+    };
+
+    const payloads = [];
+    const parcelas = getNFXmlFinanceParcelas();
+    const complementares = getNFXmlFinanceComplementares();
+
+    for (const item of parcelas) {
+        if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
+            throw new Error('Parcela exige descrição, valor, vencimento e forma de pagamento.');
+        }
+        const pago = !!item.pago || item.status === 'pago';
+        payloads.push({
+            ...base,
+            parcela: item.parcela || '001',
+            descricao: item.descricao,
+            tipo_lancamento: fin.modoPagamento === 'avista' ? 'pagamento_a_vista' : (item.origem === 'xml' ? 'nf_xml' : 'manual'),
+            vencimento: item.vencimento,
+            data_vencimento: item.vencimento,
+            valor: nfXmlMoney(item.valor),
+            status: pago ? 'pago' : 'pendente',
+            status_vencimento: pago ? 'pago' : 'em_aberto',
+            data_pagamento: pago ? (item.data_pagamento || item.vencimento || new Date().toISOString().slice(0, 10)) : null,
+            forma_pagamento: item.forma_pagamento || null,
+            observacoes: item.observacoes || null
+        });
+    }
+
+    for (const item of complementares) {
+        if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
+            throw new Error('Lançamento complementar exige descrição, valor, vencimento e forma de pagamento.');
+        }
+        const pago = !!item.pago || item.status === 'pago';
+        payloads.push({
+            ...base,
+            parcela: item.parcela || 'COMPLEMENTAR',
+            descricao: item.descricao,
+            tipo_lancamento: 'complementar',
+            vencimento: item.vencimento,
+            data_vencimento: item.vencimento,
+            valor: nfXmlMoney(item.valor),
+            status: pago ? 'pago' : 'pendente',
+            status_vencimento: pago ? 'pago' : 'em_aberto',
+            data_pagamento: pago ? (item.data_pagamento || item.vencimento || new Date().toISOString().slice(0, 10)) : null,
+            forma_pagamento: item.forma_pagamento || null,
+            observacoes: item.observacoes || 'Lançamento complementar vinculado à NF'
+        });
+    }
+
+    console.log('[ENTRADA_NF_FINANCEIRO] payload financeiro montado', payloads);
+    return payloads;
+}
+
+function renderNFXmlFinanceBlock() {
+    const state = entradaNfXmlState;
+    const fin = state.financeiro;
+    const totals = getNFXmlFinanceTotals();
+    const formas = ['pix', 'dinheiro', 'cartão', 'boleto', 'transferência', 'outro'];
+    const parcelas = getNFXmlFinanceParcelas();
+    const complementares = getNFXmlFinanceComplementares();
+    const diffOk = Math.abs(totals.diferencaParcelas) <= 0.01;
+    const editableParcelas = fin.modoPagamento === 'editar';
+
+    return `
+        <section id="nfxml-finance-block" class="nfxml-card nfxml-finance-card">
+            <div class="nfxml-section-head">
+                <div>
+                    <h3 class="nfxml-title small">FINANCEIRO DA ENTRADA</h3>
+                    <p class="nfxml-text">Confira as parcelas oficiais da NF e adicione complementares sem alterar o valor da nota.</p>
+                </div>
+                ${state.financeiro.existentes?.length ? `<span class="nfxml-status-pill warning">${state.financeiro.existentes.length} lançamento(s) já salvo(s)</span>` : ''}
+            </div>
+
+            <div class="nfxml-finance-summary">
+                ${[
+                    ['Total oficial NF', totals.totalNf, ''],
+                    ['Parcelas da nota', totals.totalParcelasNota, diffOk ? '' : 'is-alert'],
+                    ['Complementares', totals.totalComplementares, complementares.length ? 'is-complement' : ''],
+                    ['Total financeiro previsto', totals.totalPrevisto, 'is-total']
+                ].map(([label, value, tone]) => `
+                    <div class="${tone}">
+                        <span>${label}</span>
+                        <strong>${nfXmlFormatMoney(value)}</strong>
+                    </div>
+                `).join('')}
+            </div>
+            ${diffOk ? '' : `
+                <div class="nfxml-finance-warning">
+                    <span class="material-symbols-rounded">warning</span>
+                    Parcelas da nota com diferença de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}. O complementar não corrige o valor oficial da NF.
+                </div>
+            `}
+
+            <div class="nfxml-payment-mode-grid">
+                ${[
+                    ['avista', 'Pagamento à vista', 'Gera uma única parcela paga com data atual.'],
+                    ['xml', 'Parcelas da nota', state.duplicatas.length ? 'Usa vencimentos e valores do XML.' : 'XML sem parcelas. Use editar pagamentos.'],
+                    ['editar', 'Editar pagamentos', 'Ajuste parcelas, datas, valores e formas antes de salvar.']
+                ].map(([mode, label, description]) => `
+                    <button type="button" class="${fin.modoPagamento === mode ? 'active' : ''}" ${mode === 'xml' && !state.duplicatas.length ? 'disabled' : ''} onclick="updateNFXmlFinanceOption('${mode}')">
+                        <strong>${label}</strong>
+                        <small>${description}</small>
+                    </button>
+                `).join('')}
+            </div>
+
+            ${fin.modoPagamento === 'editar' ? `
+                <div class="nfxml-payment-editor-toolbar">
+                    <label>
+                        <span>Quantidade de parcelas</span>
+                        <input type="number" min="1" max="36" value="${(fin.parcelasEditaveis || []).length || 1}" onchange="setNFXmlFinanceParcelCount(this.value)">
+                    </label>
+                    <button type="button" class="btn-action" onclick="addNFXmlPagamentoEspecial()">
+                        <span class="material-symbols-rounded">add</span>
+                        Adicionar parcela
+                    </button>
+                </div>
+            ` : ''}
+
+            <div class="nfxml-payment-section-title">
+                <strong>Parcelas da nota</strong>
+                <span>${nfXmlFormatMoney(totals.totalParcelasNota)} de ${nfXmlFormatMoney(totals.totalNf)}</span>
+            </div>
+            <div class="nfxml-payment-list">
+                ${parcelas.map((item, index) => `
+                    <article class="nfxml-payment-row">
+                        <div class="nfxml-payment-index">${index + 1}</div>
+                        <label>
+                            <span>Parcela</span>
+                            <input value="${escapeKitAttribute(item.parcela || String(index + 1).padStart(3, '0'))}" ${editableParcelas ? `oninput="updateNFXmlFinanceParcelField('${item.id}', 'parcela', this.value)"` : 'readonly'}>
+                        </label>
+                        <label>
+                            <span>Valor</span>
+                            <input type="number" step="0.01" value="${nfXmlMoney(item.valor)}" ${editableParcelas ? `oninput="updateNFXmlFinanceParcelField('${item.id}', 'valor', this.value)"` : 'readonly'}>
+                        </label>
+                        <label>
+                            <span>Vencimento</span>
+                            <input type="date" value="${escapeKitAttribute(item.vencimento || '')}" ${editableParcelas ? `onchange="updateNFXmlFinanceParcelField('${item.id}', 'vencimento', this.value)"` : 'readonly'}>
+                        </label>
+                        <label>
+                            <span>Forma</span>
+                            <select ${editableParcelas ? `onchange="updateNFXmlFinanceParcelField('${item.id}', 'forma_pagamento', this.value)"` : 'disabled'}>
+                                ${formas.map(f => `<option value="${f}" ${item.forma_pagamento === f ? 'selected' : ''}>${f}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="wide">
+                            <span>Observação</span>
+                            <input value="${escapeKitAttribute(item.observacoes || '')}" ${editableParcelas ? `oninput="updateNFXmlFinanceParcelField('${item.id}', 'observacoes', this.value)"` : 'readonly'}>
+                        </label>
+                        <label class="nfxml-paid-check">
+                            <input type="checkbox" ${item.pago ? 'checked' : ''} ${editableParcelas ? `onchange="updateNFXmlFinanceParcelField('${item.id}', 'pago', this.checked)"` : 'disabled'}>
+                            <span>Pago</span>
+                        </label>
+                        ${editableParcelas ? `
+                            <button type="button" class="nfxml-payment-remove" onclick="removeNFXmlPagamentoEspecial('${escapeKitAttribute(item.id)}')" aria-label="Remover parcela">
+                                <span class="material-symbols-rounded">delete</span>
+                            </button>
+                        ` : ''}
+                    </article>
+                `).join('')}
+            </div>
+
+            <div class="nfxml-complement-section">
+                <div class="nfxml-payment-section-title">
+                    <strong>Lançamentos complementares</strong>
+                    <span>Fora do valor oficial da NF</span>
+                </div>
+                <button type="button" class="btn-action nfxml-complement-add" onclick="addNFXmlLancamentoComplementar()">
+                    <span class="material-symbols-rounded">add</span>
+                    Adicionar lançamento complementar
+                </button>
+                ${complementares.length ? `
+                    <div class="nfxml-payment-list">
+                        ${complementares.map((item, index) => `
+                            <article class="nfxml-payment-row nfxml-complement-row">
+                                <div class="nfxml-payment-index">C${index + 1}</div>
+                                <label class="wide">
+                                    <span>Descrição</span>
+                                    <input value="${escapeKitAttribute(item.descricao || '')}" oninput="updateNFXmlComplementarField('${item.id}', 'descricao', this.value)">
+                                </label>
+                                <label>
+                                    <span>Valor</span>
+                                    <input type="number" step="0.01" value="${nfXmlMoney(item.valor)}" oninput="updateNFXmlComplementarField('${item.id}', 'valor', this.value)">
+                                </label>
+                                <label>
+                                    <span>Vencimento</span>
+                                    <input type="date" value="${escapeKitAttribute(item.vencimento || '')}" onchange="updateNFXmlComplementarField('${item.id}', 'vencimento', this.value)">
+                                </label>
+                                <label>
+                                    <span>Forma</span>
+                                    <select onchange="updateNFXmlComplementarField('${item.id}', 'forma_pagamento', this.value)">
+                                        ${formas.map(f => `<option value="${f}" ${item.forma_pagamento === f ? 'selected' : ''}>${f}</option>`).join('')}
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Status</span>
+                                    <select onchange="updateNFXmlComplementarField('${item.id}', 'status', this.value)">
+                                        <option value="pendente" ${item.status !== 'pago' ? 'selected' : ''}>pendente</option>
+                                        <option value="pago" ${item.status === 'pago' ? 'selected' : ''}>pago</option>
+                                    </select>
+                                </label>
+                                <label class="wide">
+                                    <span>Observação</span>
+                                    <input value="${escapeKitAttribute(item.observacoes || '')}" oninput="updateNFXmlComplementarField('${item.id}', 'observacoes', this.value)">
+                                </label>
+                                <button type="button" class="nfxml-payment-remove" onclick="removeNFXmlLancamentoComplementar('${escapeKitAttribute(item.id)}')" aria-label="Remover complementar">
+                                    <span class="material-symbols-rounded">delete</span>
+                                </button>
+                            </article>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="nfxml-empty-inline">Nenhum lançamento complementar adicionado.</div>
+                `}
+            </div>
+
+            ${state.financeiro.existentes?.length ? `
+                <div class="nfxml-existing-payments">
+                    <strong>Lançamentos já salvos</strong>
+                    ${state.financeiro.existentes.map(item => `
+                        <div>
+                            <span>${escapeKitAttribute(item.descricao || item.parcela || '-')}</span>
+                            <span>${escapeKitAttribute(item.status || '-')}</span>
+                            <strong>${nfXmlFormatMoney(item.valor)}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </section>
+    `;
+}
+
+function renderNFXmlPreview() {
+    const state = entradaNfXmlState;
+    if (document.getElementById('nfxml-wizard-root')) {
+        refreshNFXmlWizard();
+        return;
+    }
+    const container = document.getElementById('nf-xml-preview');
+    if (!container || !state) return;
+
+    const status = getNFXmlStatus();
+    const missingLinks = state.itens.filter(item => !item.id_interno).length;
+    const canImport = !state.nfExistente && !!state.fornecedor?.cnpj;
+    const canFinalize = state.tipo_lancamento === 'entrada_normal' && !!state.savedEntradaId && missingLinks === 0 && !state.estoque_finalizado;
+    const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
+
+    container.innerHTML = `
+        ${state.nfExistente ? `
+            <div style="background: rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; padding:14px 16px; border-radius:16px; margin-bottom:16px; font-weight:800;">
+                NF já importada: ${escapeKitAttribute(state.nfExistente.numero_nf || state.numero_nf)} (${escapeKitAttribute(state.nfExistente.status || '-')}) - ${escapeKitAttribute(getNFXmlTipoConfig(state.tipo_lancamento).label)}
+            </div>
+        ` : ''}
+
+        <div class="nfxml-summary-grid">
+            <section class="nfxml-light-card">
+                <div class="nfxml-kicker">DADOS DA NOTA</div>
+                <h3>NF ${escapeKitAttribute(state.numero_nf)} / Série ${escapeKitAttribute(state.serie)}</h3>
+                <div class="nfxml-data-list">
+                    <strong>Chave:</strong> ${escapeKitAttribute(state.chave_acesso)}<br>
+                    <strong>Protocolo:</strong> ${escapeKitAttribute(state.protocolo || '-')}<br>
+                    <strong>Emissão:</strong> ${nfXmlFormatDate(state.data_emissao)}<br>
+                    <strong>Status:</strong> ${escapeKitAttribute(status)}
+                </div>
+                <div class="nfxml-note-totals">
+                    <strong style="color:var(--primary);">${nfXmlFormatMoney(state.totais.valor_produtos)} produtos</strong>
+                    <strong>${nfXmlFormatMoney(state.totais.valor_total)} total NF</strong>
+                </div>
+            </section>
+
+            <section class="nfxml-light-card">
+                <div class="nfxml-kicker">DADOS DO FORNECEDOR</div>
+                <h3>${escapeKitAttribute(state.fornecedor.razao_social || '-')}</h3>
+                <div class="nfxml-data-list">
+                    <strong>CNPJ:</strong> ${escapeKitAttribute(state.fornecedor.cnpj)}<br>
+                    <strong>IE:</strong> ${escapeKitAttribute(state.fornecedor.inscricao_estadual || '-')}<br>
+                    <strong>Cidade:</strong> ${escapeKitAttribute(state.fornecedor.cidade || '-')} / ${escapeKitAttribute(state.fornecedor.uf || '-')}
+                </div>
+                ${state.fornecedorRecord ? `
+                    <div style="margin-top:12px; color:#16a34a; font-weight:900; font-size:0.75rem;">Fornecedor cadastrado</div>
+                ` : `
+                    <div style="margin-top:12px; background:#fff7ed; color:#9a3412; border-radius:12px; padding:10px; font-size:0.78rem; font-weight:800;">
+                        Fornecedor não cadastrado. Deseja cadastrar com os dados da nota?
+                    </div>
+                    <button type="button" onclick="openNFXmlFornecedorModal()" class="btn-action" style="width:100%; justify-content:center; margin-top:10px; background:#22c55e !important;">
+                        <span class="material-symbols-rounded">add_business</span>
+                        Cadastrar fornecedor
+                    </button>
+                `}
+            </section>
+
+        </div>
+
+        ${renderNFXmlFinanceBlock()}
+
+        <section class="nfxml-card nfxml-products-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                <h3 class="nfxml-title small">PRODUTOS DA NOTA</h3>
+                <span style="font-size:0.78rem; color:${missingLinks ? '#fbbf24' : '#4ade80'}; font-weight:900;">${missingLinks ? `${missingLinks} item(ns) sem vínculo` : 'Todos os itens vinculados'}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${state.itens.map(item => renderNFXmlItemCard(item, state.tipo_lancamento === 'entrada_normal')).join('')}
+            </div>
+        </section>
+
+        <div style="position:sticky; bottom:0; margin-top:18px; background:rgba(17,17,17,0.92); backdrop-filter: blur(12px); border:1px solid rgba(255,255,255,0.08); border-radius:18px; padding:14px; display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap;">
+            <button type="button" onclick="renderNFSubMenu()" class="btn-action" style="background:#333 !important;">
+                <span class="material-symbols-rounded">arrow_back</span>
+                Voltar
+            </button>
+            <button type="button" onclick="salvarEntradaNFXml()" class="btn-action" ${canImport ? '' : 'disabled'} style="opacity:${canImport ? '1' : '0.45'}; background:#3b82f6 !important;">
+                <span class="material-symbols-rounded">save</span>
+                ${state.savedEntradaId ? 'Entrada salva' : tipoConfig.saveLabel}
+            </button>
+            ${canFinalize ? `
+                <button type="button" onclick="finalizarEntradaNFXml()" class="btn-action" style="background:#22c55e !important;">
+                    <span class="material-symbols-rounded">check_circle</span>
+                    Finalizar Entrada
+                </button>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderNFXmlItemCard(item, allowLink = true) {
+    const linked = !!item.id_interno;
+    const custo = formatarResumoCustoReal(item);
+    return `
+        <article style="background:rgba(0,0,0,0.22); border:1px solid ${linked ? 'rgba(74,222,128,0.25)' : 'rgba(251,191,36,0.25)'}; border-radius:18px; padding:14px;">
+            <div style="display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap:16px;">
+                <div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:0.72rem; font-weight:800; text-transform:uppercase;">
+                        <span>Item ${item.numero_item}</span>
+                        <span>cProd ${escapeKitAttribute(item.codigo_produto_fornecedor || '-')}</span>
+                        <span>EAN ${escapeKitAttribute(item.ean_fornecedor || '-')}</span>
+                    </div>
+                    <h4 style="margin:8px 0; color:white; font-size:1rem;">${escapeKitAttribute(item.descricao_produto_fornecedor || '-')}</h4>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; color:#ddd; font-size:0.82rem;">
+                        <span>Qtd: <strong>${formatStockNumber(item.quantidade)} ${escapeKitAttribute(item.unidade || '')}</strong></span>
+                        <span>Unit: <strong>${nfXmlFormatMoney(item.valor_unitario)}</strong></span>
+                        <span>Total: <strong>${nfXmlFormatMoney(item.valor_total)}</strong></span>
+                        <span>NCM ${escapeKitAttribute(item.ncm || '-')}</span>
+                        <span>CFOP ${escapeKitAttribute(item.cfop || '-')}</span>
+                    </div>
+                    <div class="nf-cost-summary">
+                        <span>Custo NF: <strong>${custo.custoNota}</strong></span>
+                        <span>IPI: <strong>${custo.ipi}</strong></span>
+                        <span>ICMS ST: <strong>${custo.icmsSt}</strong></span>
+                        <span>Frete/Despesas: <strong>${custo.despesasRateadas}</strong></span>
+                        <span>Desconto: <strong>${custo.desconto}</strong></span>
+                        <span class="nf-cost-real">Custo real: <strong>${custo.custoRealUnitario}</strong></span>
+                    </div>
+                </div>
+                ${allowLink ? `
+                    <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:12px;">
+                        <div style="font-size:0.7rem; font-weight:900; color:#999; text-transform:uppercase; margin-bottom:8px;">Vínculo com produto interno</div>
+                        ${linked ? `
+                            <div style="color:#4ade80; font-weight:900; margin-bottom:8px;">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
+                            <div style="color:var(--muted); font-size:0.72rem; margin-bottom:10px;">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
+                        ` : `
+                            <div style="color:#fbbf24; font-weight:900; margin-bottom:8px;">Pendente de vínculo</div>
+                        `}
+                        <div style="display:flex; gap:8px; margin-bottom:8px;">
+                            <input id="nfxml-id-${item.numero_item}" class="input-field" style="min-width:0; background:#111; color:white;" placeholder="Informar id_interno">
+                            <button type="button" onclick="updateNFXmlItemManualLink(${item.numero_item}, 'nfxml-id-${item.numero_item}')" class="btn-action" style="padding:10px 12px; background:var(--primary) !important;">
+                                <span class="material-symbols-rounded">link</span>
+                            </button>
+                        </div>
+                        <input class="input-field" style="width:100%; background:#111; color:white;" placeholder="Buscar por descrição, ID, EAN ou SKU" oninput="searchNFXmlProduct(${item.numero_item}, this.value)">
+                        <div id="nfxml-results-${item.numero_item}"></div>
+                        <label style="display:flex; align-items:center; gap:8px; color:#ddd; font-size:0.78rem; margin-top:10px;">
+                            <input type="checkbox" ${item.ean_divergente ? 'checked' : ''} onchange="toggleNFXmlEanDivergente(${item.numero_item}, this.checked)">
+                            EAN da nota divergente
+                        </label>
+                    </div>
+                ` : `
+                    <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:12px; color:var(--muted); font-size:0.82rem;">
+                        Produto exibido para conferência dos dados da nota. Não será exigido vínculo e não haverá movimentação de estoque.
+                    </div>
+                `}
+            </div>
+        </article>
+    `;
+}
+
+async function salvarEntradaNFXml() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state) return;
+    if (state.nfExistente) {
+        await showAppAlert({
+            title: 'NF ja importada',
+            message: `A nota ${state.numero_nf || ''} ja consta no sistema.`,
+            buttonLabel: 'OK',
+            icon: 'info'
+        });
+        return;
+    }
+    if (state.savedEntradaId) {
+        await showAppAlert({
+            title: 'Entrada ja salva',
+            message: 'Continue pela finalizacao se ainda precisar lançar o estoque.',
+            buttonLabel: 'OK',
+            icon: 'info'
+        });
+        return;
+    }
+    if (!state.fornecedorRecord) {
+        await garantirFornecedorNFXml();
+        if (!state.fornecedorRecord) {
+            openNFXmlFornecedorModal();
+            showToast('Cadastre ou confirme o fornecedor antes de importar.', 'warning');
+            return;
+        }
+    }
+    if (!validateNFXmlFinanceBeforeSave()) return;
+
+    const confirmedImport = await showAppConfirm({
+        title: 'Importar NF?',
+        message: `Confirmar importacao da NF ${state.numero_nf || ''}?`,
+        detail: 'A nota, os itens e os lancamentos financeiros configurados serao gravados.',
+        confirmLabel: 'Importar NF',
+        cancelLabel: 'Cancelar'
+    });
+    if (!confirmedImport) return;
+
+    try {
+        console.log('[ENTRADA_NF_XML] salvando entrada');
+        console.log('[ENTRADA_NF_TIPO_LANCAMENTO] salvando como', state.tipo_lancamento);
+        const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
+        let status = 'importada';
+        if (state.tipo_lancamento === 'entrada_normal') {
+            status = state.itens.some(item => !item.id_interno) ? 'pendente_vinculo' : 'pronta_para_finalizar';
+        } else if (state.tipo_lancamento === 'somente_financeiro') {
+            status = 'financeiro_lancado';
+        }
+
+        const entradaPayload = {
+            chave_acesso: state.chave_acesso,
+            numero_nf: state.numero_nf,
+            serie: state.serie,
+            fornecedor_id: state.fornecedorRecord?.id || null,
+            fornecedor_cnpj: state.fornecedor.cnpj,
+            cnpj_fornecedor: state.fornecedor.cnpj,
+            fornecedor_nome: state.fornecedor.razao_social,
+            data_emissao: state.data_emissao,
+            data_recebimento: new Date().toISOString().slice(0, 10),
+            valor_produtos: state.totais.valor_produtos,
+            valor_total: state.totais.valor_total,
+            valor_icms: state.totais.valor_icms,
+            valor_st: state.totais.valor_st,
+            valor_ipi: state.totais.valor_ipi,
+            status,
+            tipo_lancamento: state.tipo_lancamento,
+            afeta_estoque: tipoConfig.afetaEstoque,
+            afeta_financeiro: tipoConfig.afetaFinanceiro,
+            estoque_finalizado: false,
+            financeiro_lancado: false,
+            origem: 'xml',
+            xml_original: state.xmlText,
+            atualizado_em: new Date().toISOString()
+        };
+
+        const { data: entrada, error: entradaError } = await client
+            .from('entradas_nf')
+            .insert([entradaPayload])
+            .select()
+            .maybeSingle();
+
+        if (entradaError) throw entradaError;
+
+        state.savedEntradaId = entrada.id;
+        state.status = status;
+        state.afeta_estoque = tipoConfig.afetaEstoque;
+        state.afeta_financeiro = tipoConfig.afetaFinanceiro;
+
+        const itensPayload = state.itens.map(item => ({
+            nf_id: entrada.id,
+            entrada_nf_id: entrada.id,
+            numero_item: item.numero_item,
+            codigo_produto_fornecedor: item.codigo_produto_fornecedor,
+            descricao_produto_fornecedor: item.descricao_produto_fornecedor,
+            ean_fornecedor: item.ean_fornecedor,
+            ean_xml: item.ean_fornecedor,
+            descricao_xml: item.descricao_produto_fornecedor,
+            ncm: item.ncm,
+            cfop: item.cfop,
+            unidade: item.unidade,
+            quantidade: item.quantidade,
+            valor_unitario: item.valor_unitario,
+            valor_total: item.valor_total,
+            custo_nota_unitario: item.custo_nota_unitario,
+            custo_nota_total: item.custo_nota_total,
+            valor_ipi: item.valor_ipi,
+            valor_icms: item.valor_icms,
+            valor_icms_st: item.valor_icms_st,
+            valor_frete_rateado: item.valor_frete_rateado,
+            valor_seguro_rateado: item.valor_seguro_rateado,
+            valor_outras_despesas_rateado: item.valor_outras_despesas_rateado,
+            valor_desconto_rateado: item.valor_desconto_rateado,
+            custo_real_unitario: item.custo_real_unitario,
+            custo_real_total: item.custo_real_total,
+            id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
+            produto_id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
+            produto_id: state.tipo_lancamento === 'entrada_normal' ? (item.produto_id || null) : null,
+            status_vinculo: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno ? 'vinculado' : 'pendente_vinculo') : 'nao_exigido',
+            ean_divergente: !!item.ean_divergente,
+            atualizado_em: new Date().toISOString()
+        }));
+
+        let { error: itensError } = await client.from('entradas_nf_itens').insert(itensPayload);
+        if (itensError && isMissingColumnError(itensError)) {
+            console.warn('[ENTRADA_NF_CUSTO_REAL] colunas de custo real ainda nao existem no Supabase. Aplique a migration 20260522000100_entrada_nf_custo_real.sql. Salvando itens sem campos novos como fallback.', itensError);
+            const retry = await client.from('entradas_nf_itens').insert(stripNFXmlCostColumns(itensPayload));
+            itensError = retry.error;
+        }
+        if (itensError) throw itensError;
+
+        if (tipoConfig.afetaFinanceiro) {
+            const contasPayload = buildNFXmlFinancePayload(entrada.id);
+            if (!contasPayload.length) throw new Error('Selecione ao menos uma forma de lançamento no Financeiro da Entrada.');
+            const { error: contasError } = await client.from('contas_pagar').insert(contasPayload);
+            if (contasError) throw contasError;
+            state.financeiro.existentes = contasPayload;
+            state.financeiro_lancado = true;
+            await client.from('entradas_nf').update({ financeiro_lancado: true, atualizado_em: new Date().toISOString() }).eq('id', entrada.id);
+        }
+
+        if (state.tipo_lancamento === 'entrada_normal') {
+            await upsertNFXmlFornecedorProdutos();
+        }
+
+        appData.historicoEntradasNFLoaded = false;
+        DataClient.invalidateCache?.('nf');
+        showToast('NF importada com sucesso.', 'success');
+        await showAppAlert({
+            title: 'NF importada com sucesso',
+            message: `Nota ${state.numero_nf || ''} salva. Continue a conferência dos itens e finalize o recebimento quando estiver tudo certo.`,
+            buttonLabel: 'OK',
+            icon: 'check_circle'
+        });
+        renderNFXmlPreview();
+    } catch (error) {
+        console.error('[ENTRADA_NF_XML] erro ao salvar entrada', error);
+        await showAppAlert({
+            title: 'Erro ao importar XML',
+            message: error.message || String(error),
+            buttonLabel: 'Entendi',
+            danger: true,
+            icon: 'error'
+        });
+    }
+}
+
+async function upsertNFXmlFornecedorProdutos() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state?.fornecedorRecord) return;
+
+    const vinculados = state.itens.filter(item => item.id_interno).map(item => ({
+        fornecedor_id: state.fornecedorRecord.id,
+        fornecedor_cnpj: state.fornecedor.cnpj,
+        codigo_produto_fornecedor: item.codigo_produto_fornecedor,
+        descricao_produto_fornecedor: item.descricao_produto_fornecedor,
+        ean_fornecedor: item.ean_fornecedor,
+        id_interno: item.id_interno,
+        produto_id: item.produto_id || null,
+        ultimo_custo: item.custo_real_unitario || item.valor_unitario,
+        ultima_quantidade: item.quantidade,
+        ultima_compra_em: state.data_emissao,
+        ean_divergente: !!item.ean_divergente,
+        observacoes: item.match_source ? `Vínculo via ${item.match_source}` : null,
+        atualizado_em: new Date().toISOString()
+    }));
+
+    if (!vinculados.length) return;
+    const { error } = await client
+        .from('fornecedor_produtos')
+        .upsert(vinculados, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
+    if (error) console.warn('[ENTRADA_NF_XML] erro ao salvar vínculos fornecedor_produtos', error);
+}
+
+async function atualizarCustoProdutosEntradaNF(itens = []) {
+    const client = window.supabaseClient;
+    if (!client) return;
+
+    for (const item of itens) {
+        if (!item.id_interno || !Number.isFinite(Number(item.custo_real_unitario)) || Number(item.custo_real_unitario) <= 0) continue;
+        const payload = {
+            preco_custo: nfXmlRoundMoney(item.custo_real_unitario, 6),
+            atualizado_em: new Date().toISOString()
+        };
+
+        const { error } = await client
+            .from('produtos')
+            .update(payload)
+            .eq('id_interno', item.id_interno);
+
+        if (error) {
+            console.warn('[ENTRADA_NF_CUSTO_REAL] erro ao atualizar custo do produto', {
+                id_interno: item.id_interno,
+                custo_real_unitario: item.custo_real_unitario,
+                error
+            });
+        } else {
+            const product = appData.products?.find(p => String(p.id_interno) === String(item.id_interno));
+            if (product) product.preco_custo = payload.preco_custo;
+        }
+    }
+    DataClient.invalidateCache?.('produtos');
+}
+
+async function finalizarEntradaNFXml() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state?.savedEntradaId) return;
+
+    if (state.tipo_lancamento !== 'entrada_normal' || !state.afeta_estoque) {
+        showToast('Este tipo de lançamento não altera estoque.', 'warning');
+        console.warn('[ENTRADA_NF_TIPO_LANCAMENTO] finalização de estoque bloqueada', state.tipo_lancamento);
+        return;
+    }
+
+    const pendentes = state.itens.filter(item => !item.id_interno);
+    if (pendentes.length) {
+        showToast('Vincule todos os itens antes de finalizar.', 'warning');
+        return;
+    }
+
+    if (!state.fornecedorRecord) {
+        openNFXmlFornecedorModal();
+        showToast('Fornecedor precisa estar vinculado antes de finalizar.', 'warning');
+        return;
+    }
+
+    if (!state.financeiro_lancado && state.afeta_financeiro) {
+        showToast('Confira e salve o financeiro antes de finalizar a entrada.', 'warning');
+        return;
+    }
+
+    showAppConfirmModal({
+        title: 'Finalizar entrada?',
+        message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra os movimentos de estoque.',
+        confirmLabel: 'Finalizar entrada',
+        onConfirm: () => finalizarEntradaNFXmlConfirmado()
+    });
+}
+
+async function finalizarEntradaNFXmlConfirmado() {
+    const client = window.supabaseClient;
+    const state = entradaNfXmlState;
+    if (!client || !state?.savedEntradaId) return;
+
+    try {
+        console.log('[ENTRADA_NF_XML] finalizando entrada', state.savedEntradaId);
+        for (const item of state.itens) {
+            const ok = await DataClient.updateEstoqueSupabase(item.id_interno, 'TERREO', 'soma', item.quantidade);
+            if (!ok) throw new Error(`Falha ao atualizar estoque do item ${item.id_interno}`);
+            await DataClient.saveMovimentoSupabase({
+                tipo: 'ENTRADA_NF',
+                id_interno: item.id_interno,
+                local_origem: null,
+                local_destino: 'TERREO',
+                quantidade: item.quantidade,
+                usuario: localStorage.getItem('currentUser'),
+                origem: 'ENTRADA_NF_XML',
+                observacao: `NF ${state.numero_nf} - ${state.chave_acesso}`
+            });
+        }
+
+        const lotesResult = await criarLotesEntradaNF({
+            id: state.savedEntradaId,
+            numero_nf: state.numero_nf,
+            data_emissao: state.data_emissao,
+            local_estoque: 'terreo'
+        }, state.itens.map(item => ({ ...item, local_entrada: 'terreo' })));
+        if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
+            console.warn('[ESTOQUE_LOTES] lotes da Entrada NF nao foram criados integralmente', lotesResult);
+        }
+
+        const { error } = await client
+            .from('entradas_nf')
+            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: new Date().toISOString() })
+            .eq('id', state.savedEntradaId);
+        if (error) throw error;
+
+        await atualizarCustoProdutosEntradaNF(state.itens);
+
+        state.status = 'finalizada';
+        state.estoque_finalizado = true;
+        appData.historicoEntradasNFLoaded = false;
+        DataClient.invalidateCache?.('nf');
+        showToast('Entrada finalizada e estoque atualizado.', 'success');
+        await showAppAlert({
+            title: 'Recebimento finalizado',
+            message: `NF ${state.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÉRREO.`,
+            buttonLabel: 'OK',
+            icon: 'check_circle'
+        });
+        renderNFXmlUploadScreen();
+    } catch (error) {
+        console.error('[ENTRADA_NF_XML] erro ao finalizar entrada', error);
+        await showAppAlert({
+            title: 'Erro ao finalizar entrada',
+            message: error.message || String(error),
+            buttonLabel: 'Entendi',
+            danger: true,
+            icon: 'error'
+        });
+    }
+}
+
+function normalizeEntradaNFItemForStock(item = {}) {
+    return {
+        ...item,
+        id_interno: item.id_interno || item.produto_id_interno || '',
+        produto_id: item.produto_id || null,
+        quantidade: parseDecimal(item.quantidade),
+        custo_real_unitario: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
+        custo_real_total: parseDecimal(item.custo_real_total ?? item.valor_total)
+    };
+}
+
+async function fetchEntradaNFItens(entradaId) {
+    const client = window.supabaseClient;
+    if (!client || !entradaId) return [];
+
+    const { data, error } = await client
+        .from('entradas_nf_itens')
+        .select('*')
+        .or(`entrada_nf_id.eq.${entradaId},nf_id.eq.${entradaId}`)
+        .order('numero_item', { ascending: true });
+
+    if (error) {
+        console.error('[ENTRADA_NF_XML] erro ao carregar itens da NF aberta', error);
+        return [];
+    }
+
+    return (data || []).map(normalizeEntradaNFItemForStock);
+}
+
+async function finalizarEntradaNFAberta(entradaId) {
+    const client = window.supabaseClient;
+    if (!client || !entradaId || isFinalizing) return;
+    isFinalizing = true;
+
+    try {
+        const entrada = await DataClient.getEntradaNFById(entradaId);
+        if (!entrada) throw new Error('Nota não encontrada.');
+        if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
+            showToast('Esta nota já está finalizada.', 'info');
+            renderNFAbertasList();
+            return;
+        }
+        if (entrada.tipo_lancamento && entrada.tipo_lancamento !== 'entrada_normal') {
+            throw new Error('Esta nota não é do tipo Entrada normal.');
+        }
+        if (entrada.afeta_estoque === false) {
+            throw new Error('Esta nota foi marcada para não alterar estoque.');
+        }
+
+        const itens = await fetchEntradaNFItens(entrada.id);
+        if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
+        const pendentes = itens.filter(item => !item.id_interno || parseDecimal(item.quantidade) <= 0);
+        if (pendentes.length) throw new Error('Existem itens sem vínculo interno ou quantidade válida.');
+
+        for (const item of itens) {
+            const ok = await DataClient.updateEstoqueSupabase(item.id_interno, 'TERREO', 'soma', item.quantidade);
+            if (!ok) throw new Error(`Falha ao atualizar estoque do item ${item.id_interno}`);
+            const savedMov = await DataClient.saveMovimentoSupabase({
+                tipo: 'ENTRADA_NF',
+                id_interno: item.id_interno,
+                local_origem: null,
+                local_destino: 'TERREO',
+                quantidade: item.quantidade,
+                usuario: localStorage.getItem('currentUser'),
+                origem: 'ENTRADA_NF_XML',
+                observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id}`
+            });
+            if (!savedMov) throw new Error(`Falha ao registrar movimento do item ${item.id_interno}`);
+        }
+
+        const lotesResult = await criarLotesEntradaNF({
+            id: entrada.id,
+            numero_nf: entrada.numero_nf,
+            data_emissao: entrada.data_emissao,
+            data_recebimento: entrada.data_recebimento,
+            local_estoque: 'terreo'
+        }, itens.map(item => ({ ...item, local_entrada: 'terreo' })));
+        if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
+            console.warn('[ESTOQUE_LOTES] lotes da Entrada NF aberta nao foram criados integralmente', lotesResult);
+        }
+
+        const { error } = await client
+            .from('entradas_nf')
+            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: new Date().toISOString() })
+            .eq('id', entrada.id);
+        if (error) throw error;
+
+        await atualizarCustoProdutosEntradaNF(itens);
+
+        appData.historicoEntradasNFLoaded = false;
+        DataClient.invalidateCache?.('nf');
+        DataClient.invalidateCache?.('produtos');
+        DataClient.invalidateCache?.('movimentos');
+        showToast('Entrada finalizada e estoque atualizado.', 'success');
+        await showAppAlert({
+            title: 'Recebimento finalizado',
+            message: `NF ${entrada.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÉRREO.`,
+            buttonLabel: 'OK',
+            icon: 'check_circle'
+        });
+        renderNFXmlUploadScreen();
+    } catch (error) {
+        console.error('[ENTRADA_NF_XML] erro ao finalizar NF aberta', error);
+        await showAppAlert({
+            title: 'Erro ao finalizar entrada',
+            message: error.message || String(error),
+            buttonLabel: 'Entendi',
+            danger: true,
+            icon: 'error'
+        });
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+function confirmarFinalizarEntradaNFAberta(entradaId) {
+    showAppConfirmModal({
+        title: 'Finalizar entrada?',
+        message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra movimentos e camadas de custo.',
+        confirmLabel: 'Finalizar entrada',
+        onConfirm: () => finalizarEntradaNFAberta(entradaId)
+    });
+}
+
+async function renderNFAbertasList() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+    
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            
+            <main class="container">
+                ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
+                <div id="nf-list-container" style="padding: 12px 20px 40px 20px;">
+                    <div id="nf-list-items">
+                        <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas...</div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+
+    const notas = await DataClient.listEntradasNFAbertas();
+    const container = document.getElementById('nf-list-items');
+
+    if (notas.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; background: rgba(255,255,255,0.03); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
+                <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">description</span>
+                <p style="color: var(--muted);">Nenhuma nota em aberto encontrada.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${notas.map(nf => `
+                <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.2s;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 800; color: #101018; font-size: 1rem;">NF ${nf.numero_nf}</div>
+                        <div style="font-size: 0.75rem; color: #666; text-transform: uppercase;">${nf.fornecedor_nome}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 700; color: var(--primary); font-size: 0.9rem;">R$ ${parseFloat(nf.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        <div style="display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 4px;">
+                            <span class="status-dot" style="width: 6px; height: 6px; background: ${nf.status === 'rascunho' ? '#f59e0b' : '#3b82f6'}; border-radius: 50%;"></span>
+                            <span style="font-size: 0.65rem; font-weight: 700; color: #999; text-transform: uppercase;">${nf.status}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function getEntradaNFDate(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('pt-BR');
+}
+
+function getEntradaNFDateTime(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('pt-BR');
+}
+
+function getEntradaNFMoney(value) {
+    return nfXmlFormatMoney(value || 0);
+}
+
+function getEntradaNFCacheFallback() {
+    try {
+        return JSON.parse(localStorage.getItem('entrada_nf_historico_cache') || '[]');
+    } catch (error) {
+        console.warn('[ENTRADA_NF_HISTORICO] cache local invalido', error);
+        return [];
+    }
+}
+
+function setEntradaNFCacheFallback(entradas) {
+    try {
+        localStorage.setItem('entrada_nf_historico_cache', JSON.stringify(entradas || []));
+    } catch (error) {
+        console.warn('[ENTRADA_NF_HISTORICO] nao foi possivel salvar fallback local', error);
+    }
+}
+
+async function loadHistoricoEntradasNF(force = true) {
+    if (!force && appData.historicoEntradasNFLoaded) {
+        return appData.historicoEntradasNF || [];
+    }
+
+    const client = window.supabaseClient;
+    if (!client) {
+        console.warn('[ENTRADA_NF_HISTORICO] Supabase indisponivel, usando fallback local.');
+        appData.historicoEntradasNF = getEntradaNFCacheFallback();
+        appData.historicoEntradasNFLoaded = true;
+        return appData.historicoEntradasNF;
+    }
+
+    try {
+        console.log('[ENTRADA_NF_HISTORICO] carregando entradas_nf...');
+        const { data: entradas, error: entradasError } = await client
+            .from('entradas_nf')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (entradasError) throw entradasError;
+
+        const ids = (entradas || []).map(item => item.id).filter(Boolean);
+        let itens = [];
+        let parcelas = [];
+
+        if (ids.length) {
+            const itensResult = await client
+                .from('entradas_nf_itens')
+                .select('*')
+                .in('entrada_nf_id', ids);
+            if (itensResult.error) {
+                console.warn('[ENTRADA_NF_HISTORICO] erro ao carregar itens, historico seguira sem itens.', itensResult.error);
+            } else {
+                itens = itensResult.data || [];
+            }
+
+            const parcelasResult = await client
+                .from('contas_pagar')
+                .select('*')
+                .in('entrada_nf_id', ids);
+            if (parcelasResult.error) {
+                console.warn('[ENTRADA_NF_HISTORICO] erro ao carregar financeiro, historico seguira sem parcelas.', parcelasResult.error);
+            } else {
+                parcelas = parcelasResult.data || [];
+            }
+        }
+
+        const historico = (entradas || []).map(entrada => ({
+            ...entrada,
+            itens: itens.filter(item => String(item.entrada_nf_id || item.nf_id) === String(entrada.id)),
+            parcelas: parcelas.filter(item => String(item.entrada_nf_id || item.nf_id) === String(entrada.id))
+        }));
+
+        appData.historicoEntradasNF = historico;
+        appData.historicoEntradasNFLoaded = true;
+        setEntradaNFCacheFallback(historico);
+        return historico;
+    } catch (error) {
+        console.error('[ENTRADA_NF_HISTORICO] erro ao buscar historico', error);
+        appData.historicoEntradasNF = getEntradaNFCacheFallback();
+        appData.historicoEntradasNFLoaded = true;
+        return appData.historicoEntradasNF;
+    }
+}
+
+function isEntradaNFParcelaComplementar(parcela) {
+    return String(parcela?.tipo_lancamento || parcela?.tipo || parcela?.origem || '').toLowerCase().includes('complementar');
+}
+
+function calcularResumoEntradaNF(entrada, itens = entrada?.itens || []) {
+    const totalItens = (itens || []).reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+    const valorItens = (itens || []).reduce((sum, item) => sum + Number(item.valor_total || 0), 0);
+    const parcelas = entrada?.parcelas || [];
+    const parcelasNota = parcelas.filter(item => !isEntradaNFParcelaComplementar(item));
+    const parcelasComplementares = parcelas.filter(isEntradaNFParcelaComplementar);
+    const valorTotal = Number(entrada?.valor_total || valorItens || 0);
+    const totalParcelasNota = parcelasNota.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    const totalComplementares = parcelasComplementares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    return {
+        quantidadeItens: (itens || []).length,
+        totalItens,
+        valorItens,
+        valorTotal,
+        totalParcelasNota,
+        totalComplementares,
+        totalFinanceiroPrevisto: valorTotal + totalComplementares,
+        parcelasNota,
+        parcelasComplementares,
+        gerouEstoque: !!(entrada?.afeta_estoque || entrada?.estoque_finalizado),
+        gerouFinanceiro: !!(entrada?.afeta_financeiro || entrada?.financeiro_lancado || entrada?.parcelas?.length)
+    };
+}
+
+function renderEntradaNFStatusPill(status) {
+    const normalized = String(status || 'sem_status').toLowerCase();
+    return `<span class="entrada-nf-status-pill status-${escapeKitAttribute(normalized)}">${escapeKitAttribute(status || 'sem status')}</span>`;
+}
+
+async function renderHistoricoEntradasNF() {
+    const currentUser = localStorage.getItem('currentUser');
+    currentScreen = 'internal';
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            <main class="container entrada-nf-history-workspace">
+                ${getStandardScreenTitleHTML('HISTÓRICO DE ENTRADAS', menu3DIcons.historico)}
+                <div id="entrada-nf-history-content" class="entrada-nf-history-content">
+                    <div class="entrada-nf-history-loading">
+                        <span class="material-symbols-rounded">sync</span>
+                        <strong>Carregando histórico...</strong>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+
+    const container = document.getElementById('entrada-nf-history-content');
+    try {
+        const historico = await loadHistoricoEntradasNF(true);
+        if (!container) return;
+
+        if (!historico.length) {
+            container.innerHTML = `
+                <div class="entrada-nf-empty-state">
+                    <span class="material-symbols-rounded">history</span>
+                    <strong>Nenhuma entrada de nota fiscal encontrada.</strong>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="entrada-nf-history-list">
+                ${historico.map(entrada => {
+                    const resumo = calcularResumoEntradaNF(entrada);
+                    return `
+                        <button type="button" class="entrada-nf-history-card" onclick="renderDetalheEntradaNF('${entrada.id}')">
+                            <div class="entrada-nf-history-main">
+                                <span class="entrada-nf-history-icon material-symbols-rounded">receipt_long</span>
+                                <span>
+                                    <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
+                                    <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor não informado')}</small>
+                                </span>
+                            </div>
+                            <div class="entrada-nf-history-meta">
+                                <span><b>Emissão</b>${getEntradaNFDate(entrada.data_emissao)}</span>
+                                <span><b>Lançamento</b>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</span>
+                                <span><b>Itens</b>${resumo.quantidadeItens}</span>
+                                <span><b>Total</b>${getEntradaNFMoney(resumo.valorTotal)}</span>
+                            </div>
+                            <div class="entrada-nf-history-footer">
+                                ${renderEntradaNFStatusPill(entrada.status)}
+                                <span>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</span>
+                                <em class="${resumo.gerouEstoque ? 'ok' : ''}">${resumo.gerouEstoque ? 'Estoque' : 'Sem estoque'}</em>
+                                <em class="${resumo.gerouFinanceiro ? 'ok' : ''}">${resumo.gerouFinanceiro ? 'Financeiro' : 'Sem financeiro'}</em>
+                            </div>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (error) {
+        console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
+        if (container) {
+            container.innerHTML = `
+                <div class="entrada-nf-empty-state">
+                    <span class="material-symbols-rounded">error</span>
+                    <strong>Não foi possível carregar o histórico agora.</strong>
+                    <small>Tente novamente em alguns instantes.</small>
+                </div>
+            `;
+        }
+    }
+}
+
+async function renderDetalheEntradaNF(entradaId) {
+    const currentUser = localStorage.getItem('currentUser');
+    const historico = await loadHistoricoEntradasNF(false);
+    const entrada = (historico || []).find(item => String(item.id) === String(entradaId));
+
+    if (!entrada) {
+        showToast('Nota não encontrada no histórico.', 'error');
+        renderHistoricoEntradasNF();
+        return;
+    }
+
+    const itens = entrada.itens || [];
+    const parcelas = entrada.parcelas || [];
+    const resumo = calcularResumoEntradaNF(entrada, itens);
+    const parcelasNota = resumo.parcelasNota || parcelas.filter(item => !isEntradaNFParcelaComplementar(item));
+    const parcelasComplementares = resumo.parcelasComplementares || parcelas.filter(isEntradaNFParcelaComplementar);
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderHistoricoEntradasNF()')}
+            <main class="container entrada-nf-history-workspace">
+                ${getStandardScreenTitleHTML(`NF ${escapeKitAttribute(entrada.numero_nf || '-')}`, menu3DIcons.nf)}
+                <section class="entrada-nf-detail-card">
+                    <header class="entrada-nf-detail-header">
+                        <div>
+                            <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')} / Série ${escapeKitAttribute(entrada.serie || '-')}</strong>
+                            <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor não informado')}</small>
+                        </div>
+                        ${renderEntradaNFStatusPill(entrada.status)}
+                    </header>
+
+                    <div class="entrada-nf-detail-grid">
+                        <div><small>Data de emissão</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
+                        <div><small>Data de lançamento</small><strong>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</strong></div>
+                        <div><small>Total oficial da NF</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
+                        <div><small>Parcelas da nota</small><strong>${getEntradaNFMoney(resumo.totalParcelasNota)}</strong></div>
+                        <div><small>Lançamentos complementares</small><strong>${getEntradaNFMoney(resumo.totalComplementares)}</strong></div>
+                        <div><small>Total financeiro previsto</small><strong>${getEntradaNFMoney(resumo.totalFinanceiroPrevisto)}</strong></div>
+                        <div><small>Usuário</small><strong>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</strong></div>
+                        <div><small>Gerou estoque</small><strong>${resumo.gerouEstoque ? 'Sim' : 'Não'}</strong></div>
+                        <div><small>Gerou financeiro</small><strong>${resumo.gerouFinanceiro ? 'Sim' : 'Não'}</strong></div>
+                    </div>
+
+                    <h3>Produtos lançados</h3>
+                    ${itens.length ? `
+                        <div class="entrada-nf-detail-list">
+                            ${itens.map(item => `
+                                <article class="entrada-nf-detail-row">
+                                    <div>
+                                        <strong>${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</strong>
+                                        <small>ID interno: ${escapeKitAttribute(item.id_interno || item.produto_id_interno || '-')} • EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</small>
+                                    </div>
+                                    <div>
+                                        <span><b>Qtd</b>${Number(item.quantidade || 0).toLocaleString('pt-BR')}</span>
+                                        <span><b>Custo NF</b>${getEntradaNFMoney(item.custo_nota_unitario ?? item.valor_unitario)}</span>
+                                        <span><b>Custo real un.</b>${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
+                                        <span><b>Custo real total</b>${getEntradaNFMoney(item.custo_real_total ?? item.valor_total)}</span>
+                                        <span><b>Local</b>${escapeKitAttribute(item.local_entrada || item.local || 'TERREO')}</span>
+                                        <span><b>Status</b>${escapeKitAttribute(item.status_vinculo || item.status || '-')}</span>
+                                    </div>
+                                    <div class="entrada-nf-cost-breakdown">
+                                        <span><b>IPI</b>${getEntradaNFMoney(item.valor_ipi)}</span>
+                                        <span><b>ICMS ST</b>${getEntradaNFMoney(item.valor_icms_st)}</span>
+                                        <span><b>Frete</b>${getEntradaNFMoney(item.valor_frete_rateado)}</span>
+                                        <span><b>Seguro</b>${getEntradaNFMoney(item.valor_seguro_rateado)}</span>
+                                        <span><b>Outras desp.</b>${getEntradaNFMoney(item.valor_outras_despesas_rateado)}</span>
+                                        <span><b>Desconto</b>${getEntradaNFMoney(item.valor_desconto_rateado)}</span>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum item encontrado para esta entrada.</strong></div>`}
+
+                    <h3>Parcelas da nota</h3>
+                    ${parcelasNota.length ? `
+                        <div class="entrada-nf-detail-list">
+                            ${parcelasNota.map(parcela => `
+                                <article class="entrada-nf-detail-row finance">
+                                    <div>
+                                        <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || '-')}</strong>
+                                        <small>Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} • Status: ${escapeKitAttribute(parcela.status || '-')}</small>
+                                    </div>
+                                    <div>
+                                        <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
+                                        <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhuma parcela da nota vinculada.</strong></div>`}
+
+                    <h3>Lançamentos complementares</h3>
+                    ${parcelasComplementares.length ? `
+                        <div class="entrada-nf-detail-list">
+                            ${parcelasComplementares.map(parcela => `
+                                <article class="entrada-nf-detail-row finance">
+                                    <div>
+                                        <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || 'Lançamento complementar')}</strong>
+                                        <small>Complementar • Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} • Status: ${escapeKitAttribute(parcela.status || '-')}</small>
+                                    </div>
+                                    <div>
+                                        <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
+                                        <span><b>Forma</b>${escapeKitAttribute(parcela.forma_pagamento || '-')}</span>
+                                        <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
+                                    </div>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum lançamento complementar vinculado.</strong></div>`}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+async function renderNFDetail(id) {
+    const currentUser = localStorage.getItem('currentUser');
+    const nf = await DataClient.getEntradaNFById(id);
+    
+    if (!nf) {
+        showToast('Nota não encontrada', 'error');
+        renderNFAbertasList();
+        return;
+    }
+
+    const itens = await fetchEntradaNFItens(id);
+    const podeFinalizar = nf.tipo_lancamento === 'entrada_normal' &&
+        nf.afeta_estoque !== false &&
+        !nf.estoque_finalizado &&
+        String(nf.status || '').toLowerCase() !== 'finalizada' &&
+        itens.length > 0 &&
+        itens.every(item => item.id_interno && parseDecimal(item.quantidade) > 0);
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen">
+            ${getTopBarHTML(currentUser, 'renderNFAbertasList()')}
+            
+            <main class="container">
+                <div style="padding: 12px 20px 40px 20px;">
+                    <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px;">
+                            <div>
+                                <div style="font-size: 0.6rem; color: #999; text-transform: uppercase; font-weight: 700;">Número / Série</div>
+                                <div style="font-size: 1.2rem; font-weight: 900; color: #101018;">${nf.numero_nf} / ${nf.serie || '1'}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 4px 12px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">
+                                    ${nf.status}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-grid" style="gap: 12px;">
+                            <div class="input-group">
+                                <label style="color: #999; font-size: 0.6rem;">FORNECEDOR</label>
+                                <div style="font-weight: 700; color: #101018; font-size: 0.85rem;">${nf.fornecedor_nome}</div>
+                            </div>
+                            <div class="input-group">
+                                <label style="color: #999; font-size: 0.6rem;">VALOR TOTAL (NF)</label>
+                                <div style="font-weight: 800; color: var(--primary); font-size: 1rem;">R$ ${parseFloat(nf.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                        </div>
+
+                        <!-- SECAO DE ITENS (PREPARACAO FASE 2) -->
+                        <div style="margin-top: 30px; border-top: 2px solid #f0f0f0; padding-top: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3 style="color: #101018; font-family: 'Fjalla One', sans-serif; font-size: 1.1rem;">ITENS DA NOTA</h3>
+                                ${podeFinalizar ? `
+                                    <button class="btn-action" onclick="confirmarFinalizarEntradaNFAberta('${nf.id}')" style="padding: 8px 16px; font-size: 0.75rem; background: #22c55e !important;">
+                                        <span class="material-symbols-rounded">check_circle</span> FINALIZAR ENTRADA
+                                    </button>
+                                ` : ''}
+                            </div>
+
+                            ${itens.length ? `
+                                <div id="nf-items-container" style="display: flex; flex-direction: column; gap: 10px;">
+                                    ${itens.map(item => `
+                                        <div style="background:#f9f9f9; border:1px solid #eee; border-radius:14px; padding:12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;">
+                                            <div style="min-width:0;">
+                                                <div style="font-weight:800; color:#101018; font-size:0.85rem;">${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</div>
+                                                <div style="color:#666; font-size:0.72rem; margin-top:4px;">ID: ${escapeKitAttribute(item.id_interno || '-')} | EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</div>
+                                            </div>
+                                            <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; color:#333; font-size:0.74rem; font-weight:700;">
+                                                <span>Qtd ${formatStockNumber(item.quantidade)}</span>
+                                                <span>Custo ${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
+                                                <span>${escapeKitAttribute(item.status_vinculo || '-')}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `
+                                <div id="nf-items-container" style="text-align: center; padding: 30px; background: #f9f9f9; border-radius: 16px; border: 1px dashed #ddd;">
+                                    <span class="material-symbols-rounded" style="font-size: 32px; color: #ccc; margin-bottom: 10px;">inventory_2</span>
+                                    <p style="color: #999; font-size: 0.85rem; font-weight: 500;">NENHUM ITEM ENCONTRADO</p>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+function renderNFPlaceholder(title) {
+    const currentUser = localStorage.getItem('currentUser');
+    const normalizedTitle = String(title || '').toUpperCase();
+    const iconHTML = normalizedTitle.includes('HISTÓRICO') ? menu3DIcons.historico : menu3DIcons.nf;
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in nf-placeholder-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            
+            <main class="container">
+                ${getStandardScreenTitleHTML(normalizedTitle, iconHTML)}
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 45vh;">
+                <div style="text-align: center; padding: 40px; background: rgba(255,255,255,0.03); border-radius: 32px; border: 1px dashed rgba(255,255,255,0.1); max-width: 400px; width: 90%;">
+                    <span class="material-symbols-rounded" style="font-size: 64px; color: var(--primary); margin-bottom: 20px;">${normalizedTitle.includes('HISTÓRICO') ? 'history' : 'construction'}</span>
+                    <p style="color: var(--muted); font-size: 1.1rem; font-weight: 500;">Em desenvolvimento</p>
+                    <p style="color: rgba(255,255,255,0.3); font-size: 0.8rem; margin-top: 10px;">Esta funcionalidade estará disponível em breve.</p>
+                </div>
+                </div>
+            </main>
+        </div>
+    `;
+}
+
+/* ===================================================
+   MODERN INTERACTION LOGIC (BEHANCE STYLE)
+   =================================================== */
+(function() {
+    function updateCardTransform(e) {
+        const card = e.target.closest('.menu-card, .channel-card');
+        if (!card) return;
+        
+        const rect = card.getBoundingClientRect();
+        
+        // Posição relativa do mouse/toque
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        
+        // Injetar variáveis CSS para o Spotlight
+        card.style.setProperty('--mouse-x', `${x}px`);
+        card.style.setProperty('--mouse-y', `${y}px`);
+        
+        // Cálculo para o Tilt 3D (Desktop apenas para evitar enjoo no mobile)
+        if (window.innerWidth > 768) {
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const rotateX = ((y - centerY) / centerY) * -6; // Max 6 graus
+            const rotateY = ((x - centerX) / centerX) * 6;  // Max 6 graus
+            
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+        } else {
+            // No mobile apenas um leve feedback de escala ao tocar
+            card.style.transform = `scale3d(0.97, 0.97, 0.97)`;
+        }
+    }
+
+    function resetCardTransform(e) {
+        const card = e.target.closest('.menu-card, .channel-card');
+        if (!card) return;
+        
+        // Se for um mouseout, verificar se realmente saiu do card (não para um filho)
+        if (e.type === 'mouseout' || e.type === 'mouseleave') {
+            if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+        }
+
+        card.style.transform = '';
+    }
+
+    // Delegação de eventos para suportar cards criados dinamicamente
+    document.addEventListener('mousemove', updateCardTransform, { passive: true });
+    document.addEventListener('mouseout', resetCardTransform, { passive: true });
+
+    // Mobile events
+    document.addEventListener('touchstart', updateCardTransform, { passive: true });
+    document.addEventListener('touchend', resetCardTransform, { passive: true });
+    document.addEventListener('touchcancel', resetCardTransform, { passive: true });
+})();
