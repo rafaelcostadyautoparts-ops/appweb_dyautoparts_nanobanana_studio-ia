@@ -1109,6 +1109,59 @@ const DataClient = (function () {
         return data;
     }
 
+    async function deletePickingDraftSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const sessionId = payload.sessionId || payload.separacao_id;
+        if (!sessionId) throw new Error('separacao_id nao informado');
+
+        const { data: sessions, error: lookupError } = await client
+            .from('separacao')
+            .select('separacao_id,status')
+            .eq('separacao_id', sessionId)
+            .limit(1);
+
+        if (lookupError) {
+            logSepSupabaseError('erro ao buscar rascunho para exclusao', lookupError, { sessionId });
+            throw lookupError;
+        }
+
+        const session = Array.isArray(sessions) ? sessions[0] : null;
+        if (!session) return { deleted: false, missing: true };
+
+        const status = String(session.status || '').toLowerCase();
+        const draftStatuses = new Set(['em_separacao', 'rascunho', 'draft']);
+        if (!draftStatuses.has(status)) {
+            throw new Error('Somente rascunhos de separacao podem ser cancelados.');
+        }
+
+        const { error: itemsError } = await client
+            .from('separacao_itens')
+            .delete()
+            .eq('separacao_id', sessionId);
+
+        if (itemsError) {
+            logSepSupabaseError('erro ao excluir itens do rascunho', itemsError, { sessionId });
+            throw itemsError;
+        }
+
+        const { error: sessionError } = await client
+            .from('separacao')
+            .delete()
+            .eq('separacao_id', sessionId);
+
+        if (sessionError) {
+            logSepSupabaseError('erro ao excluir rascunho', sessionError, { sessionId });
+            throw sessionError;
+        }
+
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+
+        return { deleted: true, sessionId };
+    }
+
     function mapEtiquetaItemToDb(item = {}, index = 0, loteId = null) {
         const quantity = Math.max(1, Math.floor(Number(item.quantity ?? item.quantidade_etiquetas ?? 1) || 1));
         const idInterno = String(item.idInterno || item.id_interno || item.code || item.codigo_barra || '').trim();
@@ -1535,6 +1588,7 @@ const DataClient = (function () {
         saveBatch,
         savePickingDraftSupabase,
         finalizePickingDraftSupabase,
+        deletePickingDraftSupabase,
         getCachedData,
         isModuleLoaded,
         invalidateCache,

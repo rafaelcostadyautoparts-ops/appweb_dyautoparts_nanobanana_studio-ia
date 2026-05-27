@@ -916,6 +916,222 @@ function updateLoginThemeBackground() {
     loginScreen.style.backgroundRepeat = 'no-repeat';
     const logo = loginScreen.querySelector('.login-logo');
     if (logo) logo.src = getLoginLogoSrc();
+    applyPremiumMobileLoginLayout();
+}
+
+function setImportantStyle(element, styles = {}) {
+    if (!element) return;
+    Object.entries(styles).forEach(([property, value]) => {
+        element.style.setProperty(property, value, 'important');
+    });
+}
+
+function applyPremiumMobileLoginLayout() {
+    const loginScreen = document.getElementById('login-screen');
+    if (!loginScreen || window.innerWidth >= 768) return;
+
+    const isLightTheme = getResolvedTheme(getStoredTheme()) === 'light';
+    const isLowMobile = window.innerHeight <= 740;
+    const backgroundUrl = isLightTheme
+        ? '/assets/images/login-bg-mobile-claro.png?v=20260527-js-premium'
+        : '/assets/images/login-bg-mobile-escuro.png?v=20260527-js-premium';
+    const overlay = isLightTheme
+        ? 'linear-gradient(180deg, rgba(255,255,255,.02) 0%, rgba(255,255,255,.02) 52%, rgba(238,244,251,.42) 100%)'
+        : 'linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.05) 50%, rgba(0,0,0,.54) 100%)';
+    const fallback = isLightTheme ? '#eef3f8' : '#02060b';
+
+    setImportantStyle(loginScreen, {
+        'align-items': 'center',
+        'background': `${overlay}, url('${backgroundUrl}') 62% 26% / cover no-repeat, ${fallback}`,
+        'box-sizing': 'border-box',
+        'display': 'block',
+        'height': '100dvh',
+        'max-height': '100dvh',
+        'min-height': '100dvh',
+        'overflow': 'hidden',
+        'padding': '0',
+        'position': 'relative',
+        'width': '100%'
+    });
+
+    const controls = loginScreen.querySelector('.top-hover-zone');
+    setImportantStyle(controls, {
+        'align-items': 'center',
+        'background': 'transparent',
+        'box-shadow': 'none',
+        'display': 'flex',
+        'gap': '12px',
+        'height': 'auto',
+        'justify-content': 'flex-end',
+        'left': 'auto',
+        'min-height': '0',
+        'pointer-events': 'none',
+        'position': 'fixed',
+        'right': 'calc(env(safe-area-inset-right, 0px) + 18px)',
+        'top': 'calc(env(safe-area-inset-top, 0px) + 34px)',
+        'width': 'auto',
+        'z-index': '10005'
+    });
+
+    loginScreen.querySelectorAll('.top-hover-zone .btn-floating-app').forEach(button => {
+        setImportantStyle(button, {
+            'align-items': 'center',
+            'border-radius': '50%',
+            'display': 'inline-flex',
+            'flex': '0 0 42px',
+            'height': '42px',
+            'justify-content': 'center',
+            'margin': '0',
+            'max-height': '42px',
+            'max-width': '42px',
+            'min-height': '42px',
+            'min-width': '42px',
+            'opacity': '1',
+            'padding': '0',
+            'pointer-events': 'auto',
+            'position': 'static',
+            'visibility': 'visible',
+            'width': '42px'
+        });
+    });
+
+    const logo = loginScreen.querySelector('.login-logo');
+    if (logo) {
+        logo.src = getLoginLogoSrc();
+        setImportantStyle(logo, {
+            'display': 'block',
+            'height': 'auto',
+            'left': '50%',
+            'margin': '0',
+            'max-height': 'none',
+            'max-width': 'none',
+            'object-fit': 'contain',
+            'position': 'absolute',
+            'top': 'calc(env(safe-area-inset-top, 0px) + 120px)',
+            'transform': 'translateX(-50%)',
+            'width': 'clamp(180px, 54vw, 250px)',
+            'z-index': '2'
+        });
+    }
+
+    const grid = loginScreen.querySelector('.login-user-grid');
+    setImportantStyle(grid, {
+        'align-items': 'stretch',
+        'box-sizing': 'border-box',
+        'display': 'flex',
+        'flex-direction': 'column',
+        'gap': isLowMobile ? '10px' : '14px',
+        'left': '0',
+        'margin': '0',
+        'max-width': 'none',
+        'padding': '0 16px',
+        'position': 'absolute',
+        'right': '0',
+        'top': isLowMobile ? '50dvh' : '52dvh',
+        'transform': 'none',
+        'width': '100%',
+        'z-index': '3'
+    });
+
+    loginScreen.querySelectorAll('.login-user-card').forEach(card => {
+        setImportantStyle(card, {
+            'align-items': 'center',
+            'border-radius': '20px',
+            'box-sizing': 'border-box',
+            'display': 'flex',
+            'flex-direction': 'row',
+            'gap': '22px',
+            'height': isLowMobile ? '78px' : '92px',
+            'justify-content': 'flex-start',
+            'left': 'auto',
+            'margin': '0 auto',
+            'max-width': '430px',
+            'min-height': '0',
+            'min-width': '0',
+            'overflow': 'hidden',
+            'padding': '12px 20px',
+            'position': 'relative',
+            'right': 'auto',
+            'text-align': 'left',
+            'transform': 'none',
+            'width': 'calc(100% - 32px)'
+        });
+
+        if (isLightTheme) {
+            setImportantStyle(card, {
+                'background': 'rgba(255,255,255,0.88)',
+                'backdrop-filter': 'blur(12px)',
+                '-webkit-backdrop-filter': 'blur(12px)',
+                'border': '1px solid rgba(255,255,255,.86)',
+                'box-shadow': '0 14px 32px rgba(15,23,42,0.20)',
+                'color': '#111111'
+            });
+        } else {
+            setImportantStyle(card, {
+                'background': 'rgba(15,15,18,0.78)',
+                'backdrop-filter': 'blur(14px)',
+                '-webkit-backdrop-filter': 'blur(14px)',
+                'border': '1px solid rgba(255,255,255,0.12)',
+                'box-shadow': '0 16px 36px rgba(0,0,0,0.48)',
+                'color': '#ffffff'
+            });
+        }
+
+        const avatar = card.querySelector('.user-avatar-box');
+        setImportantStyle(avatar, {
+            'align-items': 'center',
+            'border-radius': '14px',
+            'display': 'flex',
+            'flex': isLowMobile ? '0 0 58px' : '0 0 68px',
+            'height': isLowMobile ? '58px' : '68px',
+            'justify-content': 'center',
+            'margin': '0',
+            'max-height': isLowMobile ? '58px' : '68px',
+            'max-width': isLowMobile ? '58px' : '68px',
+            'min-height': isLowMobile ? '58px' : '68px',
+            'min-width': isLowMobile ? '58px' : '68px',
+            'position': 'relative',
+            'width': isLowMobile ? '58px' : '68px'
+        });
+
+        const initials = card.querySelector('.user-initials');
+        setImportantStyle(initials, {
+            'font-family': "'Fjalla One', 'Oswald', sans-serif",
+            'font-size': isLowMobile ? '30px' : '34px',
+            'font-weight': '900',
+            'letter-spacing': '0',
+            'line-height': '1',
+            'transform': 'translateY(-3px)'
+        });
+
+        const name = card.querySelector('.name');
+        if (name?.dataset.fullName) name.textContent = name.dataset.fullName;
+        setImportantStyle(name, {
+            'display': 'block',
+            'flex': '1 1 auto',
+            'font-family': "'Oswald', 'PT Sans Narrow', sans-serif",
+            'font-size': isLowMobile ? '15px' : '17px',
+            'font-weight': '800',
+            'letter-spacing': '1.4px',
+            'line-height': '1.08',
+            'margin': '0',
+            'min-width': '0',
+            'overflow': 'hidden',
+            'text-align': 'left',
+            'text-overflow': 'ellipsis',
+            'text-transform': 'uppercase',
+            'transform': 'translateY(1px)',
+            'white-space': 'nowrap',
+            'width': 'auto'
+        });
+    });
+}
+
+if (!window.__dyPremiumMobileLoginResizeBound) {
+    window.__dyPremiumMobileLoginResizeBound = true;
+    window.addEventListener('resize', () => {
+        if (document.getElementById('login-screen')) applyPremiumMobileLoginLayout();
+    });
 }
 
 applyTheme();
@@ -2624,7 +2840,7 @@ function renderLogin(push = true) {
                     <div class="user-avatar-box">
                         <span class="user-initials">${initials}</span>
                     </div>
-                    <span class="name" style="display: block;">${formattedName}</span>
+                    <span class="name" data-full-name="${escapeKitAttribute(u.nome || '')}" style="display: block;">${formattedName}</span>
                 </div>
             `;
     }).join('');
@@ -2646,7 +2862,10 @@ function renderLogin(push = true) {
             <div class="user-grid login-user-grid">
                 ${userGridHTML}
             </div>
-            
+            <div class="login-user-hint" aria-label="Selecione seu usuário">
+                <span class="material-symbols-rounded">person</span>
+                <span class="login-user-hint-text">SELECIONE SEU USUÁRIO</span>
+            </div>
         </div>
     `;
 
@@ -2671,12 +2890,13 @@ function renderLogin(push = true) {
                 existingScreen.insertAdjacentHTML('beforeend', `
                     <div class="login-user-hint" aria-label="Selecione seu usuário">
                         <span class="material-symbols-rounded">person</span>
-                        <span>SELECIONE SEU USUARIO</span>
+                        <span class="login-user-hint-text">SELECIONE SEU USUÁRIO</span>
                     </div>
                 `);
             }
             removeLegacyLoginFullscreenControls();
             updateThemeControlsUI();
+            applyPremiumMobileLoginLayout();
             setTimeout(removeLegacyLoginFullscreenControls, 0);
             return;
         }
@@ -2685,6 +2905,7 @@ function renderLogin(push = true) {
     appContainer.innerHTML = loginHTML;
     removeLegacyLoginFullscreenControls();
     updateThemeControlsUI();
+    applyPremiumMobileLoginLayout();
     setTimeout(removeLegacyLoginFullscreenControls, 0);
 }
 
@@ -11858,6 +12079,108 @@ function markDraftPickSaveStatus(status, error = null) {
     return draft;
 }
 
+async function removeQueuedPickingDraftOperations(sessionId) {
+    const targetSessionId = String(sessionId || '');
+    if (!targetSessionId) return;
+
+    const belongsToSession = (operation) => {
+        if (!operation || operation.type !== 'supabase_pick_draft') return false;
+        return String(operation.meta?.sessionId || '') === targetSessionId
+            || String(operation.payload?.sessionId || '') === targetSessionId
+            || String(operation.payload?.session?.separacao_id || '') === targetSessionId;
+    };
+
+    try {
+        const db = await openOperationOutboxDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(OPERATION_OUTBOX_STORE, 'readwrite');
+            const store = tx.objectStore(OPERATION_OUTBOX_STORE);
+            const request = store.getAll();
+            request.onsuccess = () => {
+                (request.result || [])
+                    .filter(belongsToSession)
+                    .forEach(operation => store.delete(operation.id));
+            };
+            request.onerror = () => reject(request.error);
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        });
+    } catch (error) {
+        console.warn('[SEP] nao foi possivel limpar outbox do rascunho:', error);
+    }
+
+    try {
+        const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
+        const filtered = fallback.filter(operation => !belongsToSession(operation));
+        localStorage.setItem('operation_outbox_fallback', JSON.stringify(filtered));
+    } catch (error) {
+        console.warn('[SEP] nao foi possivel limpar fallback do outbox:', error);
+    }
+
+    await refreshOutboxPendingCount();
+}
+
+async function discardPickingDraft(sessionId, options = {}) {
+    const draft = getDraftPickSession();
+    const targetSessionId = sessionId || draft?.sessionId || currentPickingContext?.sessionId;
+    if (!targetSessionId) return true;
+
+    let remoteRemoved = false;
+    let remoteError = null;
+
+    await removeQueuedPickingDraftOperations(targetSessionId);
+
+    if (navigator.onLine && window.DataClient?.deletePickingDraftSupabase) {
+        try {
+            await window.DataClient.deletePickingDraftSupabase({ sessionId: targetSessionId });
+            remoteRemoved = true;
+        } catch (error) {
+            remoteError = error;
+            console.warn('[SEP] nao foi possivel excluir rascunho no servidor:', error);
+        }
+    }
+
+    if (!draft || String(draft.sessionId || '') === String(targetSessionId)) {
+        localStorage.removeItem('draft_pick_session');
+    }
+
+    currentSessionItems = [];
+    lastScannedPickItemKey = null;
+    if (currentPickingContext?.sessionId === targetSessionId) {
+        currentPickingContext = null;
+    }
+
+    if (Array.isArray(appData.separacao)) {
+        appData.separacao = appData.separacao.filter(row => String(row.separacao_id || row.id || '') !== String(targetSessionId));
+    }
+    if (Array.isArray(appData.separacao_itens)) {
+        appData.separacao_itens = appData.separacao_itens.filter(row => String(row.separacao_id || '') !== String(targetSessionId));
+    }
+
+    if (!options.silent) {
+        if (remoteError) {
+            showToast("Rascunho removido deste aparelho. Nao foi possivel confirmar a exclusao no servidor.", "warning");
+        } else if (remoteRemoved || !navigator.onLine) {
+            showToast("Rascunho de separacao cancelado.");
+        }
+    }
+
+    return !remoteError;
+}
+
+async function confirmDiscardPickingDraft(sessionId, channelId, channelLabel, channelColor) {
+    const draft = getDraftPickSession();
+    const targetSessionId = sessionId || draft?.sessionId || currentPickingContext?.sessionId;
+    const hasItems = currentSessionItems.length > 0 || (draft?.items || []).length > 0;
+    const itemLabel = hasItems ? 'Todos os produtos bipados nesse rascunho serao removidos.' : 'Nenhum produto foi bipado ainda.';
+    const msg = `Cancelar o rascunho da separacao ${targetSessionId}?\n\n${itemLabel}\n\nUse isso quando iniciou a separacao no canal errado.`;
+
+    if (!confirm(msg)) return;
+
+    await discardPickingDraft(targetSessionId);
+    renderPickMenu();
+}
+
 function warnIfDraftPickWasNotSynced(draft) {
     if (!draft || !Array.isArray(draft.items) || draft.items.length === 0) return;
     if (draft.saveStatus === 'failed') {
@@ -12085,7 +12408,6 @@ async function persistPickingFinal(sessionId) {
 }
 
 async function startPickingSession(channelId, channelLabel, channelColor) {
-    const currentUser = localStorage.getItem('currentUser');
     const draft = getDraftPickSession();
     
     console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
@@ -12099,7 +12421,7 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
             if (draft.channelId !== channelId) {
                 const msg = `Sessao ativa detectada em ${draft.channelLabel}.\n\nPara iniciar em ${channelLabel}, você deve descartar o rascunho anterior.\n\nDeseja LIMPAR o rascunho de ${draft.channelLabel} e começar ${channelLabel}?`;
                 if (confirm(msg)) {
-                    localStorage.removeItem('draft_pick_session');
+                    await discardPickingDraft(draft.sessionId, { silent: true });
                     console.log(`[PICKING DEBUG] rascunho de ${draft.channelLabel} descartado`);
                 } else {
                     if (confirm(`Deseja RETOMAR a sessão de ${draft.channelLabel} agora?`)) {
@@ -12137,28 +12459,6 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
     };
     
     currentSessionItems = [];
-    const newDraft = saveDraftPickSession({
-        sessionId: currentPickingContext.sessionId,
-        channelId,
-        channelLabel,
-        channelColor,
-        items: [],
-        operatorId: currentUser,
-        status: PICK_STATUS_DRAFT,
-        createdAt: currentPickingContext.createdAt,
-        executionId: currentPickingContext.executionId,
-        saveStatus: 'saving'
-    });
-
-    try {
-        const result = await persistPickingDraftSession(newDraft);
-        markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
-    } catch (error) {
-        markDraftPickSaveStatus('failed', error);
-        console.warn('[SEP] nao foi possivel criar separacao em aberto ao abrir a tela:', error);
-        showToast("Separacao aberta localmente. Servidor sera sincronizado depois.", "warning");
-    }
-
     renderPickingScreen(currentPickingContext.sessionId, channelId, channelLabel, channelColor);
 }
 
@@ -12377,6 +12677,9 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                             </button>
                             <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
                                 PAUSAR SEPARACAO
+                            </button>
+                            <button class="pick-cancel-draft-btn" type="button" onclick="confirmDiscardPickingDraft(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+                                CANCELAR RASCUNHO
                             </button>
                         </div>
                     </aside>
@@ -12670,7 +12973,8 @@ function removePickItem(index) {
     currentSessionItems.splice(index, 1);
     updatePickItemsList();
     if (currentSessionItems.length === 0) {
-        saveDraftPickSession({ items: [], saveStatus: 'local_only' });
+        discardPickingDraft(currentPickingContext?.sessionId, { silent: true })
+            .catch(error => console.warn('[SEP] nao foi possivel cancelar rascunho vazio:', error));
     } else {
         saveDraftPickSession({ items: currentSessionItems, saveStatus: 'local_only' });
     }
