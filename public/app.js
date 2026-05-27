@@ -136,9 +136,35 @@ function playFeedbackSound(type) {
     }
 }
 
+let scanFeedbackBorderTimer = null;
+
+function triggerScanFeedback(type = 'success') {
+    const normalizedType = ['success', 'warning', 'error'].includes(type) ? type : 'error';
+    let overlay = document.getElementById('scan-feedback-overlay');
+
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'scan-feedback-overlay';
+        overlay.className = 'scan-feedback-overlay';
+        document.body.appendChild(overlay);
+    }
+
+    overlay.className = `scan-feedback-overlay ${normalizedType}`;
+    void overlay.offsetWidth;
+    overlay.classList.add('is-active');
+
+    clearTimeout(scanFeedbackBorderTimer);
+    scanFeedbackBorderTimer = setTimeout(() => {
+        overlay.classList.remove('is-active');
+    }, 950);
+}
+
+window.triggerScanFeedback = triggerScanFeedback;
+
 function showScanFeedback(type, message) {
     // Remover feedbacks antigos
     document.querySelectorAll('.scan-feedback').forEach(el => el.remove());
+    triggerScanFeedback(type);
     showPageSearchSignal(type);
 
     const feedback = document.createElement('div');
@@ -3662,6 +3688,15 @@ const MOV_HISTORY_PERIODS = [
 ];
 
 const MOV_HISTORY_PAGE_SIZES = [10, 25, 50];
+const PRODUCT_MOVEMENT_FILTERS = [
+    { id: 'todos', label: 'Todos' },
+    { id: 'entrada', label: 'Entrada' },
+    { id: 'saida', label: 'Saída' },
+    { id: 'transferencia', label: 'Transferência' },
+    { id: 'ajuste', label: 'Ajuste' },
+    { id: 'inventario', label: 'Inventário' },
+    { id: 'garantia', label: 'Garantia' }
+];
 
 let movementHistoryState = {
     operations: [],
@@ -3674,6 +3709,16 @@ let movementHistoryState = {
     page: 1,
     pageSize: 10,
     expanded: new Set()
+};
+
+let productMovementState = {
+    product: null,
+    stockEntries: [],
+    movements: [],
+    filtered: [],
+    filter: 'todos',
+    loading: false,
+    error: ''
 };
 
 function formatMovHistoryDate(value) {
@@ -3701,6 +3746,278 @@ function getMovHistoryTypeConfig(type) {
         outro: { label: 'Movimento', icon: 'history', color: '#94a3b8' }
     };
     return map[type] || map.outro;
+}
+
+function classifyProductMovement(mov = {}) {
+    const historyType = classifyMovHistoryMovement(mov);
+    if (historyType === 'entrada_nf') return 'entrada';
+    if (historyType === 'separacao' || historyType === 'conferencia') return 'saida';
+    if (['transferencia', 'ajuste', 'inventario', 'garantia'].includes(historyType)) return historyType;
+
+    const tipo = String(mov.tipo || '').toUpperCase();
+    const origem = String(mov.origem || '').toUpperCase();
+    const obs = String(mov.observacao || '').toUpperCase();
+    const localDestino = String(mov.local_destino || '').trim();
+    const localOrigem = String(mov.local_origem || '').trim();
+    if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obs.includes('CANCEL')) return 'saida';
+    if (tipo.includes('SAIDA') || tipo.includes('BAIXA') || origem.includes('PICK') || origem.includes('PACK')) return 'saida';
+    if (tipo.includes('ENTRADA') || (localDestino && !localOrigem)) return 'entrada';
+    if (localOrigem && localDestino) return 'transferencia';
+    return 'ajuste';
+}
+
+function getProductMovementDisplayType(mov = {}) {
+    const historyType = classifyMovHistoryMovement(mov);
+    const baseType = classifyProductMovement(mov);
+    const tipo = String(mov.tipo || '').toUpperCase();
+    const origem = String(mov.origem || '').toUpperCase();
+    const obs = String(mov.observacao || '').toUpperCase();
+    if (historyType === 'entrada_nf' || parseMovHistoryNF(mov.observacao)) return 'entrada_nf';
+    if (historyType === 'separacao' || tipo.includes('SEPAR') || origem.includes('SEPAR') || obs.includes('SEP-')) return 'separacao';
+    if (historyType === 'conferencia' || tipo.includes('CONFER') || origem.includes('CONFER')) return 'conferencia';
+    if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obs.includes('CANCEL')) return 'cancelamento';
+    return baseType;
+}
+
+function getProductMovementConfig(mov = {}) {
+    const displayType = getProductMovementDisplayType(mov);
+    const map = {
+        entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e', sign: '+' },
+        entrada: { label: 'Entrada', icon: 'add_circle', color: '#22c55e', sign: '+' },
+        saida: { label: 'Saída', icon: 'remove_circle', color: '#ef4444', sign: '-' },
+        separacao: { label: 'Separação', icon: 'inventory_2', color: '#ef4444', sign: '-' },
+        conferencia: { label: 'Conferência', icon: 'task_alt', color: '#14b8a6', sign: '-' },
+        transferencia: { label: 'Transferência', icon: 'sync_alt', color: '#60a5fa', sign: '+' },
+        ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b', sign: '' },
+        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8', sign: '' },
+        garantia: { label: 'Garantia/Defeito', icon: 'shield', color: '#a78bfa', sign: '-' },
+        cancelamento: { label: 'Cancelamento', icon: 'cancel', color: '#fb7185', sign: '' }
+    };
+    return map[displayType] || map.ajuste;
+}
+
+function getProductMovementDocument(mov = {}) {
+    const nf = parseMovHistoryNF(mov.observacao);
+    if (nf) return `NF ${nf}`;
+    const obs = String(mov.observacao || '');
+    const processId = obs.match(/\b((?:SEP|CONF|INV|AJU|TRF|GAR)[-_A-Z0-9.]+)\b/i)?.[1];
+    return processId || mov.movimento_id || '-';
+}
+
+function getProductMovementRoute(mov = {}) {
+    return [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' → ');
+}
+
+function getProductMovementSearchText(mov = {}) {
+    return [
+        getProductMovementConfig(mov).label,
+        getProductMovementDocument(mov),
+        mov.tipo,
+        mov.origem,
+        mov.local_origem,
+        mov.local_destino,
+        mov.usuario,
+        mov.observacao
+    ].join(' ').toLowerCase();
+}
+
+function applyProductMovementFilter() {
+    const filter = productMovementState.filter || 'todos';
+    let filtered = [...(productMovementState.movements || [])];
+    if (filter !== 'todos') {
+        filtered = filtered.filter(mov => classifyProductMovement(mov) === filter);
+    }
+    filtered.sort((a, b) => new Date(b.data_hora || b.created_at || 0) - new Date(a.data_hora || a.created_at || 0));
+    productMovementState.filtered = filtered;
+}
+
+function getProductMovementLocationSummary(stockEntries = []) {
+    const active = (stockEntries || [])
+        .map(entry => ({
+            label: prettyLocal(entry.local),
+            qty: parseDecimal(entry.saldo_total ?? entry.saldo_disponivel ?? entry.saldo)
+        }))
+        .filter(entry => entry.qty > 0);
+    if (!active.length) return 'Sem saldo por local';
+    return active.slice(0, 3).map(entry => `${entry.label}: ${formatStockNumber(entry.qty)}`).join(' | ');
+}
+
+function renderProductMovementHero(product, stockEntries = []) {
+    const idInterno = String(product?.id_interno || product?.col_A || '');
+    const img = product?.image_path || product?.url_imagem;
+    const available = calcularEstoqueOperacional(stockEntries || []);
+    return `
+        <section class="product-mov-hero">
+            <div class="product-mov-image">
+                ${img ? `<img src="${formatImageUrl(img)}" alt="">` : '<span class="material-symbols-rounded">inventory_2</span>'}
+            </div>
+            <div class="product-mov-title">
+                <span>Rastreabilidade do produto</span>
+                <h1>${escapeKitAttribute(product?.descricao_completa || product?.descricao_base || 'Produto sem descrição')}</h1>
+                <div class="product-mov-meta">
+                    <strong>${escapeKitAttribute(product?.marca || 'Sem marca')}</strong>
+                    <em>ID ${escapeKitAttribute(idInterno || '-')}</em>
+                </div>
+            </div>
+            <div class="product-mov-stock">
+                <span>Estoque disponível</span>
+                <strong>${formatStockNumber(available)} <small>${escapeKitAttribute(product?.unidade || 'UN')}</small></strong>
+                <em>${escapeKitAttribute(getProductMovementLocationSummary(stockEntries))}</em>
+            </div>
+        </section>
+    `;
+}
+
+function renderProductMovementFilters() {
+    return `
+        <div class="product-mov-filters" role="tablist" aria-label="Filtros de movimentação">
+            ${PRODUCT_MOVEMENT_FILTERS.map(item => `
+                <button type="button" class="${productMovementState.filter === item.id ? 'active' : ''}" onclick="setProductMovementFilter('${item.id}')">
+                    ${item.label}
+                </button>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderProductMovementRows(items) {
+    if (productMovementState.loading) {
+        return `
+            <div class="product-mov-empty">
+                <span class="material-symbols-rounded">sync</span>
+                <strong>Carregando movimentações...</strong>
+            </div>
+        `;
+    }
+    if (productMovementState.error) {
+        return `
+            <div class="product-mov-empty">
+                <span class="material-symbols-rounded">error</span>
+                <strong>Não foi possível carregar o histórico</strong>
+                <small>${escapeKitAttribute(productMovementState.error)}</small>
+            </div>
+        `;
+    }
+    if (!items.length) {
+        return `
+            <div class="product-mov-empty">
+                <span class="material-symbols-rounded">history</span>
+                <strong>Nenhuma movimentação encontrada</strong>
+                <small>Este filtro não possui registros para o produto selecionado.</small>
+            </div>
+        `;
+    }
+
+    return items.map(mov => {
+        const cfg = getProductMovementConfig(mov);
+        const qty = parseDecimal(mov.quantidade);
+        const route = getProductMovementRoute(mov);
+        const doc = getProductMovementDocument(mov);
+        const obs = mov.observacao || '';
+        const fifo = obs.match(/FIFO[^|]*/i)?.[0] || '';
+        return `
+            <article class="product-mov-item" style="--tone:${cfg.color}">
+                <div class="product-mov-marker">
+                    <span class="material-symbols-rounded">${cfg.icon}</span>
+                </div>
+                <div class="product-mov-card">
+                    <div class="product-mov-card-head">
+                        <span class="product-mov-type">${cfg.label}</span>
+                        <time>${formatMovHistoryDate(mov.data_hora || mov.created_at)}</time>
+                    </div>
+                    <div class="product-mov-card-main">
+                        <strong>${escapeKitAttribute(doc)}</strong>
+                        <span class="product-mov-qty ${cfg.sign === '-' ? 'negative' : 'positive'}">${cfg.sign}${formatStockNumber(qty)} ${escapeKitAttribute(productMovementState.product?.unidade || 'UN')}</span>
+                    </div>
+                    <div class="product-mov-details">
+                        ${route ? `<span><b>Origem/Destino</b>${escapeKitAttribute(route)}</span>` : ''}
+                        ${mov.usuario ? `<span><b>Usuário</b>${escapeKitAttribute(mov.usuario)}</span>` : ''}
+                        ${mov.origem ? `<span><b>Origem do registro</b>${escapeKitAttribute(mov.origem)}</span>` : ''}
+                        ${fifo ? `<span><b>Custo/FIFO</b>${escapeKitAttribute(fifo)}</span>` : ''}
+                        ${obs ? `<span class="wide"><b>Observação</b>${escapeKitAttribute(obs)}</span>` : ''}
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderProductMovementScreenShell() {
+    const product = productMovementState.product || {};
+    const items = productMovementState.filtered || [];
+    return `
+        <div class="dashboard-screen internal fade-in product-mov-screen no-top-bar">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderProductDetails(window.currentProductMovementProduct || window.currentProductDetailForEdit)')}
+            <main class="product-mov-workspace">
+                ${renderProductMovementHero(product, productMovementState.stockEntries)}
+                ${renderProductMovementFilters()}
+                <section class="product-mov-list-shell">
+                    <div class="product-mov-list-head">
+                        <div>
+                            <span>Timeline operacional</span>
+                            <strong>${formatStockNumber(items.length)} registro(s)</strong>
+                        </div>
+                        <small>Carregado ao abrir esta tela</small>
+                    </div>
+                    <div class="product-mov-timeline">
+                        ${renderProductMovementRows(items)}
+                    </div>
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+function refreshProductMovementScreen() {
+    applyProductMovementFilter();
+    app.innerHTML = renderProductMovementScreenShell();
+}
+
+function setProductMovementFilter(filter) {
+    productMovementState.filter = filter;
+    refreshProductMovementScreen();
+}
+
+async function openProductMovementsFromDetail() {
+    const product = window.currentProductDetailForEdit || window.currentProductMovementProduct;
+    if (!product) {
+        showToast('Produto não encontrado para carregar movimentações.', 'error');
+        return;
+    }
+    await renderProductMovementsScreen(product);
+}
+
+async function renderProductMovementsScreen(product) {
+    const idInterno = String(product?.id_interno || product?.col_A || '').trim();
+    window.currentProductMovementProduct = product;
+    productMovementState = {
+        product,
+        stockEntries: [],
+        movements: [],
+        filtered: [],
+        filter: 'todos',
+        loading: true,
+        error: ''
+    };
+    app.innerHTML = renderProductMovementScreenShell();
+
+    try {
+        const [stockEntries, movements] = await Promise.all([
+            DataClient.fetchEstoqueProdutoSupabase(idInterno).catch(() => []),
+            (DataClient.fetchMovimentosProdutoSupabase
+                ? DataClient.fetchMovimentosProdutoSupabase(idInterno, 180)
+                : DataClient.fetchMovimentosSupabase().then(rows => (rows || []).filter(row => String(row.id_interno) === idInterno))
+            )
+        ]);
+        productMovementState.stockEntries = stockEntries || [];
+        productMovementState.movements = movements || [];
+        productMovementState.loading = false;
+    } catch (error) {
+        console.error('[PRODUCT_MOV] erro ao carregar movimentações do produto', error);
+        productMovementState.loading = false;
+        productMovementState.error = error?.message || String(error);
+    }
+    refreshProductMovementScreen();
 }
 
 function getMovHistoryPeriodStart(period) {
@@ -5299,6 +5616,13 @@ async function addTransferItem() {
 
     if (!ean) return;
 
+    const transferScanType = classifyProductInput(ean);
+    if (transferScanType.type === 'invalid' || transferScanType.type === 'empty' || transferScanType.type === 'text') {
+        showScanFeedback('error', 'Código inválido');
+        eanInput.value = '';
+        return;
+    }
+
     // LOG: Termo digitado
     console.log('[INV-DIAG] termo digitado:', ean);
 
@@ -5322,6 +5646,7 @@ async function addTransferItem() {
     console.log('[INV-DIAG] produto encontrado:', product);
 
     if (!product) {
+        showScanFeedback('warning', 'Produto não cadastrado');
         showToast("Produto não encontrado!", "error");
         eanInput.value = '';
         return;
@@ -5339,11 +5664,13 @@ async function addTransferItem() {
         .maybeSingle();
 
     if (error) {
+        showScanFeedback('error', 'Erro ao validar estoque');
         showToast("Erro ao validar estoque.");
         return;
     }
 
     if (!stockData) {
+        showScanFeedback('error', 'Sem estoque na origem');
         showToast("Produto sem estoque no local de origem", "error");
         eanInput.value = '';
         return;
@@ -5364,6 +5691,7 @@ async function addTransferItem() {
     console.log('[TRANSF-DIAG] quantidade solicitada:', requested);
 
     if (available < requested) {
+        showScanFeedback('error', 'Estoque insuficiente');
         showToast("Estoque insuficiente no local de origem", "error");
         eanInput.value = '';
         return;
@@ -5381,6 +5709,8 @@ async function addTransferItem() {
 
     eanInput.value = '';
     eanInput.focus();
+    triggerScanFeedback('success');
+    playBeep('success');
     updateTransferenciaListUI();
 }
 
@@ -6981,6 +7311,14 @@ async function addInventoryItem(scannedEan = null) {
     const eanInput = document.getElementById('inv-ean-input');
     const ean = (scannedEan || eanInput?.value?.trim() || '').toString();
     if (!ean) return;
+
+    const inventoryScanType = classifyProductInput(ean);
+    if (inventoryScanType.type === 'invalid' || inventoryScanType.type === 'empty' || inventoryScanType.type === 'text') {
+        showScanFeedback('error', 'Código inválido');
+        if(eanInput) eanInput.value = '';
+        if(eanInput) eanInput.focus();
+        return;
+    }
     
     if (eanInput) eanInput.value = ""; // Limpa campo imediatamente para novo bip
 
@@ -7005,7 +7343,7 @@ async function addInventoryItem(scannedEan = null) {
 
     if (!product) { 
         console.warn('[INV-DIAG] Produto não encontrado em definitivo:', ean);
-        playBeep(false); 
+        showScanFeedback('warning', 'Produto não cadastrado');
         showToast("PRODUTO NÃO ENCONTRADO!", "error");
         await showAppAlert({
             title: 'Produto não encontrado',
@@ -7039,6 +7377,7 @@ async function addInventoryItem(scannedEan = null) {
     if(eanInput) eanInput.value = ''; 
     if(eanInput) eanInput.focus(); 
     playBeep(true); 
+    triggerScanFeedback('success');
     updateInventoryItemsList(); 
     
     console.log('[INV-DIAG] inventario atual:', appData.currentInventory.id);
@@ -7054,7 +7393,7 @@ async function addInventoryItem(scannedEan = null) {
         console.error('[INV-DIAG] erro ao incluir item bipado:', e);
     }
     if (!saved) {
-        playBeep(false);
+        showScanFeedback('error', 'Erro ao incluir produto');
         if (existing) {
             itemToSave.qty = previousQty;
         } else {
@@ -10079,6 +10418,13 @@ async function renderProductDetails(p) {
                             ` : ''}
                         </div>
                     </div>
+
+                    <div class="product-movement-entry">
+                        <button type="button" class="product-movement-entry-btn" onclick="openProductMovementsFromDetail()">
+                            <span class="material-symbols-rounded">history</span>
+                            <span>Ver movimentações</span>
+                        </button>
+                    </div>
                 </div>
             </main>
         </div>
@@ -11473,6 +11819,9 @@ function renderPickHistory() {
 
 // Variável global para armazenar o contexto da sessão antes de ser persistida
 let currentPickingContext = null;
+let lastScannedPickItemKey = null;
+let scanCenterToastTimeout = null;
+let scanSuccessGlowTimeout = null;
 const PICK_STATUS_DRAFT = 'em_separacao';
 const PICK_STATUS_READY_FOR_PACK = 'aberta';
 const PICK_STATUS_FINISHED = 'finalizada';
@@ -11566,6 +11915,44 @@ function buildPickingItemPayload(item) {
 
 function getPickingProductId(item) {
     return normalizePickCode(item?.id_interno || item?.col_a || item?.col_A || '');
+}
+
+function showPickScanCenterToast(item = null, quantity = 1) {
+    clearTimeout(scanCenterToastTimeout);
+    document.querySelectorAll('.scan-center-toast').forEach(el => el.remove());
+
+    const title = item ? getPickItemTitle(item) : 'Produto bipado';
+    const id = item ? (getPickingProductId(item) || item.id_interno || item.col_a || '-') : '-';
+    const ean = item ? (item.ean || item.codigo_barras || '-') : '-';
+    const brand = item ? (getPickItemBrand(item) || '') : '';
+
+    const toastEl = document.createElement('div');
+    toastEl.className = 'scan-center-toast';
+    toastEl.innerHTML = `
+        <small>Produto bipado</small>
+        <strong>${escapeKitAttribute(title)}</strong>
+        ${brand ? `<em>${escapeKitAttribute(brand)}</em>` : ''}
+        <span>+${quantity} unidade adicionada</span>
+        <div>ID ${escapeKitAttribute(id)}${ean && ean !== '-' ? ` · EAN ${escapeKitAttribute(ean)}` : ''}</div>
+    `;
+    document.body.appendChild(toastEl);
+
+    scanCenterToastTimeout = setTimeout(() => {
+        toastEl.classList.add('is-hiding');
+        setTimeout(() => toastEl.remove(), 220);
+    }, 1800);
+}
+
+function triggerScanSuccessGlow() {
+    triggerScanFeedback('success');
+    document.body.classList.remove('scan-success-glow');
+    void document.body.offsetWidth;
+    document.body.classList.add('scan-success-glow');
+
+    clearTimeout(scanSuccessGlowTimeout);
+    scanSuccessGlowTimeout = setTimeout(() => {
+        document.body.classList.remove('scan-success-glow');
+    }, 760);
 }
 
 function getPickItemTitle(item) {
@@ -11811,6 +12198,52 @@ function getPickMainCode(item) {
     return item?.id_interno || item?.col_a || item?.col_A || item?.ean || item?.sku_fornecedor || item?.sku || '-';
 }
 
+function getPickItemStockInfoHTML(item) {
+    const productId = getPickingProductId(item);
+    if (!productId || !Array.isArray(appData.estoque)) {
+        return `
+            <div class="pick-product-stock is-empty" data-label="Estoque">
+                <span>Estoque -</span>
+                <small>sem saldo carregado</small>
+            </div>
+        `;
+    }
+
+    const stockEntries = appData.estoque.filter(entry => String(entry.id_interno || entry.col_a || entry.id || '') === String(productId));
+    if (!stockEntries.length) {
+        return `
+            <div class="pick-product-stock is-empty" data-label="Estoque">
+                <span>Estoque -</span>
+                <small>sem local disponivel</small>
+            </div>
+        `;
+    }
+
+    const availableQty = calcularEstoqueDisponivel(stockEntries);
+    const locations = stockEntries
+        .map(entry => {
+            const qty = parseStockQty(entry.saldo_total ?? entry.saldo ?? entry.saldo_disponivel);
+            return {
+                local: prettyLocal(entry.local || entry.col_b || ''),
+                qty
+            };
+        })
+        .filter(entry => entry.local && entry.qty > 0)
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 2);
+
+    const locationText = locations.length
+        ? locations.map(entry => `${entry.local}: ${entry.qty}`).join(' / ')
+        : 'sem local disponivel';
+
+    return `
+        <div class="pick-product-stock" data-label="Estoque">
+            <span>Estoque ${availableQty}</span>
+            <small>${escapeKitAttribute(locationText)}</small>
+        </div>
+    `;
+}
+
 function getPickTotalQuantity() {
     return currentSessionItems.reduce((total, item) => total + (Number(item.qty) || 0), 0);
 }
@@ -11851,6 +12284,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     app.innerHTML = `
         <div class="dashboard-screen fade-in internal no-top-bar picking-screen pick-workflow-screen">
             ${getModuleSidebarHTML('pick')}
+            ${getQuickActionsHTML(isModoRapidoAtivo())}
 
             <main class="pick-workflow-shell">
                 <header class="pick-workflow-header">
@@ -11922,6 +12356,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                         <div class="pick-table-head">
                             <span>Produto</span>
                             <span>Codigo</span>
+                            <span>Estoque / Local</span>
                             <span>Quantidade bipada</span>
                             <span>Acoes</span>
                         </div>
@@ -11936,12 +12371,14 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                             <div><span>Quantidade total</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
                             <div><span>Progresso</span><strong id="pick-summary-progress">${currentSessionItems.length ? '100%' : '0%'}</strong></div>
                         </div>
-                        <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                            FINALIZAR SEPARACAO
-                        </button>
-                        <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                            PAUSAR SEPARACAO
-                        </button>
+                        <div class="pick-summary-actions">
+                            <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+                                FINALIZAR SEPARACAO
+                            </button>
+                            <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+                                PAUSAR SEPARACAO
+                            </button>
+                        </div>
                     </aside>
                 </section>
 
@@ -12052,14 +12489,17 @@ async function addPickItem(scannedEan = null) {
     const ean = normalizePickCode(rawCode);
     console.log('[SEP] codigo bruto', rawCode);
     console.log('[SEP] codigo normalizado', ean);
-    if (!ean) return;
+    if (!ean) {
+        showScanFeedback('error', 'Código inválido');
+        return;
+    }
 
     const product = await findProductForPicking(ean);
 
     if (product) {
         const productId = getPickingProductId(product);
         if (!productId) {
-            playBeep('error');
+            showScanFeedback('error', 'Produto sem ID interno');
             showToast(`PRODUTO SEM ID INTERNO: ${ean}`);
             input.value = '';
             showInputFeedback('pick-ean-input', 'error');
@@ -12074,7 +12514,7 @@ async function addPickItem(scannedEan = null) {
 
         if (stock < (currentDraftQty + 1)) {
             if (!allowNegative) {
-                playBeep('error');
+                showScanFeedback('error', 'Estoque insuficiente');
                 showToast(`ESTOQUE INSUFICIENTE para ${product.descricao_base || 'este item'}`);
                 input.value = '';
                 showInputFeedback('pick-ean-input', 'error');
@@ -12096,11 +12536,14 @@ async function addPickItem(scannedEan = null) {
             descricao: getPickItemTitle(product)
         });
 
-        const existingItem = currentSessionItems.find(item => getPickingProductId(item) === productId);
-        if (existingItem) {
+        const existingIndex = currentSessionItems.findIndex(item => getPickingProductId(item) === productId);
+        if (existingIndex >= 0) {
+            const existingItem = currentSessionItems[existingIndex];
             existingItem.qty = (existingItem.qty || 1) + 1;
             existingItem.scanTime = new Date().toLocaleTimeString();
             existingItem.lastAddedAt = Date.now();
+            currentSessionItems.splice(existingIndex, 1);
+            currentSessionItems.unshift(existingItem);
         } else {
             currentSessionItems.unshift({
                 ...product,
@@ -12109,6 +12552,7 @@ async function addPickItem(scannedEan = null) {
                 lastAddedAt: Date.now()
             });
         }
+        lastScannedPickItemKey = productId;
 
         const draftStr = localStorage.getItem('draft_pick_session');
         let draft;
@@ -12141,6 +12585,7 @@ async function addPickItem(scannedEan = null) {
         draft.lastSaveAttemptAt = new Date().toISOString();
         localStorage.setItem('draft_pick_session', JSON.stringify(draft));
 
+        let pickPersistFailed = false;
         try {
             const itemToPersist = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
             const persistResult = await persistPickingDraftItem(draft, itemToPersist);
@@ -12149,6 +12594,7 @@ async function addPickItem(scannedEan = null) {
                 showToast("Item salvo localmente para sincronizar.");
             }
         } catch (error) {
+            pickPersistFailed = true;
             markDraftPickSaveStatus('failed', error);
             console.error('[SEP] erro ao salvar item', {
                 message: error?.message,
@@ -12156,16 +12602,20 @@ async function addPickItem(scannedEan = null) {
                 hint: error?.hint,
                 code: error?.code
             });
+            showScanFeedback('error', 'Erro ao salvar item');
             showToast(`Erro ao salvar item: ${error?.message || error}`, "error");
         }
 
-        showToast(`Item adicionado: ${getPickItemTitle(product)}`);
+        if (!pickPersistFailed) {
+            showPickScanCenterToast(product);
+            triggerScanSuccessGlow();
+        }
         if (currentPackSession) {
             currentPackSession.items = currentSessionItems;
             localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
         }
     } else {
-        playBeep('error');
+        showScanFeedback('warning', 'Produto não cadastrado');
         showToast(`PRODUTO NÃO CADASTRADO: ${ean}`);
     }
 
@@ -12193,7 +12643,7 @@ function updatePickItemsList() {
     }
 
     container.innerHTML = currentSessionItems.map((item, index) => `
-        <article class="pick-product-row fade-in ${Date.now() - Number(item.lastAddedAt || 0) < 1600 ? 'recently-added' : ''}">
+        <article class="pick-product-row separacao-item-card fade-in ${getPickingProductId(item) === lastScannedPickItemKey ? 'is-last-scanned' : ''} ${Date.now() - Number(item.lastAddedAt || 0) < 1600 ? 'recently-added' : ''}">
             <div class="pick-product-main" data-label="Produto">
                 <div class="pick-product-image">
                     ${getPickProductImage(item) ? `<img src="${escapeKitAttribute(getPickProductImage(item))}" alt="${escapeKitAttribute(getPickItemTitle(item))}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
@@ -12207,6 +12657,7 @@ function updatePickItemsList() {
                 <strong>${escapeKitAttribute(getPickMainCode(item))}</strong>
                 <small>EAN ${escapeKitAttribute(item.ean || '-')} • SKU ${escapeKitAttribute(item.sku_fornecedor || item.sku || '-')}</small>
             </div>
+            ${getPickItemStockInfoHTML(item)}
             <div class="pick-product-qty" data-label="Quantidade bipada">${Number(item.qty) || 0}</div>
             <button class="pick-product-delete" onclick="removePickItem(${index})" type="button" aria-label="Remover item">
                 <span class="material-symbols-rounded">delete</span>
@@ -13404,6 +13855,7 @@ function addPackScan(scannedEan = null) {
 
     if (row) {
         playBeep('success');
+        triggerScanFeedback('success');
         console.log(`[BIP CONTINUO DEBUG] produto adicionado (conferência): ${row.id_interno || ean}`);
         row.qtd_conferida++;
 
@@ -13418,9 +13870,6 @@ function addPackScan(scannedEan = null) {
         showToast("Produto conferido.");
     } else {
         // Item scanned but not in picking session (SOBRA)
-        playBeep('error');
-        showToast("Item não encontrado nesta separação. Registrado para validação ao finalizar.");
-
         // Try to find product info in appData.products
         const product = appData.products.find(p =>
             (p.ean && p.ean.toString() === ean) ||
@@ -13429,6 +13878,8 @@ function addPackScan(scannedEan = null) {
             (p.col_a && p.col_a.toString() === ean) ||
             (p.col_A && p.col_A.toString() === ean)
         );
+        showScanFeedback(product ? 'error' : 'warning', product ? 'Item fora da separação' : 'Produto não cadastrado');
+        showToast("Item não encontrado nesta separação. Registrado para validação ao finalizar.");
 
         row = {
             rom_id: currentPackSession.id,
@@ -17285,6 +17736,16 @@ function renderNFSubMenu() {
         { id: 'nf_abertas', label: 'NOTAS EM ABERTO', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Continuar notas importadas, pendentes de vínculo ou conferência.' },
         { id: 'nf_historico', label: 'HIST\u00d3RICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas concluídas, financeiras ou canceladas.' }
     ];
+    if (hasEntradaNFXMLDraft()) {
+        const draft = getEntradaNFXMLDraft();
+        subItems.unshift({
+            id: 'nf_draft',
+            label: 'CONTINUAR RASCUNHO',
+            icon: 'xml',
+            onclick: 'resumeEntradaNFXMLDraft()',
+            description: `Retomar NF ${draft.numero_nf || '-'} de ${draft.fornecedor?.razao_social || 'fornecedor não informado'}.`
+        });
+    }
     
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
@@ -17299,6 +17760,7 @@ function renderNFSubMenu() {
 }
 
 let entradaNfXmlState = null;
+const ENTRADA_NF_XML_DRAFT_KEY = 'entrada_nf_xml_draft';
 
 const NF_XML_WIZARD_STEPS = [
     { id: 'xml', label: 'XML' },
@@ -17317,7 +17779,10 @@ function getNFXmlCurrentStep() {
 }
 
 function setNFXmlCurrentStep(stepId) {
-    if (entradaNfXmlState) entradaNfXmlState.currentStep = stepId;
+    if (entradaNfXmlState) {
+        entradaNfXmlState.currentStep = stepId;
+        saveEntradaNFXMLDraft();
+    }
 }
 
 function nfXmlOnlyDigits(value) {
@@ -17325,7 +17790,59 @@ function nfXmlOnlyDigits(value) {
 }
 
 function nfXmlMoney(value) {
-    return parseFloat(String(value || '0').replace(',', '.')) || 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const raw = String(value ?? '0').trim();
+    if (!raw) return 0;
+    const normalized = raw.includes(',')
+        ? raw.replace(/\./g, '').replace(',', '.')
+        : raw;
+    return parseFloat(normalized.replace(/[^\d.-]/g, '')) || 0;
+}
+
+function nfXmlFormatMoneyInput(value) {
+    return nfXmlMoney(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getEntradaNFXMLDraft() {
+    try {
+        const draft = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFT_KEY) || 'null');
+        return draft && typeof draft === 'object' ? draft : null;
+    } catch (error) {
+        console.warn('[ENTRADA_NF_XML] rascunho local invalido. Limpando.', error);
+        localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
+        return null;
+    }
+}
+
+function saveEntradaNFXMLDraft() {
+    if (!entradaNfXmlState?.chave_acesso || entradaNfXmlState.savedEntradaId) return;
+    const draft = {
+        ...entradaNfXmlState,
+        draftSavedAt: new Date().toISOString()
+    };
+    localStorage.setItem(ENTRADA_NF_XML_DRAFT_KEY, JSON.stringify(draft));
+}
+
+function clearEntradaNFXMLDraft(chaveAcesso = entradaNfXmlState?.chave_acesso) {
+    const draft = getEntradaNFXMLDraft();
+    if (!draft || !chaveAcesso || draft.chave_acesso === chaveAcesso) {
+        localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
+    }
+}
+
+function hasEntradaNFXMLDraft() {
+    const draft = getEntradaNFXMLDraft();
+    return !!(draft?.chave_acesso && !draft.savedEntradaId);
+}
+
+function resumeEntradaNFXMLDraft() {
+    const draft = getEntradaNFXMLDraft();
+    if (!draft?.chave_acesso) {
+        showToast('Nenhum rascunho de NF encontrado.', 'warning');
+        return;
+    }
+    entradaNfXmlState = draft;
+    renderNFXmlWizardScreen();
 }
 
 function nfXmlText(node, tagName) {
@@ -17696,6 +18213,7 @@ async function renderNFXmlUploadScreen() {
     const currentUser = localStorage.getItem('currentUser');
     currentScreen = 'internal';
     entradaNfXmlState = null;
+    const draft = getEntradaNFXMLDraft();
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
@@ -17706,6 +18224,18 @@ async function renderNFXmlUploadScreen() {
                     <span>ENTRADA NF - XML</span>
                 </div>
                 <div id="nfxml-wizard-root">
+                    ${draft?.chave_acesso ? `
+                        <div class="nfxml-draft-banner">
+                            <div>
+                                <strong>Rascunho disponível</strong>
+                                <span>NF ${escapeKitAttribute(draft.numero_nf || '-')} • ${escapeKitAttribute(draft.fornecedor?.razao_social || draft.fornecedor?.cnpj || 'Fornecedor não informado')}</span>
+                            </div>
+                            <button type="button" class="btn-action" onclick="resumeEntradaNFXMLDraft()">
+                                <span class="material-symbols-rounded">restore</span>
+                                Continuar rascunho
+                            </button>
+                        </div>
+                    ` : ''}
                     ${renderNFXmlWizardHTML()}
                 </div>
             </main>
@@ -17863,8 +18393,8 @@ function renderNFXmlStepFornecedor() {
                     <label class="${key === 'observacoes' ? 'full' : ''}">
                         <span>${label}</span>
                         ${key === 'observacoes'
-                            ? `<textarea id="nfxml-forn-${key}" rows="3">${escapeKitAttribute(f[key] || '')}</textarea>`
-                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}">`}
+                            ? `<textarea id="nfxml-forn-${key}" rows="3" oninput="updateNFXmlFornecedorDraftField('${key}', this.value)">${escapeKitAttribute(f[key] || '')}</textarea>`
+                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}" oninput="updateNFXmlFornecedorDraftField('${key}', this.value)">`}
                     </label>
                 `).join('')}
             </form>
@@ -17876,6 +18406,16 @@ function renderNFXmlStepFornecedor() {
             </div>
         </section>
     `;
+}
+
+function updateNFXmlFornecedorDraftField(key, value) {
+    const state = entradaNfXmlState;
+    if (!state) return;
+    state.fornecedor = {
+        ...(state.fornecedor || {}),
+        [key]: key === 'cnpj' || key === 'cep' ? nfXmlOnlyDigits(value) : value
+    };
+    saveEntradaNFXMLDraft();
 }
 
 function renderNFXmlStepProdutos() {
@@ -18036,10 +18576,23 @@ async function handleNFXmlFileSelected(input) {
     try {
         console.log('[ENTRADA_NF_XML] arquivo selecionado', file.name, file.size);
         const xmlText = await file.text();
-        entradaNfXmlState = parseNFeXml(xmlText);
+        const parsedState = parseNFeXml(xmlText);
+        const draft = getEntradaNFXMLDraft();
+        if (draft?.chave_acesso && draft.chave_acesso === parsedState.chave_acesso && !draft.savedEntradaId) {
+            entradaNfXmlState = {
+                ...parsedState,
+                ...draft,
+                xmlText: parsedState.xmlText,
+                draftSavedAt: draft.draftSavedAt
+            };
+        } else {
+            entradaNfXmlState = parsedState;
+        }
+        saveEntradaNFXMLDraft();
         await ensureProdutosLoaded(true);
         await hydrateNFXmlPreviewFromSupabase();
         setNFXmlCurrentStep('xml');
+        saveEntradaNFXMLDraft();
         refreshNFXmlWizard();
     } catch (error) {
         console.error('[ENTRADA_NF_XML] erro ao ler XML', error);
@@ -18068,6 +18621,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
     state.nfExistente = nfExistente || null;
     if (state.nfExistente) {
         state.savedEntradaId = state.nfExistente.id;
+        clearEntradaNFXMLDraft(state.chave_acesso);
         state.tipo_lancamento = normalizeNFXmlTipoLancamento(state.nfExistente.tipo_lancamento);
         const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
         state.afeta_estoque = tipoConfig.afetaEstoque;
@@ -18109,7 +18663,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
 
     for (const item of state.itens) {
         const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '') === String(item.codigo_produto_fornecedor || ''));
-        if (vinculo?.id_interno) {
+            if (vinculo?.id_interno) {
             applyNFXmlItemProductLink(item.numero_item, vinculo.id_interno, 'fornecedor+cProd', true);
             item.ean_divergente = !!vinculo.ean_divergente;
             continue;
@@ -18121,6 +18675,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
             if (product) applyNFXmlItemProductLink(item.numero_item, product.id_interno, 'ean', true);
         }
     }
+    saveEntradaNFXMLDraft();
 }
 
 function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', silent = false) {
@@ -18140,6 +18695,7 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
     item.status_vinculo = 'vinculado';
     item.match_source = source;
     console.log('[ENTRADA_NF_XML] vínculo aplicado', { numeroItem, idInterno, source });
+    saveEntradaNFXMLDraft();
     if (!silent) renderNFXmlPreview();
     return true;
 }
@@ -18154,6 +18710,7 @@ function toggleNFXmlEanDivergente(numeroItem, checked) {
     if (!item) return;
     item.ean_divergente = !!checked;
     console.log('[ENTRADA_NF_XML] ean divergente alterado', { numeroItem, checked });
+    saveEntradaNFXMLDraft();
 }
 
 function searchNFXmlProduct(numeroItem, query) {
@@ -18233,8 +18790,8 @@ function openNFXmlFornecedorModal() {
                     <label class="${key === 'observacoes' ? 'full' : ''}">
                         <span>${label}</span>
                         ${key === 'observacoes'
-                            ? `<textarea id="nfxml-forn-${key}" rows="3">${escapeKitAttribute(f[key] || '')}</textarea>`
-                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}">`}
+                            ? `<textarea id="nfxml-forn-${key}" rows="3" oninput="updateNFXmlFornecedorDraftField('${key}', this.value)">${escapeKitAttribute(f[key] || '')}</textarea>`
+                            : `<input id="nfxml-forn-${key}" value="${escapeKitAttribute(f[key] || '')}" oninput="updateNFXmlFornecedorDraftField('${key}', this.value)">`}
                     </label>
                 `).join('')}
             </form>
@@ -18311,6 +18868,7 @@ async function saveNFXmlFornecedorFromModal() {
     state.fornecedorRecord = data;
     state.fornecedor = { ...state.fornecedor, ...payload };
     state.status = 'pendente_vinculo';
+    saveEntradaNFXMLDraft();
     window.comprasFornecedoresCache = null;
     closeAppCenterModal();
     showToast('Fornecedor salvo e vinculado.', 'success');
@@ -18338,6 +18896,7 @@ async function garantirFornecedorNFXml() {
     if (fornecedor?.id) {
         state.fornecedorRecord = fornecedor;
         state.status = 'pendente_vinculo';
+        saveEntradaNFXMLDraft();
         return fornecedor;
     }
 
@@ -18373,6 +18932,7 @@ function setNFXmlTipoLancamento(tipo) {
     state.afeta_estoque = config.afetaEstoque;
     state.afeta_financeiro = config.afetaFinanceiro;
     console.log('[ENTRADA_NF_TIPO_LANCAMENTO] tipo selecionado', { tipo: normalizedTipo, afeta_estoque: state.afeta_estoque, afeta_financeiro: state.afeta_financeiro });
+    saveEntradaNFXMLDraft();
     renderNFXmlLaunchSlot();
     renderNFXmlPreview();
 }
@@ -18465,6 +19025,7 @@ function updateNFXmlFinanceOption(mode) {
         fin.parcelasEditaveis = createNFXmlParcelasFromDuplicatas(entradaNfXmlState.duplicatas || [], entradaNfXmlState.totais?.valor_total);
     }
     console.log('[ENTRADA_NF_FINANCEIRO] modo atualizado', { mode });
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
@@ -18476,6 +19037,7 @@ function updateNFXmlFinanceParcelField(id, field, value) {
     parcela[field] = field === 'valor' ? nfXmlMoney(value) : field === 'pago' ? !!value : value;
     if (field === 'pago') parcela.status = value ? 'pago' : 'pendente';
     fin.confirmarDiferenca = false;
+    saveEntradaNFXMLDraft();
     renderNFXmlFinanceBlockOnly();
 }
 
@@ -18506,6 +19068,7 @@ function setNFXmlFinanceParcelCount(count) {
     });
     fin.modoPagamento = 'editar';
     fin.confirmarDiferenca = false;
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
@@ -18528,6 +19091,7 @@ function addNFXmlPagamentoEspecial() {
     });
     fin.modoPagamento = 'editar';
     fin.confirmarDiferenca = false;
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
@@ -18536,6 +19100,7 @@ function removeNFXmlPagamentoEspecial(id) {
     if (!fin) return;
     fin.parcelasEditaveis = (fin.parcelasEditaveis || []).filter(item => item.id !== id);
     fin.confirmarDiferenca = false;
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
@@ -18557,10 +19122,11 @@ function addNFXmlLancamentoComplementar() {
         tipo: 'complementar',
         origem: 'complementar'
     });
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
-function updateNFXmlComplementarField(id, field, value) {
+function updateNFXmlComplementarField(id, field, value, rerender = true) {
     const fin = entradaNfXmlState?.financeiro;
     if (!fin) return;
     const item = (fin.complementares || []).find(row => row.id === id);
@@ -18568,13 +19134,15 @@ function updateNFXmlComplementarField(id, field, value) {
     item[field] = field === 'valor' ? nfXmlMoney(value) : field === 'pago' ? !!value : value;
     if (field === 'pago') item.status = value ? 'pago' : 'pendente';
     if (field === 'status') item.pago = value === 'pago';
-    renderNFXmlFinanceBlockOnly();
+    saveEntradaNFXMLDraft();
+    if (rerender) renderNFXmlFinanceBlockOnly();
 }
 
 function removeNFXmlLancamentoComplementar(id) {
     const fin = entradaNfXmlState?.financeiro;
     if (!fin) return;
     fin.complementares = (fin.complementares || []).filter(item => item.id !== id);
+    saveEntradaNFXMLDraft();
     renderNFXmlPreview();
 }
 
@@ -18794,7 +19362,6 @@ function renderNFXmlFinanceBlock() {
             <div class="nfxml-complement-section">
                 <div class="nfxml-payment-section-title">
                     <strong>Lançamentos complementares</strong>
-                    <span>Fora do valor oficial da NF</span>
                 </div>
                 <button type="button" class="btn-action nfxml-complement-add" onclick="addNFXmlLancamentoComplementar()">
                     <span class="material-symbols-rounded">add</span>
@@ -18811,7 +19378,7 @@ function renderNFXmlFinanceBlock() {
                                 </label>
                                 <label>
                                     <span>Valor</span>
-                                    <input type="number" step="0.01" value="${nfXmlMoney(item.valor)}" oninput="updateNFXmlComplementarField('${item.id}', 'valor', this.value)">
+                                    <input type="text" inputmode="decimal" value="${nfXmlFormatMoneyInput(item.valor)}" oninput="updateNFXmlComplementarField('${item.id}', 'valor', this.value, false)" onblur="this.value = nfXmlFormatMoneyInput(this.value); updateNFXmlComplementarField('${item.id}', 'valor', this.value)">
                                 </label>
                                 <label>
                                     <span>Vencimento</span>
@@ -18823,16 +19390,13 @@ function renderNFXmlFinanceBlock() {
                                         ${formas.map(f => `<option value="${f}" ${item.forma_pagamento === f ? 'selected' : ''}>${f}</option>`).join('')}
                                     </select>
                                 </label>
-                                <label>
-                                    <span>Status</span>
-                                    <select onchange="updateNFXmlComplementarField('${item.id}', 'status', this.value)">
-                                        <option value="pendente" ${item.status !== 'pago' ? 'selected' : ''}>pendente</option>
-                                        <option value="pago" ${item.status === 'pago' ? 'selected' : ''}>pago</option>
-                                    </select>
-                                </label>
                                 <label class="wide">
                                     <span>Observação</span>
                                     <input value="${escapeKitAttribute(item.observacoes || '')}" oninput="updateNFXmlComplementarField('${item.id}', 'observacoes', this.value)">
+                                </label>
+                                <label class="nfxml-paid-check">
+                                    <input type="checkbox" ${item.pago || item.status === 'pago' ? 'checked' : ''} onchange="updateNFXmlComplementarField('${item.id}', 'pago', this.checked)">
+                                    <span>Pago</span>
                                 </label>
                                 <button type="button" class="nfxml-payment-remove" onclick="removeNFXmlLancamentoComplementar('${escapeKitAttribute(item.id)}')" aria-label="Remover complementar">
                                     <span class="material-symbols-rounded">delete</span>
@@ -18957,16 +19521,19 @@ function renderNFXmlItemCard(item, allowLink = true) {
     const linked = !!item.id_interno;
     const custo = formatarResumoCustoReal(item);
     return `
-        <article style="background:rgba(0,0,0,0.22); border:1px solid ${linked ? 'rgba(74,222,128,0.25)' : 'rgba(251,191,36,0.25)'}; border-radius:18px; padding:14px;">
-            <div style="display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap:16px;">
-                <div>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:0.72rem; font-weight:800; text-transform:uppercase;">
+        <article class="nfxml-item-card ${linked ? 'is-linked' : 'is-pending'}">
+            <button type="button" class="nfxml-item-more" aria-label="Mais opções">
+                <span class="material-symbols-rounded">more_vert</span>
+            </button>
+            <div class="nfxml-item-grid">
+                <div class="nfxml-item-info">
+                    <div class="nfxml-item-meta">
                         <span>Item ${item.numero_item}</span>
                         <span>cProd ${escapeKitAttribute(item.codigo_produto_fornecedor || '-')}</span>
                         <span>EAN ${escapeKitAttribute(item.ean_fornecedor || '-')}</span>
                     </div>
-                    <h4 style="margin:8px 0; color:white; font-size:1rem;">${escapeKitAttribute(item.descricao_produto_fornecedor || '-')}</h4>
-                    <div style="display:flex; gap:12px; flex-wrap:wrap; color:#ddd; font-size:0.82rem;">
+                    <h4>${escapeKitAttribute(item.descricao_produto_fornecedor || '-')}</h4>
+                    <div class="nfxml-item-values">
                         <span>Qtd: <strong>${formatStockNumber(item.quantidade)} ${escapeKitAttribute(item.unidade || '')}</strong></span>
                         <span>Unit: <strong>${nfXmlFormatMoney(item.valor_unitario)}</strong></span>
                         <span>Total: <strong>${nfXmlFormatMoney(item.valor_total)}</strong></span>
@@ -18983,29 +19550,29 @@ function renderNFXmlItemCard(item, allowLink = true) {
                     </div>
                 </div>
                 ${allowLink ? `
-                    <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:12px;">
-                        <div style="font-size:0.7rem; font-weight:900; color:#999; text-transform:uppercase; margin-bottom:8px;">Vínculo com produto interno</div>
+                    <div class="nfxml-item-link-panel">
+                        <div class="nfxml-item-link-title">Vínculo com produto interno</div>
                         ${linked ? `
-                            <div style="color:#4ade80; font-weight:900; margin-bottom:8px;">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
-                            <div style="color:var(--muted); font-size:0.72rem; margin-bottom:10px;">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
+                            <div class="nfxml-item-linked-product">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
+                            <div class="nfxml-item-origin">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
                         ` : `
-                            <div style="color:#fbbf24; font-weight:900; margin-bottom:8px;">Pendente de vínculo</div>
+                            <div class="nfxml-item-pending">Pendente de vínculo</div>
                         `}
-                        <div style="display:flex; gap:8px; margin-bottom:8px;">
-                            <input id="nfxml-id-${item.numero_item}" class="input-field" style="min-width:0; background:#111; color:white;" placeholder="Informar id_interno">
-                            <button type="button" onclick="updateNFXmlItemManualLink(${item.numero_item}, 'nfxml-id-${item.numero_item}')" class="btn-action" style="padding:10px 12px; background:var(--primary) !important;">
+                        <div class="nfxml-item-link-input">
+                            <input id="nfxml-id-${item.numero_item}" class="input-field" placeholder="Informar id_interno">
+                            <button type="button" onclick="updateNFXmlItemManualLink(${item.numero_item}, 'nfxml-id-${item.numero_item}')" class="btn-action">
                                 <span class="material-symbols-rounded">link</span>
                             </button>
                         </div>
-                        <input class="input-field" style="width:100%; background:#111; color:white;" placeholder="Buscar por descrição, ID, EAN ou SKU" oninput="searchNFXmlProduct(${item.numero_item}, this.value)">
+                        <input class="input-field nfxml-item-search" placeholder="Buscar por descrição, ID, EAN ou SKU" oninput="searchNFXmlProduct(${item.numero_item}, this.value)">
                         <div id="nfxml-results-${item.numero_item}"></div>
-                        <label style="display:flex; align-items:center; gap:8px; color:#ddd; font-size:0.78rem; margin-top:10px;">
+                        <label class="nfxml-item-ean-check">
                             <input type="checkbox" ${item.ean_divergente ? 'checked' : ''} onchange="toggleNFXmlEanDivergente(${item.numero_item}, this.checked)">
                             EAN da nota divergente
                         </label>
                     </div>
                 ` : `
-                    <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:12px; color:var(--muted); font-size:0.82rem;">
+                    <div class="nfxml-item-link-panel is-readonly">
                         Produto exibido para conferência dos dados da nota. Não será exigido vínculo e não haverá movimentação de estoque.
                     </div>
                 `}
@@ -19101,6 +19668,7 @@ async function salvarEntradaNFXml() {
         if (entradaError) throw entradaError;
 
         state.savedEntradaId = entrada.id;
+        clearEntradaNFXMLDraft(state.chave_acesso);
         state.status = status;
         state.afeta_estoque = tipoConfig.afetaEstoque;
         state.afeta_financeiro = tipoConfig.afetaFinanceiro;
@@ -19648,8 +20216,291 @@ function calcularResumoEntradaNF(entrada, itens = entrada?.itens || []) {
 }
 
 function renderEntradaNFStatusPill(status) {
-    const normalized = String(status || 'sem_status').toLowerCase();
+    const normalized = String(status || 'sem_status').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     return `<span class="entrada-nf-status-pill status-${escapeKitAttribute(normalized)}">${escapeKitAttribute(status || 'sem status')}</span>`;
+}
+
+const entradaNFHistoryState = {
+    query: '',
+    period: '90',
+    status: 'todos',
+    page: 1,
+    pageSize: 10
+};
+
+function getEntradaNFStatusLabel(entrada) {
+    const status = String(entrada?.status || '').trim();
+    if (status) return status.replace(/_/g, ' ').toUpperCase();
+    if (entrada?.erro_xml || entrada?.xml_error) return 'ERRO XML';
+    if (entrada?.estoque_finalizado) return 'FINALIZADA';
+    if (entrada?.financeiro_lancado) return 'FINANCEIRO';
+    return 'PENDENTE';
+}
+
+function getEntradaNFLaunchDate(entrada) {
+    return entrada?.created_at || entrada?.data_recebimento || entrada?.atualizado_em || entrada?.data_emissao || '';
+}
+
+function isEntradaNFWithinPeriod(entrada, period) {
+    if (period === 'todos') return true;
+    const days = Number(period);
+    if (!Number.isFinite(days) || days <= 0) return true;
+    const date = new Date(getEntradaNFLaunchDate(entrada));
+    if (Number.isNaN(date.getTime())) return true;
+    const min = new Date();
+    min.setDate(min.getDate() - days);
+    return date >= min;
+}
+
+function getFilteredHistoricoEntradasNF(historico = []) {
+    const query = normalizeProductSearchTerm(entradaNFHistoryState.query || '');
+    return (historico || []).filter(entrada => {
+        const resumo = calcularResumoEntradaNF(entrada);
+        const statusLabel = getEntradaNFStatusLabel(entrada).toLowerCase();
+        const statusFilter = entradaNFHistoryState.status;
+        if (statusFilter !== 'todos') {
+            if (statusFilter === 'estoque' && !resumo.gerouEstoque) return false;
+            else if (statusFilter === 'financeiro' && !resumo.gerouFinanceiro) return false;
+            else if (statusFilter !== 'estoque' && statusFilter !== 'financeiro' && !statusLabel.includes(statusFilter)) return false;
+        }
+        if (!isEntradaNFWithinPeriod(entrada, entradaNFHistoryState.period)) return false;
+        if (!query) return true;
+        const itemText = (entrada.itens || []).map(item => `${item.descricao_produto_fornecedor || ''} ${item.descricao_xml || ''} ${item.id_interno || ''}`).join(' ');
+        const haystack = normalizeProductSearchTerm([
+            entrada.numero_nf,
+            entrada.chave_acesso,
+            entrada.fornecedor_nome,
+            entrada.fornecedor_cnpj,
+            entrada.cnpj_fornecedor,
+            entrada.status,
+            itemText
+        ].join(' '));
+        return haystack.includes(query);
+    });
+}
+
+function renderEntradaNFHistorySummaryCards(historico = []) {
+    const total = historico.length;
+    const finalizadas = historico.filter(entrada => String(entrada.status || '').toLowerCase().includes('finalizada') || entrada.estoque_finalizado).length;
+    const emEstoque = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouEstoque).length;
+    const financeiro = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouFinanceiro).length;
+    const valorTotal = historico.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
+    const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
+    const cards = [
+        ['receipt_long', 'Total de entradas', total, 'Últimos registros'],
+        ['task_alt', 'Finalizadas', finalizadas, percent(finalizadas)],
+        ['inventory_2', 'Em estoque', emEstoque, percent(emEstoque)],
+        ['payments', 'Financeiro', financeiro, percent(financeiro)],
+        ['paid', 'Valor total', getEntradaNFMoney(valorTotal), 'Somatório das NFs']
+    ];
+    return `
+        <section class="entrada-nf-history-summary">
+            ${cards.map(([icon, label, value, hint]) => `
+                <article>
+                    <span class="material-symbols-rounded">${icon}</span>
+                    <div>
+                        <small>${label}</small>
+                        <strong>${value}</strong>
+                        <em>${hint}</em>
+                    </div>
+                </article>
+            `).join('')}
+        </section>
+    `;
+}
+
+function renderEntradaNFHistoryFilters() {
+    return `
+        <section class="entrada-nf-history-filters">
+            <label class="entrada-nf-history-search">
+                <span class="material-symbols-rounded">search</span>
+                <input type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
+            </label>
+            <label>
+                <span>Período</span>
+                <select onchange="setEntradaNFHistoryFilter('period', this.value)">
+                    ${[
+                        ['30', 'Últimos 30 dias'],
+                        ['90', 'Últimos 90 dias'],
+                        ['180', 'Últimos 180 dias'],
+                        ['todos', 'Todo o histórico']
+                    ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
+                </select>
+            </label>
+            <label>
+                <span>Status</span>
+                <select onchange="setEntradaNFHistoryFilter('status', this.value)">
+                    ${[
+                        ['todos', 'Todos'],
+                        ['finalizada', 'Finalizada'],
+                        ['estoque', 'Estoque'],
+                        ['financeiro', 'Financeiro'],
+                        ['rascunho', 'Rascunho'],
+                        ['pendente', 'Pendente'],
+                        ['erro', 'Erro XML']
+                    ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+                </select>
+            </label>
+            <button type="button" onclick="showToast('Filtros avançados serão adicionados em breve.', 'info')">
+                <span class="material-symbols-rounded">tune</span>
+                Mais filtros
+            </button>
+        </section>
+    `;
+}
+
+function renderEntradaNFHistoryBadges(entrada, resumo) {
+    const statusLabel = getEntradaNFStatusLabel(entrada);
+    const isFinalizada = String(statusLabel || '').toLowerCase().includes('finalizada') || !!entrada.estoque_finalizado;
+    const indicators = [];
+    const renderIndicator = (type, icon, label) => `
+        <span class="entrada-nf-indicator ${type}" title="${label}" aria-label="${label}" role="img">
+            <span class="material-symbols-rounded">${icon}</span>
+        </span>
+    `;
+
+    if (isFinalizada) indicators.push(renderIndicator('finalizada', 'check_circle', 'Entrada finalizada'));
+    if (resumo.gerouEstoque) indicators.push(renderIndicator('estoque', 'inventory_2', 'Estoque atualizado'));
+    if (resumo.gerouFinanceiro) indicators.push(renderIndicator('financeiro', 'account_balance_wallet', 'Financeiro gerado'));
+    if (entrada.erro_xml || entrada.xml_error) indicators.push(renderIndicator('erro', 'warning', 'Erro no XML'));
+
+    return indicators.length
+        ? indicators.join('')
+        : renderIndicator('neutro', 'radio_button_unchecked', 'Sem indicadores concluídos');
+}
+
+function renderEntradaNFHistoryRows(entries = []) {
+    return entries.map(entrada => {
+        const resumo = calcularResumoEntradaNF(entrada);
+        const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor não informado';
+        return `
+            <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
+                <div class="entrada-nf-history-cell nf">
+                    <span class="entrada-nf-history-icon material-symbols-rounded">receipt_long</span>
+                    <div>
+                        <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
+                        <small>XML importado</small>
+                    </div>
+                </div>
+                <div class="entrada-nf-history-cell supplier">
+                    <strong>${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
+                    <small>${escapeKitAttribute(entrada.tipo_lancamento || entrada.chave_acesso || 'Entrada fiscal')}</small>
+                </div>
+                <div class="entrada-nf-history-cell date"><small>Emissão</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
+                <div class="entrada-nf-history-cell date"><small>Lançamento</small><strong>${getEntradaNFDateTime(getEntradaNFLaunchDate(entrada))}</strong></div>
+                <div class="entrada-nf-history-cell count"><small>Itens</small><strong>${resumo.quantidadeItens}</strong></div>
+                <div class="entrada-nf-history-cell total"><small>Total</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
+                <div class="entrada-nf-history-cell status">${renderEntradaNFHistoryBadges(entrada, resumo)}</div>
+                <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
+                    <button type="button" title="Visualizar detalhes" aria-label="Visualizar detalhes" onclick="renderDetalheEntradaNF('${entrada.id}')"><span class="material-symbols-rounded">visibility</span></button>
+                    <button type="button" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')"><span class="material-symbols-rounded">text_snippet</span></button>
+                    <button type="button" title="Abrir lançamento" aria-label="Abrir lançamento" onclick="editEntradaNFLancamento('${entrada.id}')"><span class="material-symbols-rounded">assignment</span></button>
+                    <button type="button" title="Mais opções" aria-label="Mais opções" onclick="cancelEntradaNFHistoryItem('${entrada.id}')"><span class="material-symbols-rounded">more_horiz</span></button>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderEntradaNFHistoryDashboard(historico = []) {
+    const filtered = getFilteredHistoricoEntradasNF(historico);
+    const totalPages = Math.max(1, Math.ceil(filtered.length / entradaNFHistoryState.pageSize));
+    entradaNFHistoryState.page = Math.min(Math.max(1, entradaNFHistoryState.page), totalPages);
+    const start = (entradaNFHistoryState.page - 1) * entradaNFHistoryState.pageSize;
+    const pageEntries = filtered.slice(start, start + entradaNFHistoryState.pageSize);
+    const showingStart = filtered.length ? start + 1 : 0;
+    const showingEnd = start + pageEntries.length;
+
+    return `
+        <section class="entrada-nf-history-hero">
+            <button type="button" class="entrada-nf-history-back" onclick="renderNFSubMenu()" aria-label="Voltar">
+                <span class="material-symbols-rounded">arrow_back</span>
+            </button>
+            <div>
+                <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
+                <h1>HISTÓRICO DE ENTRADAS</h1>
+                <p>Acompanhe todas as notas fiscais importadas</p>
+            </div>
+        </section>
+        ${renderEntradaNFHistorySummaryCards(historico)}
+        ${renderEntradaNFHistoryFilters()}
+        <section class="entrada-nf-history-table-card">
+            <div class="entrada-nf-history-table-head">
+                <span>NF-e</span>
+                <span>Fornecedor</span>
+                <span>Emissão</span>
+                <span>Lançamento</span>
+                <span>Itens</span>
+                <span>Total</span>
+                <span>Indicadores</span>
+                <span>Ações</span>
+            </div>
+            <div class="entrada-nf-history-list">
+                ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
+                    <div class="entrada-nf-empty-state compact">
+                        <span class="material-symbols-rounded">search_off</span>
+                        <strong>Nenhuma entrada encontrada com os filtros atuais.</strong>
+                    </div>
+                `}
+            </div>
+            <footer class="entrada-nf-history-pagination">
+                <span>Mostrando ${showingStart} a ${showingEnd} de ${filtered.length} entradas</span>
+                <div>
+                    <button type="button" ${entradaNFHistoryState.page <= 1 ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page - 1})">
+                        <span class="material-symbols-rounded">chevron_left</span>
+                    </button>
+                    <strong>${entradaNFHistoryState.page} / ${totalPages}</strong>
+                    <button type="button" ${entradaNFHistoryState.page >= totalPages ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page + 1})">
+                        <span class="material-symbols-rounded">chevron_right</span>
+                    </button>
+                </div>
+            </footer>
+        </section>
+    `;
+}
+
+function refreshEntradaNFHistoryDashboard() {
+    const container = document.getElementById('entrada-nf-history-content');
+    if (!container) return;
+    container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
+}
+
+function setEntradaNFHistoryFilter(key, value) {
+    entradaNFHistoryState[key] = value;
+    entradaNFHistoryState.page = 1;
+    refreshEntradaNFHistoryDashboard();
+}
+
+function setEntradaNFHistoryPage(page) {
+    entradaNFHistoryState.page = page;
+    refreshEntradaNFHistoryDashboard();
+}
+
+function openEntradaNFXML(entradaId) {
+    const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+    if (!entrada?.xml_original) {
+        showToast('XML original não disponível para esta entrada.', 'warning');
+        return;
+    }
+    const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function editEntradaNFLancamento(entradaId) {
+    renderNFDetail(entradaId);
+}
+
+function cancelEntradaNFHistoryItem(entradaId) {
+    const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+    if (!entrada) return;
+    if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
+        showToast('Entrada finalizada não pode ser cancelada por aqui.', 'warning');
+        return;
+    }
+    showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
+    renderDetalheEntradaNF(entradaId);
 }
 
 async function renderHistoricoEntradasNF() {
@@ -19659,7 +20510,6 @@ async function renderHistoricoEntradasNF() {
         <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
             ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
             <main class="container entrada-nf-history-workspace">
-                ${getStandardScreenTitleHTML('HISTÓRICO DE ENTRADAS', menu3DIcons.historico)}
                 <div id="entrada-nf-history-content" class="entrada-nf-history-content">
                     <div class="entrada-nf-history-loading">
                         <span class="material-symbols-rounded">sync</span>
@@ -19685,36 +20535,7 @@ async function renderHistoricoEntradasNF() {
             return;
         }
 
-        container.innerHTML = `
-            <div class="entrada-nf-history-list">
-                ${historico.map(entrada => {
-                    const resumo = calcularResumoEntradaNF(entrada);
-                    return `
-                        <button type="button" class="entrada-nf-history-card" onclick="renderDetalheEntradaNF('${entrada.id}')">
-                            <div class="entrada-nf-history-main">
-                                <span class="entrada-nf-history-icon material-symbols-rounded">receipt_long</span>
-                                <span>
-                                    <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
-                                    <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor não informado')}</small>
-                                </span>
-                            </div>
-                            <div class="entrada-nf-history-meta">
-                                <span><b>Emissão</b>${getEntradaNFDate(entrada.data_emissao)}</span>
-                                <span><b>Lançamento</b>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</span>
-                                <span><b>Itens</b>${resumo.quantidadeItens}</span>
-                                <span><b>Total</b>${getEntradaNFMoney(resumo.valorTotal)}</span>
-                            </div>
-                            <div class="entrada-nf-history-footer">
-                                ${renderEntradaNFStatusPill(entrada.status)}
-                                <span>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</span>
-                                <em class="${resumo.gerouEstoque ? 'ok' : ''}">${resumo.gerouEstoque ? 'Estoque' : 'Sem estoque'}</em>
-                                <em class="${resumo.gerouFinanceiro ? 'ok' : ''}">${resumo.gerouFinanceiro ? 'Financeiro' : 'Sem financeiro'}</em>
-                            </div>
-                        </button>
-                    `;
-                }).join('')}
-            </div>
-        `;
+        container.innerHTML = renderEntradaNFHistoryDashboard(historico);
     } catch (error) {
         console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
         if (container) {
@@ -19926,6 +20747,7 @@ async function renderNFDetail(id) {
                             `}
                         </div>
                     </div>
+
                 </div>
             </main>
         </div>

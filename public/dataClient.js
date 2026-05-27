@@ -854,6 +854,32 @@ const DataClient = (function () {
         return data || [];
     }
 
+    async function fetchMovimentosProdutoSupabase(id_interno, limit = 120) {
+        const client = window.supabaseClient;
+        if (!client) {
+            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos: Supabase client não encontrado');
+            throw new Error('Supabase client não encontrado');
+        }
+
+        const cleanId = String(id_interno || '').trim();
+        if (!cleanId) return [];
+
+        const safeLimit = Math.max(20, Math.min(parseInt(limit, 10) || 120, 300));
+        const { data, error } = await client
+            .from('movimentos')
+            .select('*')
+            .eq('id_interno', cleanId)
+            .order('data_hora', { ascending: false })
+            .limit(safeLimit);
+
+        if (error) {
+            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos:', error);
+            throw error;
+        }
+
+        return data || [];
+    }
+
     async function fetchSeparacoesAbertasPorCanalSupabase(channelName) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -1518,6 +1544,7 @@ const DataClient = (function () {
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,
         fetchMovimentosSupabase,
+        fetchMovimentosProdutoSupabase,
         fetchUsuariosSupabase,
         fetchCanaisEnvioSupabase,
         fetchSeparacoesAbertasPorCanalSupabase,
