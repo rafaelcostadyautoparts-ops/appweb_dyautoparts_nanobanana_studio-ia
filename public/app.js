@@ -328,6 +328,7 @@ function renderScreenByName(name, push = true) {
         case 'search': renderSearchScreen(push); break;
         case 'login': renderLogin(push); break;
         case 'client-quotes': renderClientQuotesList(false); break;
+        case 'comissoes': renderComissoesScreen(null, false); break;
         case 'config': renderConfigSubMenu(push); break;
         default: renderMenu(push);
     }
@@ -489,7 +490,7 @@ const syncTraceLog = [];
 function addSyncTrace(origin, action, details = '') {
     if (!SYNC_TRACE_ENABLED) return;
     const entry = {
-        time: new Date().toISOString().substr(11, 12),
+        time: formatTimeBR(new Date(), { withSeconds: true }),
         origin,
         action,
         details,
@@ -771,7 +772,7 @@ function normalizePayloadForSheet(payload) {
 async function revertStockMovement(sessionId, row, operatorId) {
     try {
         showToast(`Iniciando estorno para ${row.descricao}...`);
-        const now = new Date().toISOString();
+        const now = getDataHoraBrasil();
         await fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
@@ -931,7 +932,39 @@ function applyPremiumMobileLoginLayout() {
     if (!loginScreen || window.innerWidth >= 768) return;
 
     const isLightTheme = getResolvedTheme(getStoredTheme()) === 'light';
-    const isLowMobile = window.innerHeight <= 740;
+    const viewportHeight = Math.max(window.innerHeight || 0, 360);
+    const userCount = Math.max(loginScreen.querySelectorAll('.login-user-card').length || 4, 1);
+    const isLowMobile = viewportHeight <= 740;
+    const safeTop = 72;
+    const bottomBreathingRoom = isLowMobile ? 42 : 54;
+    const desiredCardHeight = isLowMobile ? 78 : 92;
+    const minCardHeight = 62;
+    const desiredGap = isLowMobile ? 10 : 14;
+    const minGap = 8;
+    let cardHeight = desiredCardHeight;
+    let cardGap = desiredGap;
+    let gridTop = Math.round(viewportHeight * (isLowMobile ? 0.50 : 0.52));
+    const desiredListHeight = (desiredCardHeight * userCount) + (desiredGap * Math.max(userCount - 1, 0));
+    const desiredBottom = gridTop + desiredListHeight + bottomBreathingRoom;
+
+    if (desiredBottom > viewportHeight) {
+        gridTop = Math.max(safeTop, viewportHeight - desiredListHeight - bottomBreathingRoom);
+    }
+
+    const availableListHeight = viewportHeight - gridTop - bottomBreathingRoom;
+    const desiredGapsHeight = desiredGap * Math.max(userCount - 1, 0);
+    if (availableListHeight < desiredListHeight) {
+        cardGap = minGap;
+        const gapHeight = cardGap * Math.max(userCount - 1, 0);
+        cardHeight = Math.max(minCardHeight, Math.floor((availableListHeight - gapHeight) / userCount));
+    }
+
+    const avatarSize = Math.max(46, Math.min(isLowMobile ? 58 : 68, cardHeight - 20));
+    const avatarLineWidth = Math.max(26, Math.round(avatarSize * 0.5));
+    const initialsSize = Math.max(24, Math.round(avatarSize * 0.5));
+    const nameSize = Math.max(13, Math.min(isLowMobile ? 15 : 17, Math.round(cardHeight * 0.18)));
+    const horizontalPadding = cardHeight < 74 ? 14 : 20;
+    const cardInnerGap = Math.max(14, Math.min(22, Math.round(cardHeight * 0.24)));
     const backgroundUrl = isLightTheme
         ? '/assets/images/login-bg-mobile-claro.png?v=20260527-js-premium'
         : '/assets/images/login-bg-mobile-escuro.png?v=20260527-js-premium';
@@ -1020,14 +1053,14 @@ function applyPremiumMobileLoginLayout() {
         'box-sizing': 'border-box',
         'display': 'flex',
         'flex-direction': 'column',
-        'gap': isLowMobile ? '10px' : '14px',
+        'gap': `${cardGap}px`,
         'left': '0',
         'margin': '0',
         'max-width': 'none',
         'padding': '0 16px',
         'position': 'absolute',
         'right': '0',
-        'top': isLowMobile ? '50dvh' : '52dvh',
+        'top': `${gridTop}px`,
         'transform': 'none',
         'width': '100%',
         'z-index': '3'
@@ -1040,16 +1073,17 @@ function applyPremiumMobileLoginLayout() {
             'box-sizing': 'border-box',
             'display': 'flex',
             'flex-direction': 'row',
-            'gap': '22px',
-            'height': isLowMobile ? '78px' : '92px',
+            'gap': `${cardInnerGap}px`,
+            'height': `${cardHeight}px`,
             'justify-content': 'flex-start',
             'left': 'auto',
             'margin': '0 auto',
             'max-width': '430px',
-            'min-height': '0',
+            'max-height': `${cardHeight}px`,
+            'min-height': `${cardHeight}px`,
             'min-width': '0',
             'overflow': 'hidden',
-            'padding': '12px 20px',
+            'padding': `${cardHeight < 74 ? 8 : 12}px ${horizontalPadding}px`,
             'position': 'relative',
             'right': 'auto',
             'text-align': 'left',
@@ -1082,22 +1116,23 @@ function applyPremiumMobileLoginLayout() {
             'align-items': 'center',
             'border-radius': '14px',
             'display': 'flex',
-            'flex': isLowMobile ? '0 0 58px' : '0 0 68px',
-            'height': isLowMobile ? '58px' : '68px',
+            'flex': `0 0 ${avatarSize}px`,
+            'height': `${avatarSize}px`,
             'justify-content': 'center',
             'margin': '0',
-            'max-height': isLowMobile ? '58px' : '68px',
-            'max-width': isLowMobile ? '58px' : '68px',
-            'min-height': isLowMobile ? '58px' : '68px',
-            'min-width': isLowMobile ? '58px' : '68px',
+            'max-height': `${avatarSize}px`,
+            'max-width': `${avatarSize}px`,
+            'min-height': `${avatarSize}px`,
+            'min-width': `${avatarSize}px`,
             'position': 'relative',
-            'width': isLowMobile ? '58px' : '68px'
+            'width': `${avatarSize}px`
         });
+        avatar.style.setProperty('--login-avatar-line-width', `${avatarLineWidth}px`, 'important');
 
         const initials = card.querySelector('.user-initials');
         setImportantStyle(initials, {
             'font-family': "'Fjalla One', 'Oswald', sans-serif",
-            'font-size': isLowMobile ? '30px' : '34px',
+            'font-size': `${initialsSize}px`,
             'font-weight': '900',
             'letter-spacing': '0',
             'line-height': '1',
@@ -1110,7 +1145,7 @@ function applyPremiumMobileLoginLayout() {
             'display': 'block',
             'flex': '1 1 auto',
             'font-family': "'Oswald', 'PT Sans Narrow', sans-serif",
-            'font-size': isLowMobile ? '15px' : '17px',
+            'font-size': `${nameSize}px`,
             'font-weight': '800',
             'letter-spacing': '1.4px',
             'line-height': '1.08',
@@ -1449,7 +1484,7 @@ async function ensureFreshData(callback) {
 function addTechnicalLog(action, status, details = "") {
     const logs = JSON.parse(localStorage.getItem('tech_logs') || '[]');
     logs.unshift({
-        timestamp: new Date().toISOString(),
+        timestamp: getDataHoraBrasil(),
         action,
         status,
         details
@@ -1524,7 +1559,7 @@ function showBootstrapError(message) {
 function withTimeout(promise, ms, label) {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            reject(new Error(`[BOOT] Timeout em ${label} (${ms}ms)`));
+            reject(new Error(`Timeout em ${label} (${ms}ms)`));
         }, ms);
         promise
             .then(result => {
@@ -1617,7 +1652,7 @@ async function initApp() {
         if (usersLoaded) {
             console.log(`[BOOT] Usuários carregados: ${appData.users?.length || 0}`);
         } else {
-            console.warn('[BOOT] Usuários não carregados, usando fallback');
+        console.warn('[BOOT] Usuários não carregados, usando fallback');
         }
 
         // 7. CARGA INICIAL (separacao) - apenas se necessário
@@ -1746,8 +1781,8 @@ async function queueOperation(type, payload, meta = {}) {
         meta,
         status: 'pending',
         attempts: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: getDataHoraBrasil(),
+        updatedAt: getDataHoraBrasil(),
         lastError: ''
     };
     operation.payload.executionId = operation.id;
@@ -1795,7 +1830,7 @@ async function markQueuedOperation(operation, status, error = '') {
         ...operation,
         status,
         attempts: (operation.attempts || 0) + (status === 'error' ? 1 : 0),
-        updatedAt: new Date().toISOString(),
+        updatedAt: getDataHoraBrasil(),
         lastError: error ? String(error) : ''
     };
 
@@ -1829,6 +1864,10 @@ async function executeQueuedOperation(operation) {
 
     if (operation.type === 'supabase_pick_draft') {
         return DataClient.savePickingDraftSupabase(operation.payload);
+    }
+
+    if (operation.type === 'supabase_pick_draft_item_delete') {
+        return deletePickingDraftItemSupabaseDirect(operation.payload);
     }
 
     if (operation.type === 'supabase_pick_finalize') {
@@ -1956,7 +1995,7 @@ async function safePost(payload) {
 
     const syncItem = {
         id: executionId,
-        timestamp: new Date().toISOString(),
+        timestamp: getDataHoraBrasil(),
         payload: normalizedPayload
     };
 
@@ -2338,7 +2377,7 @@ async function loadAllData(silent = false, caller = 'unknown') {
 
         // Não salvar todo o appData no localStorage para evitar dados desatualizados
         // Cada módulo gerencia seu próprio cache via DataClient
-        appData.lastSyncTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        appData.lastSyncTime = formatTimeBR();
         appData.lastSyncTimestamp = Date.now();
         
         addTechnicalLog('SYNC', 'SUCCESS');
@@ -3144,6 +3183,16 @@ function getQuickActionsHTML(modoRapidoAtivo) {
                 <span class="quick-action-label">ORÇAMENTO CLIENTE</span>
                 <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
             </button>
+            <button class="quick-action-item quick-action-card quick-action-commission" type="button" role="menuitem" onclick="quickActionComissoes()">
+                <span class="quick-action-icon quick-action-icon-commission material-symbols-rounded">percent</span>
+                <span class="quick-action-label">COMISSÕES</span>
+                <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            </button>
+            <button class="quick-action-item quick-action-card quick-action-replacement" type="button" role="menuitem" onclick="quickActionReposicao()">
+                <span class="quick-action-icon quick-action-icon-replacement material-symbols-rounded">local_shipping</span>
+                <span class="quick-action-label">REPOSIÇÃO</span>
+                <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            </button>
         </div>
         
         <button class="quick-action-fab fab-icon-btn fab-funcoes ${modoRapidoAtivo ? 'fast-mode' : ''}" type="button" onclick="toggleQuickActions()" aria-label="Funções rápidas" title="Funções rápidas">
@@ -3812,9 +3861,7 @@ function renderMovimentacoesList(history) {
     };
 
     const formatDate = (dateStr) => {
-        if (!dateStr) return '-';
-        const d = new Date(dateStr);
-        return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return formatDateTimeBR(dateStr);
     };
 
     return `
@@ -3943,10 +3990,7 @@ let productMovementState = {
 };
 
 function formatMovHistoryDate(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return formatDateTimeBR(value, { shortYear: true });
 }
 
 function formatMovHistoryMoney(value) {
@@ -4306,7 +4350,7 @@ function buildMovHistoryMovementKey(mov) {
     const sessionId = obs.match(/\b((?:INV|SEP|CONF|TRF|AJU|GAR)[-_A-Z0-9.]+)\b/i)?.[1];
     if (sessionId) return `${type}:${sessionId}`;
 
-    const time = mov.data_hora ? new Date(mov.data_hora).toISOString().slice(0, 16) : mov.movimento_id;
+    const time = mov.data_hora ? getDataHoraBrasil(mov.data_hora).slice(0, 16) : mov.movimento_id;
     const route = `${mov.local_origem || ''}>${mov.local_destino || ''}`;
     return `${type}:${obs || route}:${mov.usuario || ''}:${time}`;
 }
@@ -4850,6 +4894,8 @@ function showAppAlert({ title = 'Aviso', message = '', detail = '', buttonLabel 
         overlay.id = 'app-alert-modal';
         overlay.className = 'app-confirm-overlay app-alert-overlay';
         const iconName = icon || (danger ? 'error' : 'info');
+        const alertSound = danger || iconName === 'error' ? 'error' : 'warning';
+        playFeedbackSound(alertSound);
         overlay.innerHTML = `
             <div class="app-confirm-dialog app-alert-dialog" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title">
                 <div class="app-confirm-icon ${danger ? 'danger' : ''}">
@@ -5282,7 +5328,7 @@ async function saveNovaMovimentacao(tipo) {
             if (!appData.movimentacoes) appData.movimentacoes = [];
             appData.movimentacoes.unshift({
                 ...savedMov,
-                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+                data: formatDateTimeBR(savedMov.data_hora)
             });
 
             DataClient.invalidateCache('produtos');
@@ -5532,7 +5578,7 @@ async function saveMovimentacao(tipo) {
             if (!appData.movimentacoes) appData.movimentacoes = [];
             appData.movimentacoes.unshift({
                 ...savedMov,
-                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+                data: formatDateTimeBR(savedMov.data_hora)
             });
 
             // Forçar invalidação do cache de produtos/estoque para refletir na tela
@@ -6260,7 +6306,7 @@ function renderAjusteEstoqueScreen() {
                             <div class="is-type"><span class="material-symbols-rounded">swap_vert</span><small>Tipo de ajuste</small><strong id="ajuste-summary-type">Definir quantidade</strong></div>
                             <div class="is-qty"><span class="material-symbols-rounded">calculate</span><small>Quantidade</small><strong id="ajuste-summary-qty">0 un</strong></div>
                             <div class="is-reason"><span class="material-symbols-rounded">chat</span><small>Motivo</small><strong id="ajuste-summary-reason">Correção de contagem</strong></div>
-                            <div><span class="material-symbols-rounded">schedule</span><small>Data e hora</small><strong id="ajuste-summary-date">${new Date().toLocaleString('pt-BR')}</strong></div>
+                            <div><span class="material-symbols-rounded">schedule</span><small>Data e hora</small><strong id="ajuste-summary-date">${formatDateTimeBR(getDataHoraBrasil())}</strong></div>
                             <div><span class="material-symbols-rounded">person</span><small>Usuário</small><strong>${escapeKitAttribute(currentUser || '-')}</strong></div>
                         </div>
                         <div class="ajuste-impact-card">
@@ -6316,7 +6362,7 @@ function updateAjusteSummaryUI() {
     setText('ajuste-summary-type', tipoText.replace(' correta', ''));
     setText('ajuste-summary-qty', `${formatStockNumber(qty)} un`);
     setText('ajuste-summary-reason', motivoText);
-    setText('ajuste-summary-date', new Date().toLocaleString('pt-BR'));
+    setText('ajuste-summary-date', formatDateTimeBR(getDataHoraBrasil()));
 
     if (ajusteSelectedProduct) {
         setText('ajuste-summary-product', getAjusteProductName(ajusteSelectedProduct));
@@ -6546,7 +6592,7 @@ async function saveAjusteEstoque() {
             if (!appData.movimentacoes) appData.movimentacoes = [];
             appData.movimentacoes.unshift({
                 ...savedMov,
-                data: new Date(savedMov.data_hora).toLocaleString('pt-BR')
+                data: formatDateTimeBR(savedMov.data_hora)
             });
             DataClient.invalidateCache('produtos');
             DataClient.invalidateCache('movimentos');
@@ -6614,16 +6660,19 @@ function checkGhostInventorySession() {
 }
 
 function buildInventoryItemFromRow(row) {
-    const product = appData.products?.find(p => String(p.id_interno) === String(row.id_interno));
     const qty = Number(row.saldo_fisico || row.qty || 0);
     const saldoSistema = Number(row.saldo_sistema || 0);
-    const valorUnitario = Number(row.valor_unitario || product?.preco_custo || product?.custo || 0);
+    const costInfo = resolveInventoryUnitCost(row.id_interno);
+    const product = costInfo.product;
+    const diferenca = Number(row.diferenca ?? (qty - saldoSistema));
     return {
         id_interno: row.id_interno,
         qty,
         saldo_sistema: saldoSistema,
-        diferenca: Number(row.diferenca ?? (qty - saldoSistema)),
-        valor_unitario: valorUnitario,
+        diferenca,
+        valor_unitario: costInfo.value,
+        valor_diferenca: diferenca * costInfo.value,
+        sem_preco_custo: !costInfo.hasCost,
         ean: product?.ean || row.ean || row.id_interno,
         name: product?.descricao_completa || product?.nome || row.name || `PRODUTO ID: ${row.id_interno} (NÃO CARREGADO)`,
         brand: product?.marca || row.brand || '',
@@ -6642,10 +6691,11 @@ function groupInventoryItemsByProduct(rows = []) {
         if (current) {
             current.qty += item.qty;
             current.diferenca = current.qty - Number(current.saldo_sistema || 0);
+            applyInventoryCostToItem(current);
             current.db_ids = Array.from(new Set([...(current.db_ids || []), ...(item.db_ids || [])]));
             continue;
         }
-        grouped.set(idInterno, item);
+        grouped.set(idInterno, applyInventoryCostToItem(item));
     }
     return Array.from(grouped.values());
 }
@@ -6659,17 +6709,7 @@ function getInventoryTypeLabel(type) {
 }
 
 function formatInventoryDateTime(value) {
-    if (!value) return 'N/A';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
+    return formatDateTimeBR(value, { fallback: 'N/A', withSeconds: true });
 }
 
 function getInventoryId(inv) {
@@ -6694,6 +6734,60 @@ function getInventoryStartedBy(inv) {
 
 function normalizeInventoryUser(value) {
     return String(value || '').trim().toLowerCase();
+}
+
+function getInventoryAuditUser() {
+    const name = String(localStorage.getItem('currentUser') || '').trim();
+    const id = String(localStorage.getItem('currentUserId') || '').trim();
+    return {
+        id,
+        name: name || 'N/A'
+    };
+}
+
+function parseInventoryMoney(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+    const normalized = String(value)
+        .replace(/[^\d,.-]/g, '')
+        .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+        .replace(',', '.');
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findInventoryProductByIdInterno(idInterno) {
+    const target = String(idInterno || '').trim();
+    if (!target) return null;
+    return (appData.products || []).find(p => String(p.id_interno || '').trim() === target) || null;
+}
+
+function resolveInventoryUnitCost(idInterno) {
+    const product = findInventoryProductByIdInterno(idInterno);
+    const cost = product ? parseInventoryMoney(product.preco_custo) : 0;
+    return {
+        product,
+        value: cost,
+        hasCost: Boolean(product) && cost > 0
+    };
+}
+
+function applyInventoryCostToItem(item) {
+    if (!item) return item;
+
+    const costInfo = resolveInventoryUnitCost(item.id_interno);
+    const saldoFisico = Number(item.qty ?? item.saldo_fisico ?? 0);
+    const saldoSistema = Number(item.saldo_sistema || 0);
+    const diferenca = Number(item.diferenca ?? (saldoFisico - saldoSistema));
+
+    item.saldo_sistema = saldoSistema;
+    item.diferenca = diferenca;
+    item.valor_unitario = costInfo.value;
+    item.valor_diferenca = diferenca * costInfo.value;
+    item.sem_preco_custo = !costInfo.hasCost;
+
+    return item;
 }
 
 function isOpenInventoryStatus(status) {
@@ -7024,7 +7118,7 @@ async function createNewInventorySession(type) {
         appData.currentInventory = {
             id: sessionId,
             user: currentUser,
-            date: date.toISOString(),
+            date: getDataHoraBrasil(date),
             items: [],
             local: local,
             type: type,
@@ -7102,7 +7196,7 @@ async function resumeInventorySession(sessionId, type, mode = 'edit') {
         appData.currentInventory = {
             id: sessionId,
             user: startedBy,
-            date: invData.data_inicio || new Date().toISOString(),
+            date: invData.data_inicio || getDataHoraBrasil(),
             data_fim: invData.data_fim || invData.finalizado_em || null,
             local: invData.local || 'TÉRREO',
             type: invData.tipo || type,
@@ -7153,8 +7247,8 @@ async function confirmCancelInventory(sessionId) {
 
                 await client.from('inventarios').update({
                     status: 'CANCELADO',
-                    data_fim: new Date().toISOString(),
-                    atualizado_em: new Date().toISOString()
+                    data_fim: getDataHoraBrasil(),
+                    atualizado_em: getDataHoraBrasil()
                 }).eq('inventario_id', sessionId);
             }
             appData.currentInventory = null;
@@ -7223,7 +7317,23 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
                     ` : ''}
                     <div class="inv-search-wrapper" style="position: relative; margin-bottom: 10px;">
                         <span class="material-symbols-rounded" style="position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: #555; font-size: 24px;">barcode_scanner</span>
-                        <input type="text" id="inv-ean-input" ${isView ? 'disabled' : ''} placeholder="${isView ? 'MODO VISUALIZACAO' : 'Bipar EAN ou Codigo...'}" style="width: 100%; padding: 18px 60px; border-radius: 14px; border: 2px solid #333; background: #111; color: white; font-size: 1.1rem; text-align: left; transition: all 0.2s;" onkeypress="if(event.key === 'Enter') addInventoryItem()">
+                        <input
+                            type="text"
+                            id="inv-ean-input"
+                            ${isView ? 'disabled' : ''}
+                            placeholder="${isView ? 'MODO VISUALIZACAO' : 'Bipar EAN ou Codigo...'}"
+                            autocomplete="off"
+                            autocorrect="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            inputmode="text"
+                            enterkeyhint="done"
+                            name="dy-inventory-scan-code"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            style="width: 100%; padding: 18px 60px; border-radius: 14px; border: 2px solid #333; background: #111; color: white; font-size: 1.1rem; text-align: left; transition: all 0.2s;"
+                            onkeypress="if(event.key === 'Enter') addInventoryItem()"
+                        >
                         <button class="inv-cam-btn" ${isView ? 'disabled' : ''} onclick="${isView ? '' : `startScanner(false, false, true)`}" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; cursor: ${isView ? 'not-allowed' : 'pointer'}; transition: all 0.2s; opacity: ${isView ? '0.45' : '1'};" title="Abrir leitor de código">
                             <span class="material-symbols-rounded">qr_code_scanner</span>
                         </button>
@@ -7303,13 +7413,13 @@ async function gerarPdfPreInventario() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const now = new Date();
-        const timestamp = now.toLocaleString('pt-BR');
-        const fileNameDate = now.toISOString().split('T')[0] + '_' + now.getHours().toString().padStart(2, '0') + '-' + now.getMinutes().toString().padStart(2, '0');
+        const timestamp = formatDateTimeBR(now);
+        const fileNameDate = getDataBrasilISO(now) + '_' + now.getHours().toString().padStart(2, '0') + '-' + now.getMinutes().toString().padStart(2, '0');
         const status = String(inv.status || 'ABERTO').toUpperCase();
         const isClosed = ['FECHADO', 'FINALIZADO', 'FINALIZADA'].includes(status);
         const title = isClosed ? 'Relatório Final de Inventário' : 'Relatório Parcial de Inventário';
         const currentUser = inv.user || localStorage.getItem('currentUser') || 'Não identificado';
-        const formatPdfDate = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
+        const formatPdfDate = (value) => formatDateTimeBR(value);
         const groupedItems = groupInventoryItemsByProduct(inv.items);
 
         appData.currentInventory.items = groupedItems;
@@ -7439,6 +7549,13 @@ async function updateInventoryItemsList() {
         const realIndex = displayIndex;
         const productImg = product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
         const qtyLabel = isInitialInventoryType(appData.currentInventory?.type) ? 'SALDO INICIAL' : 'CONTADO';
+        const costInfo = resolveInventoryUnitCost(item.id_interno);
+        item.valor_unitario = costInfo.value;
+        item.valor_diferenca = Number(item.diferenca || 0) * costInfo.value;
+        item.sem_preco_custo = !costInfo.hasCost;
+        const costWarning = item.sem_preco_custo
+            ? `<span class="inv-cost-warning"><span class="material-symbols-rounded">info</span>Produto sem preço de custo cadastrado</span>`
+            : `<span class="inv-cost-readonly"><span class="material-symbols-rounded">lock</span>Custo ${formatPrice(item.valor_unitario)}</span>`;
 
         return `
         <div class="inventory-item">
@@ -7458,6 +7575,7 @@ async function updateInventoryItemsList() {
                 <span class="inv-product-code">${item.id_interno}</span>
                 <span class="inv-product-name">${nome}</span>
                 <span class="inv-product-meta"><strong>SKU</strong> ${sku} <strong>EAN</strong> ${ean}</span>
+                ${costWarning}
                 ${renderInventoryQuantitySummary(product, item, expectedQty)}
             </div>
             <!-- DIREITA: Quantidade + Remover -->
@@ -7564,7 +7682,7 @@ async function addInventoryItem(scannedEan = null) {
 
     if (!product) { 
         console.warn('[INV-DIAG] Produto não encontrado em definitivo:', ean);
-        showScanFeedback('warning', 'Produto não cadastrado');
+        showScanFeedback('warning', 'Produto sem cadastro');
         showToast("PRODUTO NÃO ENCONTRADO!", "error");
         await showAppAlert({
             title: 'Produto não encontrado',
@@ -7592,13 +7710,13 @@ async function addInventoryItem(scannedEan = null) {
     }
     else {
         itemToSave = { ean: product.ean || product.id_interno, name: product.descricao_completa || product.nome || 'Produto', brand: product.marca || '', qty: 1, id_interno: product.id_interno };
+        applyInventoryCostToItem(itemToSave);
         appData.currentInventory.items.unshift(itemToSave);
     }
     
     if(eanInput) eanInput.value = ''; 
     if(eanInput) eanInput.focus(); 
-    playBeep(true); 
-    triggerScanFeedback('success');
+    showScanFeedback('success', 'Produto bipado');
     updateInventoryItemsList(); 
     
     console.log('[INV-DIAG] inventario atual:', appData.currentInventory.id);
@@ -7652,6 +7770,7 @@ async function saveInventoryItemToServer(item) {
         showToast('Sessão de inventário inválida. Item não incluído.', 'error');
         return false;
     }
+    const auditUser = getInventoryAuditUser();
 
     if (inv.isNewSession) {
         console.log('[INVENTARIO DEBUG] primeiro item bipado, criando inventário');
@@ -7683,8 +7802,14 @@ async function saveInventoryItemToServer(item) {
     const diferenca = saldo_fisico - saldo_sistema;
     item.saldo_sistema = saldo_sistema;
 
-    const product = appData.products.find(p => p.id_interno == item.id_interno);
-    const valor_unitario = product ? parseFloat((product.preco_custo || product.custo || 0).toString().replace(',', '.')) : 0;
+    const costInfo = resolveInventoryUnitCost(item.id_interno);
+    const valor_unitario = costInfo.value;
+    item.valor_unitario = valor_unitario;
+    item.valor_diferenca = diferenca * valor_unitario;
+    item.sem_preco_custo = !costInfo.hasCost;
+    if (!costInfo.hasCost) {
+        showToast('Produto sem preço de custo cadastrado', 'warning');
+    }
 
     const payload = {
         inventario_id: inv.id,
@@ -7695,7 +7820,9 @@ async function saveInventoryItemToServer(item) {
         diferenca: diferenca,
         valor_unitario: valor_unitario,
         valor_diferenca: diferenca * valor_unitario,
-        auditado_em: new Date().toISOString()
+        auditado_por: auditUser.name,
+        auditado_em: getDataHoraBrasil(),
+        atualizado_em: getDataHoraBrasil()
     };
 
     console.log('[INV-DIAG] payload inventarios_itens:', payload);
@@ -7760,6 +7887,11 @@ async function saveInventoryItemToServer(item) {
                 throw new Error("Persistência falhou");
             } else {
                 item.db_ids = (check || []).map(row => row.id).filter(Boolean);
+                const savedRow = check?.[0] || payload;
+                item.valor_unitario = parseInventoryMoney(savedRow.valor_unitario);
+                item.valor_diferenca = parseInventoryMoney(savedRow.valor_diferenca);
+                item.diferenca = Number(savedRow.diferenca ?? item.diferenca ?? 0);
+                item.sem_preco_custo = item.valor_unitario <= 0;
                 console.log('[INV-DIAG] Confirmação FINALIZADA COM SUCESSO.');
                 return true;
             }
@@ -7881,8 +8013,8 @@ window.finishInventorySession = async function () {
         console.log('[INV-DIAG] executando fechamento final...');
         const { error: finalErr } = await client.from('inventarios').update({
             status: 'FECHADO',
-            data_fim: new Date().toISOString(),
-            atualizado_em: new Date().toISOString(),
+            data_fim: getDataHoraBrasil(),
+            atualizado_em: getDataHoraBrasil(),
             total_skus: total_skus,
             total_itens: total_itens,
             total_itens_contados: total_itens_contados,
@@ -8167,7 +8299,7 @@ async function renderInventarioHistory() {
                                         <div style="color: #4ade80; font-weight: 800; font-size: 1.1rem; margin-bottom: 4px;">${inv.inventario_id}</div>
                                         <div style="color: #777; font-size: 0.85rem; margin-bottom: 2px;">${(inv.tipo || '').toUpperCase()} | ${inv.local}</div>
                                         <div style="color: #666; font-size: 0.8rem; margin-bottom: 2px;">Iniciado por: ${getInventoryStartedBy(inv)}${isInventoryOwnedByCurrentUser(inv) ? ' (voce)' : ''}</div>
-                                        <div style="color: #555; font-size: 0.8rem;">${new Date(inv.data_inicio).toLocaleDateString('pt-BR')} ${new Date(inv.data_inicio).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
+                                        <div style="color: #555; font-size: 0.8rem;">${formatDateTimeBR(inv.data_inicio)}</div>
                                     </div>
                                     <div style="text-align: right;">
                                         <div style="color: ${inv.status === 'FECHADO' ? '#4ade80' : (inv.status === 'ANULADO' ? '#ef4444' : '#fbbf24')}; font-size: 0.85rem; font-weight: 800; letter-spacing: 0.5px;">${inv.status}</div>
@@ -8278,7 +8410,8 @@ async function startInventoryReview(baseInventoryId) {
         const client = window.supabaseClient;
         if (!client) return;
 
-        const currentUser = localStorage.getItem('currentUser');
+        const auditUser = getInventoryAuditUser();
+        const currentUser = auditUser.name;
         
         // Gerar novo ID
         const date = new Date();
@@ -8311,7 +8444,7 @@ async function startInventoryReview(baseInventoryId) {
             status: 'ABERTO',
             criado_por: currentUser,
             usuario_responsavel: currentUser,
-            data_inicio: date.toISOString(),
+            data_inicio: getDataHoraBrasil(date),
             local: original.local,
             filtro_aplicado: `REVISÃO DO ${baseInventoryId}`
         }]);
@@ -8320,14 +8453,23 @@ async function startInventoryReview(baseInventoryId) {
 
         // 2. Clonar itens
         for (const item of original.items) {
+            const reviewItem = applyInventoryCostToItem({
+                ...item,
+                qty: Number(item.qty || item.saldo_fisico || 0),
+                saldo_sistema: Number(item.saldo_sistema || 0)
+            });
             await client.from('inventarios_itens').insert([{
                 inventario_id: newSessionId,
                 id_interno: item.id_interno,
                 local: original.local,
-                saldo_sistema: item.saldo_sistema,
-                saldo_fisico: item.qty,
-                diferenca: item.qty - item.saldo_sistema,
-                auditado_em: date.toISOString()
+                saldo_sistema: reviewItem.saldo_sistema,
+                saldo_fisico: reviewItem.qty,
+                diferenca: reviewItem.diferenca,
+                valor_unitario: reviewItem.valor_unitario,
+                valor_diferenca: reviewItem.valor_diferenca,
+                auditado_por: auditUser.name,
+                auditado_em: getDataHoraBrasil(date),
+                atualizado_em: getDataHoraBrasil(date)
             }]);
         }
 
@@ -8337,7 +8479,7 @@ async function startInventoryReview(baseInventoryId) {
             id: newSessionId,
             status: 'ABERTO',
             user: currentUser,
-            date: date.toISOString()
+            date: getDataHoraBrasil(date)
         };
 
         await renderInventarioInicialScreen(newSessionId, 'edit');
@@ -8360,7 +8502,7 @@ async function cancelClosedInventory(sessionId) {
             .from('inventarios')
             .update({
                 status: 'ANULADO',
-                atualizado_em: new Date().toISOString()
+                atualizado_em: getDataHoraBrasil()
             })
             .eq('inventario_id', sessionId);
 
@@ -9184,119 +9326,6 @@ function renderProductStockFilterSideList() {
 
 function renderProductSearchSummaryBar(resultCount = 0) {
     return `
-        <section class="product-search-summary-bar" aria-label="Resumo da busca">
-            <div class="product-summary-metric">
-                <span>RESUMO DA BUSCA</span>
-                <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
-                <small>PRODUTOS ENCONTRADOS</small>
-            </div>
-            <div class="product-summary-metric">
-                <strong id="product-summary-stock">${formatStockNumber(getProductStockFilterCount('DISPONIVEL'))} <em>UN</em></strong>
-                <small>ESTOQUE TOTAL</small>
-            </div>
-            <div class="product-summary-metric">
-                <strong id="product-summary-price">R$ 1,00</strong>
-                <small>PREÇO MÉDIO</small>
-            </div>
-        </section>
-    `;
-}
-
-function renderSearchInitialStateHTML() {
-    return `
-        <div id="search-initial-state" class="search-empty-state">
-            <div class="empty-state-visual">
-                <div class="empty-state-icon-glow"></div>
-                <span class="material-symbols-rounded">search</span>
-            </div>
-            <div class="empty-state-content">
-                <h3>Digite um termo para buscar produtos</h3>
-                <p>Use a busca ao lado para encontrar produtos pelo nome, código ou descrição.</p>
-            </div>
-            <span class="search-empty-arrow" aria-hidden="true">&gt;</span>
-        </div>
-    `;
-}
-
-function updateProductSearchSummary(resultCount = 0, results = []) {
-    const countEl = document.getElementById('product-summary-count');
-    const stockEl = document.getElementById('product-summary-stock');
-    const priceEl = document.getElementById('product-summary-price');
-    const helpEl = document.getElementById('product-side-search-help');
-    const query = document.getElementById('search-input')?.value?.trim() || '';
-
-    if (countEl) countEl.textContent = formatStockNumber(resultCount);
-    if (stockEl) {
-        const totalStock = Array.isArray(results)
-            ? results.reduce((total, product) => total + getSearchCardStockQty(product), 0)
-            : 0;
-        stockEl.innerHTML = `${formatStockNumber(totalStock)} <em>UN</em>`;
-    }
-    if (priceEl) {
-        const prices = Array.isArray(results)
-            ? results.map(product => parseFloat(String(product.preco_varejo || product.col_G || 0).replace(',', '.'))).filter(Number.isFinite)
-            : [];
-        const avgPrice = prices.length ? prices.reduce((sum, value) => sum + value, 0) / prices.length : 1;
-        priceEl.textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-    if (helpEl) {
-        helpEl.textContent = query ? `${resultCount} resultado(s) para "${cleanProductSearchText(query)}"` : 'Digite um termo para buscar produtos';
-    }
-}
-
-function renderProductSearchSidePanel(resultCount, queryRaw = '') {
-    const query = String(queryRaw || '').trim();
-    return `
-        <aside class="product-search-side-panel">
-            <section class="product-side-card product-side-filters">
-                <div class="product-side-heading product-side-heading-main">
-                    <button class="product-side-back-btn" type="button" aria-label="Voltar" onclick="renderProductSubMenu()">
-                        <span class="material-symbols-rounded">arrow_back</span>
-                    </button>
-                    <span class="material-symbols-rounded">filter_alt</span>
-                    <span>Filtros</span>
-                </div>
-                <label class="product-side-search-label" for="search-input">Busca por</label>
-                <div class="search-bar-wrapper">
-                    <div class="product-search-bar">
-                        <span class="material-symbols-rounded search-icon">search</span>
-                        <input
-                            type="search"
-                            id="search-input"
-                            class="product-search-input"
-                            placeholder="caneta"
-                            value="${query ? cleanProductSearchText(query) : ''}"
-                            autocomplete="off"
-                            autocorrect="off"
-                            autocapitalize="none"
-                            spellcheck="false"
-                            inputmode="search"
-                            oninput="debouncedSearch()"
-                            onkeypress="if(event.key === 'Enter') handleSearchEnter(event)"
-                            onkeydown="handleSearchKeyDown(event)"
-                        />
-
-                        <div class="search-actions">
-                            <button class="product-search-camera-btn" type="button" aria-label="Escanear" onclick="startScanner()">
-                                <span class="material-symbols-rounded">qr_code_scanner</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <p id="product-side-search-help" class="product-side-search-help">${query ? `${resultCount} resultado(s) para "${cleanProductSearchText(query)}"` : 'Digite um termo para buscar produtos'}</p>
-
-                <div class="product-side-heading">
-                    <span class="material-symbols-rounded">warehouse</span>
-                    <span>Setor do estoque</span>
-                </div>
-                ${renderProductStockFilterSideList()}
-            </section>
-        </aside>
-    `;
-}
-
-function renderProductSearchSummaryBar(resultCount = 0) {
-    return `
         <section class="product-search-summary-bar product-search-command-bar" aria-label="Consulta de produtos">
             <div class="search-bar-wrapper product-search-command-input">
                 <div class="product-search-bar">
@@ -9653,7 +9682,7 @@ async function criarLotesEntradaNF(entrada, itens = []) {
             acc[key] = (acc[key] || 0) + 1;
             return acc;
         }, {});
-        const dataEntrada = entrada.data_recebimento || entrada.data_emissao || new Date().toISOString();
+        const dataEntrada = entrada.data_recebimento || entrada.data_emissao || getDataHoraBrasil();
         const payload = itensValidos
             .filter(item => {
                 const key = String(item.id_interno);
@@ -9680,7 +9709,7 @@ async function criarLotesEntradaNF(entrada, itens = []) {
                     custo_total: custoTotal,
                     local_estoque: getLoteLocal(item.local_entrada || item.local_estoque || entrada.local_estoque),
                     status: getLoteStatus(quantidade),
-                    atualizado_em: new Date().toISOString()
+                    atualizado_em: getDataHoraBrasil()
                 };
             });
 
@@ -9779,7 +9808,7 @@ async function baixarEstoqueFIFO(idInterno, quantidade, localEstoque = 'terreo')
                     quantidade_atual: novaQuantidade,
                     custo_total: novaQuantidade * custoUnitario,
                     status: getLoteStatus(novaQuantidade),
-                    atualizado_em: new Date().toISOString()
+                    atualizado_em: getDataHoraBrasil()
                 })
                 .eq('id', lote.id);
 
@@ -9870,7 +9899,7 @@ function renderCamadasEstoqueHTML(lotes = [], resumo = {}) {
             <div class="product-stock-layer-row">
                 <span><b>Origem</b>${escapeKitAttribute(lote.origem_tipo || '-')}</span>
                 <span><b>NF</b>${escapeKitAttribute(lote.numero_nf || '-')}</span>
-                <span><b>Data entrada</b>${lote.data_entrada ? new Date(lote.data_entrada).toLocaleDateString('pt-BR') : '-'}</span>
+                <span><b>Data entrada</b>${lote.data_entrada ? formatDateBR(lote.data_entrada) : '-'}</span>
                 <span><b>Local</b>${escapeKitAttribute(lote.local_estoque || '-')}</span>
                 <span><b>Quantidade atual</b>${formatStockNumber(quantidade)}</span>
                 <span><b>Custo unit.</b>${formatPrice(custoUnitario)}</span>
@@ -11757,7 +11786,7 @@ function formatFinanceiroMoney(value) {
 
 function formatFinanceiroDate(value) {
     const date = parseFinanceiroDate(value);
-    return date ? date.toLocaleDateString('pt-BR') : '-';
+    return date ? formatDateBR(date) : '-';
 }
 
 async function renderFinanceiroSubMenu() {
@@ -12021,7 +12050,7 @@ function renderPickHistory() {
                                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                                             <div>
                                                 <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item.rom_id || '-'}</div>
-                                                <div style="font-size: 0.65rem; color: var(--muted);">${new Date(item.criado_em).toLocaleString('pt-BR')}</div>
+                                                <div style="font-size: 0.65rem; color: var(--muted);">${formatDateTimeBR(item.criado_em)}</div>
                                             </div>
                                             <div style="background: ${item.status === 'CONCLUÍDO' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)'}; color: ${item.status === 'CONCLUÍDO' ? '#22c55e' : '#eab308'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
                                                 ${item.status || 'PENDENTE'}
@@ -12041,6 +12070,10 @@ function renderPickHistory() {
 // Variável global para armazenar o contexto da sessão antes de ser persistida
 let currentPickingContext = null;
 let lastScannedPickItemKey = null;
+let expandedPickItemKey = null;
+let pickRemovalModeActive = false;
+let lastPickScanAction = 'add';
+let pickScanHistory = [];
 let scanCenterToastTimeout = null;
 let scanSuccessGlowTimeout = null;
 const PICK_STATUS_DRAFT = 'em_separacao';
@@ -12062,7 +12095,7 @@ function saveDraftPickSession(draftPatch) {
     const draft = {
         ...(getDraftPickSession() || {}),
         ...(draftPatch || {}),
-        timestamp: new Date().toISOString()
+        timestamp: getDataHoraBrasil()
     };
     localStorage.setItem('draft_pick_session', JSON.stringify(draft));
     return draft;
@@ -12072,7 +12105,7 @@ function markDraftPickSaveStatus(status, error = null) {
     const draft = getDraftPickSession();
     if (!draft) return null;
     draft.saveStatus = status;
-    draft.lastSaveAttemptAt = new Date().toISOString();
+    draft.lastSaveAttemptAt = getDataHoraBrasil();
     if (error) draft.lastSaveError = error?.message || String(error);
     else delete draft.lastSaveError;
     localStorage.setItem('draft_pick_session', JSON.stringify(draft));
@@ -12146,6 +12179,10 @@ async function discardPickingDraft(sessionId, options = {}) {
 
     currentSessionItems = [];
     lastScannedPickItemKey = null;
+    expandedPickItemKey = null;
+    pickRemovalModeActive = false;
+    lastPickScanAction = 'add';
+    pickScanHistory = [];
     if (currentPickingContext?.sessionId === targetSessionId) {
         currentPickingContext = null;
     }
@@ -12193,7 +12230,7 @@ function warnIfDraftPickWasNotSynced(draft) {
 function generatePickSessionId(channelLabel) {
     const now = new Date();
     const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
-    const todayStr = now.toLocaleDateString('pt-BR');
+    const todayStr = formatDateBR(now);
     const cleanChannel = channelLabel.split(' ')[0].toUpperCase();
 
     let countInSheet = 0;
@@ -12210,7 +12247,7 @@ function generatePickSessionId(channelLabel) {
 }
 
 function buildPickingSessionPayload(sessionId, channelId, channelLabel, status = PICK_STATUS_DRAFT, createdAt = null) {
-    const now = new Date().toISOString();
+    const now = getDataHoraBrasil();
     const currentUser = localStorage.getItem('currentUser') || 'N/A';
     return {
         separacao_id: sessionId,
@@ -12256,7 +12293,6 @@ function showPickScanCenterToast(item = null, quantity = 1) {
         <strong>${escapeKitAttribute(title)}</strong>
         ${brand ? `<em>${escapeKitAttribute(brand)}</em>` : ''}
         <span>+${quantity} unidade adicionada</span>
-        <div>ID ${escapeKitAttribute(id)}${ean && ean !== '-' ? ` · EAN ${escapeKitAttribute(ean)}` : ''}</div>
     `;
     document.body.appendChild(toastEl);
 
@@ -12325,7 +12361,11 @@ async function persistPickingDraftItem(draft, item) {
     }
 
     try {
-        return await DataClient.savePickingDraftSupabase(payload);
+        return await withTimeout(
+            DataClient.savePickingDraftSupabase(payload),
+            15000,
+            'salvar sessao de separacao'
+        );
     } catch (error) {
         if (isRetryableConferenceSyncError(error)) {
             await queueOperation('supabase_pick_draft', payload, {
@@ -12363,7 +12403,11 @@ async function persistPickingDraftSession(draft) {
     }
 
     try {
-        return await DataClient.savePickingDraftSupabase(payload);
+        return await withTimeout(
+            DataClient.savePickingDraftSupabase(payload),
+            15000,
+            'salvar rascunho da separacao'
+        );
     } catch (error) {
         if (isRetryableConferenceSyncError(error)) {
             await queueOperation('supabase_pick_draft', payload, {
@@ -12375,6 +12419,36 @@ async function persistPickingDraftSession(draft) {
         }
         throw error;
     }
+}
+
+async function deletePickingDraftItemSupabaseDirect(payload = {}) {
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Supabase client nao encontrado');
+
+    const sessionId = payload.sessionId || payload.separacao_id;
+    const idInterno = payload.idInterno || payload.id_interno;
+    if (!sessionId) throw new Error('separacao_id nao informado');
+    if (!idInterno) throw new Error('id_interno nao informado');
+
+    const { error: itemError } = await client
+        .from('separacao_itens')
+        .delete()
+        .eq('separacao_id', sessionId)
+        .eq('id_interno', idInterno);
+
+    if (itemError) throw itemError;
+
+    const { error: sessionError } = await client
+        .from('separacao')
+        .update({ atualizado_em: getDataHoraBrasil() })
+        .eq('separacao_id', sessionId);
+
+    if (sessionError) throw sessionError;
+
+    DataClient.invalidateCache('separacao');
+    DataClient.invalidateCache('conferencia');
+
+    return { deleted: true, sessionId, idInterno };
 }
 
 async function persistPickingFinal(sessionId) {
@@ -12393,7 +12467,11 @@ async function persistPickingFinal(sessionId) {
     }
 
     try {
-        return await DataClient.finalizePickingDraftSupabase(payload);
+        return await withTimeout(
+            DataClient.finalizePickingDraftSupabase(payload),
+            20000,
+            'finalizar separacao'
+        );
     } catch (error) {
         if (isRetryableConferenceSyncError(error)) {
             await queueOperation('supabase_pick_finalize', payload, {
@@ -12409,6 +12487,9 @@ async function persistPickingFinal(sessionId) {
 
 async function startPickingSession(channelId, channelLabel, channelColor) {
     const draft = getDraftPickSession();
+    pickRemovalModeActive = false;
+    lastPickScanAction = 'add';
+    pickScanHistory = [];
     
     console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
 
@@ -12455,10 +12536,12 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
         channelColor,
         sessionId: generatePickSessionId(channelLabel),
         executionId: generateExecutionId(),
-        createdAt: new Date().toISOString()
+        createdAt: getDataHoraBrasil()
     };
     
     currentSessionItems = [];
+    pickScanHistory = [];
+    lastPickScanAction = 'add';
     renderPickingScreen(currentPickingContext.sessionId, channelId, channelLabel, channelColor);
 }
 
@@ -12480,9 +12563,7 @@ function getPickChannelSubtitle(channelLabel) {
 }
 
 function formatPickCreatedAt(value) {
-    const date = value ? new Date(value) : new Date();
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return formatDateTimeBR(value || getDataHoraBrasil());
 }
 
 function getPickProductImage(item) {
@@ -12569,13 +12650,14 @@ function focusPickManualInput() {
 
 function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     const currentUser = localStorage.getItem('currentUser');
+    pickRemovalModeActive = false;
     currentPickingContext = {
         sessionId,
         channelId,
         channelLabel,
         channelColor,
         executionId: currentPickingContext?.executionId || generateExecutionId(),
-        createdAt: currentPickingContext?.createdAt || new Date().toISOString()
+        createdAt: currentPickingContext?.createdAt || getDataHoraBrasil()
     };
     const channelIcon = getChannelConfig(channelLabel).svgIcon || menu3DIcons?.[channelId] || '<span class="material-symbols-rounded">inventory_2</span>';
     const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
@@ -12595,7 +12677,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     <div class="pick-workflow-title">
                         <span class="pick-title-icon">${channelIcon}</span>
                         <div>
-                            <h1>SEPARACAO (PICK)</h1>
+                            <h1>SEPARAÇÃO (PICK)</h1>
                             <p>Escaneie o produto para adicionar</p>
                         </div>
                     </div>
@@ -12607,15 +12689,26 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                 </header>
 
                 <section class="pick-scan-panel">
-                    <div class="pick-scan-field">
-                        <span class="material-symbols-rounded">search</span>
-                        <input type="text" id="pick-ean-input" class="product-search-input" 
-                               placeholder="EAN, SKU OU CODIGO INTERNO" 
-                               onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPickItem(); }" autocomplete="off" autofocus>
-                        <button class="pick-scanner-btn" onclick="startScanner(true)" title="Abrir Scanner" type="button">
-                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                    <div class="pick-scan-row">
+                        <div class="pick-scan-field">
+                            <span class="material-symbols-rounded">search</span>
+                            <input type="text" id="pick-ean-input" class="product-search-input" 
+                                   placeholder="Escaneie o produto (EAN, SKU ou código interno)" 
+                                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPickItem(); }" autocomplete="off" autofocus>
+                            <button class="pick-scanner-btn" onclick="startScanner(true)" title="Abrir Scanner" type="button">
+                                <span class="material-symbols-rounded">qr_code_scanner</span>
+                            </button>
+                        </div>
+                        <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
+                            <span class="material-symbols-rounded">remove_circle</span>
+                            <span id="pick-remove-scan-label">Remover por bipagem</span>
                         </button>
                     </div>
+                    <div id="pick-removal-badge" class="pick-removal-badge hidden">
+                        <span class="material-symbols-rounded">warning</span>
+                        MODO REMOÇÃO ATIVO
+                    </div>
+                    <div id="pick-scan-history" class="pick-scan-history hidden"></div>
                 </section>
 
                 <section class="pick-info-grid">
@@ -12627,7 +12720,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     <article class="pick-info-card">
                         <span>ID DA SEPARACAO</span>
                         <strong>${escapeKitAttribute(sessionId)}</strong>
-                        <small>Gerado pela regra atual</small>
+                        <small>Em andamento</small>
                     </article>
                     <article class="pick-info-card">
                         <span>OPERADOR</span>
@@ -12668,7 +12761,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                         <h2>RESUMO DA SEPARACAO</h2>
                         <div class="pick-summary-metrics">
                             <div><span>Itens</span><strong id="pick-summary-items">${currentSessionItems.length}</strong></div>
-                            <div><span>Quantidade total</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
+                            <div><span>Unidades totais</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
                             <div><span>Progresso</span><strong id="pick-summary-progress">${currentSessionItems.length ? '100%' : '0%'}</strong></div>
                         </div>
                         <div class="pick-summary-actions">
@@ -12695,6 +12788,8 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     `;
 
     updatePickItemsList();
+    updatePickRemovalModeUI();
+    renderPickScanHistory();
     setTimeout(() => document.getElementById('pick-ean-input')?.focus(), 80);
 }
 
@@ -12727,6 +12822,83 @@ function showInputFeedback(inputId, type) {
 
 function normalizePickCode(rawValue) {
     return String(rawValue || '').trim().replace(/\s+/g, '');
+}
+
+function getPickScanInputPlaceholder() {
+    return pickRemovalModeActive
+        ? 'Bipe o produto para remover 1 unidade'
+        : 'Escaneie o produto (EAN, SKU ou código interno)';
+}
+
+function updatePickRemovalModeUI() {
+    const screen = document.querySelector('.pick-workflow-screen');
+    const input = document.getElementById('pick-ean-input');
+    const button = document.getElementById('pick-remove-scan-toggle');
+    const label = document.getElementById('pick-remove-scan-label');
+    const badge = document.getElementById('pick-removal-badge');
+
+    screen?.classList.toggle('pick-removal-active', pickRemovalModeActive);
+    if (input) input.placeholder = getPickScanInputPlaceholder();
+    if (button) button.classList.toggle('is-active', pickRemovalModeActive);
+    if (label) label.textContent = pickRemovalModeActive ? 'Cancelar remoção' : 'Remover por bipagem';
+    badge?.classList.toggle('hidden', !pickRemovalModeActive);
+}
+
+function setPickRemovalMode(active) {
+    pickRemovalModeActive = Boolean(active);
+    updatePickRemovalModeUI();
+    setTimeout(() => document.getElementById('pick-ean-input')?.focus(), 60);
+}
+
+function togglePickRemovalMode() {
+    setPickRemovalMode(!pickRemovalModeActive);
+}
+
+function pickItemMatchesCode(item, cleanCode) {
+    const code = normalizePickCode(cleanCode);
+    if (!code) return false;
+    const possibleCodes = [
+        getPickingProductId(item),
+        item?.id_interno,
+        item?.col_a,
+        item?.col_A,
+        item?.ean,
+        item?.codigo_barras,
+        item?.sku_fornecedor,
+        item?.sku
+    ];
+    return possibleCodes.some(value => normalizePickCode(value) === code);
+}
+
+function addPickScanHistory(action, itemOrText) {
+    const label = typeof itemOrText === 'string'
+        ? itemOrText
+        : getPickItemTitle(itemOrText);
+    pickScanHistory.unshift({
+        action,
+        label,
+        time: formatTimeBR()
+    });
+    pickScanHistory = pickScanHistory.slice(0, 4);
+    renderPickScanHistory();
+}
+
+function renderPickScanHistory() {
+    const container = document.getElementById('pick-scan-history');
+    if (!container) return;
+    if (!pickScanHistory.length) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    container.classList.remove('hidden');
+    container.innerHTML = pickScanHistory.map(entry => `
+        <span class="${entry.action === 'remove' ? 'is-remove' : 'is-add'}">
+            <strong>${entry.action === 'remove' ? '-' : '+'}</strong>
+            ${escapeKitAttribute(entry.label)}
+        </span>
+    `).join('');
 }
 
 function findProductInLocalCacheByCode(cleanCode) {
@@ -12786,6 +12958,110 @@ async function findProductForPicking(cleanCode) {
     return null;
 }
 
+function getCurrentPickDraftForUpdate(saveStatus = 'saving') {
+    const existingDraft = getDraftPickSession() || {};
+    return saveDraftPickSession({
+        sessionId: existingDraft.sessionId || currentPickingContext?.sessionId || `SEP-TEMP-${Date.now()}`,
+        channelId: existingDraft.channelId || currentPickingContext?.channelId || '',
+        channelLabel: existingDraft.channelLabel || currentPickingContext?.channelLabel || 'OUTROS',
+        channelColor: existingDraft.channelColor || currentPickingContext?.channelColor || 'pdv',
+        items: currentSessionItems,
+        status: PICK_STATUS_DRAFT,
+        operatorId: localStorage.getItem('currentUser'),
+        createdAt: existingDraft.createdAt || currentPickingContext?.createdAt || getDataHoraBrasil(),
+        executionId: existingDraft.executionId || currentPickingContext?.executionId || generateExecutionId(),
+        saveStatus,
+        lastSaveAttemptAt: getDataHoraBrasil()
+    });
+}
+
+async function persistPickingItemRemoval(draft, removedItem, removedAll) {
+    if (!removedItem) return null;
+    if (!removedAll) {
+        const persistResult = await persistPickingDraftItem(draft, removedItem);
+        markDraftPickSaveStatus(persistResult?.queued ? 'queued' : 'synced');
+        return persistResult;
+    }
+
+    const payload = {
+        sessionId: draft.sessionId,
+        idInterno: removedItem.id_interno || removedItem.col_a || removedItem.col_A || getPickingProductId(removedItem),
+        executionId: draft.executionId || draft.sessionId
+    };
+
+    if (!payload.sessionId || !payload.idInterno) return null;
+
+    if (!navigator.onLine) {
+        await queueOperation('supabase_pick_draft_item_delete', payload, {
+            module: 'separacao',
+            sessionId: payload.sessionId,
+            itemId: payload.idInterno
+        });
+        markDraftPickSaveStatus('queued');
+        return { queued: true };
+    }
+
+    const result = await deletePickingDraftItemSupabaseDirect(payload);
+    markDraftPickSaveStatus('synced');
+    return result;
+}
+
+async function removePickItemByScan(cleanCode, input) {
+    const existingIndex = currentSessionItems.findIndex(item => pickItemMatchesCode(item, cleanCode));
+
+    if (existingIndex < 0) {
+        playBeep('error');
+        showScanFeedback('warning', 'Produto não está nesta separação');
+        showToast('Produto não está nesta separação', 'warning');
+        if (input) input.value = '';
+        updatePickRemovalModeUI();
+        showInputFeedback('pick-ean-input', 'error');
+        return;
+    }
+
+    const item = currentSessionItems[existingIndex];
+    const productKey = getPickingProductId(item);
+    const nextQty = Math.max(0, (Number(item.qty) || Number(item.qtd_separada) || 1) - 1);
+    const removedAll = nextQty <= 0;
+
+    playBeep('success');
+    lastScannedPickItemKey = productKey;
+    lastPickScanAction = 'remove';
+    expandedPickItemKey = null;
+
+    currentSessionItems.splice(existingIndex, 1);
+    if (!removedAll) {
+        item.qty = nextQty;
+        item.scanTime = formatTimeBR();
+        item.lastRemovedAt = Date.now();
+        item.lastAddedAt = 0;
+        currentSessionItems.unshift(item);
+    }
+
+    const draft = getCurrentPickDraftForUpdate('saving');
+    if (currentPackSession) {
+        currentPackSession.items = currentSessionItems;
+        localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
+    }
+    addPickScanHistory('remove', item);
+    updatePickItemsList();
+    if (input) input.value = '';
+
+    try {
+        const result = await persistPickingItemRemoval(draft, item, removedAll);
+        if (result?.queued) showToast('Remoção salva localmente para sincronizar.');
+        else showToast(removedAll ? 'Produto removido da separação' : '1 unidade removida');
+    } catch (error) {
+        markDraftPickSaveStatus('failed', error);
+        console.error('[SEP] erro ao remover item por bipagem', error);
+        showScanFeedback('error', 'Erro ao salvar remoção');
+        showToast(`Erro ao salvar remoção: ${error?.message || error}`, 'error');
+    }
+
+    setPickRemovalMode(false);
+    showInputFeedback('pick-ean-input', 'success');
+}
+
 async function addPickItem(scannedEan = null) {
     const input = document.getElementById('pick-ean-input');
     const rawCode = (scannedEan ?? input?.value ?? '').toString();
@@ -12794,6 +13070,11 @@ async function addPickItem(scannedEan = null) {
     console.log('[SEP] codigo normalizado', ean);
     if (!ean) {
         showScanFeedback('error', 'Código inválido');
+        return;
+    }
+
+    if (pickRemovalModeActive) {
+        await removePickItemByScan(ean, input);
         return;
     }
 
@@ -12843,7 +13124,7 @@ async function addPickItem(scannedEan = null) {
         if (existingIndex >= 0) {
             const existingItem = currentSessionItems[existingIndex];
             existingItem.qty = (existingItem.qty || 1) + 1;
-            existingItem.scanTime = new Date().toLocaleTimeString();
+            existingItem.scanTime = formatTimeBR();
             existingItem.lastAddedAt = Date.now();
             currentSessionItems.splice(existingIndex, 1);
             currentSessionItems.unshift(existingItem);
@@ -12851,11 +13132,14 @@ async function addPickItem(scannedEan = null) {
             currentSessionItems.unshift({
                 ...product,
                 qty: 1,
-                scanTime: new Date().toLocaleTimeString(),
+                scanTime: formatTimeBR(),
                 lastAddedAt: Date.now()
             });
         }
         lastScannedPickItemKey = productId;
+        lastPickScanAction = 'add';
+        expandedPickItemKey = null;
+        addPickScanHistory('add', currentSessionItems[0] || product);
 
         const draftStr = localStorage.getItem('draft_pick_session');
         let draft;
@@ -12871,8 +13155,8 @@ async function addPickItem(scannedEan = null) {
                 items: [],
                 operatorId: localStorage.getItem('currentUser'),
                 status: PICK_STATUS_DRAFT,
-                timestamp: now.toISOString(),
-                createdAt: currentPickingContext?.createdAt || now.toISOString(),
+                timestamp: getDataHoraBrasil(now),
+                createdAt: currentPickingContext?.createdAt || getDataHoraBrasil(now),
                 executionId: currentPickingContext?.executionId || generateExecutionId()
             };
         } else {
@@ -12881,11 +13165,11 @@ async function addPickItem(scannedEan = null) {
 
         draft.items = currentSessionItems;
         draft.status = PICK_STATUS_DRAFT;
-        draft.timestamp = new Date().toISOString();
-        draft.createdAt = draft.createdAt || new Date().toISOString();
+        draft.timestamp = getDataHoraBrasil();
+        draft.createdAt = draft.createdAt || getDataHoraBrasil();
         draft.executionId = draft.executionId || currentPickingContext?.executionId || generateExecutionId();
         draft.saveStatus = 'saving';
-        draft.lastSaveAttemptAt = new Date().toISOString();
+        draft.lastSaveAttemptAt = getDataHoraBrasil();
         localStorage.setItem('draft_pick_session', JSON.stringify(draft));
 
         let pickPersistFailed = false;
@@ -12945,8 +13229,15 @@ function updatePickItemsList() {
         return;
     }
 
-    container.innerHTML = currentSessionItems.map((item, index) => `
-        <article class="pick-product-row separacao-item-card fade-in ${getPickingProductId(item) === lastScannedPickItemKey ? 'is-last-scanned' : ''} ${Date.now() - Number(item.lastAddedAt || 0) < 1600 ? 'recently-added' : ''}">
+    container.innerHTML = currentSessionItems.map((item, index) => {
+        const productKey = getPickingProductId(item) || `pick-item-${index}`;
+        const isLastScanned = productKey === lastScannedPickItemKey;
+        const isLastRemoval = isLastScanned && lastPickScanAction === 'remove';
+        const isExpanded = productKey === expandedPickItemKey;
+        const addedRecently = Date.now() - Number(item.lastAddedAt || 0) < 4500;
+        const removedRecently = Date.now() - Number(item.lastRemovedAt || 0) < 4500;
+        return `
+        <article class="pick-product-row separacao-item-card fade-in ${isLastScanned ? 'is-last-scanned' : ''} ${isLastRemoval ? 'is-last-removed' : ''} ${addedRecently ? 'recently-added' : ''} ${removedRecently ? 'recently-removed' : ''} ${isExpanded ? 'is-expanded' : ''}" onclick="togglePickItemExpanded(${quotePackInlineArg(productKey)})" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); togglePickItemExpanded(${quotePackInlineArg(productKey)}); }">
             <div class="pick-product-main" data-label="Produto">
                 <div class="pick-product-image">
                     ${getPickProductImage(item) ? `<img src="${escapeKitAttribute(getPickProductImage(item))}" alt="${escapeKitAttribute(getPickItemTitle(item))}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
@@ -12961,16 +13252,42 @@ function updatePickItemsList() {
                 <small>EAN ${escapeKitAttribute(item.ean || '-')} • SKU ${escapeKitAttribute(item.sku_fornecedor || item.sku || '-')}</small>
             </div>
             ${getPickItemStockInfoHTML(item)}
-            <div class="pick-product-qty" data-label="Quantidade bipada">${Number(item.qty) || 0}</div>
-            <button class="pick-product-delete" onclick="removePickItem(${index})" type="button" aria-label="Remover item">
+            <div class="pick-product-qty" data-label="Quantidade bipada">
+                <span class="pick-qty-number">${Number(item.qty) || 0}</span>
+                <span class="pick-qty-unit">un</span>
+            </div>
+            <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Remover item">
                 <span class="material-symbols-rounded">delete</span>
             </button>
+            ${isLastScanned ? `
+                <div class="pick-added-now ${isLastRemoval ? 'is-remove' : ''}">
+                    <span class="material-symbols-rounded">${isLastRemoval ? 'remove_done' : 'check'}</span>
+                    ${isLastRemoval ? '1 unidade removida' : 'Adicionado agora'}
+                </div>
+            ` : ''}
+            ${isExpanded ? `
+                <div class="pick-product-details">
+                    <div><span>Marca</span><strong>${escapeKitAttribute(getPickItemBrand(item) || '-')}</strong></div>
+                    <div><span>Adicionado em</span><strong>${escapeKitAttribute(item.scanTime || '-')}</strong></div>
+                    <div><span>EAN</span><strong>${escapeKitAttribute(item.ean || '-')}</strong></div>
+                    <div><span>SKU</span><strong>${escapeKitAttribute(item.sku_fornecedor || item.sku || '-')}</strong></div>
+                </div>
+            ` : ''}
         </article>
-    `).join('');
+    `}).join('');
+}
+
+function togglePickItemExpanded(productKey) {
+    expandedPickItemKey = expandedPickItemKey === productKey ? null : productKey;
+    updatePickItemsList();
 }
 
 function removePickItem(index) {
+    const removedItem = currentSessionItems[index];
+    const removedKey = getPickingProductId(removedItem) || `pick-item-${index}`;
     currentSessionItems.splice(index, 1);
+    if (lastScannedPickItemKey === removedKey) lastScannedPickItemKey = null;
+    if (expandedPickItemKey === removedKey) expandedPickItemKey = null;
     updatePickItemsList();
     if (currentSessionItems.length === 0) {
         discardPickingDraft(currentPickingContext?.sessionId, { silent: true })
@@ -12990,7 +13307,7 @@ async function pausePickingSession(sessionId, channelId, channelLabel, channelCo
         items: currentSessionItems,
         status: PICK_STATUS_DRAFT,
         operatorId: localStorage.getItem('currentUser'),
-        createdAt: currentPickingContext?.createdAt || new Date().toISOString(),
+        createdAt: currentPickingContext?.createdAt || getDataHoraBrasil(),
         executionId: currentPickingContext?.executionId || generateExecutionId(),
         saveStatus: 'saving'
     });
@@ -13022,14 +13339,14 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
         }
 
         const currentUser = localStorage.getItem('currentUser');
-        const now = new Date().toISOString();
+        const now = getDataHoraBrasil();
         const modoRapidoAtivo = isModoRapidoAtivo();
 
         const pickingData = {
             separacao_id: sessionId,
             canal_id: channelId,
             canal_nome: channelLabel,
-            data_separacao: new Date().toLocaleDateString('pt-BR'),
+            data_separacao: formatDateBR(getDataBrasilISO()),
             status: 'em_separacao',
             criado_por: currentUser,
             criado_em: now,
@@ -13260,7 +13577,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             return;
         }
 
-        const now = new Date().toISOString();
+        const now = getDataHoraBrasil();
         const draft = getDraftPickSession() || {
             sessionId,
             channelId,
@@ -13449,7 +13766,7 @@ function renderPackHistory() {
                                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                                             <div>
                                                 <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item.rom_id || '-'}</div>
-                                                <div style="font-size: 0.65rem; color: var(--muted);">${new Date(item.conferido_em).toLocaleString('pt-BR')}</div>
+                                                <div style="font-size: 0.65rem; color: var(--muted);">${formatDateTimeBR(item.conferido_em)}</div>
                                             </div>
                                             <div style="background: ${item.divergencia === 'OK' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; color: ${item.divergencia === 'OK' ? '#22c55e' : '#ef4444'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
                                                 ${item.divergencia || 'OK'}
@@ -13486,16 +13803,7 @@ function getPackSeparationDisplayId(session) {
 }
 
 function formatPackSeparationDate(value) {
-    if (!value) return 'Data não informada';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    return formatDateTimeBR(value, { fallback: 'Data não informada' });
 }
 
 async function renderPackSessionsList(channelName) {
@@ -13781,7 +14089,7 @@ async function renderPackSessionDetails(sessionId) {
 function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
     const icon = getChannelConfig(channelName).svgIcon || menu3DIcons?.conferencia || '<span class="material-symbols-rounded">fact_check</span>';
     const title = channelName ? channelName.toUpperCase() : 'CONFERÊNCIA';
-    const createdAt = currentPackSession?.pickingData?.criado_em || currentPackSession?.time || new Date().toISOString();
+    const createdAt = currentPackSession?.pickingData?.criado_em || currentPackSession?.time || getDataHoraBrasil();
     const createdAtLabel = formatPackSeparationDate(createdAt);
 
     app.innerHTML = `
@@ -14094,7 +14402,7 @@ function openManualAddProductToSession(sessionId, type = 'PACK') {
                 currentSessionItems.unshift({
                     ...product,
                     qty: 1,
-                    scanTime: new Date().toLocaleTimeString()
+                    scanTime: formatTimeBR()
                 });
             }
             updatePickItemsList();
@@ -14363,7 +14671,7 @@ function adjustConferenceRow(index, delta) {
     // Registrar log interno caso tenha corrigido uma divergência
     if (prevDivergence !== 'OK' && row.divergencia === 'OK') {
         const logEntry = {
-            timestamp: new Date().toISOString(),
+            timestamp: getDataHoraBrasil(),
             session: currentPackSession.id,
             item: row.ean,
             description: row.descricao,
@@ -14414,7 +14722,7 @@ function startFastPackSession(channelLabel, channelColor) {
     const currentUser = localStorage.getItem('currentUser');
     const now = new Date();
     const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
-    const todayStr = now.toLocaleDateString('pt-BR');
+    const todayStr = formatDateBR(now);
     const cleanChannel = channelLabel.split(' ')[0].toUpperCase();
 
     let countInSheet = 0;
@@ -14439,8 +14747,8 @@ function startFastPackSession(channelLabel, channelColor) {
             data_separacao: todayStr,
             status: 'rascunho',
             criado_por: currentUser,
-            criado_em: now.toISOString(),
-            finalizado_em: now.toISOString(), data_hora: now.toISOString(),
+            criado_em: getDataHoraBrasil(now),
+            finalizado_em: getDataHoraBrasil(now), data_hora: getDataHoraBrasil(now),
             observacao: 'MODO CONFERÊNCIA DIRETA'
         },
         conferenceRows: [],
@@ -14460,8 +14768,12 @@ async function submitConferenceFinalization(payload) {
     }
 
     try {
-        await DataClient.finalizarConferenciaSupabase(payload);
-        return { synced: true };
+        const data = await withTimeout(
+            DataClient.finalizarConferenciaSupabase(payload),
+            25000,
+            'finalizar_conferencia'
+        );
+        return { synced: true, data };
     } catch (error) {
         if (isRetryableConferenceSyncError(error)) {
             console.error('[CONFERENCIA] Falha de rede, mantendo operacao na outbox:', error);
@@ -14701,6 +15013,993 @@ function quickActionOrcamentoCliente() {
     renderClientQuotesList();
 }
 
+const COMMISSIONS_STORAGE_KEY = 'dyComissoesVendas';
+const COMMISSION_STATUSES = ['Pendente', 'Pago', 'Cancelado'];
+const COMMISSION_PAYMENT_METHODS = ['PIX', 'Dinheiro', 'Cartão/Maquininha', 'Boleto', 'Transferência', 'Outro'];
+
+let commissionsState = {
+    loaded: false,
+    items: [],
+    activeId: null
+};
+
+async function quickActionComissoes() {
+    toggleQuickActions();
+    await renderComissoesScreen();
+}
+
+function getComissoesLocal() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(COMMISSIONS_STORAGE_KEY) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        console.warn('[COMISSOES] Cache local invalido:', error);
+        return [];
+    }
+}
+
+function setComissoesLocal(items) {
+    localStorage.setItem(COMMISSIONS_STORAGE_KEY, JSON.stringify(Array.isArray(items) ? items : []));
+}
+
+function comissaoParseNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const normalized = String(value || '')
+        .replace(/\./g, '')
+        .replace(',', '.')
+        .replace(/[^\d.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function comissaoMoney(value) {
+    return (Number(value) || 0).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+}
+
+function comissaoNumberInput(value) {
+    return Number(value || 0).toFixed(2);
+}
+
+function normalizeComissao(row = {}) {
+    const valorBruto = comissaoParseNumber(row.valor_bruto);
+    const descontoValor = comissaoParseNumber(row.desconto_valor);
+    const valorFinal = Math.max(0, comissaoParseNumber(row.valor_final ?? (valorBruto - descontoValor)));
+    const taxaPercentual = comissaoParseNumber(row.taxa_percentual);
+    const valorTaxa = Math.max(0, comissaoParseNumber(row.valor_taxa ?? (valorFinal * taxaPercentual / 100)));
+    const baseComissao = Math.max(0, comissaoParseNumber(row.base_comissao ?? (valorFinal - valorTaxa)));
+    const percentualComissao = comissaoParseNumber(row.percentual_comissao ?? 10);
+    const valorComissao = Math.max(0, comissaoParseNumber(row.valor_comissao ?? (baseComissao * percentualComissao / 100)));
+    const id = String(row.id || row.id_interno || `COM-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+    return {
+        id,
+        id_interno: String(row.id_interno || id),
+        data_venda: row.data_venda || quoteDateInput(0),
+        cliente: String(row.cliente || '').trim(),
+        produto_id: String(row.produto_id || '').trim(),
+        produto_codigo: String(row.produto_codigo || '').trim(),
+        produto_nome: String(row.produto_nome || row.produto || '').trim(),
+        valor_bruto: Number(valorBruto.toFixed(2)),
+        desconto_valor: Number(descontoValor.toFixed(2)),
+        desconto_percentual: Number(comissaoParseNumber(row.desconto_percentual).toFixed(2)),
+        valor_final: Number(valorFinal.toFixed(2)),
+        forma_pagamento: row.forma_pagamento || 'PIX',
+        parcelas: Math.max(1, parseInt(row.parcelas || 1, 10) || 1),
+        taxa_percentual: Number(taxaPercentual.toFixed(2)),
+        valor_taxa: Number(valorTaxa.toFixed(2)),
+        base_comissao: Number(baseComissao.toFixed(2)),
+        percentual_comissao: Number((percentualComissao || 10).toFixed(2)),
+        valor_comissao: Number(valorComissao.toFixed(2)),
+        observacao: String(row.observacao || '').trim(),
+        status: COMMISSION_STATUSES.includes(row.status) ? row.status : 'Pendente',
+        criado_por: row.criado_por || localStorage.getItem('currentUser') || '',
+        created_at: row.created_at || getDataHoraBrasil(),
+        updated_at: getDataHoraBrasil()
+    };
+}
+
+function createEmptyComissao() {
+    return normalizeComissao({
+        forma_pagamento: 'PIX',
+        taxa_percentual: 0,
+        percentual_comissao: 10,
+        status: 'Pendente'
+    });
+}
+
+async function ensureComissoesLoaded(force = false) {
+    if (commissionsState.loaded && !force) return commissionsState.items;
+
+    let items = getComissoesLocal().map(normalizeComissao);
+
+    try {
+        if (window.supabaseClientReady) await window.supabaseClientReady;
+        const client = window.supabaseClient;
+        if (client?.from) {
+            const { data, error } = await client
+                .from('comissoes_vendas')
+                .select('*')
+                .order('data_venda', { ascending: false })
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            if (Array.isArray(data)) {
+                items = data.map(normalizeComissao);
+                setComissoesLocal(items);
+            }
+        }
+    } catch (error) {
+        console.warn('[COMISSOES] Usando cache local. Supabase:', error?.message || error);
+    }
+
+    commissionsState = { ...commissionsState, loaded: true, items };
+    return items;
+}
+
+async function saveComissaoVenda(row) {
+    const normalized = normalizeComissao(row);
+    const items = commissionsState.items.filter(item => item.id_interno !== normalized.id_interno);
+    commissionsState.items = [normalized, ...items].sort((a, b) => new Date(b.data_venda) - new Date(a.data_venda));
+    setComissoesLocal(commissionsState.items);
+
+    try {
+        if (window.supabaseClientReady) await window.supabaseClientReady;
+        const client = window.supabaseClient;
+        if (client?.from) {
+            const { error } = await client
+                .from('comissoes_vendas')
+                .upsert(normalized, { onConflict: 'id_interno' });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.warn('[COMISSOES] Comissão salva localmente. Falha Supabase:', error?.message || error);
+        showToast('Comissão salva localmente. Supabase indisponível.', 'warning');
+    }
+
+    return normalized;
+}
+
+function getComissaoById(id) {
+    return (commissionsState.items || []).find(item => String(item.id_interno) === String(id));
+}
+
+function getComissaoSummary(items = commissionsState.items) {
+    return (items || []).filter(item => item.status !== 'Cancelado').reduce((summary, item) => {
+        summary.totalVendido += Number(item.valor_final) || 0;
+        summary.totalDescontos += Number(item.desconto_valor) || 0;
+        summary.totalTaxas += Number(item.valor_taxa) || 0;
+        summary.baseComissao += Number(item.base_comissao) || 0;
+        summary.comissaoPrevista += Number(item.valor_comissao) || 0;
+        summary.quantidade += 1;
+        return summary;
+    }, {
+        totalVendido: 0,
+        totalDescontos: 0,
+        totalTaxas: 0,
+        baseComissao: 0,
+        comissaoPrevista: 0,
+        quantidade: 0
+    });
+}
+
+function getComissaoProductOptions() {
+    const products = Array.isArray(appData.products) ? appData.products : [];
+    return products.slice(0, 600).map(product => {
+        const code = product.id_interno || product.col_A || product.ean || product.sku || '';
+        const desc = cleanProductSearchText(product.descricao_completa || product.col_C || product.descricao || '');
+        return `<option value="${quoteEscape([code, desc].filter(Boolean).join(' - '))}"></option>`;
+    }).join('');
+}
+
+function findComissaoProduct(value) {
+    const query = String(value || '').trim().toLowerCase();
+    if (!query) return null;
+    const products = Array.isArray(appData.products) ? appData.products : [];
+    return products.find(product => {
+        const fields = [
+            product.id_interno,
+            product.col_A,
+            product.ean,
+            product.sku,
+            product.codigo,
+            product.descricao_completa,
+            product.col_C
+        ].map(item => String(item || '').toLowerCase());
+        return fields.some(field => field && (query === field || query.includes(field) || field.includes(query)));
+    }) || null;
+}
+
+function renderComissaoStatusBadge(status) {
+    const safe = quoteEscape(status || 'Pendente');
+    const klass = String(status || 'Pendente').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+    return `<span class="commission-status ${klass}">${safe}</span>`;
+}
+
+async function renderComissoesScreen(activeId = null, push = true) {
+    if (push) pushNav('comissoes');
+    currentScreen = 'comissoes';
+    document.body.classList.remove('menu-active');
+
+    if (!appData.products || appData.products.length === 0) {
+        await ensureProdutosLoaded(false);
+    }
+    await ensureComissoesLoaded();
+
+    const currentUser = localStorage.getItem('currentUser') || '';
+    const active = activeId ? getComissaoById(activeId) : null;
+    const formData = active || createEmptyComissao();
+    const summary = getComissaoSummary();
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal commission-screen">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            <main class="commission-shell">
+                <header class="commission-hero">
+                    <div>
+                        <span>Modo Rápido</span>
+                        <h1>Comissões</h1>
+                    </div>
+                    <button type="button" onclick="renderComissoesScreen(null, false)">
+                        <span class="material-symbols-rounded">add</span>
+                        Nova comissão
+                    </button>
+                </header>
+
+                <section class="commission-summary-grid">
+                    <article><small>Total vendido</small><strong>${comissaoMoney(summary.totalVendido)}</strong></article>
+                    <article><small>Total descontos</small><strong>${comissaoMoney(summary.totalDescontos)}</strong></article>
+                    <article><small>Total taxas</small><strong>${comissaoMoney(summary.totalTaxas)}</strong></article>
+                    <article><small>Base comissão</small><strong>${comissaoMoney(summary.baseComissao)}</strong></article>
+                    <article><small>Comissão prevista</small><strong>${comissaoMoney(summary.comissaoPrevista)}</strong></article>
+                    <article><small>Quantidade de vendas</small><strong>${summary.quantidade}</strong></article>
+                </section>
+
+                <section class="commission-layout">
+                    ${renderComissaoForm(formData)}
+                    ${renderComissoesHistory()}
+                </section>
+            </main>
+        </div>
+    `;
+
+    setTimeout(() => comissaoUpdateCalculations(), 0);
+}
+
+function renderComissaoForm(item) {
+    return `
+        <section class="commission-panel commission-form-panel">
+            <div class="commission-panel-title">
+                <span class="material-symbols-rounded">percent</span>
+                <h2>${item?.id_interno && getComissaoById(item.id_interno) ? 'Editar comissão' : 'Lançar venda'}</h2>
+            </div>
+            <form id="commission-form" class="commission-form" onsubmit="submitComissaoVenda(event)">
+                <input type="hidden" name="id_interno" value="${quoteEscape(item.id_interno)}">
+                <input type="hidden" name="created_at" value="${quoteEscape(item.created_at)}">
+                <input type="hidden" name="produto_id" value="${quoteEscape(item.produto_id)}">
+                <input type="hidden" name="produto_codigo" value="${quoteEscape(item.produto_codigo)}">
+                <datalist id="commission-products-list">${getComissaoProductOptions()}</datalist>
+
+                <label><span>Data da venda</span><input type="date" name="data_venda" value="${quoteEscape(item.data_venda)}"></label>
+                <label><span>Cliente</span><input name="cliente" value="${quoteEscape(item.cliente)}" placeholder="Nome do cliente"></label>
+                <label class="wide"><span>Produto</span><input name="produto_nome" list="commission-products-list" value="${quoteEscape(item.produto_nome)}" placeholder="Buscar no cadastro ou digitar manualmente" onchange="applyComissaoProduct(this.value)"></label>
+
+                <label><span>Valor bruto da venda</span><input type="number" step="0.01" min="0" name="valor_bruto" value="${comissaoNumberInput(item.valor_bruto)}" oninput="comissaoUpdateCalculations('gross')"></label>
+                <label><span>Desconto R$</span><input type="number" step="0.01" min="0" name="desconto_valor" value="${comissaoNumberInput(item.desconto_valor)}" oninput="comissaoUpdateCalculations('discountValue')"></label>
+                <label><span>Desconto %</span><input type="number" step="0.01" min="0" name="desconto_percentual" value="${comissaoNumberInput(item.desconto_percentual)}" oninput="comissaoUpdateCalculations('discountPercent')"></label>
+                <label><span>Valor final</span><input type="number" step="0.01" name="valor_final" value="${comissaoNumberInput(item.valor_final)}" readonly></label>
+
+                <label><span>Forma de pagamento</span><select name="forma_pagamento" onchange="handleComissaoPaymentChange()">
+                    ${COMMISSION_PAYMENT_METHODS.map(method => `<option value="${quoteEscape(method)}" ${method === item.forma_pagamento ? 'selected' : ''}>${quoteEscape(method)}</option>`).join('')}
+                </select></label>
+                <label><span>Parcelas</span><input type="number" min="1" step="1" name="parcelas" value="${quoteEscape(item.parcelas || 1)}"></label>
+                <label><span>Taxa %</span><input type="number" step="0.01" min="0" name="taxa_percentual" value="${comissaoNumberInput(item.taxa_percentual)}" oninput="comissaoUpdateCalculations('tax')"></label>
+                <label><span>Valor da taxa</span><input type="number" step="0.01" name="valor_taxa" value="${comissaoNumberInput(item.valor_taxa)}" readonly></label>
+
+                <label><span>Base da comissão</span><input type="number" step="0.01" name="base_comissao" value="${comissaoNumberInput(item.base_comissao)}" readonly></label>
+                <label><span>Comissão %</span><input type="number" step="0.01" min="0" name="percentual_comissao" value="${comissaoNumberInput(item.percentual_comissao || 10)}" oninput="comissaoUpdateCalculations('commission')"></label>
+                <label><span>Valor da comissão</span><input type="number" step="0.01" name="valor_comissao" value="${comissaoNumberInput(item.valor_comissao)}" readonly></label>
+                <label><span>Status</span><select name="status">
+                    ${COMMISSION_STATUSES.map(status => `<option value="${quoteEscape(status)}" ${status === item.status ? 'selected' : ''}>${quoteEscape(status)}</option>`).join('')}
+                </select></label>
+
+                <label class="wide"><span>Observação</span><textarea name="observacao" rows="3" placeholder="Observações internas">${quoteEscape(item.observacao)}</textarea></label>
+
+                <div class="commission-form-actions">
+                    <button type="button" class="ghost" onclick="renderComissoesScreen(null, false)">Limpar</button>
+                    <button type="submit">Salvar comissão</button>
+                </div>
+            </form>
+        </section>
+    `;
+}
+
+function renderComissoesHistory() {
+    const rows = (commissionsState.items || []).map(item => `
+        <button type="button" class="commission-history-row" onclick="renderComissoesScreen('${quoteInlineArg(item.id_interno)}', false)">
+            <span><small>Data</small><strong>${quoteDateDisplay(item.data_venda)}</strong></span>
+            <span><small>Produto</small><strong>${quoteEscape(item.produto_nome || '-')}</strong></span>
+            <span><small>Cliente</small><strong>${quoteEscape(item.cliente || '-')}</strong></span>
+            <span><small>Valor final</small><strong>${comissaoMoney(item.valor_final)}</strong></span>
+            <span><small>Pagamento</small><strong>${quoteEscape(item.forma_pagamento || '-')} ${Number(item.parcelas) > 1 ? `${item.parcelas}x` : ''}</strong></span>
+            <span><small>Taxa</small><strong>${comissaoMoney(item.valor_taxa)}</strong></span>
+            <span><small>Comissão</small><strong>${comissaoMoney(item.valor_comissao)}</strong></span>
+            <span>${renderComissaoStatusBadge(item.status)}</span>
+        </button>
+    `).join('');
+
+    return `
+        <section class="commission-panel commission-history-panel">
+            <div class="commission-panel-title">
+                <span class="material-symbols-rounded">receipt_long</span>
+                <h2>Histórico de comissões</h2>
+            </div>
+            <div class="commission-history-head">
+                <span>Data</span><span>Produto</span><span>Cliente</span><span>Valor final</span><span>Pagamento</span><span>Taxa</span><span>Comissão</span><span>Status</span>
+            </div>
+            <div class="commission-history-list">
+                ${rows || `
+                    <div class="commission-empty">
+                        <span class="material-symbols-rounded">percent</span>
+                        <strong>Nenhuma comissão lançada</strong>
+                        <small>Use o formulário para registrar uma venda manual sem movimentar estoque.</small>
+                    </div>
+                `}
+            </div>
+        </section>
+    `;
+}
+
+function applyComissaoProduct(value) {
+    const form = document.getElementById('commission-form');
+    if (!form) return;
+    const product = findComissaoProduct(value);
+    if (!product) {
+        form.elements.produto_id.value = '';
+        form.elements.produto_codigo.value = '';
+        return;
+    }
+    const code = product.id_interno || product.col_A || product.ean || product.sku || '';
+    const desc = cleanProductSearchText(product.descricao_completa || product.col_C || product.descricao || value);
+    form.elements.produto_id.value = product.id_interno || product.col_A || '';
+    form.elements.produto_codigo.value = code;
+    form.elements.produto_nome.value = desc;
+}
+
+function handleComissaoPaymentChange() {
+    const form = document.getElementById('commission-form');
+    if (!form) return;
+    const method = form.elements.forma_pagamento.value;
+    if (method === 'PIX' || method === 'Dinheiro') {
+        form.elements.taxa_percentual.value = '0.00';
+    }
+    comissaoUpdateCalculations('payment');
+}
+
+function comissaoUpdateCalculations(source = '') {
+    const form = document.getElementById('commission-form');
+    if (!form) return;
+
+    const valorBruto = Math.max(0, comissaoParseNumber(form.elements.valor_bruto.value));
+    let descontoValor = Math.max(0, comissaoParseNumber(form.elements.desconto_valor.value));
+    let descontoPercentual = Math.max(0, comissaoParseNumber(form.elements.desconto_percentual.value));
+
+    if (source === 'discountPercent') {
+        descontoValor = valorBruto * descontoPercentual / 100;
+        form.elements.desconto_valor.value = comissaoNumberInput(descontoValor);
+    } else if (source === 'discountValue' || source === 'gross') {
+        descontoPercentual = valorBruto > 0 ? descontoValor / valorBruto * 100 : 0;
+        form.elements.desconto_percentual.value = comissaoNumberInput(descontoPercentual);
+    }
+
+    const valorFinal = Math.max(0, valorBruto - descontoValor);
+    const taxaPercentual = Math.max(0, comissaoParseNumber(form.elements.taxa_percentual.value));
+    const valorTaxa = valorFinal * taxaPercentual / 100;
+    const baseComissao = Math.max(0, valorFinal - valorTaxa);
+    const percentualComissao = Math.max(0, comissaoParseNumber(form.elements.percentual_comissao.value || 10));
+    const valorComissao = baseComissao * percentualComissao / 100;
+
+    form.elements.valor_final.value = comissaoNumberInput(valorFinal);
+    form.elements.valor_taxa.value = comissaoNumberInput(valorTaxa);
+    form.elements.base_comissao.value = comissaoNumberInput(baseComissao);
+    form.elements.valor_comissao.value = comissaoNumberInput(valorComissao);
+}
+
+async function submitComissaoVenda(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    comissaoUpdateCalculations();
+
+    const data = Object.fromEntries(new FormData(form).entries());
+    const normalized = normalizeComissao(data);
+
+    if (!normalized.produto_nome) {
+        showToast('Informe o produto da venda.', 'error');
+        form.elements.produto_nome.focus();
+        return;
+    }
+
+    await saveComissaoVenda(normalized);
+    showToast('Comissão salva sem movimentar estoque.');
+    await renderComissoesScreen(null, false);
+}
+
+const REPOSICAO_STORAGE_KEY = 'dyReposicoes';
+const REPOSICAO_DRAFT_KEY = 'dyReposicaoDraft';
+const REPOSICAO_STATUSES = ['Rascunho', 'Aguardando postagem', 'Postado', 'Enviado ao cliente', 'Cancelado'];
+
+let reposicaoState = {
+    filter: 'Todos',
+    search: '',
+    activeId: null
+};
+let reposicaoSearchTimer = null;
+
+function quickActionReposicao() {
+    toggleQuickActions();
+    renderReposicaoList();
+}
+
+function handleReposicaoSearchInput(value) {
+    reposicaoState.search = value;
+    clearTimeout(reposicaoSearchTimer);
+    reposicaoSearchTimer = setTimeout(renderReposicaoList, 220);
+}
+
+function reposicaoEscape(value) {
+    return quoteEscape(value);
+}
+
+function reposicaoInlineArg(value) {
+    return quoteInlineArg(value);
+}
+
+function getReposicoes() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(REPOSICAO_STORAGE_KEY) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        console.warn('[Reposicao] Falha ao ler reposicoes locais', error);
+        return [];
+    }
+}
+
+function saveReposicoes(reposicoes) {
+    localStorage.setItem(REPOSICAO_STORAGE_KEY, JSON.stringify(Array.isArray(reposicoes) ? reposicoes : []));
+}
+
+function getReposicaoDraft() {
+    try {
+        return JSON.parse(localStorage.getItem(REPOSICAO_DRAFT_KEY) || 'null');
+    } catch {
+        return null;
+    }
+}
+
+function clearReposicaoDraft() {
+    localStorage.removeItem(REPOSICAO_DRAFT_KEY);
+}
+
+function generateReposicaoId() {
+    const year = new Date().getFullYear();
+    const reposicoes = getReposicoes();
+    const maxSeq = reposicoes.reduce((max, item) => {
+        const match = String(item.id_reposicao || '').match(/^REP-(\d{4})-(\d{6})$/);
+        if (!match || Number(match[1]) !== year) return max;
+        return Math.max(max, Number(match[2]) || 0);
+    }, 0);
+    return `REP-${year}-${String(maxSeq + 1).padStart(6, '0')}`;
+}
+
+function createEmptyReposicao() {
+    const now = getDataHoraBrasil();
+    const today = now.slice(0, 10);
+    const user = localStorage.getItem('currentUser') || '';
+    return {
+        id: `reposicao-${Date.now()}`,
+        id_reposicao: generateReposicaoId(),
+        data_inclusao: today,
+        canal: '',
+        motivo: '',
+        cliente_nome: '',
+        pedido: '',
+        cpf_cnpj: '',
+        telefone: '',
+        email: '',
+        cep: '',
+        rua: '',
+        numero: '',
+        complemento: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+        referencia: '',
+        endereco_completo: '',
+        tipo_envio: '',
+        transportadora: '',
+        codigo_rastreio: '',
+        data_execucao: '',
+        data_postagem: '',
+        data_envio_cliente: '',
+        status_postagem: 'Aguardando postagem',
+        status_envio_cliente: 'Pendente',
+        status_geral: 'Rascunho',
+        observacao_geral: '',
+        bling_id: '',
+        bling_status: '',
+        criado_por: user,
+        criado_em: now,
+        atualizado_em: now,
+        itens: [createEmptyReposicaoItem()]
+    };
+}
+
+function createEmptyReposicaoItem() {
+    return {
+        id: `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        quantidade: 1,
+        item: '',
+        modelo: '',
+        valor_declarado: '0,00',
+        observacao: ''
+    };
+}
+
+function normalizeReposicaoMoney(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '0,00';
+    const normalized = raw.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    const number = Number(normalized);
+    return (Number.isFinite(number) ? number : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function parseReposicaoMoney(value) {
+    const normalized = String(value ?? '0').replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : 0;
+}
+
+function getReposicaoAddressText(reposicao) {
+    const parts = [
+        reposicao.rua,
+        reposicao.numero ? `nº ${reposicao.numero}` : '',
+        reposicao.complemento,
+        reposicao.bairro,
+        [reposicao.cidade, reposicao.estado].filter(Boolean).join(' - '),
+        reposicao.cep ? `CEP ${reposicao.cep}` : ''
+    ].filter(Boolean);
+    return parts.join(', ');
+}
+
+function readReposicaoForm() {
+    const form = document.getElementById('reposicao-form');
+    if (!form) return null;
+    const data = new FormData(form);
+    const base = {
+        id: data.get('id') || `reposicao-${Date.now()}`,
+        id_reposicao: data.get('id_reposicao') || generateReposicaoId(),
+        data_inclusao: data.get('data_inclusao') || getDataBrasilISO(),
+        canal: data.get('canal') || '',
+        motivo: data.get('motivo') || '',
+        cliente_nome: data.get('cliente_nome') || '',
+        pedido: data.get('pedido') || '',
+        cpf_cnpj: data.get('cpf_cnpj') || '',
+        telefone: data.get('telefone') || '',
+        email: data.get('email') || '',
+        cep: data.get('cep') || '',
+        rua: data.get('rua') || '',
+        numero: data.get('numero') || '',
+        complemento: data.get('complemento') || '',
+        bairro: data.get('bairro') || '',
+        cidade: data.get('cidade') || '',
+        estado: data.get('estado') || '',
+        referencia: data.get('referencia') || '',
+        tipo_envio: data.get('tipo_envio') || '',
+        transportadora: data.get('transportadora') || '',
+        codigo_rastreio: data.get('codigo_rastreio') || '',
+        data_execucao: data.get('data_execucao') || '',
+        data_postagem: data.get('data_postagem') || '',
+        data_envio_cliente: data.get('data_envio_cliente') || '',
+        status_postagem: data.get('status_postagem') || 'Aguardando postagem',
+        status_envio_cliente: data.get('status_envio_cliente') || 'Pendente',
+        status_geral: data.get('status_geral') || 'Rascunho',
+        observacao_geral: data.get('observacao_geral') || '',
+        bling_id: data.get('bling_id') || '',
+        bling_status: data.get('bling_status') || '',
+        criado_por: data.get('criado_por') || localStorage.getItem('currentUser') || '',
+        criado_em: data.get('criado_em') || getDataHoraBrasil(),
+        atualizado_em: getDataHoraBrasil()
+    };
+    base.endereco_completo = data.get('endereco_completo') || getReposicaoAddressText(base);
+    base.itens = Array.from(form.querySelectorAll('.reposicao-item-row')).map((row) => ({
+        id: row.dataset.itemId || `item-${Date.now()}`,
+        quantidade: Number(row.querySelector('[name="item_quantidade"]')?.value || 1),
+        item: row.querySelector('[name="item_nome"]')?.value || '',
+        modelo: row.querySelector('[name="item_modelo"]')?.value || '',
+        valor_declarado: normalizeReposicaoMoney(row.querySelector('[name="item_valor"]')?.value || '0'),
+        observacao: row.querySelector('[name="item_observacao"]')?.value || ''
+    })).filter(item => item.item || item.modelo || item.observacao || item.quantidade);
+    if (base.itens.length === 0) base.itens = [createEmptyReposicaoItem()];
+    return base;
+}
+
+function persistReposicaoFormDraft() {
+    const reposicao = readReposicaoForm();
+    if (!reposicao) return;
+    reposicao.endereco_completo = getReposicaoAddressText(reposicao);
+    localStorage.setItem(REPOSICAO_DRAFT_KEY, JSON.stringify(reposicao));
+    const address = document.getElementById('reposicao-endereco-completo');
+    if (address) address.value = reposicao.endereco_completo;
+}
+
+function saveReposicaoFromForm({ silent = false } = {}) {
+    const reposicao = readReposicaoForm();
+    if (!reposicao) return null;
+    reposicao.status_geral = reposicao.status_geral || 'Rascunho';
+    reposicao.endereco_completo = getReposicaoAddressText(reposicao);
+    const reposicoes = getReposicoes();
+    const index = reposicoes.findIndex(item => item.id === reposicao.id || item.id_reposicao === reposicao.id_reposicao);
+    if (index >= 0) reposicoes[index] = { ...reposicoes[index], ...reposicao, atualizado_em: getDataHoraBrasil() };
+    else reposicoes.unshift(reposicao);
+    saveReposicoes(reposicoes);
+    clearReposicaoDraft();
+    reposicaoState.activeId = reposicao.id;
+    if (!silent) showToast('Rascunho de reposição salvo.');
+    return reposicao;
+}
+
+function getFilteredReposicoes() {
+    const search = String(reposicaoState.search || '').trim().toLowerCase();
+    return getReposicoes()
+        .filter(item => reposicaoState.filter === 'Todos' || item.status_geral === reposicaoState.filter)
+        .filter(item => {
+            if (!search) return true;
+            const haystack = [
+                item.id_reposicao, item.cliente_nome, item.pedido, item.cpf_cnpj,
+                item.codigo_rastreio, item.canal, ...(item.itens || []).map(prod => prod.item)
+            ].join(' ').toLowerCase();
+            return haystack.includes(search);
+        })
+        .sort((a, b) => String(b.data_inclusao || '').localeCompare(String(a.data_inclusao || '')));
+}
+
+function renderReposicaoList() {
+    const draft = getReposicaoDraft();
+    const reposicoes = getFilteredReposicoes();
+    const totalValor = reposicoes.reduce((sum, reposicao) => sum + (reposicao.itens || []).reduce((acc, item) => acc + (Number(item.quantidade || 0) * parseReposicaoMoney(item.valor_declarado)), 0), 0);
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in reposicao-screen">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+            <main class="reposicao-shell">
+                <header class="reposicao-hero">
+                    <div>
+                        <span class="reposicao-kicker">Modo Rápido</span>
+                        <h1>Reposição</h1>
+                        <p>Controle rápido para envio, declaração de conteúdo e etiqueta</p>
+                    </div>
+                    <button class="reposicao-primary-btn" type="button" onclick="openReposicaoForm()">
+                        <span class="material-symbols-rounded">add</span>
+                        Nova reposição
+                    </button>
+                </header>
+                ${draft ? `
+                    <section class="reposicao-draft-banner">
+                        <span class="material-symbols-rounded">edit_note</span>
+                        <div>
+                            <strong>Rascunho local encontrado</strong>
+                            <small>${reposicaoEscape(draft.cliente_nome || draft.id_reposicao || 'Reposição em edição')}</small>
+                        </div>
+                        <button type="button" onclick="openReposicaoForm('__draft__')">Continuar</button>
+                        <button type="button" class="ghost" onclick="clearReposicaoDraft(); renderReposicaoList();">Descartar</button>
+                    </section>
+                ` : ''}
+                <section class="reposicao-summary-grid">
+                    <article><span class="material-symbols-rounded">inventory_2</span><small>Total</small><strong>${reposicoes.length}</strong></article>
+                    <article><span class="material-symbols-rounded">draft</span><small>Rascunhos</small><strong>${reposicoes.filter(item => item.status_geral === 'Rascunho').length}</strong></article>
+                    <article><span class="material-symbols-rounded">local_shipping</span><small>Postados</small><strong>${reposicoes.filter(item => item.status_geral === 'Postado').length}</strong></article>
+                    <article><span class="material-symbols-rounded">payments</span><small>Valor declarado</small><strong>${quoteMoney(totalValor)}</strong></article>
+                </section>
+                <section class="reposicao-filters">
+                    <div class="reposicao-search">
+                        <span class="material-symbols-rounded">search</span>
+                        <input type="search" placeholder="Buscar por cliente, pedido, CPF/CNPJ, rastreio ou produto" value="${reposicaoEscape(reposicaoState.search)}" oninput="handleReposicaoSearchInput(this.value)">
+                    </div>
+                    <div class="reposicao-status-tabs">
+                        ${['Todos', ...REPOSICAO_STATUSES].map(status => `
+                            <button type="button" class="${reposicaoState.filter === status ? 'active' : ''}" onclick="reposicaoState.filter='${status}'; renderReposicaoList();">${status}</button>
+                        `).join('')}
+                    </div>
+                </section>
+                <section class="reposicao-list">
+                    ${reposicoes.length ? reposicoes.map(renderReposicaoCard).join('') : `
+                        <div class="reposicao-empty">
+                            <span class="material-symbols-rounded">package_2</span>
+                            <strong>Nenhuma reposição encontrada</strong>
+                            <p>Crie uma nova reposição ou ajuste os filtros.</p>
+                        </div>
+                    `}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+function renderReposicaoCard(reposicao) {
+    const itemCount = (reposicao.itens || []).reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+    return `
+        <article class="reposicao-card" onclick="openReposicaoForm('${reposicaoInlineArg(reposicao.id)}')">
+            <div class="reposicao-card-main">
+                <span class="reposicao-id">${reposicaoEscape(reposicao.id_reposicao)}</span>
+                <strong>${reposicaoEscape(reposicao.cliente_nome || 'Cliente não informado')}</strong>
+                <small>${reposicaoEscape(reposicao.canal || 'Canal não informado')} ${reposicao.pedido ? `• Pedido ${reposicaoEscape(reposicao.pedido)}` : ''}</small>
+            </div>
+            <div class="reposicao-card-meta">
+                <span>${itemCount} item(ns)</span>
+                <span>${reposicaoEscape(reposicao.data_inclusao || '-')}</span>
+                ${reposicao.codigo_rastreio ? `<span class="tracking">${reposicaoEscape(reposicao.codigo_rastreio)}</span>` : ''}
+            </div>
+            <span class="reposicao-status ${String(reposicao.status_geral || 'Rascunho').toLowerCase().replace(/\s+/g, '-')}">${reposicaoEscape(reposicao.status_geral || 'Rascunho')}</span>
+        </article>
+    `;
+}
+
+function openReposicaoForm(id = null) {
+    const reposicoes = getReposicoes();
+    const reposicao = id === '__draft__'
+        ? getReposicaoDraft()
+        : id
+            ? reposicoes.find(item => item.id === id) || getReposicaoDraft()
+            : getReposicaoDraft() || createEmptyReposicao();
+    renderReposicaoForm(reposicao || createEmptyReposicao());
+}
+
+function renderReposicaoForm(reposicao) {
+    const enderecoCompleto = reposicao.endereco_completo || getReposicaoAddressText(reposicao);
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in reposicao-screen">
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderReposicaoList()')}
+            <main class="reposicao-shell reposicao-form-shell">
+                <header class="reposicao-hero compact">
+                    <div>
+                        <span class="reposicao-kicker">${reposicaoEscape(reposicao.id_reposicao)}</span>
+                        <h1>Nova reposição</h1>
+                        <p>Preencha os dados para salvar rascunho, gerar declaração ou preparar etiqueta.</p>
+                    </div>
+                    <span class="reposicao-status ${String(reposicao.status_geral || 'Rascunho').toLowerCase().replace(/\s+/g, '-')}">${reposicaoEscape(reposicao.status_geral || 'Rascunho')}</span>
+                </header>
+                <form id="reposicao-form" class="reposicao-form" oninput="persistReposicaoFormDraft()" onchange="persistReposicaoFormDraft()">
+                    <input type="hidden" name="id" value="${reposicaoEscape(reposicao.id)}">
+                    <input type="hidden" name="id_reposicao" value="${reposicaoEscape(reposicao.id_reposicao)}">
+                    <input type="hidden" name="criado_por" value="${reposicaoEscape(reposicao.criado_por)}">
+                    <input type="hidden" name="criado_em" value="${reposicaoEscape(reposicao.criado_em)}">
+                    ${renderReposicaoMainFields(reposicao)}
+                    ${renderReposicaoAddressFields(reposicao, enderecoCompleto)}
+                    ${renderReposicaoItemsSection(reposicao.itens || [])}
+                    ${renderReposicaoShippingFields(reposicao)}
+                    <footer class="reposicao-actions">
+                        <button type="button" class="secondary" onclick="saveReposicaoFromForm(); renderReposicaoList();">Salvar rascunho</button>
+                        <button type="button" onclick="generateReposicaoDeclaration()">Gerar declaração de conteúdo</button>
+                        <button type="button" onclick="sendReposicaoToBling()">Enviar para Bling</button>
+                        <button type="button" onclick="updateReposicaoStatus('Postado')">Marcar como postado</button>
+                        <button type="button" onclick="updateReposicaoStatus('Enviado ao cliente')">Enviado ao cliente</button>
+                        <button type="button" class="danger" onclick="updateReposicaoStatus('Cancelado')">Cancelar reposição</button>
+                    </footer>
+                </form>
+            </main>
+        </div>
+    `;
+    persistReposicaoFormDraft();
+}
+
+function renderReposicaoMainFields(reposicao) {
+    return `
+        <section class="reposicao-section">
+            <h2>Dados principais</h2>
+            <div class="reposicao-grid">
+                ${reposicaoField('Data inclusão', 'data_inclusao', reposicao.data_inclusao, 'date')}
+                ${reposicaoField('Canal', 'canal', reposicao.canal)}
+                ${reposicaoField('Motivo', 'motivo', reposicao.motivo)}
+                ${reposicaoField('Nome do cliente', 'cliente_nome', reposicao.cliente_nome)}
+                ${reposicaoField('Pedido', 'pedido', reposicao.pedido)}
+                ${reposicaoField('CPF/CNPJ', 'cpf_cnpj', reposicao.cpf_cnpj)}
+                ${reposicaoField('Telefone/WhatsApp', 'telefone', reposicao.telefone)}
+                ${reposicaoField('E-mail opcional', 'email', reposicao.email, 'email')}
+                ${reposicaoSelect('Status geral', 'status_geral', reposicao.status_geral || 'Rascunho', REPOSICAO_STATUSES)}
+            </div>
+        </section>
+    `;
+}
+
+function renderReposicaoAddressFields(reposicao, enderecoCompleto) {
+    return `
+        <section class="reposicao-section">
+            <h2>Endereço</h2>
+            <div class="reposicao-grid">
+                ${reposicaoField('CEP', 'cep', reposicao.cep)}
+                ${reposicaoField('Rua', 'rua', reposicao.rua)}
+                ${reposicaoField('Número', 'numero', reposicao.numero)}
+                ${reposicaoField('Complemento', 'complemento', reposicao.complemento)}
+                ${reposicaoField('Bairro', 'bairro', reposicao.bairro)}
+                ${reposicaoField('Cidade', 'cidade', reposicao.cidade)}
+                ${reposicaoField('Estado', 'estado', reposicao.estado)}
+                ${reposicaoField('Referência', 'referencia', reposicao.referencia)}
+                <label class="wide"><span>Endereço completo</span><textarea id="reposicao-endereco-completo" name="endereco_completo" readonly>${reposicaoEscape(enderecoCompleto)}</textarea></label>
+            </div>
+        </section>
+    `;
+}
+
+function renderReposicaoItemsSection(items) {
+    return `
+        <section class="reposicao-section">
+            <div class="reposicao-section-title">
+                <h2>Itens da reposição</h2>
+                <button type="button" onclick="addReposicaoItem()">+ Adicionar item</button>
+            </div>
+            <div id="reposicao-items" class="reposicao-items">
+                ${(items.length ? items : [createEmptyReposicaoItem()]).map(renderReposicaoItemRow).join('')}
+            </div>
+        </section>
+    `;
+}
+
+function renderReposicaoItemRow(item) {
+    return `
+        <div class="reposicao-item-row" data-item-id="${reposicaoEscape(item.id || createEmptyReposicaoItem().id)}">
+            <label><span>Qtd</span><input name="item_quantidade" type="number" min="1" step="1" value="${reposicaoEscape(item.quantidade || 1)}"></label>
+            <label><span>Produto/item</span><input name="item_nome" value="${reposicaoEscape(item.item || '')}"></label>
+            <label><span>Modelo/variação</span><input name="item_modelo" value="${reposicaoEscape(item.modelo || '')}"></label>
+            <label><span>Valor declarado</span><input name="item_valor" inputmode="decimal" value="${reposicaoEscape(normalizeReposicaoMoney(item.valor_declarado || '0'))}" onblur="this.value=normalizeReposicaoMoney(this.value); persistReposicaoFormDraft();"></label>
+            <label><span>Observação</span><input name="item_observacao" value="${reposicaoEscape(item.observacao || '')}"></label>
+            <button type="button" class="reposicao-item-remove" onclick="removeReposicaoItem(this)" aria-label="Remover item">
+                <span class="material-symbols-rounded">delete</span>
+            </button>
+        </div>
+    `;
+}
+
+function renderReposicaoShippingFields(reposicao) {
+    return `
+        <section class="reposicao-section">
+            <h2>Envio</h2>
+            <div class="reposicao-grid">
+                ${reposicaoField('Tipo de envio', 'tipo_envio', reposicao.tipo_envio)}
+                ${reposicaoField('Transportadora', 'transportadora', reposicao.transportadora)}
+                ${reposicaoField('Código de rastreio', 'codigo_rastreio', reposicao.codigo_rastreio)}
+                ${reposicaoField('Data execução', 'data_execucao', reposicao.data_execucao, 'date')}
+                ${reposicaoField('Data postagem', 'data_postagem', reposicao.data_postagem, 'date')}
+                ${reposicaoField('Data envio ao cliente', 'data_envio_cliente', reposicao.data_envio_cliente, 'date')}
+                ${reposicaoSelect('Status postagem', 'status_postagem', reposicao.status_postagem || 'Aguardando postagem', ['Aguardando postagem', 'Postado', 'Cancelado'])}
+                ${reposicaoSelect('Status envio cliente', 'status_envio_cliente', reposicao.status_envio_cliente || 'Pendente', ['Pendente', 'Enviado ao cliente', 'Cancelado'])}
+                ${reposicaoField('Bling ID', 'bling_id', reposicao.bling_id)}
+                ${reposicaoField('Bling status', 'bling_status', reposicao.bling_status)}
+                <label class="wide"><span>Observação geral</span><textarea name="observacao_geral">${reposicaoEscape(reposicao.observacao_geral || '')}</textarea></label>
+            </div>
+        </section>
+    `;
+}
+
+function reposicaoField(label, name, value = '', type = 'text') {
+    return `<label><span>${label}</span><input type="${type}" name="${name}" value="${reposicaoEscape(value)}"></label>`;
+}
+
+function reposicaoSelect(label, name, value, options) {
+    return `
+        <label><span>${label}</span><select name="${name}">
+            ${options.map(option => `<option value="${reposicaoEscape(option)}" ${option === value ? 'selected' : ''}>${reposicaoEscape(option)}</option>`).join('')}
+        </select></label>
+    `;
+}
+
+function addReposicaoItem() {
+    const list = document.getElementById('reposicao-items');
+    if (!list) return;
+    list.insertAdjacentHTML('beforeend', renderReposicaoItemRow(createEmptyReposicaoItem()));
+    persistReposicaoFormDraft();
+}
+
+function removeReposicaoItem(button) {
+    const row = button?.closest('.reposicao-item-row');
+    const list = document.getElementById('reposicao-items');
+    if (!row || !list) return;
+    if (list.querySelectorAll('.reposicao-item-row').length <= 1) {
+        row.querySelectorAll('input').forEach(input => input.value = input.name === 'item_quantidade' ? '1' : '');
+    } else {
+        row.remove();
+    }
+    persistReposicaoFormDraft();
+}
+
+function updateReposicaoStatus(status) {
+    const reposicao = saveReposicaoFromForm({ silent: true });
+    if (!reposicao) return;
+    reposicao.status_geral = status;
+    if (status === 'Postado') {
+        reposicao.status_postagem = 'Postado';
+        reposicao.data_postagem = reposicao.data_postagem || getDataBrasilISO();
+    }
+    if (status === 'Enviado ao cliente') {
+        reposicao.status_envio_cliente = 'Enviado ao cliente';
+        reposicao.data_envio_cliente = reposicao.data_envio_cliente || getDataBrasilISO();
+    }
+    const reposicoes = getReposicoes();
+    const index = reposicoes.findIndex(item => item.id === reposicao.id);
+    if (index >= 0) reposicoes[index] = reposicao;
+    saveReposicoes(reposicoes);
+    clearReposicaoDraft();
+    showToast(`Reposição marcada como ${status}.`);
+    renderReposicaoList();
+}
+
+function generateReposicaoDeclaration() {
+    const reposicao = saveReposicaoFromForm({ silent: true });
+    if (!reposicao) return;
+    const total = (reposicao.itens || []).reduce((sum, item) => sum + Number(item.quantidade || 0) * parseReposicaoMoney(item.valor_declarado), 0);
+    const rows = (reposicao.itens || []).map(item => `
+        <tr>
+            <td>${reposicaoEscape(item.quantidade)}</td>
+            <td>${reposicaoEscape(item.item)}</td>
+            <td>${reposicaoEscape(item.modelo)}</td>
+            <td>R$ ${reposicaoEscape(normalizeReposicaoMoney(item.valor_declarado))}</td>
+            <td>${reposicaoEscape(item.observacao)}</td>
+        </tr>
+    `).join('');
+    const html = `
+        <html><head><title>Declaração ${reposicaoEscape(reposicao.id_reposicao)}</title>
+        <style>
+            body{font-family:Arial,sans-serif;color:#111827;padding:32px;line-height:1.35}
+            h1{font-size:22px;text-transform:uppercase} h2{font-size:15px;margin-top:24px}
+            table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #d1d5db;padding:8px;font-size:12px;text-align:left}
+            .box{border:1px solid #d1d5db;border-radius:12px;padding:14px;margin-top:10px}.total{text-align:right;font-weight:700;margin-top:14px}
+        </style></head><body>
+            <h1>Declaração de Conteúdo</h1>
+            <p><strong>ID:</strong> ${reposicaoEscape(reposicao.id_reposicao)}</p>
+            <div class="box"><h2>Remetente</h2><p><strong>DY Auto Parts</strong><br>Remetente padrão da empresa</p></div>
+            <div class="box"><h2>Destinatário</h2><p><strong>${reposicaoEscape(reposicao.cliente_nome)}</strong><br>${reposicaoEscape(reposicao.cpf_cnpj)}<br>${reposicaoEscape(reposicao.endereco_completo || getReposicaoAddressText(reposicao))}</p></div>
+            <h2>Itens</h2><table><thead><tr><th>Qtd</th><th>Item</th><th>Modelo</th><th>Valor declarado</th><th>Observação</th></tr></thead><tbody>${rows}</tbody></table>
+            <p class="total">Valor total declarado: R$ ${reposicaoEscape(normalizeReposicaoMoney(total))}</p>
+            <div class="box"><h2>Observações</h2><p>${reposicaoEscape(reposicao.observacao_geral || '-')}</p></div>
+        </body></html>
+    `;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showToast('Permita pop-ups para gerar a declaração.');
+        return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    showToast('Declaração de conteúdo gerada.');
+}
+
+async function criarReposicaoNoBling(reposicao) {
+    // Integração real deve passar por backend/serverless para proteger tokens do Bling.
+    console.log('[Reposicao][Bling mock]', reposicao);
+    return {
+        success: true,
+        bling_id: reposicao.bling_id || `BLING-MOCK-${Date.now()}`,
+        status: 'mockado'
+    };
+}
+
+async function sendReposicaoToBling() {
+    const reposicao = saveReposicaoFromForm({ silent: true });
+    if (!reposicao) return;
+    const result = await criarReposicaoNoBling(reposicao);
+    if (result?.success) {
+        reposicao.bling_id = result.bling_id;
+        reposicao.bling_status = result.status;
+        const reposicoes = getReposicoes();
+        const index = reposicoes.findIndex(item => item.id === reposicao.id);
+        if (index >= 0) reposicoes[index] = reposicao;
+        saveReposicoes(reposicoes);
+        clearReposicaoDraft();
+        showToast('Reposição preparada para Bling.');
+        renderReposicaoForm(reposicao);
+    }
+}
+
 function quoteEscape(value) {
     if (typeof escapeKitAttribute === 'function') return escapeKitAttribute(value);
     return String(value ?? '')
@@ -14722,14 +16021,14 @@ function quoteMoney(value) {
 function quoteDateInput(daysFromNow = 0) {
     const date = new Date();
     date.setDate(date.getDate() + daysFromNow);
-    return date.toISOString().slice(0, 10);
+    return getDataBrasilISO(date);
 }
 
 function quoteDateDisplay(value) {
     if (!value) return '-';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleDateString('pt-BR');
+    return formatDateBR(date);
 }
 
 function getClientQuotesLocal() {
@@ -14774,7 +16073,7 @@ function normalizeQuote(row = {}) {
     return {
         id_interno: String(row.id_interno || row.id || `quote_${Date.now()}`),
         quote_number: String(row.quote_number || ''),
-        created_at: row.created_at || new Date().toISOString(),
+        created_at: row.created_at || getDataHoraBrasil(),
         expires_at: row.expires_at || quoteDateInput(7),
         status: QUOTE_STATUSES.includes(row.status) ? row.status : 'Rascunho',
         company_id: row.company_id || DEFAULT_QUOTE_COMPANY.id,
@@ -14939,7 +16238,7 @@ async function renderClientQuotesList(push = true) {
 }
 
 function createBlankQuote() {
-    const now = new Date().toISOString();
+    const now = getDataHoraBrasil();
     return normalizeQuote({
         id_interno: `quote_${Date.now()}`,
         quote_number: buildNextQuoteNumber(),
@@ -15689,16 +16988,13 @@ function getExpandedLabelItems(includeFill = true) {
 
 function getLabelLoteDefaultName() {
     const now = new Date();
-    const date = now.toLocaleDateString('pt-BR');
-    const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const date = formatDateBR(now);
+    const time = formatTimeBR(now);
     return `Etiquetas ${date} ${time}`;
 }
 
 function formatLabelDateTime(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return `${date.toLocaleDateString('pt-BR')} ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    return formatDateTimeBR(value);
 }
 
 function getLabelProductByInternalId(idInterno) {
@@ -16440,7 +17736,7 @@ async function saveCurrentEtiquetaLote({ silent = false } = {}) {
         labelGeneratorState.nomeLote = saved.nome_lote || payload.lote.nome_lote;
         labelGeneratorState.observacoes = saved.observacoes || payload.lote.observacoes || '';
         labelGeneratorState.status = saved.status || 'rascunho';
-        labelGeneratorState.lastSavedAt = saved.atualizado_em || new Date().toISOString();
+        labelGeneratorState.lastSavedAt = saved.atualizado_em || getDataHoraBrasil();
         saveLabelDraft();
 
         if (!silent) {
@@ -16779,7 +18075,7 @@ async function printLabelSheet() {
         try {
             const printed = await DataClient.marcarEtiquetaLoteComoImpresso(labelGeneratorState.activeLoteId);
             labelGeneratorState.status = printed?.status || 'impresso';
-            labelGeneratorState.lastSavedAt = printed?.atualizado_em || new Date().toISOString();
+            labelGeneratorState.lastSavedAt = printed?.atualizado_em || getDataHoraBrasil();
             saveLabelDraft();
         } catch (error) {
             console.warn('[ETIQUETAS] nao foi possivel marcar lote como impresso:', error);
@@ -18122,7 +19418,7 @@ function saveEntradaNFXMLDraft() {
     if (!entradaNfXmlState?.chave_acesso || entradaNfXmlState.savedEntradaId) return;
     const draft = {
         ...entradaNfXmlState,
-        draftSavedAt: new Date().toISOString()
+        draftSavedAt: getDataHoraBrasil()
     };
     localStorage.setItem(ENTRADA_NF_XML_DRAFT_KEY, JSON.stringify(draft));
 }
@@ -18162,7 +19458,7 @@ function nfXmlDate(value) {
 function nfXmlFormatDate(value) {
     if (!value) return '-';
     const date = new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
-    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR');
+    return Number.isNaN(date.getTime()) ? value : formatDateBR(date);
 }
 
 function nfXmlFormatMoney(value) {
@@ -18348,7 +19644,7 @@ function createNFXmlParcelasFromDuplicatas(duplicatas = [], valorTotal = 0) {
             parcela: dup.parcela || String(index + 1).padStart(3, '0'),
             descricao: `Parcela ${dup.parcela || index + 1}`,
             valor: nfXmlMoney(dup.valor),
-            vencimento: dup.vencimento || new Date().toISOString().slice(0, 10),
+            vencimento: dup.vencimento || getDataBrasilISO(),
             forma_pagamento: 'boleto',
             observacoes: 'Parcela importada do XML',
             status: 'pendente',
@@ -18362,7 +19658,7 @@ function createNFXmlParcelasFromDuplicatas(duplicatas = [], valorTotal = 0) {
         parcela: '001',
         descricao: 'Parcela 001',
         valor: total,
-        vencimento: new Date().toISOString().slice(0, 10),
+        vencimento: getDataBrasilISO(),
         forma_pagamento: 'boleto',
         observacoes: '',
         status: 'pendente',
@@ -19138,7 +20434,7 @@ async function saveNFXmlFornecedorFromModal() {
         estado: read('uf').toUpperCase(),
         observacoes: read('observacoes'),
         status: 'ativo',
-        atualizado_em: new Date().toISOString()
+        atualizado_em: getDataHoraBrasil()
     };
 
     console.log('[ENTRADA_NF_XML] cadastrando fornecedor', payload);
@@ -19297,7 +20593,7 @@ function getNFXmlFinanceParcelas() {
             parcela: '001',
             descricao: `Pagamento à vista NF ${state.numero_nf || ''}`.trim(),
             valor: nfXmlMoney(state.totais?.valor_total),
-            vencimento: new Date().toISOString().slice(0, 10),
+            vencimento: getDataBrasilISO(),
             forma_pagamento: 'pix',
             observacoes: 'Pagamento à vista',
             status: 'pago',
@@ -19362,7 +20658,7 @@ function setNFXmlFinanceParcelCount(count) {
             parcela: String(index + 1).padStart(3, '0'),
             descricao: `Parcela ${String(index + 1).padStart(3, '0')}`,
             valor: index === qty - 1 ? nfXmlRoundMoney(total - (value * (qty - 1)), 2) : value,
-            vencimento: due.toISOString().slice(0, 10),
+            vencimento: getDataBrasilISO(due),
             forma_pagamento: 'boleto',
             observacoes: '',
             status: 'pendente',
@@ -19386,7 +20682,7 @@ function addNFXmlPagamentoEspecial() {
         parcela: String(next).padStart(3, '0'),
         descricao: `Parcela ${String(next).padStart(3, '0')}`,
         valor: 0,
-        vencimento: new Date().toISOString().slice(0, 10),
+        vencimento: getDataBrasilISO(),
         forma_pagamento: 'boleto',
         observacoes: '',
         status: 'pendente',
@@ -19418,7 +20714,7 @@ function addNFXmlLancamentoComplementar() {
         parcela: `COMP-${String(next).padStart(2, '0')}`,
         descricao: 'Lançamento complementar',
         valor: 0,
-        vencimento: new Date().toISOString().slice(0, 10),
+        vencimento: getDataBrasilISO(),
         forma_pagamento: 'boleto',
         observacoes: '',
         status: 'pendente',
@@ -19491,7 +20787,7 @@ function buildNFXmlFinancePayload(entradaId) {
     if (!state.afeta_financeiro) return [];
     if (!fin) return [];
 
-    const now = new Date().toISOString();
+    const now = getDataHoraBrasil();
     const base = {
         entrada_nf_id: entradaId,
         nf_id: entradaId,
@@ -19523,7 +20819,7 @@ function buildNFXmlFinancePayload(entradaId) {
             valor: nfXmlMoney(item.valor),
             status: pago ? 'pago' : 'pendente',
             status_vencimento: pago ? 'pago' : 'em_aberto',
-            data_pagamento: pago ? (item.data_pagamento || item.vencimento || new Date().toISOString().slice(0, 10)) : null,
+            data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
             forma_pagamento: item.forma_pagamento || null,
             observacoes: item.observacoes || null
         });
@@ -19544,7 +20840,7 @@ function buildNFXmlFinancePayload(entradaId) {
             valor: nfXmlMoney(item.valor),
             status: pago ? 'pago' : 'pendente',
             status_vencimento: pago ? 'pago' : 'em_aberto',
-            data_pagamento: pago ? (item.data_pagamento || item.vencimento || new Date().toISOString().slice(0, 10)) : null,
+            data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
             forma_pagamento: item.forma_pagamento || null,
             observacoes: item.observacoes || 'Lançamento complementar vinculado à NF'
         });
@@ -19946,7 +21242,7 @@ async function salvarEntradaNFXml() {
             cnpj_fornecedor: state.fornecedor.cnpj,
             fornecedor_nome: state.fornecedor.razao_social,
             data_emissao: state.data_emissao,
-            data_recebimento: new Date().toISOString().slice(0, 10),
+            data_recebimento: getDataBrasilISO(),
             valor_produtos: state.totais.valor_produtos,
             valor_total: state.totais.valor_total,
             valor_icms: state.totais.valor_icms,
@@ -19960,7 +21256,7 @@ async function salvarEntradaNFXml() {
             financeiro_lancado: false,
             origem: 'xml',
             xml_original: state.xmlText,
-            atualizado_em: new Date().toISOString()
+            atualizado_em: getDataHoraBrasil()
         };
 
         const { data: entrada, error: entradaError } = await client
@@ -20008,7 +21304,7 @@ async function salvarEntradaNFXml() {
             produto_id: state.tipo_lancamento === 'entrada_normal' ? (item.produto_id || null) : null,
             status_vinculo: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno ? 'vinculado' : 'pendente_vinculo') : 'nao_exigido',
             ean_divergente: !!item.ean_divergente,
-            atualizado_em: new Date().toISOString()
+            atualizado_em: getDataHoraBrasil()
         }));
 
         let { error: itensError } = await client.from('entradas_nf_itens').insert(itensPayload);
@@ -20026,7 +21322,7 @@ async function salvarEntradaNFXml() {
             if (contasError) throw contasError;
             state.financeiro.existentes = contasPayload;
             state.financeiro_lancado = true;
-            await client.from('entradas_nf').update({ financeiro_lancado: true, atualizado_em: new Date().toISOString() }).eq('id', entrada.id);
+            await client.from('entradas_nf').update({ financeiro_lancado: true, atualizado_em: getDataHoraBrasil() }).eq('id', entrada.id);
         }
 
         if (state.tipo_lancamento === 'entrada_normal') {
@@ -20073,7 +21369,7 @@ async function upsertNFXmlFornecedorProdutos() {
         ultima_compra_em: state.data_emissao,
         ean_divergente: !!item.ean_divergente,
         observacoes: item.match_source ? `Vínculo via ${item.match_source}` : null,
-        atualizado_em: new Date().toISOString()
+        atualizado_em: getDataHoraBrasil()
     }));
 
     if (!vinculados.length) return;
@@ -20091,7 +21387,7 @@ async function atualizarCustoProdutosEntradaNF(itens = []) {
         if (!item.id_interno || !Number.isFinite(Number(item.custo_real_unitario)) || Number(item.custo_real_unitario) <= 0) continue;
         const payload = {
             preco_custo: nfXmlRoundMoney(item.custo_real_unitario, 6),
-            atualizado_em: new Date().toISOString()
+            atualizado_em: getDataHoraBrasil()
         };
 
         const { error } = await client
@@ -20183,7 +21479,7 @@ async function finalizarEntradaNFXmlConfirmado() {
 
         const { error } = await client
             .from('entradas_nf')
-            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: new Date().toISOString() })
+            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
             .eq('id', state.savedEntradaId);
         if (error) throw error;
 
@@ -20296,7 +21592,7 @@ async function finalizarEntradaNFAberta(entradaId) {
 
         const { error } = await client
             .from('entradas_nf')
-            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: new Date().toISOString() })
+            .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
             .eq('id', entrada.id);
         if (error) throw error;
 
@@ -20391,17 +21687,11 @@ async function renderNFAbertasList() {
 }
 
 function getEntradaNFDate(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleDateString('pt-BR');
+    return formatDateBR(value);
 }
 
 function getEntradaNFDateTime(value) {
-    if (!value) return '-';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString('pt-BR');
+    return formatDateTimeBR(value);
 }
 
 function getEntradaNFMoney(value) {
