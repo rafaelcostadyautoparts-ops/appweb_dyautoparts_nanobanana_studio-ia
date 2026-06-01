@@ -2304,21 +2304,31 @@ function updateMenuStatusUI() {
     }
 }
 
+function getInlineAppIconHTML(iconName) {
+    const icons = {
+        arrow_back: '<svg viewBox="0 0 24 24" focusable="false"><path d="M15 6l-6 6 6 6"/><path d="M9 12h11"/></svg>',
+        settings: '<svg viewBox="0 0 24 24" focusable="false"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.2 2.2-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7v.2h-3v-.2a1.8 1.8 0 0 0-1.1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1-2.2-2.2.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1h-.2v-3h.2a1.8 1.8 0 0 0 1.7-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.2-2.2.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V4h3v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1 2.2 2.2-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.7 1.2Z"/></svg>',
+        power_settings_new: '<svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v8"/><path d="M7.1 6.5a8 8 0 1 0 9.8 0"/></svg>'
+    };
+    const svg = icons[iconName] || icons.settings;
+    return `<span class="app-inline-icon" aria-hidden="true">${svg}</span>`;
+}
+
 function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') {
     const isMenu = screenType === 'menu';
     return `
         <div class="top-action-group">
                 ${!isMenu && backAction ? `
                 <button class="fab-icon-btn fab-voltar" type="button" onclick="${backAction}" aria-label="Voltar">
-                    <span class="material-symbols-rounded">arrow_back</span>
+                    ${getInlineAppIconHTML('arrow_back')}
                 </button>
                 ` : ''}
                 ${isMenu ? `
                 <button class="fab-icon-btn fab-config" type="button" onclick="renderConfigSubMenu()" aria-label="Configurações">
-                    <span class="material-symbols-rounded">settings</span>
+                    ${getInlineAppIconHTML('settings')}
                 </button>
                 <button class="fab-icon-btn fab-desligar" type="button" onclick="logout()" aria-label="Encerrar sessão">
-                    <span class="material-symbols-rounded">power_settings_new</span>
+                    ${getInlineAppIconHTML('power_settings_new')}
                 </button>
                 ` : ''}
             </div>
@@ -3001,14 +3011,21 @@ function renderLogin(push = true) {
         return (first + last).toUpperCase();
     };
 
-    const getLoginAutomotiveIcon = (initials, index) => {
-        const iconByInitials = {
-            AK: 'lightbulb',
-            DY: 'airline_seat_recline_normal',
-            FK: 'directions_car',
-            RC: 'graphic_eq'
+    const getLoginAutomotiveIconHTML = (initials, index) => {
+        const icons = {
+            bulb: '<svg viewBox="0 0 24 24" focusable="false"><path d="M9 21h6"/><path d="M10 17h4"/><path d="M8.2 13.4a6 6 0 1 1 7.6 0c-.9.7-1.4 1.6-1.6 2.6H9.8c-.2-1-.7-1.9-1.6-2.6Z"/><path d="M12 4v2"/></svg>',
+            seat: '<svg viewBox="0 0 24 24" focusable="false"><path d="M8 4h6.2c1.1 0 2 .8 2.2 1.9l.8 5.1"/><path d="M7 4v9.5c0 1.4 1.1 2.5 2.5 2.5H17"/><path d="M6 20h12"/><path d="M18 16l1.4 4"/><path d="M7.8 10h8.4"/></svg>',
+            car: '<svg viewBox="0 0 24 24" focusable="false"><path d="M5 16h14"/><path d="M7 19h1.8"/><path d="M15.2 19H17"/><path d="M4.5 16l1.7-5.1A2.7 2.7 0 0 1 8.8 9h6.4a2.7 2.7 0 0 1 2.6 1.9l1.7 5.1"/><path d="M7 13h10"/></svg>',
+            eq: '<svg viewBox="0 0 24 24" focusable="false"><path d="M5 7h14"/><path d="M5 12h14"/><path d="M5 17h14"/><circle cx="9" cy="7" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="11" cy="17" r="1.7"/></svg>',
+            speed: '<svg viewBox="0 0 24 24" focusable="false"><path d="M4 15a8 8 0 1 1 16 0"/><path d="M12 15l4-5"/><path d="M8 19h8"/></svg>'
         };
-        const fallbackIcons = ['lightbulb', 'airline_seat_recline_normal', 'directions_car', 'graphic_eq', 'speed'];
+        const iconByInitials = {
+            AK: icons.bulb,
+            DY: icons.seat,
+            FK: icons.car,
+            RC: icons.eq
+        };
+        const fallbackIcons = [icons.bulb, icons.seat, icons.car, icons.eq, icons.speed];
         return iconByInitials[initials] || fallbackIcons[index % fallbackIcons.length];
     };
 
@@ -3025,14 +3042,14 @@ function renderLogin(push = true) {
         const safeFirstName = escapeKitAttribute(firstName);
         const safeLastName = escapeKitAttribute(lastName);
         const safeInitials = escapeKitAttribute(initials);
-        const automotiveIcon = getLoginAutomotiveIcon(initials, index);
+        const automotiveIconHTML = getLoginAutomotiveIconHTML(initials, index);
         
         return `
                 <div class="user-card login-user-card" onclick="window.playLoginSound(${index}); setUser('${u.nome}', '${u.id}', '${u.perfil}')">
                     <span class="login-card-glow login-card-glow-top" aria-hidden="true"></span>
                     <span class="login-card-glow login-card-glow-bottom" aria-hidden="true"></span>
                     <div class="user-avatar-box">
-                        <span class="material-symbols-rounded login-user-auto-icon" aria-hidden="true">${automotiveIcon}</span>
+                        <span class="login-user-auto-icon" aria-hidden="true">${automotiveIconHTML}</span>
                     </div>
                     <div class="login-user-content">
                         <span class="user-initials">${safeInitials}</span>

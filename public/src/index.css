@@ -51041,11 +51041,45 @@ html body.login-active #app #login-screen.login-screen .login-user-card.user-car
   box-shadow: 0 0 8px rgba(225,6,0,0.42) !important;
 }
 
-html body.login-active #app #login-screen.login-screen .login-user-auto-icon.material-symbols-rounded {
+html body.login-active #app #login-screen.login-screen .login-user-auto-icon {
   color: #FFFFFF !important;
-  font-size: 28px !important;
-  font-weight: 300 !important;
   line-height: 1 !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+html body.login-active #app #login-screen.login-screen .login-user-auto-icon svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+.fab-icon-btn .app-inline-icon {
+  width: 22px !important;
+  height: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: currentColor !important;
+}
+
+.fab-icon-btn .app-inline-icon svg {
+  width: 22px !important;
+  height: 22px !important;
+  display: block !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
 }
 
 html body.login-active #app #login-screen.login-screen .login-user-content {
@@ -51186,7 +51220,7 @@ html[data-theme="light"] body.login-active #app #login-screen.login-screen .user
     inset 0 1px 0 rgba(255,255,255,0.95) !important;
 }
 
-html[data-theme="light"] body.login-active #app #login-screen.login-screen .login-user-auto-icon.material-symbols-rounded,
+html[data-theme="light"] body.login-active #app #login-screen.login-screen .login-user-auto-icon,
 html[data-theme="light"] body.login-active #app #login-screen.login-screen .login-user-card.user-card .user-initials {
   color: #20242c !important;
   text-shadow: 0 10px 22px rgba(15,23,42,0.12) !important;
@@ -51344,8 +51378,9 @@ html[data-theme="light"] body.login-active #app #login-screen.login-screen .logi
     flex-basis: 58px !important;
   }
 
-  html body.login-active #app #login-screen.login-screen#login-screen .login-user-auto-icon.material-symbols-rounded {
-    font-size: 28px !important;
+  html body.login-active #app #login-screen.login-screen#login-screen .login-user-auto-icon {
+    width: 28px !important;
+    height: 28px !important;
   }
 
   html body.login-active #app #login-screen.login-screen#login-screen .login-user-content {
@@ -51588,8 +51623,9 @@ html[data-theme="light"] body.login-active #app #login-screen.login-screen .logi
     flex-basis: 52px !important;
   }
 
-  html body.login-active #app #login-screen.login-screen#login-screen .login-user-auto-icon.material-symbols-rounded {
-    font-size: 27px !important;
+  html body.login-active #app #login-screen.login-screen#login-screen .login-user-auto-icon {
+    width: 27px !important;
+    height: 27px !important;
   }
 
   html body.login-active #app #login-screen.login-screen#login-screen .login-user-content {
