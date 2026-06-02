@@ -976,6 +976,21 @@ const DataClient = (function () {
         });
     }
 
+    function isMissingPickingTotalsColumnError(error) {
+        const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+        return error?.code === 'PGRST204'
+            || (text.includes('schema cache') && (text.includes('total_itens_separados') || text.includes('total_produtos_separados') || text.includes('total_pacotes_montados')))
+            || (text.includes('column') && (text.includes('total_itens_separados') || text.includes('total_produtos_separados') || text.includes('total_pacotes_montados')));
+    }
+
+    function stripPickingTotalsColumns(row) {
+        const clone = { ...row };
+        delete clone.total_produtos_separados;
+        delete clone.total_itens_separados;
+        delete clone.total_pacotes_montados;
+        return clone;
+    }
+
     async function savePickingDraftSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -997,17 +1012,30 @@ const DataClient = (function () {
             atualizado_em: now,
             finalizado_em: session.finalizado_em || null,
             total_produtos_separados: Number(session.total_produtos_separados || 0),
+            total_itens_separados: Number(session.total_itens_separados || 0),
             total_pacotes_montados: Number(session.total_pacotes_montados || 0),
             observacao: session.observacao || null
         };
 
         console.log('[SEP] criando separacao payload', separacaoRow);
 
-        const { data: sepData, error: sepError } = await client
+        let { data: sepData, error: sepError } = await client
             .from('separacao')
             .upsert([separacaoRow], { onConflict: 'separacao_id' })
             .select()
             .single();
+
+        if (sepError && isMissingPickingTotalsColumnError(sepError)) {
+            const fallbackRow = stripPickingTotalsColumns(separacaoRow);
+            logSepSupabaseError('colunas de totais ausentes; salvando separacao sem totais', sepError, separacaoRow);
+            const fallback = await client
+                .from('separacao')
+                .upsert([fallbackRow], { onConflict: 'separacao_id' })
+                .select()
+                .single();
+            sepData = fallback.data;
+            sepError = fallback.error;
+        }
 
         if (sepError) {
             logSepSupabaseError('erro ao criar separacao', sepError, separacaoRow);
@@ -1090,17 +1118,31 @@ const DataClient = (function () {
             atualizado_em: now,
             finalizado_em: now,
             total_produtos_separados: Number(payload.total_produtos_separados || 0),
+            total_itens_separados: Number(payload.total_itens_separados || 0),
             total_pacotes_montados: Number(payload.total_pacotes_montados || 0)
         };
 
         console.log('[SEP] finalizando separacao', { sessionId, payload: updatePayload });
 
-        const { data, error } = await client
+        let { data, error } = await client
             .from('separacao')
             .update(updatePayload)
             .eq('separacao_id', sessionId)
             .select()
             .single();
+
+        if (error && isMissingPickingTotalsColumnError(error)) {
+            const fallbackPayload = stripPickingTotalsColumns(updatePayload);
+            logSepSupabaseError('colunas de totais ausentes; finalizando separacao sem totais', error, { sessionId, ...updatePayload });
+            const fallback = await client
+                .from('separacao')
+                .update(fallbackPayload)
+                .eq('separacao_id', sessionId)
+                .select()
+                .single();
+            data = fallback.data;
+            error = fallback.error;
+        }
 
         if (error) {
             logSepSupabaseError('erro ao finalizar separacao', error, { sessionId, ...updatePayload });

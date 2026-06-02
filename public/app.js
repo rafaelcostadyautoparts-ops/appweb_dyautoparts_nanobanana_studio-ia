@@ -17,6 +17,66 @@
 const app = document.getElementById('app');
 const toast = document.getElementById('toast');
 
+const MATERIAL_ICON_FALLBACKS = {
+    add: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    add_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+    arrow_back: '<svg viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>',
+    barcode_scanner: '<svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 8v8M10 8v8M14 8v8M17 8v8"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24"><path d="m13 2-9 13h7l-1 7 10-14h-7l1-6Z"/></svg>',
+    check: '<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>',
+    check_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 6-6"/></svg>',
+    chevron_right: '<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    delete: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 15h10l1-15M9 7V4h6v3"/></svg>',
+    error: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg>',
+    inventory_2: '<svg viewBox="0 0 24 24"><path d="M4 8 12 4l8 4-8 4-8-4Z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>',
+    keyboard_arrow_down: '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+    keyboard_arrow_up: '<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>',
+    assignment: '<svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v18H5V6h3l1-2Z"/><path d="M8 11h8M8 15h8M8 19h5"/></svg>',
+    dark_mode: '<svg viewBox="0 0 24 24"><path d="M21 14.5A8 8 0 0 1 9.5 3 9 9 0 1 0 21 14.5Z"/></svg>',
+    deployed_code: '<svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>',
+    devices: '<svg viewBox="0 0 24 24"><path d="M3 5h13v10H3zM8 19h4M10 15v4M17 9h4v10h-4z"/></svg>',
+    folder_open: '<svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v3"/><path d="M3 7v14h16l3-10H6L3 21"/></svg>',
+    history: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6M12 7v5l4 2"/></svg>',
+    local_shipping: '<svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+    package_2: '<svg viewBox="0 0 24 24"><path d="M4 8 12 4l8 4v8l-8 4-8-4V8Z"/><path d="m4 8 8 4 8-4M12 12v8M8 6l8 4"/></svg>',
+    percent: '<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
+    person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    priority_high: '<svg viewBox="0 0 24 24"><path d="M12 5v9M12 19h.01"/></svg>',
+    qr_code_scanner: '<svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 8h3v3H8zM14 8h2M14 11h3M8 14h2M12 14h5M8 17h5"/></svg>',
+    request_quote: '<svg viewBox="0 0 24 24"><path d="M6 3h10l4 4v18H6z"/><path d="M16 3v5h5M9 12h6M9 16h6M11 20h2"/></svg>',
+    remove: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
+    remove_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
+    remove_done: '<svg viewBox="0 0 24 24"><path d="M5 12h8"/><path d="m14 15 2 2 4-5"/></svg>',
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>',
+    warning: '<svg viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg>'
+};
+
+function ensureMaterialIconFallbacks(root = document) {
+    const icons = root.querySelectorAll?.('.material-symbols-rounded:not(.icon-fallback-ready)');
+    icons?.forEach(icon => {
+        const name = String(icon.textContent || '').trim();
+        const svg = MATERIAL_ICON_FALLBACKS[name];
+        if (!svg) return;
+        icon.dataset.iconName = name;
+        icon.innerHTML = svg;
+        icon.classList.add('icon-fallback-ready');
+    });
+}
+
+function startMaterialIconFallbackObserver() {
+    ensureMaterialIconFallbacks(document);
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType !== Node.ELEMENT_NODE) return;
+                ensureMaterialIconFallbacks(node.matches?.('.material-symbols-rounded') ? node.parentElement || node : node);
+            });
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
 // ==== AUXILIARY FUNCTIONS ====
 function normalizeText(text) {
     if (!text) return "";
@@ -352,6 +412,7 @@ window.handleUserClick = async function(e) {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
+    startMaterialIconFallbackObserver();
     [
         'loginBackgroundImage',
         'loginBackgroundDesktop',
@@ -12865,10 +12926,25 @@ function getSeparationProductTotal(session) {
     const storedTotal = Number(session.total_produtos_separados || session.totalProdutosSeparados || 0);
     if (storedTotal > 0) return storedTotal;
     const sessionId = getPackSeparationSessionId(session);
-    if (!sessionId) return Number(session.total_itens || session.qtd_itens || session.itens || 0) || 0;
-    return (appData.separacao_itens || [])
+    if (!sessionId) return 0;
+    const uniqueProducts = new Set((appData.separacao_itens || [])
+        .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId))
+        .map(item => getPickingProductId(item) || String(item.id_interno || item.ean || item.descricao || '').trim())
+        .filter(Boolean));
+    return uniqueProducts.size;
+}
+
+function getSeparationItemTotal(session) {
+    const storedTotal = Number(session.total_itens_separados || session.totalItensSeparados || 0);
+    if (storedTotal > 0) return storedTotal;
+    const sessionId = getPackSeparationSessionId(session);
+    if (!sessionId) {
+        return Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
+    }
+    const itemsTotal = (appData.separacao_itens || [])
         .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId))
         .reduce((sum, item) => sum + (Number(item.qtd_separada || item.quantidade || item.qty || item.qtd_solicitada || 0) || 0), 0);
+    return itemsTotal || Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
 }
 
 function getDraftPickSessionsWithLocalDraft() {
@@ -12883,7 +12959,8 @@ function getDraftPickSessionsWithLocalDraft() {
             criado_por: localStorage.getItem('currentUser') || '',
             criado_em: localDraft.createdAt || localDraft.timestamp || getDataHoraBrasil(),
             atualizado_em: localDraft.timestamp || getDataHoraBrasil(),
-            total_produtos_separados: (localDraft.items || []).reduce((sum, item) => sum + (Number(item.qty || item.qtd_separada || 0) || 0), 0),
+            total_produtos_separados: countDifferentPickProducts(localDraft.items || []),
+            total_itens_separados: getPickItemsTotal(localDraft.items || []),
             total_pacotes_montados: getPickPackageCountFrom(localDraft),
             __localDraft: true
         });
@@ -12920,6 +12997,7 @@ function buildPickDraftViewModel(session) {
     const status = getPickDraftStatusInfo(session);
     const clientName = getPickDraftClientName(session);
     const products = getSeparationProductTotal(session);
+    const items = getSeparationItemTotal(session);
     const packages = getPickPackageCountFrom(session);
     const dateTime = formatPackSeparationDate(session.atualizado_em || session.criado_em || session.data_separacao || session.col_b) || '-';
     const searchText = [sessionId, clientName, channel.label, session?.canal_nome, session?.canal, status.label]
@@ -12927,7 +13005,7 @@ function buildPickDraftViewModel(session) {
         .join(' ')
         .toLowerCase();
 
-    return { session, sessionId, channel, status, clientName, products, packages, dateTime, searchText };
+    return { session, sessionId, channel, status, clientName, products, items, packages, dateTime, searchText };
 }
 
 function getPickDraftSummaryCards(viewModels) {
@@ -12954,7 +13032,8 @@ function showPickDraftDetails(sessionId) {
         `Separação: ${item.sessionId}`,
         `Canal: ${item.channel.label}`,
         `Cliente: ${item.clientName || 'Cliente não informado'}`,
-        `Produtos: ${item.products}`,
+        `Produtos diferentes: ${item.products}`,
+        `Itens/bipes: ${item.items}`,
         `Volumes: ${item.packages}`,
         `Data/Hora: ${item.dateTime}`,
         `Status: ${item.status.label}`
@@ -13092,6 +13171,7 @@ async function renderSeparacoesAndamentoScreen() {
                                     <th>Separação</th>
                                     <th>Canal</th>
                                     <th>Produtos</th>
+                                    <th>Itens</th>
                                     <th>Volumes</th>
                                     <th>Data / Hora</th>
                                     <th>Status</th>
@@ -13107,6 +13187,7 @@ async function renderSeparacoesAndamentoScreen() {
                                         </td>
                                         <td><span class="pick-drafts-channel-badge tone-${item.channel.tone}">${escapeKitAttribute(item.channel.label)}</span></td>
                                         <td><strong>${item.products}</strong></td>
+                                        <td><strong>${item.items}</strong></td>
                                         <td><strong>${item.packages}</strong></td>
                                         <td>${escapeKitAttribute(item.dateTime)}</td>
                                         <td><span class="pick-drafts-status status-${item.status.key}">${escapeKitAttribute(item.status.label)}</span></td>
@@ -13136,6 +13217,7 @@ async function renderSeparacoesAndamentoScreen() {
                                 <span class="pick-drafts-channel-badge tone-${item.channel.tone}">${escapeKitAttribute(item.channel.label)}</span>
                                 <div class="pick-draft-mobile-grid">
                                     <div><small>Produtos</small><strong>${item.products}</strong></div>
+                                    <div><small>Itens</small><strong>${item.items}</strong></div>
                                     <div><small>Volumes</small><strong>${item.packages}</strong></div>
                                     <div><small>Data/Hora</small><strong>${escapeKitAttribute(item.dateTime)}</strong></div>
                                 </div>
@@ -13281,6 +13363,7 @@ function normalizePickPackageCount(value) {
 }
 
 function getPickPackageCountFrom(source = {}) {
+    if (!source || typeof source !== 'object') return 0;
     return normalizePickPackageCount(
         source.total_pacotes_montados
         ?? source.totalPacotesMontados
@@ -13290,20 +13373,79 @@ function getPickPackageCountFrom(source = {}) {
     );
 }
 
-function getCurrentPickPackageCount() {
-    return getPickPackageCountFrom(currentPickingContext)
-        || getPickPackageCountFrom(getDraftPickSession())
-        || getPickPackageCountFrom(currentPickSession?.pickingData)
-        || getPickPackageCountFrom(currentPickSession);
+function hasPickPackageCount(source = {}) {
+    if (!source || typeof source !== 'object') return false;
+    return source.total_pacotes_montados !== undefined
+        || source.totalPacotesMontados !== undefined
+        || source.pacotesMontados !== undefined
+        || source.packagesMounted !== undefined;
+}
+
+function pickContextMatches(source = {}, sessionId = '', channelId = '', channelLabel = '') {
+    if (!source || typeof source !== 'object') return false;
+    const sourceSessionId = String(
+        source.sessionId
+        || source.separacao_id
+        || source.pickingData?.separacao_id
+        || source.pickingData?.sessionId
+        || ''
+    );
+    const targetSessionId = String(sessionId || currentPickingContext?.sessionId || '').trim();
+    if (targetSessionId) return sourceSessionId === targetSessionId;
+
+    const sourceChannelId = String(source.channelId || source.canal_id || source.pickingData?.channelId || source.pickingData?.canal_id || '').trim();
+    const targetChannelId = String(channelId || currentPickingContext?.channelId || '').trim();
+    if (sourceChannelId && targetChannelId) return sourceChannelId === targetChannelId;
+
+    const sourceChannel = normalizeOperationalLabel(source.channelLabel || source.canal_nome || source.canal || source.pickingData?.channelLabel || source.pickingData?.canal_nome || '');
+    const targetChannel = normalizeOperationalLabel(channelLabel || currentPickingContext?.channelLabel || '');
+    return Boolean(sourceChannel && targetChannel && sourceChannel === targetChannel);
+}
+
+function getScopedDraftPickSession(sessionId = '', channelId = '', channelLabel = '') {
+    const draft = getDraftPickSession();
+    return pickContextMatches(draft, sessionId, channelId, channelLabel) ? draft : null;
+}
+
+function getCurrentPickPackageCount(sessionId = '', channelId = '', channelLabel = '') {
+    const sources = [
+        currentPickingContext,
+        getScopedDraftPickSession(sessionId, channelId, channelLabel),
+        currentPickSession?.pickingData,
+        currentPickSession
+    ];
+    const targetSessionId = sessionId || currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id || '';
+    const targetChannelId = channelId || currentPickingContext?.channelId || '';
+    const targetChannelLabel = channelLabel || currentPickingContext?.channelLabel || '';
+    for (const source of sources) {
+        if (hasPickPackageCount(source) && pickContextMatches(source, targetSessionId, targetChannelId, targetChannelLabel)) {
+            return getPickPackageCountFrom(source);
+        }
+    }
+    return 0;
+}
+
+function getPickItemsTotal(items = currentSessionItems) {
+    return (items || []).reduce((total, item) => total + (Number(item.qty || item.qtd_separada || item.quantidade || 0) || 0), 0);
+}
+
+function countDifferentPickProducts(items = currentSessionItems) {
+    const uniqueProducts = new Set((items || [])
+        .map(item => getPickingProductId(item) || normalizePickCode(item?.ean || item?.codigo || item?.descricao || ''))
+        .filter(Boolean));
+    return uniqueProducts.size || (items || []).length;
 }
 
 function getPickingOperationalStats(items = currentSessionItems) {
-    const totalProdutosSeparados = (items || []).reduce((total, item) => total + (Number(item.qty || item.qtd_separada || 0) || 0), 0);
+    const totalProdutosSeparados = countDifferentPickProducts(items);
+    const totalItensSeparados = getPickItemsTotal(items);
     const totalPacotesMontados = getCurrentPickPackageCount();
     return {
         total_produtos_separados: totalProdutosSeparados,
+        total_itens_separados: totalItensSeparados,
         total_pacotes_montados: totalPacotesMontados,
-        media_produtos_por_pacote: totalPacotesMontados > 0 ? totalProdutosSeparados / totalPacotesMontados : 0
+        media_itens_por_pacote: totalPacotesMontados > 0 ? totalItensSeparados / totalPacotesMontados : 0,
+        media_produtos_por_pacote: totalPacotesMontados > 0 ? totalItensSeparados / totalPacotesMontados : 0
     };
 }
 
@@ -13342,6 +13484,8 @@ function syncPickPackageCount(count, persist = true) {
             operatorId: localStorage.getItem('currentUser'),
             createdAt: currentPickingContext?.createdAt || getDraftPickSession()?.createdAt || getDataHoraBrasil(),
             executionId: currentPickingContext?.executionId || getDraftPickSession()?.executionId || generateExecutionId(),
+            total_produtos_separados: countDifferentPickProducts(currentSessionItems),
+            total_itens_separados: getPickItemsTotal(currentSessionItems),
             total_pacotes_montados: safeCount,
             totalPacotesMontados: safeCount,
             saveStatus: 'local_only'
@@ -13510,22 +13654,57 @@ function warnIfDraftPickWasNotSynced(draft) {
     }
 }
 
+function getPickSessionChannelPrefix(channelLabel) {
+    const normalized = normalizeOperationalLabel(channelLabel);
+    if (normalized.includes('CORREIOS')) return 'CORREIOS';
+    if (normalized.includes('FLEX')) return 'FLEX';
+    if (normalized.includes('MOTOBOY') || normalized.includes('MOTO')) return 'MOTOBOY';
+    if (normalized.includes('TRANSPORTADORA')) return 'TRANSPORTADORA';
+    if (normalized.includes('TURBO') || normalized.includes('ULTRA')) return 'TURBO';
+    if (normalized.includes('OUTROS')) return 'OUTROS';
+    return (normalized.split(' ')[0] || 'OUTROS').replace(/[^A-Z0-9]/g, '') || 'OUTROS';
+}
+
+function getPickSessionDateKey(date = new Date()) {
+    return date.getDate().toString().padStart(2, '0') + (date.getMonth() + 1).toString().padStart(2, '0');
+}
+
+function getPickSessionSequenceFromId(sessionId, prefix, ddmm) {
+    const match = String(sessionId || '').toUpperCase().match(new RegExp(`^SEP-${prefix}-${ddmm}-(\\d+)$`));
+    return match ? Number(match[1] || 0) : 0;
+}
+
+async function refreshSeparacoesForPickSequence() {
+    try {
+        const data = await DataClient.loadModule('separacao', true);
+        if (data) {
+            appData.separacao = data.separacao || appData.separacao || [];
+            appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+        }
+    } catch (error) {
+        console.warn('[SEP] Falha ao atualizar separacoes para gerar ID. Usando cache local.', error);
+    }
+}
+
 function generatePickSessionId(channelLabel) {
     const now = new Date();
-    const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
+    const ddmm = getPickSessionDateKey(now);
     const todayStr = formatDateBR(now);
-    const cleanChannel = channelLabel.split(' ')[0].toUpperCase();
+    const cleanChannel = getPickSessionChannelPrefix(channelLabel);
 
-    let countInSheet = 0;
+    let maxSequence = 0;
+    let legacyCount = 0;
     if (appData.separacao && Array.isArray(appData.separacao)) {
-        countInSheet = appData.separacao.filter(row => {
+        appData.separacao.forEach(row => {
+            const rowId = row.separacao_id || row.codigo_separacao || row.id || row.col_a || '';
+            maxSequence = Math.max(maxSequence, getPickSessionSequenceFromId(rowId, cleanChannel, ddmm));
             const rowDate = row.data_separacao || row.col_d || row.col_D;
             const rowChannel = row.canal_nome || row.col_c || row.col_C;
-            return rowDate === todayStr && rowChannel === channelLabel;
-        }).length;
+            if (rowDate === todayStr && rowChannel === channelLabel) legacyCount += 1;
+        });
     }
 
-    const seq = countInSheet + 1;
+    const seq = Math.max(maxSequence, legacyCount) + 1;
     return `SEP-${cleanChannel}-${ddmm}-${seq.toString().padStart(2, '0')}`;
 }
 
@@ -13543,6 +13722,7 @@ function buildPickingSessionPayload(sessionId, channelId, channelLabel, status =
         criado_em: createdAt || now,
         atualizado_em: now,
         total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
         total_pacotes_montados: stats.total_pacotes_montados,
         observacao: 'SEPARACAO MANUAL'
     };
@@ -13813,6 +13993,7 @@ async function persistPickingFinal(sessionId) {
         sessionId,
         status: PICK_STATUS_READY_FOR_PACK,
         total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
         total_pacotes_montados: stats.total_pacotes_montados,
         executionId: generateExecutionId()
     };
@@ -13901,6 +14082,7 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
     }
 
     console.log(`[PICKING DEBUG] abriu bipagem sem criar rascunho`);
+    await refreshSeparacoesForPickSequence();
     
     // Define contexto para criação futura no primeiro item
     currentPickingContext = {
@@ -14166,11 +14348,11 @@ function getPickItemStockInfoHTML(item) {
 }
 
 function getPickTotalQuantity() {
-    return currentSessionItems.reduce((total, item) => total + (Number(item.qty) || 0), 0);
+    return getPickItemsTotal(currentSessionItems);
 }
 
 function updatePickSummaryUI() {
-    const differentItems = currentSessionItems.length;
+    const differentItems = countDifferentPickProducts(currentSessionItems);
     const totalQuantity = getPickTotalQuantity();
     const totalPackages = getCurrentPickPackageCount();
     const itemsEl = document.getElementById('pick-summary-items');
@@ -14194,8 +14376,8 @@ function focusPickManualInput() {
 function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     const currentUser = localStorage.getItem('currentUser');
     pickRemovalModeActive = false;
-    const draft = getDraftPickSession();
-    const packageCount = getPickPackageCountFrom(draft || currentPickingContext || {});
+    const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
+    const packageCount = getCurrentPickPackageCount(sessionId, channelId, channelLabel);
     currentPickingContext = {
         sessionId,
         channelId,
@@ -14278,7 +14460,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     <div class="pick-list-panel">
                         <div class="pick-list-header">
                             <h2>PRODUTOS NA SEPARACAO</h2>
-                            <span id="pick-list-count">${currentSessionItems.length} itens</span>
+                            <span id="pick-list-count">${countDifferentPickProducts(currentSessionItems)} produto(s)</span>
                         </div>
 
                         <div class="pick-table-head">
@@ -14293,8 +14475,8 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     <aside class="pick-summary-panel">
                         <h2>RESUMO DA SEPARACAO</h2>
                         <div class="pick-summary-metrics">
-                            <div><span>Produtos separados</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
-                            <div><span>Itens</span><strong id="pick-summary-items">${currentSessionItems.length}</strong></div>
+                            <div><span>Produtos diferentes</span><strong id="pick-summary-items">${countDifferentPickProducts(currentSessionItems)}</strong></div>
+                            <div><span>Itens / bipes</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
                             <div><span>Pacotes montados</span><strong id="pick-summary-packages">${packageCount}</strong></div>
                         </div>
                         <div class="pick-summary-actions">
@@ -14502,6 +14684,7 @@ async function findProductForPicking(cleanCode) {
 function getCurrentPickDraftForUpdate(saveStatus = 'saving') {
     const existingDraft = getDraftPickSession() || {};
     const packageCount = getCurrentPickPackageCount();
+    const stats = getPickingOperationalStats(currentSessionItems);
     return saveDraftPickSession({
         sessionId: existingDraft.sessionId || currentPickingContext?.sessionId || `SEP-TEMP-${Date.now()}`,
         channelId: existingDraft.channelId || currentPickingContext?.channelId || '',
@@ -14512,6 +14695,8 @@ function getCurrentPickDraftForUpdate(saveStatus = 'saving') {
         operatorId: localStorage.getItem('currentUser'),
         createdAt: existingDraft.createdAt || currentPickingContext?.createdAt || getDataHoraBrasil(),
         executionId: existingDraft.executionId || currentPickingContext?.executionId || generateExecutionId(),
+        total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
         total_pacotes_montados: packageCount,
         totalPacotesMontados: packageCount,
         saveStatus,
@@ -14761,10 +14946,14 @@ async function addPickItem(scannedEan = null) {
             });
         }
 
-        const draftStr = localStorage.getItem('draft_pick_session');
+        const scopedDraft = getScopedDraftPickSession(
+            currentPickingContext?.sessionId,
+            currentPickingContext?.channelId,
+            currentPickingContext?.channelLabel
+        );
         let draft;
         
-        if (!draftStr) {
+        if (!scopedDraft) {
             console.log(`[PICKING DEBUG] primeiro item bipado, criando rascunho`);
             const now = new Date();
             draft = {
@@ -14778,18 +14967,27 @@ async function addPickItem(scannedEan = null) {
                 timestamp: getDataHoraBrasil(now),
                 createdAt: currentPickingContext?.createdAt || getDataHoraBrasil(now),
                 executionId: currentPickingContext?.executionId || generateExecutionId(),
+                total_produtos_separados: 0,
+                total_itens_separados: 0,
                 total_pacotes_montados: getCurrentPickPackageCount(),
                 totalPacotesMontados: getCurrentPickPackageCount()
             };
         } else {
-            draft = getDraftPickSession() || {};
+            draft = scopedDraft;
         }
 
+        draft.sessionId = currentPickingContext?.sessionId || draft.sessionId;
+        draft.channelId = currentPickingContext?.channelId || draft.channelId;
+        draft.channelLabel = currentPickingContext?.channelLabel || draft.channelLabel;
+        draft.channelColor = currentPickingContext?.channelColor || draft.channelColor;
         draft.items = currentSessionItems;
         draft.status = PICK_STATUS_DRAFT;
         draft.timestamp = getDataHoraBrasil();
         draft.createdAt = draft.createdAt || getDataHoraBrasil();
         draft.executionId = draft.executionId || currentPickingContext?.executionId || generateExecutionId();
+        const draftStats = getPickingOperationalStats(currentSessionItems);
+        draft.total_produtos_separados = draftStats.total_produtos_separados;
+        draft.total_itens_separados = draftStats.total_itens_separados;
         draft.total_pacotes_montados = getCurrentPickPackageCount();
         draft.totalPacotesMontados = getCurrentPickPackageCount();
         draft.saveStatus = 'saving';
@@ -14844,7 +15042,8 @@ function updatePickItemsList() {
     const container = document.getElementById('pick-items-list');
     const countEl = document.getElementById('pick-list-count');
     updatePickSummaryUI();
-    if (countEl) countEl.textContent = `${currentSessionItems.length} ${currentSessionItems.length === 1 ? 'item' : 'itens'}`;
+    const differentProducts = countDifferentPickProducts(currentSessionItems);
+    if (countEl) countEl.textContent = `${differentProducts} ${differentProducts === 1 ? 'produto' : 'produtos'}`;
     if (!container) return;
     
     if (currentSessionItems.length === 0) {
@@ -14989,6 +15188,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
             pedido_origem_id: '',
             marketplace_order_id: '',
             total_produtos_separados: stats.total_produtos_separados,
+            total_itens_separados: stats.total_itens_separados,
             total_pacotes_montados: stats.total_pacotes_montados,
             observacao: modoRapidoAtivo ? 'SAIDA_RAPIDA AUTOMATICA' : 'SEPARACAO MANUAL POR NF'
         };
@@ -15023,6 +15223,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
             pickingData,
             conferenceRows,
             total_produtos_separados: stats.total_produtos_separados,
+            total_itens_separados: stats.total_itens_separados,
             total_pacotes_montados: stats.total_pacotes_montados
         };
 
@@ -15124,6 +15325,8 @@ function adjustPickRow(index, delta, sessionId, channelId, channelLabel, channel
         channelLabel,
         channelColor,
         items: currentSessionItems,
+        total_produtos_separados: countDifferentPickProducts(currentSessionItems),
+        total_itens_separados: getPickItemsTotal(currentSessionItems),
         total_pacotes_montados: getCurrentPickPackageCount(),
         totalPacotesMontados: getCurrentPickPackageCount(),
         saveStatus: 'local_only'
@@ -15222,6 +15425,7 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
         sessionId,
         status: PICK_STATUS_FINISHED,
         total_produtos_separados: Number(payload.total_produtos_separados || 0),
+        total_itens_separados: Number(payload.total_itens_separados || 0),
         total_pacotes_montados: Number(payload.total_pacotes_montados || 0),
         executionId: payload.executionId || generateExecutionId()
     });
@@ -15325,6 +15529,7 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
         user: currentUser,
         rows,
         total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
         total_pacotes_montados: stats.total_pacotes_montados,
         executionId: draft.executionId || generateExecutionId()
     };
@@ -15354,6 +15559,7 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
         status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
         finalizado_em: now,
         total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
         total_pacotes_montados: stats.total_pacotes_montados,
         observacao: 'SAIDA_RAPIDA AUTOMATICA'
     };
@@ -15374,7 +15580,7 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
         message: finalizationResult?.queued
             ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
             : `Saida rapida ${sessionId} finalizada e estoque baixado.`,
-        detail: `Produtos separados: ${stats.total_produtos_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Média por pacote: ${formatPickPackageAverage(stats.media_produtos_por_pacote)}`,
+        detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
         confirmText: 'OK'
     });
     playBeep('success');
@@ -15402,7 +15608,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             const confirmed = await showAppModal({
                 type: 'warning',
                 title: 'Nenhum pacote marcado',
-                message: 'Nenhum pacote foi marcado. Deseja finalizar mesmo assim?',
+                message: 'Separação sem pacotes informados. Deseja finalizar mesmo assim?',
                 confirmText: 'Finalizar mesmo assim',
                 cancelText: 'Voltar'
             });
@@ -15485,6 +15691,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             separacao_id: sessionId,
             canal_nome: channelLabel,
             total_produtos_separados: stats.total_produtos_separados,
+            total_itens_separados: stats.total_itens_separados,
             total_pacotes_montados: stats.total_pacotes_montados,
             status: PICK_STATUS_READY_FOR_PACK
         };
@@ -15508,7 +15715,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             message: finalResult?.queued
                 ? `Separação ${sessionId} salva localmente para sincronizar.`
                 : `Separação ${sessionId} enviada para conferência.`,
-            detail: `Produtos separados: ${stats.total_produtos_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Média por pacote: ${formatPickPackageAverage(stats.media_produtos_por_pacote)}`,
+            detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
             confirmText: 'OK'
         });
         renderMenu();
@@ -15586,7 +15793,9 @@ async function renderPackMenu() {
                                     const uniqueId = getPackSeparationUniqueId(session);
                                     const displayId = getPackSeparationDisplayId(session);
                                     const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
-                                    const itemCount = getSeparationItemCount(session);
+                                    const productsCount = getSeparationProductTotal(session);
+                                    const itemCount = getSeparationItemTotal(session);
+                                    const packagesCount = getPickPackageCountFrom(session);
                                     const statusRaw = String(session.status || 'aberta');
                                     const statusLabel = statusRaw.toLowerCase().includes('pend') ? 'Pendente' : 'Aberta';
                                     return `
@@ -15597,7 +15806,9 @@ async function renderPackMenu() {
                                                 <small>${escapeKitAttribute(channelName)}</small>
                                                 <span class="operational-card-meta">
                                                     <em>${escapeKitAttribute(createdAt)}</em>
-                                                    <em>${itemCount ? `${itemCount} item(ns)` : 'Itens não informados'}</em>
+                                                    <em>${productsCount} produto(s)</em>
+                                                    <em>${itemCount} item(ns)</em>
+                                                    <em>${packagesCount} pacote(s)</em>
                                                     <b>${escapeKitAttribute(statusLabel)}</b>
                                                 </span>
                                                 <span class="operational-open-indicator">
@@ -15763,6 +15974,9 @@ async function renderPackSessionsList(channelName) {
                                 const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
                                 const status = session.status || 'aberta';
                                 const statusClass = getSessionStatusClass(status);
+                                const productsCount = getSeparationProductTotal(session);
+                                const itemCount = getSeparationItemTotal(session);
+                                const packagesCount = getPickPackageCountFrom(session);
                                 return `
                                 <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
                                     <div class="pack-session-card-main">
@@ -15773,6 +15987,7 @@ async function renderPackSessionsList(channelName) {
                                             <span class="pack-session-card-kicker">Separação</span>
                                             <strong>${displayId}</strong>
                                             <small>${createdAt}</small>
+                                            <small>${productsCount} produto(s) | ${itemCount} item(ns) | ${packagesCount} pacote(s)</small>
                                         </div>
                                     </div>
                                     <div class="pack-session-card-meta">
@@ -15873,7 +16088,14 @@ async function renderPackSessionDetails(sessionId) {
         id: packSessionId,
         separacaoRowId,
         items: [],
-        pickingData: { separacao_id: packSessionId, separacao_row_id: separacaoRowId, canal_nome: channelName },
+        pickingData: {
+            separacao_id: packSessionId,
+            separacao_row_id: separacaoRowId,
+            canal_nome: channelName,
+            total_produtos_separados: getSeparationProductTotal(separacaoSession || {}),
+            total_itens_separados: getSeparationItemTotal(separacaoSession || {}),
+            total_pacotes_montados: getPickPackageCountFrom(separacaoSession || {})
+        },
         conferenceRows: []
     };
     
@@ -15938,7 +16160,10 @@ async function renderPackSessionDetails(sessionId) {
             pickingData: {
                 separacao_id: packSessionId,
                 separacao_row_id: separacaoRowId,
-                canal_nome: channelName || (expectedItems.length > 0 ? (expectedItems[0].canal_nome || packSessionId.split('-')[1] || '') : '')
+                canal_nome: channelName || (expectedItems.length > 0 ? (expectedItems[0].canal_nome || packSessionId.split('-')[1] || '') : ''),
+                total_produtos_separados: getSeparationProductTotal(separacaoSession || {}),
+                total_itens_separados: getSeparationItemTotal(separacaoSession || {}),
+                total_pacotes_montados: getPickPackageCountFrom(separacaoSession || {})
             },
             conferenceRows
         };
@@ -15959,6 +16184,8 @@ async function renderPackSessionDetails(sessionId) {
         // Atualizar lista após carregar dados
         const packList = document.getElementById('pack-items-list');
         if (packList) packList.innerHTML = renderPackItemsListHTML();
+        const packPackagesEl = document.getElementById('pack-summary-packages');
+        if (packPackagesEl) packPackagesEl.textContent = String(getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {}));
         
     } catch (err) {
         console.error("Erro ao carregar sessão:", err);
@@ -15974,6 +16201,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
     const title = channelName ? channelName.toUpperCase() : 'CONFERÊNCIA';
     const createdAt = currentPackSession?.pickingData?.criado_em || currentPackSession?.time || getDataHoraBrasil();
     const createdAtLabel = formatPackSeparationDate(createdAt);
+    const packageCount = getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {});
 
     app.innerHTML = `
         <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen ${channelColorClass}">
@@ -16072,6 +16300,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                         <div class="pack-blind-summary-metrics">
                             <div><span class="material-symbols-rounded">assignment_turned_in</span><small>Itens</small><strong id="pack-summary-items">0</strong><em>itens</em></div>
                             <div><span class="material-symbols-rounded">inventory_2</span><small>Unidades</small><strong id="pack-summary-units">0</strong><em>unidades</em></div>
+                            <div><span class="material-symbols-rounded">package_2</span><small>Pacotes</small><strong id="pack-summary-packages">${packageCount}</strong><em>volumes</em></div>
                         </div>
                         <div class="pack-blind-progress">
                             <small>Progresso</small>
@@ -17103,14 +17332,16 @@ function getRomaneioTodayMetrics(channelName, withdrawalType = channelName) {
         const channel = normalizeOperationalLabel(session.canal_nome || session.canal || session.col_c || '');
         const rawDate = String(session.data_separacao || session.criado_em || session.finalizado_em || session.col_b || '');
         const matchesDate = rawDate.includes(todayBr) || rawDate.includes(todayIso);
+        const knownChannels = ['FLEX', 'CORREIOS', 'TURBO', 'MOTOBOY', 'TRANSPORTADORA'];
         const matchesChannel = typeTarget === 'OUTROS'
-            ? channel && !channel.includes('FLEX') && !channel.includes('CORREIOS')
+            ? channel && !knownChannels.some(known => channel.includes(known))
             : channel && target && (channel.includes(target) || target.includes(channel));
         return matchesDate && matchesChannel && isRomaneioPickupStatus(session.status || 'aberta');
     });
 
     return sessions.reduce((acc, session) => {
         acc.produtos += getSeparationProductTotal(session);
+        acc.itens += getSeparationItemTotal(session);
         acc.pacotes += getPickPackageCountFrom(session);
         acc.separacoes += 1;
         return acc;
@@ -17118,6 +17349,7 @@ function getRomaneioTodayMetrics(channelName, withdrawalType = channelName) {
         data: todayBr,
         canal: channelName,
         produtos: 0,
+        itens: 0,
         pacotes: 0,
         separacoes: 0,
         tipo_retirada: withdrawalType
@@ -17157,7 +17389,7 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
                 <section class="romaneio-channel-step">
                     <h2>Tipo de Retirada</h2>
                     <div class="romaneio-channel-grid">
-                        ${['Flex', 'Correios', 'Outros'].map(type => {
+                        ${['Correios', 'Flex', 'Turbo', 'Motoboy', 'Transportadora', 'Outros'].map(type => {
                             const config = getRomaneioTypeConfig(type);
                             const active = normalizeOperationalLabel(type) === normalizeOperationalLabel(selectedType);
                             return `
@@ -17201,7 +17433,8 @@ function renderRomaneioForm(metrics) {
     return `
         <section class="romaneio-form-card">
             <div class="romaneio-metrics-grid">
-                <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>itens</em><span class="material-symbols-rounded">deployed_code</span></div>
+                <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
+                <div><small>Itens</small><strong>${metrics.itens}</strong><em>bipes/unidades</em><span class="material-symbols-rounded">inventory_2</span></div>
                 <div><small>Pacotes</small><strong>${metrics.pacotes}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
                 <div><small>Separações</small><strong>${metrics.separacoes}</strong><em>separações</em><span class="material-symbols-rounded">assignment</span></div>
                 <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
@@ -17267,7 +17500,8 @@ function renderRomaneioHistory(romaneios) {
                             <div class="romaneio-history-copy">
                                 <small>${escapeKitAttribute(item.data)} ${item.hora ? `- ${escapeKitAttribute(item.hora)}` : ''}</small>
                                 <strong>${escapeKitAttribute(item.canal || '-')}</strong>
-                                <span>Produtos: ${Number(item.produtos || 0)}</span>
+                                <span>Produtos diferentes: ${Number(item.produtos || 0)}</span>
+                                <span>Itens/bipes: ${Number(item.itens || 0)}</span>
                                 <span>Pacotes: ${Number(item.pacotes || 0)}</span>
                                 <span>Separações: ${Number(item.separacoes || 0)}</span>
                                 <em>Responsável: ${escapeKitAttribute(item.responsavel || '-')}</em>
@@ -17294,7 +17528,8 @@ function renderRomaneioDetail(item) {
             <div class="romaneio-detail-grid">
                 <div><small>Data/Hora</small><strong>${escapeKitAttribute(item.data)} ${escapeKitAttribute(item.hora)}</strong></div>
                 <div><small>Canal</small><strong>${escapeKitAttribute(item.canal)}</strong></div>
-                <div><small>Produtos</small><strong>${Number(item.produtos || 0)}</strong></div>
+                <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
+                <div><small>Itens/bipes</small><strong>${Number(item.itens || 0)}</strong></div>
                 <div><small>Pacotes</small><strong>${Number(item.pacotes || 0)}</strong></div>
                 <div><small>Separações</small><strong>${Number(item.separacoes || 0)}</strong></div>
                 <div><small>Responsável</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
@@ -17405,7 +17640,7 @@ function redoRomaneioSignature() {
 }
 
 function getRomaneioText(item) {
-    return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos: ${item.produtos}\nPacotes: ${item.pacotes}\nSeparacoes: ${item.separacoes || 0}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
+    return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos diferentes: ${item.produtos}\nItens/bipes: ${item.itens || 0}\nPacotes: ${item.pacotes}\nSeparacoes: ${item.separacoes || 0}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
 }
 
 function saveRomaneioFromForm(withdrawalType) {
@@ -17439,6 +17674,7 @@ function saveRomaneioFromForm(withdrawalType) {
         canal: finalChannel || metrics.canal,
         tipo_retirada: type,
         produtos: metrics.produtos,
+        itens: metrics.itens,
         pacotes: metrics.pacotes,
         separacoes: metrics.separacoes,
         responsavel,
