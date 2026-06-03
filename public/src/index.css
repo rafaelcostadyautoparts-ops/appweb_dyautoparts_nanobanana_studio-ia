@@ -58076,3 +58076,623 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
   background: rgba(227, 6, 19, 0.12) !important;
   color: #ef4444 !important;
 }
+
+/* Separation mobile reference layout. */
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen {
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen {
+    background: #f6f8fb !important;
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen {
+    background: #07090c !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 14px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+    position: relative !important;
+    inset: auto !important;
+    z-index: 2 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) 44px !important;
+    align-items: center !important;
+    flex: 0 0 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-back-btn {
+    width: 40px !important;
+    height: 40px !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-back-btn {
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-back-btn {
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-back-btn .material-symbols-rounded {
+    color: currentColor !important;
+    font-size: 25px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title {
+    grid-column: 2 !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title h1 {
+    color: inherit !important;
+    font-size: clamp(1rem, 5vw, 1.26rem) !important;
+    letter-spacing: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-title-icon {
+    position: static !important;
+    grid-column: 3 !important;
+    justify-self: end !important;
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 999px !important;
+    background: #eab308 !important;
+    border: 0 !important;
+    box-shadow: 0 10px 22px rgba(234, 179, 8, 0.24) !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-title-icon svg,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-title-icon img {
+    width: 24px !important;
+    height: 24px !important;
+    filter: brightness(0) invert(1) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-panel {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field {
+    display: grid !important;
+    grid-template-columns: 42px minmax(0, 1fr) 44px !important;
+    width: 100% !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    padding: 0 8px !important;
+    border: 1.5px solid #ef2b2d !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field {
+    background: #101216 !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field > .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scanner-btn .material-symbols-rounded {
+    color: #ef2b2d !important;
+    font-size: 23px !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field > .material-symbols-rounded,
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scanner-btn .material-symbols-rounded {
+    color: #d7dce4 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen #pick-ean-input {
+    min-width: 0 !important;
+    color: inherit !important;
+    background: transparent !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen #pick-ean-input::placeholder {
+    color: #7c8798 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen #pick-ean-input::placeholder {
+    color: #a8afbd !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scanner-btn {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0 !important;
+    flex: 0 0 auto !important;
+    overflow: hidden !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08) !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-grid {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-grid {
+    background: #15171a !important;
+    border: 1px solid #2a2f36 !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card {
+    min-height: 58px !important;
+    padding: 10px 12px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card:not(:last-child) {
+    border-right: 1px solid rgba(124, 135, 152, 0.18) !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card:not(:last-child) {
+    border-right-color: #2a2f36 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card span {
+    display: block !important;
+    font-size: clamp(0.58rem, 2.15vw, 0.68rem) !important;
+    font-weight: 950 !important;
+    letter-spacing: 0 !important;
+    line-height: 1.1 !important;
+    margin-bottom: 6px !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card span {
+    color: #7c8798 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card span {
+    color: #a8afbd !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card strong {
+    display: block !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: clamp(0.75rem, 3.1vw, 0.92rem) !important;
+    line-height: 1.12 !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card strong {
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-card strong {
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-work-area {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-panel {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    border-radius: 14px !important;
+    padding: 12px !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-panel {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07) !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-panel {
+    background: #111418 !important;
+    border: 1px solid #2a2f36 !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    padding: 0 0 10px !important;
+    border: 0 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header h2 {
+    color: inherit !important;
+    font-size: clamp(0.92rem, 3.9vw, 1.08rem) !important;
+    letter-spacing: 0 !important;
+    line-height: 1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header span {
+    height: 30px !important;
+    min-width: 0 !important;
+    padding: 0 11px !important;
+    border-radius: 999px !important;
+    font-size: 0.72rem !important;
+    font-weight: 950 !important;
+    white-space: nowrap !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header span {
+    background: #eef2f7 !important;
+    color: #475569 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header span {
+    background: #1c222a !important;
+    color: #d7dce4 !important;
+    border: 1px solid #2a2f36 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-items-list {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding: 0 2px 2px 0 !important;
+    gap: 0 !important;
+    scrollbar-width: thin !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+    grid-template-columns: minmax(0, 1fr) minmax(42px, auto) 34px !important;
+    gap: 8px !important;
+    align-items: center !important;
+    padding: 10px 0 !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-top: 0 !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+    background: #15191f !important;
+    border-bottom: 1px solid #2a2f36 !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-main {
+    display: grid !important;
+    grid-template-columns: 56px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: center !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-image {
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 9px !important;
+    overflow: hidden !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-image {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-image {
+    background: #ffffff !important;
+    border: 1px solid #2a2f36 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-main strong {
+    display: block !important;
+    color: inherit !important;
+    font-family: 'Inter', 'Oswald', sans-serif !important;
+    font-size: clamp(0.82rem, 3.45vw, 0.95rem) !important;
+    font-weight: 900 !important;
+    line-height: 1.18 !important;
+    max-width: 100% !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta,
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta span {
+    color: #a8afbd !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta,
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta span {
+    color: #667085 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta {
+    display: grid !important;
+    gap: 2px !important;
+    margin-top: 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta span {
+    display: block !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: 0.72rem !important;
+    font-weight: 750 !important;
+    line-height: 1.2 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta span:nth-child(3) {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-qty {
+    min-width: 42px !important;
+    padding: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: transparent !important;
+    border: 0 !important;
+    color: inherit !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-qty::before {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-qty-number {
+    color: inherit !important;
+    font-size: clamp(1.35rem, 6vw, 1.75rem) !important;
+    line-height: 1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-qty-unit {
+    color: inherit !important;
+    font-size: 0.7rem !important;
+    font-weight: 950 !important;
+    margin-top: 3px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete {
+    width: 32px !important;
+    height: 32px !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: #ef2b2d !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete .material-symbols-rounded {
+    color: #ef2b2d !important;
+    font-size: 22px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-empty-state {
+    min-height: 210px !important;
+    color: inherit !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-empty-state small {
+    color: #667085 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-empty-state small {
+    color: #a8afbd !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-panel {
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    flex: 0 0 auto !important;
+    display: grid !important;
+    gap: 9px !important;
+    grid-template-columns: 1fr !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-panel h2 {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics > div {
+    min-width: 0 !important;
+    min-height: 64px !important;
+    padding: 8px 6px !important;
+    border-radius: 11px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    text-align: center !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics > div {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics > div {
+    background: #15171a !important;
+    border: 1px solid #2a2f36 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics span {
+    color: #7c8798 !important;
+    font-size: 0.62rem !important;
+    font-weight: 950 !important;
+    line-height: 1.05 !important;
+    text-transform: uppercase !important;
+    white-space: normal !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics span {
+    color: #a8afbd !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics strong,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-input {
+    color: inherit !important;
+    font-size: clamp(1.3rem, 6vw, 1.65rem) !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-field {
+    flex-direction: column !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-input {
+    width: 100% !important;
+    max-width: 70px !important;
+    min-width: 0 !important;
+    height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-align: center !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions {
+    display: grid !important;
+    grid-template-columns: 96px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-minus,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-plus {
+    min-height: 48px !important;
+    border-radius: 11px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-minus {
+    background: #edf1f6 !important;
+    border: 0 !important;
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-minus {
+    background: #15191f !important;
+    border: 1px solid #2a2f36 !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-plus {
+    background: #ef2b2d !important;
+    border: 0 !important;
+    color: #ffffff !important;
+    box-shadow: 0 12px 24px rgba(239, 43, 45, 0.22) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn {
+    grid-column: 1 / -1 !important;
+    min-height: 50px !important;
+    width: 100% !important;
+    border-radius: 11px !important;
+    font-size: clamp(0.76rem, 3.45vw, 0.92rem) !important;
+    font-weight: 950 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn {
+    background: transparent !important;
+    border: 1.5px solid #ef2b2d !important;
+    color: #ef2b2d !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn {
+    background: #ef2b2d !important;
+    border: 0 !important;
+    color: #ffffff !important;
+    box-shadow: 0 12px 24px rgba(239, 43, 45, 0.22) !important;
+  }
+
+  html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn {
+    background: #ffffff !important;
+    border: 1.5px solid #111111 !important;
+    color: #111111 !important;
+  }
+
+  html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn {
+    background: #15171a !important;
+    border: 1px solid #2a2f36 !important;
+    color: #ffffff !important;
+  }
+}

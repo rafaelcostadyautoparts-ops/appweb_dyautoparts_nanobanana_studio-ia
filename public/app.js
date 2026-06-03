@@ -14640,8 +14640,8 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                 <section class="pick-work-area">
                     <div class="pick-list-panel">
                         <div class="pick-list-header">
-                            <h2>PRODUTOS NA SEPARACAO</h2>
-                            <span id="pick-list-count">${countDifferentPickProducts(currentSessionItems)} produto(s)</span>
+                            <h2>PRODUTOS BIPADOS</h2>
+                            <span id="pick-list-count">${countDifferentPickProducts(currentSessionItems)} PRODUTO(S)</span>
                         </div>
 
                         <div class="pick-table-head">
@@ -15245,7 +15245,7 @@ function updatePickItemsList() {
     const countEl = document.getElementById('pick-list-count');
     updatePickSummaryUI();
     const differentProducts = countDifferentPickProducts(currentSessionItems);
-    if (countEl) countEl.textContent = `${differentProducts} ${differentProducts === 1 ? 'produto' : 'produtos'}`;
+    if (countEl) countEl.textContent = `${differentProducts} ${differentProducts === 1 ? 'PRODUTO' : 'PRODUTOS'}`;
     if (!container) return;
     
     if (currentSessionItems.length === 0) {
