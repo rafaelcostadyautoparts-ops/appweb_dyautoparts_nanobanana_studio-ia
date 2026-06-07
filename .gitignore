@@ -3,7 +3,12 @@ build/
 dist/
 coverage/
 scratch/
+chrome-profile/
+chrome-profile*/
+edge-profile/
+edge-profile*/
 .DS_Store
+Thumbs.db
 *.log
 .env*
 !.env.example
