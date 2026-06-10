@@ -8910,6 +8910,81 @@ async function saveInventoryItemToServer(item) {
 }
 
 
+async function findExistingRequiredMovement(movPayload) {
+    const client = window.supabaseClient;
+    const quantidade = Math.abs(Number(movPayload.quantidade || 0));
+    if (client && movPayload.id_interno && movPayload.origem && movPayload.observacao) {
+        const { data: existingMovs, error: existingError } = await client
+            .from('movimentos')
+            .select('*')
+            .eq('id_interno', movPayload.id_interno)
+            .eq('origem', movPayload.origem)
+            .eq('observacao', movPayload.observacao)
+            .eq('quantidade', quantidade)
+            .limit(1);
+        if (existingError) {
+            console.warn('[MOV] nao foi possivel verificar movimento existente:', existingError);
+        } else if (existingMovs?.length) {
+            console.log('[MOV] movimento obrigatorio ja existia, reutilizando:', existingMovs[0]);
+            return existingMovs[0];
+        }
+    }
+    return null;
+}
+
+async function saveRequiredMovimentoSupabase(movPayload, contextLabel = 'movimento') {
+    const existingMov = await findExistingRequiredMovement(movPayload);
+    if (existingMov) return existingMov;
+    const savedMov = await DataClient.saveMovimentoSupabase(movPayload);
+    if (!savedMov) {
+        throw new Error(`Falha ao registrar ${contextLabel}. Estoque nao sera finalizado sem movimentacao.`);
+    }
+    return savedMov;
+}
+
+async function rollbackStockChange(idInterno, local, operacaoOriginal, quantidade, contextLabel = 'estoque') {
+    const rollbackOp = operacaoOriginal === 'subtrai' ? 'soma' : 'subtrai';
+    const reverted = await DataClient.updateEstoqueSupabase(idInterno, local, rollbackOp, quantidade);
+    if (!reverted) {
+        throw new Error(`Falha critica: ${contextLabel} alterado e rollback nao confirmado para ${idInterno} em ${local}. Verifique o estoque antes de continuar.`);
+    }
+}
+
+async function applyStockChangeWithRequiredMovement({ idInterno, local, operacao, quantidade, movPayload, contextLabel }) {
+    const existingMov = await findExistingRequiredMovement(movPayload);
+    if (existingMov) {
+        console.log('[MOV] estoque nao foi alterado novamente porque o movimento ja existia:', existingMov);
+        return existingMov;
+    }
+
+    const ok = await DataClient.updateEstoqueSupabase(idInterno, local, operacao, quantidade);
+    if (!ok) throw new Error(`Falha ao atualizar estoque do produto ${idInterno}`);
+
+    try {
+        const savedMov = await saveRequiredMovimentoSupabase(movPayload, contextLabel);
+        return savedMov;
+    } catch (error) {
+        await rollbackStockChange(idInterno, local, operacao, quantidade, contextLabel);
+        throw error;
+    }
+}
+
+async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoFisico, saldoSistema, movPayload, contextLabel }) {
+    const stockResult = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldoFisico);
+    if (!stockResult) throw new Error(`Falha ao refletir inventario no estoque do item ${item.id_interno}`);
+
+    try {
+        const savedMov = await saveRequiredMovimentoSupabase(movPayload, contextLabel);
+        return savedMov;
+    } catch (error) {
+        const reverted = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldoSistema);
+        if (!reverted) {
+            throw new Error(`Falha critica: estoque do inventario alterado e rollback nao confirmado para ${item.id_interno}. Verifique o estoque antes de continuar.`);
+        }
+        throw error;
+    }
+}
+
 
 window.finishInventorySession = async function () {
     if (isFinalizing) return;
@@ -8984,30 +9059,34 @@ window.finishInventorySession = async function () {
                 else valor_ajuste_negativo += (Math.abs(diferenca) * valor_unitario);
             }
 
-            // 1. Refletir saldo fisico em estoque_atual (inventario e fonte de verdade)
+            // 1. Refletir saldo fisico em estoque_atual e exigir movimento confirmado.
             const itemLocal = item.local || local;
-            console.log('[INV-DIAG] estoque inventario payload:', { id_interno: item.id_interno, local: itemLocal, saldo_fisico });
-            const stockResult = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldo_fisico);
-            console.log('[INV-DIAG] estoque inventario result:', stockResult);
-            if (!stockResult) throw new Error(`Falha ao refletir inventario no estoque do item ${item.id_interno}`);
-
-            // 2. Gerar movimento (Trava: se falhar, interrompe)
-            if (diferenca !== 0) {
-                const movPayload = {
-                    tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO',
-                    id_interno: item.id_interno,
-                    local_origem: diferenca < 0 ? itemLocal : null,
-                    local_destino: diferenca > 0 ? itemLocal : null,
-                    quantidade: Math.abs(diferenca),
-                    usuario: user,
-                    origem: 'APP_INVENTARIO',
-                    observacao: sessionId
-                };
-                console.log('[INV-DIAG] movimento payload:', movPayload);
-                const movResult = await DataClient.saveMovimentoSupabase(movPayload);
-                console.log('[INV-DIAG] movimento result:', movResult);
-                if (!movResult) throw new Error(`Falha ao gerar movimento do item ${item.id_interno}`);
-            }
+            const movPayload = {
+                tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : (diferenca < 0 ? 'AJUSTE_NEGATIVO' : 'INVENTARIO'),
+                id_interno: item.id_interno,
+                local_origem: diferenca < 0 ? itemLocal : null,
+                local_destino: diferenca >= 0 ? itemLocal : null,
+                quantidade: Math.abs(diferenca),
+                usuario: user,
+                origem: 'APP_INVENTARIO',
+                observacao: diferenca === 0 ? `Inventario ${sessionId} conferido sem divergencia` : sessionId
+            };
+            console.log('[INV-DIAG] estoque/movimento inventario payload:', {
+                id_interno: item.id_interno,
+                local: itemLocal,
+                saldo_sistema,
+                saldo_fisico,
+                movPayload
+            });
+            const movResult = await applyInventoryStockWithRequiredMovement({
+                item,
+                itemLocal,
+                saldoFisico: saldo_fisico,
+                saldoSistema: saldo_sistema,
+                movPayload,
+                contextLabel: `movimento do inventario ${sessionId}`
+            });
+            console.log('[INV-DIAG] estoque/movimento inventario confirmado:', movResult);
         }
 
         // 3. Só agora marcamos como FECHADO
@@ -9889,6 +9968,7 @@ function openProductFilterSheet() {
     sheet.classList.add('is-open');
     sheet.setAttribute('aria-hidden', 'false');
     document.body.classList.add('product-filter-sheet-open');
+    document.addEventListener('keydown', handleProductFilterSheetKeydown);
 }
 
 function closeProductFilterSheet() {
@@ -9897,6 +9977,11 @@ function closeProductFilterSheet() {
     sheet.classList.remove('is-open');
     sheet.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('product-filter-sheet-open');
+    document.removeEventListener('keydown', handleProductFilterSheetKeydown);
+}
+
+function handleProductFilterSheetKeydown(event) {
+    if (event.key === 'Escape') closeProductFilterSheet();
 }
 
 function clearProductSearch() {
@@ -10011,7 +10096,6 @@ async function renderSearchScreen(push = true) {
                 </div>
 
                 <div class="product-search-workbench">
-                    ${renderProductSearchSidePanel(0, '')}
                     <section class="product-search-main-panel">
                         ${renderProductSearchSummaryBar(0)}
                         <div id="search-results" class="product-search-results">
@@ -10472,12 +10556,9 @@ function handleSearchEnter(event) {
 }
 
 function getSearchProductMetaItems(product) {
-    const attrs = getProductAttrMap(product);
-    const cor = product.cor || product.col_I || attrs.cor || attrs.cor_lente || attrs.cor_botao;
     return [
         { label: 'EAN', value: product.ean || product.col_B },
-        { label: 'SKU', value: product.sku_fornecedor || product.sku },
-        { label: 'COR', value: cor }
+        { label: 'SKU', value: product.sku_fornecedor || product.sku }
     ].filter(item => isSearchProductMetaValue(item.value));
 }
 
@@ -10631,8 +10712,9 @@ function getSearchCardSellableLocationQty(productId, filterKey) {
 function renderSearchProductSellableLocations(product) {
     const productId = product?.id_interno || product?.col_A;
     const locations = [
-        { key: 'TERREO', label: 'Térreo' },
-        { key: 'PRIMEIRO_ANDAR', label: '1º Andar' }
+        { key: 'TERREO', label: 'TÉRREO' },
+        { key: 'PRIMEIRO_ANDAR', label: '1º ANDAR' },
+        { key: 'MOSTRUARIO', label: 'MOSTRUÁRIO' }
     ]
         .map(location => ({
             ...location,
@@ -10646,8 +10728,7 @@ function renderSearchProductSellableLocations(product) {
         <div class="stock-sellable-locations" aria-label="Estoque disponível por local">
             ${locations.map(location => `
                 <span class="stock-sellable-location">
-                    <span class="material-symbols-rounded">location_on</span>
-                    <strong>${location.label}</strong>
+                    <strong>${location.label}:</strong>
                     <em>${formatStockNumber(location.qty)} UN</em>
                 </span>
             `).join('')}
@@ -10702,25 +10783,31 @@ function renderProductSearchSummaryBar(resultCount = 0) {
                         onkeypress="if(event.key === 'Enter') handleSearchEnter(event)"
                         onkeydown="handleSearchKeyDown(event)"
                     />
-                    <div class="search-actions">
+                    <div class="search-actions mobile-only-scanner">
                         <button class="product-search-camera-btn" type="button" aria-label="Escanear" onclick="startScanner()">
                             <span class="material-symbols-rounded">qr_code_scanner</span>
                         </button>
                     </div>
                 </div>
             </div>
+            
+            <button class="product-search-camera-btn-desktop desktop-only-scanner" type="button" aria-label="Escanear" onclick="startScanner()">
+                <span class="material-symbols-rounded">qr_code_scanner</span>
+            </button>
+
             <div class="product-summary-metric product-found-counter">
                 <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
-                <small>PRODUTOS ENCONTRADOS</small>
+                <span class="found-label">PRODUTOS ENCONTRADOS</span>
             </div>
+            
             <div class="product-mobile-search-actions" aria-label="Acoes rapidas da busca">
-                <button type="button" onclick="openProductFilterSheet()">
+                <button type="button" class="btn-filter" onclick="openProductFilterSheet()">
                     <span class="material-symbols-rounded">tune</span>
-                    Filtros
+                    <span class="btn-text">Filtros</span>
                 </button>
-                <button type="button" onclick="clearProductSearch()">
-                    <span class="material-symbols-rounded">cleaning_services</span>
-                    Limpar
+                <button type="button" class="btn-clear" onclick="clearProductSearch()">
+                    <span class="material-symbols-rounded">delete</span>
+                    <span class="btn-text">Limpar</span>
                 </button>
             </div>
         </section>
@@ -10823,11 +10910,14 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
         const marca = cleanProductSearchText(p.marca || p.col_E || '-');
         const imgUrl = getProductImageUrl(p);
         const precoVarejo = p.preco_varejo || p.col_G || 0;
+        const precoAtacado = p.preco_atacado ?? p.col_I ?? p.preco_revenda ?? precoVarejo;
         const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
         const isAtivo = status === 'SIM' || status === 'TRUE';
 
         // Obter estoque principal (Disponível)
         const estoque = getSearchCardStockQty(p);
+        const pack = getSearchProductPackInfo(p, estoque);
+        const showCx = pack && pack.caixas > 0;
         return `
             <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
                  onclick="showProductDetails('${idInterno}')" 
@@ -10850,6 +10940,7 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
                         </span>
                     </div>
                     <h3 class="card-title">${desc}</h3>
+                    <span class="card-brand">${isFilledValue(marca) ? marca : 'SEM MARCA'}</span>
                     <div class="card-mobile-quick-info">
                         ${isFilledValue(marca) ? `<span>${marca}</span>` : '<span>Marca nao informada</span>'}
                         <span>Estoque: ${formatStockNumber(estoque)}</span>
@@ -10858,28 +10949,28 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
                     ${renderSearchProductMeta(p)}
                 </div>
 
-                <div class="card-brand-column">
-                    <span class="card-brand">${isFilledValue(marca) ? marca : 'SEM MARCA'}</span>
-                    <span class="card-brand-underline" aria-hidden="true"></span>
+                <div class="card-stock-block">
+                    <span class="stock-label">ESTOQUE TOTAL</span>
+                    <div class="stock-quantity-row">
+                        <span class="stock-value ${estoque <= 0 ? 'out' : ''}">${formatStockNumber(estoque)} <small>UN</small></span>
+                        ${showCx ? `
+                            <span class="stock-divider">|</span>
+                            <span class="stock-cx-value">${formatStockNumber(pack.caixas)} <small>CX</small></span>
+                        ` : ''}
+                    </div>
+                    ${renderSearchProductSellableLocations(p)}
                 </div>
 
-                <div class="card-operational-info">
-                    <div class="card-stock-block">
-                        <span class="card-stock-icon material-symbols-rounded" aria-hidden="true">inventory_2</span>
-                        <span class="stock-label">ESTOQUE TOTAL</span>
-                        <span class="stock-value ${estoque <= 0 ? 'out' : ''}">${formatStockNumber(estoque)} <small>UN</small></span>
-                        ${renderSearchProductPackInfo(p, estoque)}
-                        ${renderSearchProductSellableLocations(p)}
-                    </div>
-                    <div class="card-price-block">
-                        <span class="card-price-icon material-symbols-rounded" aria-hidden="true">sell</span>
+                <div class="card-price-block">
+                    <div class="card-price-tier card-price-tier-retail">
                         <span class="price-label">PREÇO VAREJO</span>
                         <span class="price-value">R$ ${Number(precoVarejo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
+                    <div class="card-price-tier card-price-tier-wholesale">
+                        <span class="price-label">PREÇO ATACADO</span>
+                        <span class="price-value">R$ ${Number(precoAtacado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
                 </div>
-
-                <div class="card-status-indicator ${isAtivo ? 'active' : 'inactive'}"></div>
-                <div class="card-more-indicator"><span class="material-symbols-rounded">more_vert</span></div>
             </div>
         `;
     }).join('');
@@ -11025,7 +11116,7 @@ function closeImageModal() {
 
 // ==== LÓGICA DE ESTOQUE E LOCAIS ====
 const LOCAIS_DISPONIVEIS = ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'];
-const LOCAIS_SAIDA = ['TERREO', 'MOSTRUARIO'];
+const LOCAIS_SAIDA = ['TERREO', 'PRIMEIRO_ANDAR', 'MOSTRUARIO'];
 const LOCAIS_NAO_VENDAVEIS = ['DEFEITO', 'EM_GARANTIA', 'EM_TRANSPORTE'];
 const LOCAIS_EXTERNOS = ['FULL_ML'];
 
@@ -13485,9 +13576,9 @@ async function resumePickingDraftFromServer(sessionId) {
 
 async function confirmDiscardSavedPickingDraft(sessionId) {
     const confirmed = await showAppConfirm({
-        title: 'Excluir rascunho de separação',
-        message: `Excluir o rascunho da separacao ${sessionId}?`,
-        detail: 'Os produtos bipados nesse rascunho serao removidos.',
+        title: 'Excluir separacao?',
+        message: `Excluir a separacao ${sessionId}?`,
+        detail: 'Os produtos bipados e a conferencia pendente vinculada serao removidos.',
         confirmLabel: 'Excluir',
         cancelLabel: 'Cancelar',
         danger: true
@@ -13934,7 +14025,9 @@ let lastScannedPickItemKey = null;
 let expandedPickItemKey = null;
 let pickRemovalModeActive = false;
 let lastPickScanAction = 'add';
-let pickScanHistory = [];
+let pickSearchDebounceTimer = null;
+let pickSearchSuggestions = [];
+let pickSearchActiveIndex = -1;
 let scanCenterToastTimeout = null;
 let scanSuccessGlowTimeout = null;
 const PICK_STATUS_DRAFT = 'em_separacao';
@@ -14375,7 +14468,7 @@ async function clearFinishedPickingDraftState(sessionId, options = {}) {
     expandedPickItemKey = null;
     pickRemovalModeActive = false;
     lastPickScanAction = 'add';
-    pickScanHistory = [];
+    clearPickSearchSuggestions();
 }
 
 async function discardPickingDraft(sessionId, options = {}) {
@@ -14408,7 +14501,7 @@ async function discardPickingDraft(sessionId, options = {}) {
     expandedPickItemKey = null;
     pickRemovalModeActive = false;
     lastPickScanAction = 'add';
-    pickScanHistory = [];
+    clearPickSearchSuggestions();
     if (currentPickingContext?.sessionId === targetSessionId) {
         currentPickingContext = null;
     }
@@ -14936,7 +15029,7 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
 
     pickRemovalModeActive = false;
     lastPickScanAction = 'add';
-    pickScanHistory = [];
+    clearPickSearchSuggestions();
     
     console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
     console.log(`[PICKING DEBUG] abriu nova bipagem sem retomar rascunho automaticamente`);
@@ -14955,7 +15048,7 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
     };
     
     currentSessionItems = [];
-    pickScanHistory = [];
+    clearPickSearchSuggestions();
     lastPickScanAction = 'add';
     renderPickingScreen(currentPickingContext.sessionId, channelId, channelLabel, channelColor);
 }
@@ -15319,13 +15412,15 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                             <span class="material-symbols-rounded">search</span>
                             <input type="text" id="pick-ean-input" class="product-search-input" 
                                    placeholder="Bipe o produto (EAN, SKU ou código interno)"
-                                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPickItem(); }"
+                                   oninput="handlePickSearchInput(event)"
+                                   onkeydown="handlePickSearchKeyDown(event)"
                                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                    inputmode="none" enterkeyhint="done">
                             <button class="pick-scanner-btn" onclick="startScanner(true)" title="Abrir Scanner" type="button">
                                 <span class="material-symbols-rounded">qr_code_scanner</span>
                             </button>
                         </div>
+                        <div id="pick-search-suggestions" class="pick-search-suggestions hidden"></div>
                     </div>
                     <div id="pick-removal-badge" class="pick-removal-badge hidden">
                         <span class="material-symbols-rounded">warning</span>
@@ -15394,13 +15489,13 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                             </button>
                             <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
                                 <span class="material-symbols-rounded">remove_circle</span>
-                                <span id="pick-remove-scan-label">Remover por bipagem</span>
+                                <span id="pick-remove-scan-label">REMOVER</span>
                             </button>
                             <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                                FINALIZAR SEPARACAO
+                                FINALIZAR
                             </button>
                             <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                                PAUSAR SEPARACAO
+                                PAUSAR
                             </button>
                         </div>
                     </aside>
@@ -15472,7 +15567,7 @@ function updatePickRemovalModeUI() {
     screen?.classList.toggle('pick-removal-active', pickRemovalModeActive);
     if (input) input.placeholder = getPickScanInputPlaceholder();
     if (button) button.classList.toggle('is-active', pickRemovalModeActive);
-    if (label) label.textContent = pickRemovalModeActive ? 'Cancelar remoção' : 'Remover por bipagem';
+    if (label) label.textContent = pickRemovalModeActive ? 'CANCELAR' : 'REMOVER';
     badge?.classList.toggle('hidden', !pickRemovalModeActive);
 }
 
@@ -15502,26 +15597,145 @@ function pickItemMatchesCode(item, cleanCode) {
     return possibleCodes.some(value => normalizePickCode(value) === code);
 }
 
-function addPickScanHistory(action, itemOrText) {
-    pickScanHistory = [];
+function getPickSuggestionCode(product) {
+    return getPickingProductId(product)
+        || normalizePickCode(product?.ean)
+        || normalizePickCode(product?.sku_fornecedor || product?.sku);
 }
 
-function renderPickScanHistory() {
-    const container = document.getElementById('pick-scan-history');
+function getPickSuggestionSearchText(product) {
+    return normalizeText([
+        getPickingProductId(product),
+        product?.ean,
+        product?.codigo_barras,
+        product?.sku_fornecedor,
+        product?.sku,
+        product?.descricao,
+        product?.descricao_base,
+        product?.descricao_completa,
+        product?.marca
+    ].filter(Boolean).join(' '));
+}
+
+function findPickProductSuggestions(query, limit = 8) {
+    const term = normalizeText(query || '').trim();
+    const codeTerm = normalizePickCode(query || '').toLowerCase();
+    if (!term && !codeTerm) return [];
+
+    const seen = new Set();
+    return (appData.products || [])
+        .map(product => {
+            const id = getPickingProductId(product);
+            const ean = normalizePickCode(product?.ean || product?.codigo_barras);
+            const sku = normalizePickCode(product?.sku_fornecedor || product?.sku);
+            const haystack = getPickSuggestionSearchText(product);
+            let score = 0;
+            if (codeTerm && [id, ean, sku].some(value => String(value || '').toLowerCase() === codeTerm)) score += 100;
+            if (codeTerm && [id, ean, sku].some(value => String(value || '').toLowerCase().startsWith(codeTerm))) score += 45;
+            if (term && haystack.startsWith(term)) score += 25;
+            if (term && haystack.includes(term)) score += 12;
+            return { product, score };
+        })
+        .filter(entry => entry.score > 0 && getPickSuggestionCode(entry.product))
+        .sort((a, b) => b.score - a.score || getPickItemTitle(a.product).localeCompare(getPickItemTitle(b.product)))
+        .filter(entry => {
+            const key = getPickSuggestionCode(entry.product);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .slice(0, limit)
+        .map(entry => entry.product);
+}
+
+function renderPickSearchSuggestions(suggestions = []) {
+    const container = document.getElementById('pick-search-suggestions');
     if (!container) return;
-    if (!pickScanHistory.length) {
+    pickSearchSuggestions = suggestions;
+    pickSearchActiveIndex = Math.min(pickSearchActiveIndex, suggestions.length - 1);
+    if (!suggestions.length) {
         container.classList.add('hidden');
         container.innerHTML = '';
         return;
     }
 
     container.classList.remove('hidden');
-    container.innerHTML = pickScanHistory.map(entry => `
-        <span class="${entry.action === 'remove' ? 'is-remove' : 'is-add'}">
-            <strong>${entry.action === 'remove' ? '-' : '+'}</strong>
-            ${escapeKitAttribute(entry.label)}
-        </span>
-    `).join('');
+    container.innerHTML = suggestions.map((product, index) => {
+        const activeClass = index === pickSearchActiveIndex ? ' is-active' : '';
+        const code = getPickSuggestionCode(product);
+        return `
+            <button class="pick-search-suggestion${activeClass}" type="button"
+                    onmousedown="event.preventDefault(); selectPickSearchSuggestion(${index});">
+                <strong>${escapeKitAttribute(code)}</strong>
+                <span>${escapeKitAttribute(getPickItemTitle(product))}</span>
+                <small>${escapeKitAttribute(product?.marca || '-')} | EAN ${escapeKitAttribute(getPickItemEan(product))} | SKU ${escapeKitAttribute(getPickItemSku(product))}</small>
+            </button>
+        `;
+    }).join('');
+}
+
+function clearPickSearchSuggestions() {
+    clearTimeout(pickSearchDebounceTimer);
+    pickSearchSuggestions = [];
+    pickSearchActiveIndex = -1;
+    const container = document.getElementById('pick-search-suggestions');
+    if (container) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+    }
+}
+
+function handlePickSearchInput(event) {
+    const value = event?.target?.value || '';
+    clearTimeout(pickSearchDebounceTimer);
+    if (!String(value).trim()) {
+        clearPickSearchSuggestions();
+        return;
+    }
+    pickSearchDebounceTimer = setTimeout(() => {
+        pickSearchActiveIndex = -1;
+        renderPickSearchSuggestions(findPickProductSuggestions(value));
+    }, 140);
+}
+
+async function selectPickSearchSuggestion(index) {
+    const product = pickSearchSuggestions[index];
+    const code = getPickSuggestionCode(product);
+    if (!code) return;
+    const input = document.getElementById('pick-ean-input');
+    if (input) input.value = code;
+    clearPickSearchSuggestions();
+    await addPickItem(code);
+}
+
+function handlePickSearchKeyDown(event) {
+    if (!event) return;
+    if (event.key === 'ArrowDown' && pickSearchSuggestions.length) {
+        event.preventDefault();
+        pickSearchActiveIndex = (pickSearchActiveIndex + 1) % pickSearchSuggestions.length;
+        renderPickSearchSuggestions(pickSearchSuggestions);
+        return;
+    }
+    if (event.key === 'ArrowUp' && pickSearchSuggestions.length) {
+        event.preventDefault();
+        pickSearchActiveIndex = pickSearchActiveIndex <= 0 ? pickSearchSuggestions.length - 1 : pickSearchActiveIndex - 1;
+        renderPickSearchSuggestions(pickSearchSuggestions);
+        return;
+    }
+    if (event.key === 'Escape') {
+        clearPickSearchSuggestions();
+        return;
+    }
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const selectedIndex = pickSearchActiveIndex >= 0 ? pickSearchActiveIndex : 0;
+        if (pickSearchSuggestions[selectedIndex]) {
+            selectPickSearchSuggestion(selectedIndex);
+        } else {
+            clearPickSearchSuggestions();
+            addPickItem();
+        }
+    }
 }
 
 function findProductInLocalCacheByCode(cleanCode) {
@@ -15722,7 +15936,7 @@ async function removePickItemByScan(cleanCode, input) {
         currentPackSession.items = currentSessionItems;
         localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
     }
-    addPickScanHistory('remove', item);
+    clearPickSearchSuggestions();
     updatePickItemsList();
     if (input) input.value = '';
 
@@ -15846,7 +16060,7 @@ async function addPickItem(scannedEan = null) {
         lastScannedPickItemKey = productId;
         lastPickScanAction = 'add';
         expandedPickItemKey = null;
-        addPickScanHistory('add', currentSessionItems[0] || product);
+        clearPickSearchSuggestions();
         const scannedPickItem = currentSessionItems[0];
 
         if ((Number(scannedPickItem?.qty || 0) === getHighQtyThreshold()) && !scannedPickItem.high_qty_prompted) {
@@ -16029,23 +16243,25 @@ function togglePickItemExpanded(productKey) {
     updatePickItemsList();
 }
 
-function removePickItem(index) {
+async function removePickItem(index) {
     const removedItem = currentSessionItems[index];
     const removedKey = getPickingProductId(removedItem) || `pick-item-${index}`;
     currentSessionItems.splice(index, 1);
     if (lastScannedPickItemKey === removedKey) lastScannedPickItemKey = null;
     if (expandedPickItemKey === removedKey) expandedPickItemKey = null;
     updatePickItemsList();
-    if (currentSessionItems.length === 0) {
-        discardPickingDraft(currentPickingContext?.sessionId, { silent: true })
-            .catch(error => console.warn('[SEP] nao foi possivel cancelar rascunho vazio:', error));
-    } else {
-        saveDraftPickSession({
-            items: currentSessionItems,
-            total_pacotes_montados: getCurrentPickPackageCount(),
-            totalPacotesMontados: getCurrentPickPackageCount(),
-            saveStatus: 'local_only'
-        });
+    const draft = getCurrentPickDraftForUpdate('saving');
+    try {
+        const result = await persistPickingItemRemoval(draft, removedItem, true);
+        markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
+        if (currentSessionItems.length === 0) {
+            await discardPickingDraft(draft.sessionId, { silent: true });
+        }
+        showToast(result?.queued ? 'Remocao salva localmente para sincronizar.' : 'Produto removido da separacao');
+    } catch (error) {
+        markDraftPickSaveStatus('failed', error);
+        console.error('[SEP] erro ao remover item manualmente', error);
+        showToast(`Erro ao salvar remocao: ${error?.message || error}`, 'error');
     }
     settlePickScannerInput(80);
 }
@@ -16176,7 +16392,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
     } finally {
         isFinalizing = false;
         const submitBtn = document.querySelector(`button[onclick^="finishPickingSession"]`);
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'FINALIZAR SEPARACAO'; }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'FINALIZAR'; }
     }
 }
 
@@ -16318,9 +16534,13 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
             const take = Math.min(available, needed);
             if (take <= 0) continue;
 
-            const ok = await DataClient.updateEstoqueSupabase(row.id_interno, local, 'subtrai', take);
-            if (!ok) throw new Error(`Falha ao baixar estoque do produto ${row.id_interno}`);
-            await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: row.id_interno,
+                local,
+                operacao: 'subtrai',
+                quantidade: take,
+                contextLabel: `movimento da separacao rapida ${sessionId}`,
+                movPayload: {
                 tipo: 'SAIDA',
                 id_interno: row.id_interno,
                 local_origem: local,
@@ -16329,15 +16549,20 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
                 usuario: currentUser,
                 origem: 'APP_SEPARACAO',
                 observacao: `Baixa automatica da separacao rapida ${sessionId}`
+                }
             });
             movimentos += 1;
             needed -= take;
         }
 
         if (needed > 0) {
-            const ok = await DataClient.updateEstoqueSupabase(row.id_interno, 'TERREO', 'subtrai', needed);
-            if (!ok) throw new Error(`Falha ao gerar estoque negativo do produto ${row.id_interno}`);
-            await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: row.id_interno,
+                local: 'TERREO',
+                operacao: 'subtrai',
+                quantidade: needed,
+                contextLabel: `movimento negativo da separacao rapida ${sessionId}`,
+                movPayload: {
                 tipo: 'SAIDA',
                 id_interno: row.id_interno,
                 local_origem: 'TERREO',
@@ -16346,6 +16571,7 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
                 usuario: currentUser,
                 origem: 'APP_SEPARACAO',
                 observacao: `Baixa da separacao rapida ${sessionId} com estoque negativo permitido. Produto ficou com saldo negativo.`
+                }
             });
             console.warn('[SEPARACAO_ESTOQUE_NEGATIVO] separacao rapida gerou saldo negativo', {
                 sessionId,
@@ -18088,8 +18314,7 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
     let movimentos = 0;
     for (const row of rows) {
         let needed = Number(row.qtd_conferida || 0);
-        const locais = ['TERREO', 'MOSTRUARIO'];
-        for (const local of locais) {
+        for (const local of LOCAIS_SAIDA) {
             if (needed <= 0) break;
             const stockRows = (appData.estoque || [])
                 .filter(stock => String(stock.id_interno || stock.col_a || '') === String(row.id_interno) && normalizarLocal(stock.local) === local)
@@ -18097,9 +18322,13 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
             const available = stockRows.reduce((sum, stock) => sum + Math.max(0, Number(stock.saldo_disponivel ?? stock.saldo_total ?? stock.saldo ?? 0) || 0), 0);
             const take = Math.min(available, needed);
             if (take <= 0) continue;
-            const ok = await DataClient.updateEstoqueSupabase(row.id_interno, local, 'subtrai', take);
-            if (!ok) throw new Error(`Falha ao baixar estoque do produto ${row.id_interno}`);
-            await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: row.id_interno,
+                local,
+                operacao: 'subtrai',
+                quantidade: take,
+                contextLabel: `movimento da conferencia ${payload.sessionId}`,
+                movPayload: {
                 tipo: 'SAIDA',
                 id_interno: row.id_interno,
                 local_origem: local,
@@ -18108,15 +18337,20 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
                 usuario: payload.user,
                 origem: 'APP_CONFERENCIA',
                 observacao: `Baixa automatica da conferencia ${payload.sessionId}`
+                }
             });
             movimentos += 1;
             needed -= take;
         }
 
         if (needed > 0) {
-            const ok = await DataClient.updateEstoqueSupabase(row.id_interno, 'TERREO', 'subtrai', needed);
-            if (!ok) throw new Error(`Falha ao gerar estoque negativo do produto ${row.id_interno}`);
-            await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: row.id_interno,
+                local: 'TERREO',
+                operacao: 'subtrai',
+                quantidade: needed,
+                contextLabel: `movimento negativo da conferencia ${payload.sessionId}`,
+                movPayload: {
                 tipo: 'SAIDA',
                 id_interno: row.id_interno,
                 local_origem: 'TERREO',
@@ -18125,6 +18359,7 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
                 usuario: payload.user,
                 origem: 'APP_CONFERENCIA',
                 observacao: `Baixa da conferencia ${payload.sessionId} com estoque negativo permitido. Produto ficou com saldo negativo.`
+                }
             });
             console.warn('[SEPARACAO_ESTOQUE_NEGATIVO] movimento gerou saldo negativo', {
                 sessionId: payload.sessionId,
@@ -25760,8 +25995,7 @@ async function renderGarantiaEnvioForm() {
             const result = await DataClient.saveGarantiaSupabase(garantiaData);
             if (!result) throw new Error('Erro ao salvar registro de garantia');
 
-            // 2. Registrar movimento de saída da origem
-            await DataClient.saveMovimentoSupabase({
+            const movPayload = {
                 tipo: 'TRANSFERENCIA',
                 id_interno: selectedProduct.id_interno,
                 local_origem: selectedSource,
@@ -25770,20 +26004,28 @@ async function renderGarantiaEnvioForm() {
                 usuario: currentUser,
                 origem: 'MANUAL',
                 observacao: `${garantiaData.tipo_operacao}: Enviado de ${selectedSource} para EM_GARANTIA. Motivo: ${garantiaData.motivo}`
-            });
+            };
 
-            // 3. Atualizar estoque (Subtrair origem, Somar destino)
             const subOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, selectedSource, 'subtrai', qty);
-            const addOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty);
+            if (!subOk) throw new Error('Erro ao baixar saldo da origem');
 
-            if (subOk && addOk) {
-                showToast('Garantia registrada e estoque movido!', 'success');
-                // Recarregar dados do módulo para atualizar UI global
-                await DataClient.loadModule('produtos', true);
-                renderMovimentacoesSubMenu();
-            } else {
-                throw new Error('Erro ao atualizar saldos de estoque');
+            const addOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty);
+            if (!addOk) {
+                await rollbackStockChange(selectedProduct.id_interno, selectedSource, 'subtrai', qty, 'garantia');
+                throw new Error('Erro ao creditar saldo em garantia');
             }
+
+            try {
+                await saveRequiredMovimentoSupabase(movPayload, 'movimento de garantia');
+            } catch (movError) {
+                await rollbackStockChange(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty, 'garantia');
+                await rollbackStockChange(selectedProduct.id_interno, selectedSource, 'subtrai', qty, 'garantia');
+                throw movError;
+            }
+
+            showToast('Garantia registrada e estoque movido!', 'success');
+            await DataClient.loadModule('produtos', true);
+            renderMovimentacoesSubMenu();
 
         } catch (err) {
             console.error('Erro no fluxo de garantia:', err);
@@ -28075,9 +28317,13 @@ async function finalizarEntradaNFXmlConfirmado() {
         console.log('[ENTRADA_NF_XML] finalizando entrada', state.savedEntradaId);
         recalcularCustosReaisEntradaNFXML({ log: true });
         for (const item of state.itens) {
-            const ok = await DataClient.updateEstoqueSupabase(item.id_interno, 'TERREO', 'soma', item.quantidade);
-            if (!ok) throw new Error(`Falha ao atualizar estoque do item ${item.id_interno}`);
-            await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: item.id_interno,
+                local: 'TERREO',
+                operacao: 'soma',
+                quantidade: item.quantidade,
+                contextLabel: `movimento da NF ${state.numero_nf}`,
+                movPayload: {
                 tipo: 'ENTRADA',
                 id_interno: item.id_interno,
                 local_origem: null,
@@ -28086,6 +28332,7 @@ async function finalizarEntradaNFXmlConfirmado() {
                 usuario: localStorage.getItem('currentUser'),
                 origem: 'APP_COMPRAS',
                 observacao: `NF ${state.numero_nf} - ${state.chave_acesso} | custo_real_unit=${nfXmlFormatMoney(item.custo_real_unitario)} | custo_real_total=${nfXmlFormatMoney(item.custo_real_total)}`
+                }
             });
         }
 
@@ -28199,9 +28446,13 @@ async function finalizarEntradaNFAberta(entradaId) {
         });
 
         for (const item of itens) {
-            const ok = await DataClient.updateEstoqueSupabase(item.id_interno, 'TERREO', 'soma', item.quantidade);
-            if (!ok) throw new Error(`Falha ao atualizar estoque do item ${item.id_interno}`);
-            const savedMov = await DataClient.saveMovimentoSupabase({
+            await applyStockChangeWithRequiredMovement({
+                idInterno: item.id_interno,
+                local: 'TERREO',
+                operacao: 'soma',
+                quantidade: item.quantidade,
+                contextLabel: `movimento da NF ${entrada.numero_nf || entrada.id}`,
+                movPayload: {
                 tipo: 'ENTRADA',
                 id_interno: item.id_interno,
                 local_origem: null,
@@ -28210,8 +28461,8 @@ async function finalizarEntradaNFAberta(entradaId) {
                 usuario: localStorage.getItem('currentUser'),
                 origem: 'APP_COMPRAS',
                 observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id} | custo_real_unit=${nfXmlFormatMoney(item.custo_real_unitario)} | custo_real_total=${nfXmlFormatMoney(item.custo_real_total)}`
+                }
             });
-            if (!savedMov) throw new Error(`Falha ao registrar movimento do item ${item.id_interno}`);
         }
 
         const lotesResult = await criarLotesEntradaNF({

@@ -1,156 +1,38 @@
-  # WORKFLOW RULES — DY AutoParts WMS
+# WORKFLOW_RULES.md
 
-This document defines the operational workflows of the warehouse system.
+Documento consolidado no padrao atual do projeto.
 
-The AI must follow these workflows when implementing or modifying features.
+Fluxos oficiais devem seguir:
 
----
+- `docs/PADRAO_QUALIDADE_CODIGO_DY_AUTO_PARTS.md`
+- `PROJECT_CONTEXT.md`
+- `docs/ARCHITECTURE_BOUNDARIES.md`
 
-# 1. Product Registration
+## Fluxos atuais principais
 
-Flow:
+### Separacao rapida
 
-Create product
-↓
-Generate id_interno
-↓
-Register EAN
-↓
-Define category
-↓
-Define storage location
-↓
-Product becomes available for operations
+- Nao passa por conferencia.
+- Baixa estoque ao finalizar separacao.
+- Movimento: `tipo = SAIDA`, `origem = APP_SEPARACAO`.
 
-Rules:
+### Separacao normal
 
-id_interno is the unique identifier
-EAN may be duplicated across brands
-Product cannot be deleted if movements exist
+- Prepara pedido.
+- Nao baixa estoque na separacao.
+- Baixa estoque apenas ao finalizar conferencia.
+- Movimento: `tipo = SAIDA`, `origem = APP_CONFERENCIA`.
 
----
+### Inventario
 
-# 2. Purchase Workflow
+- Contagem fisica e fonte de verdade ao finalizar.
+- Ajuste positivo: `AJUSTE_POSITIVO` + `APP_INVENTARIO`.
+- Ajuste negativo: `AJUSTE_NEGATIVO` + `APP_INVENTARIO`.
 
-Create purchase order
-↓
-Send order to supplier
-↓
-Wait for delivery
-↓
-Receive goods
-↓
-Register invoice (Entrada NF)
-↓
-Generate movement CHEGADA_COMPRA
-↓
-Stock becomes available
+### Entrada NF / compra
 
-Rules:
+- Entrada futura deve usar `ENTRADA` + `APP_COMPRAS`.
 
-Purchase orders do not affect stock
-Stock is only affected after invoice entry
+### Ajustes manuais
 
----
-
-# 3. Inventory Workflow
-
-Start inventory session
-↓
-Scan products
-↓
-Count quantities
-↓
-Save inventory items
-↓
-Compare with expected stock
-↓
-Generate adjustment movement if needed
-
-Movement types used:
-
-AJUSTE_POSITIVO
-AJUSTE_NEGATIVO
-
-Rules:
-
-Inventory must not edit stock directly
-Adjustments generate movements
-
----
-
-# 4. Picking Workflow (Order Separation)
-
-Create picking order
-↓
-Reserve stock
-↓
-Operator scans items
-↓
-Items added to separation
-↓
-Separation completed
-
-Movement type:
-
-RESERVA_ESTOQUE
-
-Rules:
-
-Stock becomes reserved but not removed yet
-
----
-
-# 5. Packing Workflow (Order Conference)
-
-Start packing session
-↓
-Scan separated products
-↓
-Validate quantities
-↓
-Finalize order
-
-Movement type:
-
-CONFIRMACAO_SAIDA
-
-Rules:
-
-This is when stock is effectively reduced
-
----
-
-# 6. Stock Movement Rules
-
-Stock must never be edited directly.
-
-Stock balance must always be calculated from movement logs.
-
-Allowed movement types:
-
-CHEGADA_COMPRA
-CONFIRMACAO_SAIDA
-AJUSTE_POSITIVO
-AJUSTE_NEGATIVO
-TRANSFERENCIA
-RESERVA_ESTOQUE
-
----
-# 7. Offline Operation
-
-System must support offline operation.
-
-When offline:
-
-Operations are stored locally
-↓
-Added to synchronization queue
-↓
-Sent to server when connection returns
-
-Technology used:
-
-IndexedDB
-Offline Queue
-Background Sync
+- Usar `AJUSTE_POSITIVO` ou `AJUSTE_NEGATIVO` + `MANUAL`.

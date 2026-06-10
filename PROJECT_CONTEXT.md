@@ -28,7 +28,6 @@ O objetivo principal e centralizar a operacao diaria da DY Auto Parts:
 - Vite.
 - JavaScript, CSS e HTML.
 - Supabase como banco principal.
-- Google Sheets como base secundaria, backup ou legado.
 - Service Worker para cache/offline.
 
 ## 4. Estrutura Geral do Projeto
@@ -37,7 +36,7 @@ Arquivos e pastas principais:
 
 - `index.html`: ponto de entrada do app, carrega CSS, scripts, manifest e arquivos publicos.
 - `public/app.js`: arquivo principal do app, com telas, fluxos, navegacao e logica de interface.
-- `public/dataClient.js`: camada de acesso a dados, com rotas para Supabase e fallback legado.
+- `public/dataClient.js`: camada de acesso a dados, com rotas para Supabase, cache e sincronizacao.
 - `public/supabaseClient.js`: inicializacao do cliente Supabase e helpers de storage.
 - `public/sw.js`: service worker manual do PWA para cache e atualizacao.
 - `public/src/index.css`: estilos principais do app, incluindo login, menu, telas internas e responsividade.
@@ -50,8 +49,7 @@ Supabase e a fonte principal de dados do projeto.
 
 Regras importantes:
 
-- Google Sheets nao deve sobrescrever dados do Supabase.
-- Google Sheets deve ser tratado como legado, apoio ou backup.
+- Planilhas externas nao fazem parte da operacao atual. Futuramente, podem existir apenas como backup/exportacao de seguranca derivada do Supabase.
 - `localStorage` e caches locais devem ser usados apenas como fallback emergencial ou estado temporario.
 - Quando Supabase estiver disponivel, evitar usar dados antigos em cache.
 - Toda alteracao relevante de dados deve respeitar o Supabase como fonte principal.
@@ -66,7 +64,7 @@ Regras:
 - Cache local deve ser tratado como otimizacao, fallback emergencial ou estado temporario.
 - Se alterar `public/app.js`, `public/dataClient.js` ou `public/sw.js`, verificar risco de dado antigo em cache.
 - Sempre considerar versionamento do service worker quando alterar arquivos publicos criticos.
-- Evitar que dados legados do Google Sheets sobrescrevam registros atuais vindos do Supabase.
+- Nao criar fonte paralela que sobrescreva registros atuais vindos do Supabase.
 
 ## 7. Modulos do App
 
@@ -343,7 +341,6 @@ Regras para Codex, IA ou desenvolvedor:
 - Fazer mudancas cirurgicas.
 - Nao alterar modulos que nao foram solicitados.
 - Preservar Supabase como fonte principal.
-- Nao quebrar fallback legado.
 - Nao alterar service worker sem necessidade.
 - Nao criar pastas duplicadas.
 - Nao mexer no `dist/` manualmente se o projeto usa build.

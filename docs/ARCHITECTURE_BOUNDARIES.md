@@ -5,7 +5,7 @@ Este projeto deve crescer com fronteiras claras entre tela, dados e regra critic
 ## Fonte de verdade
 
 - Supabase e a fonte principal de verdade.
-- Google Sheets/App Script e legado inativo e nao deve ser usado como segundo plano para novas rotinas.
+- Planilhas externas nao fazem parte da operacao atual. Futuramente, podem existir apenas como backup/exportacao de seguranca derivada do Supabase.
 - `localStorage`, IndexedDB e service worker servem para estado temporario, fila offline ou cache, nunca para sobrescrever dados confirmados no Supabase.
 
 ## Regra para novas funcionalidades

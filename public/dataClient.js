@@ -1317,11 +1317,48 @@ const DataClient = (function () {
         if (!session) return { deleted: false, missing: true };
 
         const status = String(session.status || '').toLowerCase();
-        const draftStatuses = new Set(['em_separacao', 'rascunho', 'draft']);
-        if (!draftStatuses.has(status)) {
-            throw new Error('Somente rascunhos de separacao podem ser cancelados.');
+        const blockedStatuses = new Set(['finalizada', 'finalizado', 'concluida', 'concluido', 'faturada', 'faturado']);
+        if (blockedStatuses.has(status)) {
+            throw new Error('Separacao finalizada/concluida/faturada nao pode ser excluida.');
         }
 
+        const { data: conferencias, error: confLookupError } = await client
+            .from('conferencia')
+            .select('conferencia_id,status')
+            .eq('separacao_id', sessionId);
+
+        if (confLookupError) {
+            logSepSupabaseError('erro ao buscar conferencia para exclusao', confLookupError, { sessionId });
+            throw confLookupError;
+        }
+
+        const blockedConference = (conferencias || []).find(row => {
+            const confStatus = String(row.status || '').toLowerCase();
+            return blockedStatuses.has(confStatus) || confStatus === 'conferido';
+        });
+        if (blockedConference) {
+            throw new Error('Separacao com conferencia finalizada/concluida/faturada nao pode ser excluida.');
+        }
+
+        const { error: confItemsError } = await client
+            .from('conferencia_itens')
+            .delete()
+            .eq('separacao_id', sessionId);
+
+        if (confItemsError) {
+            logSepSupabaseError('erro ao excluir itens da conferencia vinculada', confItemsError, { sessionId });
+            throw confItemsError;
+        }
+
+        const { error: confError } = await client
+            .from('conferencia')
+            .delete()
+            .eq('separacao_id', sessionId);
+
+        if (confError) {
+            logSepSupabaseError('erro ao excluir conferencia vinculada', confError, { sessionId });
+            throw confError;
+        }
         const { error: itemsError } = await client
             .from('separacao_itens')
             .delete()

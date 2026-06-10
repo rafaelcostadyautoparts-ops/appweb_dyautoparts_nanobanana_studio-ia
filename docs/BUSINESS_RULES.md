@@ -1,125 +1,20 @@
-# BUSINESS RULES — DY AutoParts WMS
+# BUSINESS_RULES.md
 
-This document defines the business rules that govern the warehouse system.
+Documento consolidado no padrao atual do projeto.
 
-All AI-generated code must respect these rules.
+As regras de negocio oficiais estao em:
 
----
+- `docs/PADRAO_QUALIDADE_CODIGO_DY_AUTO_PARTS.md`
+- `docs/ARCHITECTURE_BOUNDARIES.md`
+- `PROJECT_CONTEXT.md`
 
-# 1. Product Identification
+## Regras atuais essenciais
 
-Products must be identified using:
-
-id_interno
-
-EAN is used only for scanning.
-
-Multiple products may share the same EAN.
-
-Example:
-
-Sensor Grafite Mafreet
-Sensor Grafite JP2
-
-Same EAN, different id_interno.
-
----
-
-# 2. Stock Control
-
-Stock cannot be edited manually.
-
-Stock must always be calculated using the movement log.
-
-Stock formula:
-
-Current Stock = SUM(entries) - SUM(exits)
-
-Source table:
-
-MOVIMENTOS
-
----
-
-# 3. Movement Integrity
-
-Every stock change must create a movement record.
-
-Allowed movement types:
-
-CHEGADA_COMPRA
-CONFIRMACAO_SAIDA
-AJUSTE_POSITIVO
-AJUSTE_NEGATIVO
-TRANSFERENCIA
-RESERVA_ESTOQUE
-
-Stock must never be edited directly.
-
----
-
-# 4. Traceability
-
-Every operation must record:
-
-user
-timestamp
-operation
-origin
-location
-
-Example origins:
-
-INVENTARIO
-PICK
-PACK
-COMPRA
-AJUSTE
-
----
-
-# 5. Mobile Warehouse Operation
-
-The system is designed for warehouse mobile operation.
-
-Rules:
-
-Large buttons
-Barcode scanning
-Audio feedback
-Vibration feedback
-Minimal typing
-
----
-
-# 6. Performance
-
-System must prioritize speed.
-
-Rules:
-
-Avoid heavy frameworks
-Prefer simple JavaScript
-Cache data locally
-Minimize server requests
-
----
-
-# 7. Error Prevention
-
-System must prevent:
-
-Negative stock
-Duplicate movements
-Invalid product identifiers
-
----
-
-# 8. System Integrity
-
-AI must never:
-
-Delete movement history
-Modify historical records
-Change product identifiers
-Break API compatibility
+- Produto e identificado por `id_interno`.
+- Supabase e a fonte principal de dados.
+- Movimentos novos devem gravar `tipo` e `origem` em maiusculo.
+- Quantidade em movimento deve ser positiva.
+- Separacao rapida baixa estoque na separacao.
+- Separacao normal baixa estoque somente na conferencia.
+- Inventario finalizado reflete a contagem fisica em `estoque_atual`.
+- Nao alterar RPC, migration, RLS, estoque ou dados historicos sem autorizacao.

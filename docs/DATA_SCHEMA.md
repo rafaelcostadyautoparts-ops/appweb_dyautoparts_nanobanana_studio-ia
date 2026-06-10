@@ -2,9 +2,9 @@
 
 Este documento descreve a estrutura de dados utilizada no sistema **DY AutoParts WMS**.
 
-O banco de dados utiliza **Google Sheets** como armazenamento principal.
+A base principal e fonte de verdade do projeto e o **Supabase**.
 
-Cada aba representa uma tabela do sistema.
+Cada secao representa uma tabela ou conjunto de campos do sistema.
 
 ---
 
