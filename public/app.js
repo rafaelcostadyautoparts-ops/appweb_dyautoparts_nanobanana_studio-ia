@@ -34,7 +34,7 @@ const MOJIBAKE_REPLACEMENTS = [
 function repairMojibakeText(value) {
     if (value === undefined || value === null) return '';
     const decodeLatin1AsUtf8 = (text) => {
-        if (!/[\u00c3\u00c2\u00e2\u00ef]/.test(text)) return text;
+        if (!/[\u00c3\u00c2\u00e2\u00ef\u0192\u2020\u20ac\u0161\u0153\u017d]/.test(text)) return text;
         try {
             const bytes = Uint8Array.from(Array.from(text), ch => ch.charCodeAt(0) & 255);
             return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -42,7 +42,40 @@ function repairMojibakeText(value) {
             return text;
         }
     };
+    const hasBrokenAccent = (match) => /[^\x00-\x7F]/.test(match);
+    const keepCase = (match, upperText, titleText = upperText) => match === match.toUpperCase() ? upperText : titleText;
+    const wordFixes = [
+        [/PRE(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'PRE\u00c7O', 'Pre\u00e7o'],
+        [/PREA\S*O/gi, 'PRE\u00c7O', 'Pre\u00e7o'],
+        [/T(?=[^\s]*[^\x00-\x7F])\S*RREO/gi, 'T\u00c9RREO', 'T\u00e9rreo'],
+        [/T\S*RREO/gi, 'T\u00c9RREO', 'T\u00e9rreo'],
+        [/SEPARA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'SEPARA\u00c7\u00c3O', 'Separa\u00e7\u00e3o'],
+        [/CONFER(?=[^\s]*[^\x00-\x7F])\S*NCIA/gi, 'CONFER\u00caNCIA', 'Confer\u00eancia'],
+        [/C(?=[^\s]*[^\x00-\x7F])\S*DIGO/gi, 'C\u00d3DIGO', 'C\u00f3digo'],
+        [/USU(?=[^\s]*[^\x00-\x7F])\S*RIO/gi, 'USU\u00c1RIO', 'Usu\u00e1rio'],
+        [/HIST(?=[^\s]*[^\x00-\x7F])\S*RICO/gi, 'HIST\u00d3RICO', 'Hist\u00f3rico'],
+        [/DISPON(?=[^\s]*[^\x00-\x7F])\S*VEL/gi, 'DISPON\u00cdVEL', 'Dispon\u00edvel'],
+        [/REVIS(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'REVIS\u00c3O', 'Revis\u00e3o'],
+        [/LAN(?=[^\s]*[^\x00-\x7F])\S*AR/gi, 'LAN\u00c7AR', 'Lan\u00e7ar'],
+        [/LAN(?=[^\s]*[^\x00-\x7F])\S*AMENTO/gi, 'LAN\u00c7AMENTO', 'Lan\u00e7amento'],
+        [/V(?=[^\s]*[^\x00-\x7F])\S*NCULOS\b/gi, 'V\u00cdNCULOS', 'V\u00ednculos'],
+        [/V(?=[^\s]*[^\x00-\x7F])\S*NCULO\b/gi, 'V\u00cdNCULO', 'V\u00ednculo'],
+        [/OP(?=[^\s]*[^\x00-\x7F])\S*ES\b/gi, 'OP\u00c7\u00d5ES', 'Op\u00e7\u00f5es'],
+        [/DESCRI(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'DESCRI\u00c7\u00c3O', 'Descri\u00e7\u00e3o'],
+        [/IMPORTA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'IMPORTA\u00c7\u00c3O', 'Importa\u00e7\u00e3o'],
+        [/ATEN(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'ATEN\u00c7\u00c3O', 'Aten\u00e7\u00e3o'],
+        [/CONFIGURA(?=[^\s]*[^\x00-\x7F])\S*ES/gi, 'CONFIGURA\u00c7\u00d5ES', 'Configura\u00e7\u00f5es'],
+        [/INFORMA(?=[^\s]*[^\x00-\x7F])\S*ES/gi, 'INFORMA\u00c7\u00d5ES', 'Informa\u00e7\u00f5es'],
+        [/INFORMA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'INFORMA\u00c7\u00c3O', 'Informa\u00e7\u00e3o'],
+        [/ALTERA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'ALTERA\u00c7\u00c3O', 'Altera\u00e7\u00e3o'],
+        [/PR(?=[^\s]*[^\x00-\x7F])\S*CADASTRO/gi, 'PR\u00c9-CADASTRO', 'Pr\u00e9-cadastro'],
+        [/N(?=[^\s]*[^\x00-\x7F])\S*O\b/gi, 'N\u00c3O', 'N\u00e3o'],
+        [/S(?=[^\s]*[^\x00-\x7F])\S*O\b/gi, 'S\u00c3O', 'S\u00e3o']
+    ];
     let output = String(value);
+    for (const [broken, fixed] of MOJIBAKE_REPLACEMENTS) {
+        output = output.split(broken).join(fixed);
+    }
     for (let pass = 0; pass < 4; pass++) {
         const before = output;
         output = decodeLatin1AsUtf8(output)
@@ -56,20 +89,37 @@ function repairMojibakeText(value) {
             .replace(/\u00ef\u00bf\u00bd/g, '');
         if (output === before) break;
     }
+    wordFixes.forEach(([pattern, upperText, titleText]) => {
+        output = output.replace(pattern, match => hasBrokenAccent(match) ? keepCase(match, upperText, titleText) : match);
+    });
     output = output
-        .replace(/PRE(?=[^\s]*[^\x00-\x7F])\S*O/gi, match => match === match.toUpperCase() ? 'PRE\u00c7O' : 'Pre\u00e7o')
-        .replace(/PREA\S*O/gi, match => match === match.toUpperCase() ? 'PRE\u00c7O' : 'Pre\u00e7o')
-        .replace(/T(?=[^\s]*[^\x00-\x7F])\S*RREO/gi, match => match === match.toUpperCase() ? 'T\u00c9RREO' : 'T\u00e9rreo')
-        .replace(/T\S*RREO/gi, match => match === match.toUpperCase() ? 'T\u00c9RREO' : 'T\u00e9rreo')
-        .replace(/SEPARA\S*O/gi, match => match === match.toUpperCase() ? 'SEPARA\u00c7\u00c3O' : 'Separa\u00e7\u00e3o')
-        .replace(/CONFER\S*NCIA/gi, match => match === match.toUpperCase() ? 'CONFER\u00caNCIA' : 'Confer\u00eancia')
-        .replace(/C\S*DIGO/gi, match => match === match.toUpperCase() ? 'C\u00d3DIGO' : 'C\u00f3digo')
-        .replace(/A\S*ES\b/gi, match => match === match.toUpperCase() ? 'A\u00c7\u00d5ES' : 'A\u00e7\u00f5es')
-        .replace(/USU\S*RIO/gi, match => match === match.toUpperCase() ? 'USU\u00c1RIO' : 'Usu\u00e1rio')
-        .replace(/HIST\S*RICO/gi, match => match === match.toUpperCase() ? 'HIST\u00d3RICO' : 'Hist\u00f3rico')
-        .replace(/DISPON\S*VEL/gi, match => match === match.toUpperCase() ? 'DISPON\u00cdVEL' : 'Dispon\u00edvel')
+        .replace(/\bUS\u00c3O\b/g, 'USU\u00c1RIO')
+        .replace(/\bUs\u00e3o\b/g, 'Usu\u00e1rio')
+        .replace(/\b[^\s\x00-\x7F]*ltima\b/gi, match => keepCase(match, '\u00daLTIMA', '\u00daltima'))
         .replace(/(\d+)(?=[^\s]*[^\x00-\x7F])\S*\s+ANDAR/gi, '$1\u00ba ANDAR');
     return output;
+}
+
+function restoreScanFieldFocus(inputOrContext = 'search', delay = 50, { clear = true } = {}) {
+    const inputIds = {
+        search: 'search-input',
+        picking: 'pick-ean-input',
+        pick: 'pick-ean-input',
+        conference: 'pack-ean-input',
+        pack: 'pack-ean-input',
+        inventory: 'inv-ean-input',
+        garantia: 'garantia-search-input',
+        edit: 'edit-search-input'
+    };
+    const inputId = inputIds[inputOrContext] || inputOrContext;
+    setTimeout(() => {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        if (clear) input.value = '';
+        if (inputId === 'pick-ean-input') preparePickScannerInput({ focus: true });
+        else input.focus({ preventScroll: true });
+        input.select?.();
+    }, delay);
 }
 
 function sanitizeTextNode(node) {
@@ -146,6 +196,8 @@ const MATERIAL_ICON_FALLBACKS = {
     history: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6M12 7v5l4 2"/></svg>',
     local_shipping: '<svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
     package_2: '<svg viewBox="0 0 24 24"><path d="M4 8 12 4l8 4v8l-8 4-8-4V8Z"/><path d="m4 8 8 4 8-4M12 12v8M8 6l8 4"/></svg>',
+    pause: '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
+    pause_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8v8M14 8v8"/></svg>',
     percent: '<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
     person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
     priority_high: '<svg viewBox="0 0 24 24"><path d="M12 5v9M12 19h.01"/></svg>',
@@ -414,6 +466,7 @@ async function handleProductScan(rawValue, context = 'search') {
             if (input) {
                 input.value = rawValue;
                 performSearch();
+                restoreScanFieldFocus('search', 80, { clear: false });
             }
         }
         return;
@@ -449,7 +502,7 @@ async function handleProductScan(rawValue, context = 'search') {
             const input = document.getElementById('search-input');
             if (input) {
                 input.value = rawValue;
-                input.focus();
+                restoreScanFieldFocus('search', 80, { clear: false });
             }
             await stopScanner();
             performSearch();
@@ -480,6 +533,7 @@ async function handleProductScan(rawValue, context = 'search') {
         if (context !== 'search') {
             showScanFeedback('warning', 'Produto nÃƒÆ’Ã‚Â£o cadastrado');
         }
+        restoreScanFieldFocus(context, 80);
         return null;
     }
 }
@@ -10465,11 +10519,13 @@ async function startScanner(isPicking = false, isConference = false, isInventory
                         if (input) {
                             input.value = decodedText;
                             input.removeAttribute('inputmode');
-                            input.focus();
+                            restoreScanFieldFocus('search', 80, { clear: false });
                         }
                         performSearch();
-                    } else if (isInventory) addInventoryItem(decodedText);
-                    else if (isPicking) addPickItem(decodedText);
+                    } else if (isInventory) {
+                        addInventoryItem(decodedText);
+                        restoreScanFieldFocus('inventory', 120);
+                    } else if (isPicking) addPickItem(decodedText);
                     else if (isConference) addPackScan(decodedText);
                 }
             },
@@ -11407,7 +11463,7 @@ async function criarLotesEntradaNF(entrada, itens = []) {
     const client = window.supabaseClient;
     if (!client || !entrada?.id) return { ok: false, skipped: true, reason: 'client_or_entrada_missing' };
 
-    const itensValidos = (itens || []).filter(item => item?.id_interno && parseDecimal(item.quantidade) > 0);
+    const itensValidos = (itens || []).filter(item => item?.id_interno && getEntradaNFStockQuantity(item) > 0);
     if (!itensValidos.length) return { ok: true, inserted: 0, skipped: 0 };
 
     try {
@@ -11437,9 +11493,9 @@ async function criarLotesEntradaNF(entrada, itens = []) {
                 return true;
             })
             .map(item => {
-                const quantidade = parseDecimal(item.quantidade);
-                const custoUnitario = parseDecimal(item.custo_real_unitario || item.valor_unitario);
-                const custoTotal = parseDecimal(item.custo_real_total || (quantidade * custoUnitario));
+                const quantidade = getEntradaNFStockQuantity(item);
+                const custoUnitario = getEntradaNFStockUnitCost(item);
+                const custoTotal = getEntradaNFStockTotalCost(item) || (quantidade * custoUnitario);
                 return {
                     produto_id: item.produto_id || null,
                     id_interno: String(item.id_interno),
@@ -13540,6 +13596,7 @@ async function renderFinanceiroSubMenu() {
         { id: 'fin_a_vencer', label: 'A VENCER', icon: 'financeiro_avencer', onclick: "renderFinanceiroLista('a_vencer')", description: 'Consultar parcelas de notas fiscais com vencimento futuro.' },
         { id: 'fin_vencidas', label: 'VENCIDAS', icon: 'financeiro_vencidas', onclick: "renderFinanceiroLista('vencidas')", description: 'Ver parcelas vencidas e valores em atraso.' },
         { id: 'fin_pendentes', label: 'PENDENTES', icon: 'financeiro_pendentes', onclick: "renderFinanceiroLista('pendentes')", description: 'Acompanhar todas as parcelas ainda em aberto.' },
+        { id: 'fin_a_combinar', label: 'A COMBINAR', icon: 'financeiro_pendentes', onclick: "renderFinanceiroACombinar()", description: 'Notas recebidas sem pagamento definido.' },
         { id: 'fin_pagas_mes', label: 'PAGAS NO MÃƒÆ’Ã…Â S', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Consultar parcelas pagas dentro do mÃƒÆ’Ã‚Âªs atual.' }
     ];
 
@@ -13611,6 +13668,248 @@ async function renderFinanceiroLista(filtro = 'pendentes') {
             </main>
         </div>
     `;
+}
+
+async function renderFinanceiroACombinar() {
+    const currentUser = localStorage.getItem('currentUser');
+    let entradas = [];
+    try {
+        entradas = await loadHistoricoEntradasNF(true);
+    } catch (error) {
+        console.warn('[FINANCEIRO] erro ao carregar notas a combinar', error);
+    }
+    const pendentes = (entradas || []).filter(entrada => {
+        const status = String(entrada.status_financeiro || '').toLowerCase();
+        const tipo = String(entrada.tipo_condicao_financeira || '').toLowerCase();
+        return status === 'a_combinar' || tipo === 'a_combinar';
+    });
+    const total = pendentes.reduce((sum, entrada) => sum + Number(String(entrada.valor_total ?? 0).replace(',', '.')), 0);
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+            ${getModuleSidebarHTML('financeiro')}
+            <main class="container financeiro-list-workspace">
+                <section class="financeiro-list-panel">
+                    <header class="financeiro-list-header">
+                        <span class="standard-module-card-icon">${menu3DIcons.financeiro_pendentes || menu3DIcons.financeiro || ''}</span>
+                        <span>
+                            <strong>NOTAS COM PAGAMENTO A COMBINAR</strong>
+                            <small>Entradas recebidas ou importadas sem contas a pagar definitivas.</small>
+                        </span>
+                    </header>
+
+                    <div class="financeiro-list-summary">
+                        <div><small>NOTAS</small><strong>${pendentes.length}</strong></div>
+                        <div><small>TOTAL</small><strong>${formatFinanceiroMoney(total)}</strong></div>
+                    </div>
+
+                    ${pendentes.length ? `
+                        <div class="financeiro-list">
+                            ${pendentes.map(entrada => `
+                                <article class="financeiro-row financeiro-row-a-combinar">
+                                    <div>
+                                        <strong>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
+                                        <small>NF ${escapeKitAttribute(entrada.numero_nf || '-')} | Recebimento ${getEntradaNFDate(entrada.data_recebimento || entrada.created_at)}</small>
+                                        ${entrada.observacao_financeira ? `<small>${escapeKitAttribute(entrada.observacao_financeira)}</small>` : ''}
+                                    </div>
+                                    <div>
+                                        <strong>${formatFinanceiroMoney(entrada.valor_total)}</strong>
+                                        <small>Status: A combinar</small>
+                                    </div>
+                                    <button type="button" class="btn-action" onclick="openDefinirPagamentoEntradaNF('${entrada.id}')">
+                                        <span class="material-symbols-rounded">edit_calendar</span>
+                                        Definir pagamento
+                                    </button>
+                                </article>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div class="financeiro-empty-state">
+                            <span class="material-symbols-rounded">task_alt</span>
+                            <strong>Nenhuma nota com pagamento a combinar.</strong>
+                        </div>
+                    `}
+                </section>
+            </main>
+        </div>
+    `;
+}
+
+function renderACombinarParcelRows(total, count, firstDate = getDataBrasilISO()) {
+    const qty = Math.max(1, Math.min(36, parseInt(count, 10) || 1));
+    const base = nfXmlRoundMoney(nfXmlMoney(total) / qty, 2);
+    return Array.from({ length: qty }, (_, index) => {
+        const due = new Date(firstDate || getDataBrasilISO());
+        if (!Number.isNaN(due.getTime())) due.setMonth(due.getMonth() + index);
+        const value = index === qty - 1 ? nfXmlRoundMoney(nfXmlMoney(total) - (base * (qty - 1)), 2) : base;
+        return `
+            <article class="nfxml-payment-row nfxml-a-combinar-row">
+                <div class="nfxml-payment-index">${index + 1}</div>
+                <label>
+                    <span>Parcela</span>
+                    <input class="a-combinar-parcela" value="${String(index + 1).padStart(3, '0')}">
+                </label>
+                <label>
+                    <span>Valor</span>
+                    <input class="a-combinar-valor money-input" inputmode="decimal" value="${nfXmlFormatMoneyInput(value)}">
+                </label>
+                <label>
+                    <span>Vencimento</span>
+                    <input class="a-combinar-vencimento" type="date" value="${getDataBrasilISO(due)}">
+                </label>
+                <label class="wide">
+                    <span>Observacao</span>
+                    <input class="a-combinar-obs" value="">
+                </label>
+            </article>
+        `;
+    }).join('');
+}
+
+function refreshACombinarParcelRows() {
+    const modal = document.getElementById('app-center-modal');
+    const rows = document.getElementById('a-combinar-parcelas-list');
+    if (!modal || !rows) return;
+    rows.innerHTML = renderACombinarParcelRows(
+        modal.dataset.total || 0,
+        document.getElementById('a-combinar-qtd')?.value || 1,
+        document.getElementById('a-combinar-primeiro-vencimento')?.value || getDataBrasilISO()
+    );
+}
+
+async function openDefinirPagamentoEntradaNF(entradaId) {
+    const entrada = await DataClient.getEntradaNFById(entradaId);
+    if (!entrada) {
+        showToast('Nota nao encontrada.', 'error');
+        return;
+    }
+    closeAppCenterModal();
+    const total = nfXmlMoney(entrada.valor_total);
+    const modal = document.createElement('div');
+    modal.id = 'app-center-modal';
+    modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+    modal.dataset.entradaId = entrada.id;
+    modal.dataset.total = total;
+    modal.innerHTML = `
+        <div class="app-center-modal-card wide" role="dialog" aria-modal="true" aria-label="Definir pagamento">
+            <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+                <span class="material-symbols-rounded">close</span>
+            </button>
+            <h3>DEFINIR PAGAMENTO</h3>
+            <p>NF ${escapeKitAttribute(entrada.numero_nf || '-')} | ${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')} | Total ${formatFinanceiroMoney(total)}</p>
+            <div class="nfxml-payment-editor-toolbar">
+                <label>
+                    <span>Quantidade de parcelas</span>
+                    <input id="a-combinar-qtd" type="number" min="1" max="36" value="1" onchange="refreshACombinarParcelRows()">
+                </label>
+                <label>
+                    <span>Primeiro vencimento</span>
+                    <input id="a-combinar-primeiro-vencimento" type="date" value="${getDataBrasilISO()}" onchange="refreshACombinarParcelRows()">
+                </label>
+            </div>
+            <div id="a-combinar-parcelas-list" class="nfxml-payment-list">
+                ${renderACombinarParcelRows(total, 1, getDataBrasilISO())}
+            </div>
+            <label class="nfxml-a-combinar-note">
+                <span>Observacao geral</span>
+                <textarea id="a-combinar-observacao-geral" rows="2">${escapeKitAttribute(entrada.observacao_financeira || '')}</textarea>
+            </label>
+            <div class="app-center-modal-actions">
+                <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+                <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoACombinarEntrada()">Gerar contas a pagar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+async function salvarPagamentoACombinarEntrada() {
+    try {
+        const client = window.supabaseClient;
+        const modal = document.getElementById('app-center-modal');
+        const entradaId = modal?.dataset?.entradaId;
+        if (!client || !entradaId) return;
+        const entrada = await DataClient.getEntradaNFById(entradaId);
+        if (!entrada) throw new Error('Nota nao encontrada.');
+
+        const { data: existentes, error: existingError } = await client
+            .from('contas_pagar')
+            .select('*')
+            .eq('entrada_nf_id', entradaId);
+        if (existingError) throw existingError;
+        if ((existentes || []).some(item => String(item.status || '').toLowerCase() === 'pago')) {
+            showToast('Ja existe conta paga para esta NF. Nao recriei o financeiro.', 'error');
+            return;
+        }
+
+        const geralObs = document.getElementById('a-combinar-observacao-geral')?.value?.trim() || '';
+        const rows = Array.from(document.querySelectorAll('#a-combinar-parcelas-list .nfxml-a-combinar-row'));
+        const payload = rows.map((row, index) => {
+            const parcela = row.querySelector('.a-combinar-parcela')?.value?.trim() || String(index + 1).padStart(3, '0');
+            const valor = nfXmlMoney(row.querySelector('.a-combinar-valor')?.value);
+            const vencimento = row.querySelector('.a-combinar-vencimento')?.value || '';
+            const obs = row.querySelector('.a-combinar-obs')?.value?.trim() || geralObs;
+            if (valor <= 0 || !vencimento) throw new Error('Todas as parcelas precisam de valor e vencimento.');
+            return {
+                entrada_nf_id: entradaId,
+                nf_id: entradaId,
+                fornecedor_id: entrada.fornecedor_id || null,
+                fornecedor_cnpj: entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || null,
+                cnpj_fornecedor: entrada.cnpj_fornecedor || entrada.fornecedor_cnpj || null,
+                fornecedor_nome: entrada.fornecedor_nome || null,
+                numero_nf: entrada.numero_nf || null,
+                numero_parcela: index + 1,
+                parcela,
+                descricao: `NF ${entrada.numero_nf || '-'} - Parcela ${parcela}`,
+                tipo_lancamento: 'manual',
+                origem: 'manual',
+                vencimento,
+                data_vencimento: vencimento,
+                valor,
+                status: 'pendente',
+                status_vencimento: 'em_aberto',
+                forma_pagamento: 'boleto',
+                observacoes: obs,
+                observacao: obs,
+                boleto_recebido: false,
+                atualizado_em: getDataHoraBrasil()
+            };
+        });
+        const totalParcelas = payload.reduce((sum, item) => sum + nfXmlMoney(item.valor), 0);
+        const totalNota = nfXmlMoney(entrada.valor_total);
+        if (Math.abs(totalParcelas - totalNota) > 0.01) {
+            showToast(`Soma das parcelas precisa bater com a NF. Diferença: ${formatFinanceiroMoney(totalParcelas - totalNota)}`, 'warning');
+            return;
+        }
+
+        if ((existentes || []).length) {
+            const ids = existentes.map(item => item.id).filter(Boolean);
+            if (ids.length) await client.from('contas_pagar').delete().in('id', ids);
+        }
+        const { error: insertError } = await client.from('contas_pagar').insert(payload);
+        if (insertError) throw insertError;
+        const { error: updateError } = await client.from('entradas_nf').update({
+            financeiro_lancado: true,
+            status_financeiro: 'gerado',
+            tipo_condicao_financeira: 'manual',
+            observacao_financeira: geralObs || null,
+            financeiro_configurado_em: getDataHoraBrasil(),
+            financeiro_configurado_por: localStorage.getItem('currentUser'),
+            atualizado_em: getDataHoraBrasil()
+        }).eq('id', entradaId);
+        if (updateError) throw updateError;
+
+        appData.financeiroParcelasLoaded = false;
+        appData.historicoEntradasNFLoaded = false;
+        closeAppCenterModal();
+        showToast('Pagamento definido e contas a pagar geradas.', 'success');
+        renderFinanceiroACombinar();
+    } catch (error) {
+        console.error('[FINANCEIRO_A_COMBINAR] erro ao definir pagamento', error);
+        showToast(error.message || 'Erro ao definir pagamento.', 'error');
+        return;
+    }
 }
 
 
@@ -15288,6 +15587,7 @@ async function startPickingSession(channelId, channelLabel, channelColor, select
             message: 'Escolha um canal antes de iniciar a separacao.',
             confirmText: 'Entendi'
         });
+        settlePickScannerInput(80);
         return;
     }
 
@@ -16229,6 +16529,8 @@ async function removePickItemByScan(cleanCode, input) {
 
     setPickRemovalMode(false);
     showInputFeedback('pick-ean-input', 'success');
+    settlePickScannerInput(80);
+    settlePickScannerInput(320);
 }
 
 async function addPickItem(scannedEan = null) {
@@ -16250,6 +16552,7 @@ async function addPickItem(scannedEan = null) {
     console.log('[SEP] codigo bruto', rawCode);
     console.log('[SEP] codigo normalizado', ean);
     if (!ean) {
+        settlePickScannerInput(80);
         showScanFeedback('error', 'CÃƒÆ’Ã‚Â³digo invÃƒÆ’Ã‚Â¡lido');
         return;
     }
@@ -16268,6 +16571,7 @@ async function addPickItem(scannedEan = null) {
             showToast(`PRODUTO SEM ID INTERNO: ${ean}`);
             input.value = '';
             showInputFeedback('pick-ean-input', 'error');
+            settlePickScannerInput(120);
             return;
         }
 
@@ -16298,6 +16602,7 @@ async function addPickItem(scannedEan = null) {
                 });
                 input.value = '';
                 showInputFeedback('pick-ean-input', 'error');
+                settlePickScannerInput(120);
                 return;
             } else {
                 if (!window.pickNegativeStockWarnings) window.pickNegativeStockWarnings = new Set();
@@ -16453,6 +16758,8 @@ async function addPickItem(scannedEan = null) {
     input.value = '';
     updatePickItemsList();
     showInputFeedback('pick-ean-input', product ? 'success' : 'error');
+    settlePickScannerInput(80);
+    settlePickScannerInput(320);
 }
 
 function updatePickItemsList() {
@@ -18047,7 +18354,10 @@ function manualAddItemToConference(product) {
 async function addPackScan(scannedEan = null) {
     const input = document.getElementById('pack-ean-input');
     const ean = (scannedEan || input.value.trim()).toString();
-    if (!ean) return;
+    if (!ean) {
+        restoreScanFieldFocus('pack', 80);
+        return;
+    }
 
     let row = currentPackSession.conferenceRows.find(r =>
         (r.ean && r.ean.toString() === ean) ||
@@ -18116,6 +18426,8 @@ async function addPackScan(scannedEan = null) {
     input.value = '';
     document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
     showInputFeedback('pack-ean-input', row && row.divergencia !== 'SOBRA' ? 'success' : 'error');
+    restoreScanFieldFocus('pack', 80);
+    restoreScanFieldFocus('pack', 320);
 }
 
 /**
@@ -26575,6 +26887,81 @@ function calcularCustoRealItem(item, rateios = {}, contexto = {}) {
     };
 }
 
+function inferNFXmlConversionFactorFromUnit(unit = '') {
+    const text = String(unit || '').trim().toUpperCase();
+    if (!text) return 1;
+    const match = text.match(/(?:CX|CAIXA|C\/|COM)\s*([0-9]{1,4})(?:[,.]([0-9]+))?/i) || text.match(/([0-9]{1,4})(?:[,.]([0-9]+))?\s*(?:UN|UND|PCS|PC)/i);
+    if (!match) return 1;
+    const value = Number(`${match[1]}.${match[2] || '0'}`);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function getNFXmlProductConversionFactor(product = {}, item = {}) {
+    const productFactor = nfXmlMoney(
+        product.fator_conversao_compra ??
+        product.fator_compra ??
+        product.fator_conversao ??
+        product.quantidade_por_caixa ??
+        product.quantidade_caixa ??
+        product.quantidade_embalagem
+    );
+    if (productFactor > 0 && productFactor !== 1) return productFactor;
+    return inferNFXmlConversionFactorFromUnit(item.unidade || item.unidade_nf);
+}
+
+function applyNFXmlItemConversion(item = {}, product = null) {
+    const quantidadeNF = nfXmlMoney(item.quantidade_nf_original ?? item.quantidade);
+    const custoTotalReal = nfXmlMoney(item.custo_real_total ?? item.valor_total);
+    const explicitFactor = nfXmlMoney(item.fator_conversao_usado);
+    const suggestedFactor = product ? getNFXmlProductConversionFactor(product, item) : inferNFXmlConversionFactorFromUnit(item.unidade || item.unidade_nf);
+    const factor = explicitFactor > 0 ? explicitFactor : (suggestedFactor > 0 ? suggestedFactor : 1);
+    const quantidadeEstoque = quantidadeNF * factor;
+    return {
+        ...item,
+        unidade_nf: item.unidade_nf || item.unidade || '',
+        unidade_estoque: item.unidade_estoque || product?.unidade_estoque || product?.unidade_venda || product?.unidade || 'UN',
+        fator_conversao_sugerido: nfXmlRoundMoney(suggestedFactor || 1, 6),
+        fator_conversao_usado: nfXmlRoundMoney(factor || 1, 6),
+        quantidade_nf_original: nfXmlRoundMoney(quantidadeNF, 6),
+        quantidade_estoque_calculada: nfXmlRoundMoney(quantidadeEstoque || quantidadeNF, 6),
+        custo_unitario_nf: nfXmlRoundMoney(item.custo_nota_unitario ?? item.valor_unitario, 6),
+        custo_unitario_estoque: quantidadeEstoque > 0 ? nfXmlRoundMoney(custoTotalReal / quantidadeEstoque, 6) : nfXmlRoundMoney(item.custo_real_unitario ?? item.valor_unitario, 6),
+        custo_total_real_item: nfXmlRoundMoney(custoTotalReal, 6)
+    };
+}
+
+function recalculateNFXmlItemConversion(numeroItem = null) {
+    const state = entradaNfXmlState;
+    if (!state?.itens?.length) return;
+    state.itens = state.itens.map(item => {
+        if (numeroItem !== null && Number(item.numero_item) !== Number(numeroItem)) return item;
+        const product = (appData.products || []).find(p => String(p.id_interno || '') === String(item.id_interno || ''));
+        return applyNFXmlItemConversion(item, product || null);
+    });
+}
+
+function updateNFXmlItemConversionFactor(numeroItem, value) {
+    const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+    if (!item) return;
+    const factor = Math.max(0.000001, nfXmlMoney(value) || 1);
+    item.fator_conversao_usado = nfXmlRoundMoney(factor, 6);
+    recalculateNFXmlItemConversion(numeroItem);
+    saveEntradaNFXMLDraft();
+    renderNFXmlPreview();
+}
+
+function getEntradaNFStockQuantity(item = {}) {
+    return parseDecimal(item.quantidade_estoque_calculada ?? item.quantidade);
+}
+
+function getEntradaNFStockUnitCost(item = {}) {
+    return parseDecimal(item.custo_unitario_estoque ?? item.custo_real_unitario ?? item.valor_unitario);
+}
+
+function getEntradaNFStockTotalCost(item = {}) {
+    return parseDecimal(item.custo_total_real_item ?? item.custo_real_total ?? item.valor_total);
+}
+
 function aplicarCustosReaisNF(nota, options = {}) {
     const rateios = calcularRateioCustosNF(nota, nota.itens);
     const totalProdutosNF = nfXmlMoney(nota?.totais?.valor_produtos) ||
@@ -26585,7 +26972,7 @@ function aplicarCustosReaisNF(nota, options = {}) {
             totalProdutosNF,
             totalFinanceiroPrevisto
         });
-        return { ...item, ...resumo };
+        return applyNFXmlItemConversion({ ...item, ...resumo });
     });
     return nota;
 }
@@ -26643,7 +27030,14 @@ const NF_XML_COST_COLUMNS = [
     'valor_outras_despesas_rateado',
     'valor_desconto_rateado',
     'custo_real_unitario',
-    'custo_real_total'
+    'custo_real_total',
+    'unidade_nf',
+    'fator_conversao_usado',
+    'quantidade_nf_original',
+    'quantidade_estoque_calculada',
+    'custo_unitario_nf',
+    'custo_unitario_estoque',
+    'custo_total_real_item'
 ];
 
 function stripNFXmlCostColumns(payloads) {
@@ -26666,7 +27060,8 @@ function createNFXmlFinanceState(duplicatas = [], valorTotal = 0) {
         confirmarDiferenca: false,
         parcelasEditaveis,
         complementares: [],
-        existentes: []
+        existentes: [],
+        observacaoFinanceira: ''
     };
 }
 
@@ -26705,7 +27100,8 @@ function getNFXmlFinanceModeLabel(mode) {
     const labels = {
         avista: 'Pagamento ÃƒÆ’Ã‚Â  vista',
         xml: 'Parcelas da nota',
-        editar: 'Editar pagamentos'
+        editar: 'Condicao negociada',
+        a_combinar: 'A combinar'
     };
     return labels[mode] || labels.editar;
 }
@@ -26772,6 +27168,9 @@ function parseNFeXml(xmlText) {
             quantidade: nfXmlMoney(nfXmlText(prod, 'qCom')),
             valor_unitario: nfXmlMoney(nfXmlText(prod, 'vUnCom')),
             valor_total: nfXmlMoney(nfXmlText(prod, 'vProd')),
+            unidade_nf: nfXmlText(prod, 'uCom'),
+            fator_conversao_usado: inferNFXmlConversionFactorFromUnit(nfXmlText(prod, 'uCom')),
+            quantidade_nf_original: nfXmlMoney(nfXmlText(prod, 'qCom')),
             ...tributos,
             id_interno: '',
             produto_id: null,
@@ -27329,6 +27728,7 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
     item.produto_nome = product.descricao_completa || product.descricao_base || product.nome || product.id_interno;
     item.status_vinculo = 'vinculado';
     item.match_source = source;
+    Object.assign(item, applyNFXmlItemConversion(item, product));
     console.log('[ENTRADA_NF_XML] vÃƒÆ’Ã‚Â­nculo aplicado', { numeroItem, idInterno, source });
     saveEntradaNFXMLDraft();
     if (!silent) renderNFXmlPreview();
@@ -27622,6 +28022,7 @@ function getNFXmlFinanceParcelas() {
     const state = entradaNfXmlState;
     const fin = state?.financeiro;
     if (!state || !fin) return [];
+    if (fin.modoPagamento === 'a_combinar') return [];
     if (fin.modoPagamento === 'avista') {
         return [{
             id: 'avista-1',
@@ -27789,6 +28190,7 @@ function renderNFXmlFinanceBlockOnly() {
 function validateNFXmlFinanceBeforeSave({ allowPrompt = true, silent = false } = {}) {
     const state = entradaNfXmlState;
     if (!state?.afeta_financeiro) return true;
+    if (state.financeiro?.modoPagamento === 'a_combinar') return true;
     const parcelas = getNFXmlFinanceParcelas();
     const complementares = getNFXmlFinanceComplementares();
     if (!parcelas.length) {
@@ -27821,6 +28223,7 @@ function buildNFXmlFinancePayload(entradaId) {
     if (!state?.fornecedorRecord) throw new Error('Vincule/cadastre o fornecedor antes de salvar o financeiro.');
     if (!state.afeta_financeiro) return [];
     if (!fin) return [];
+    if (fin.modoPagamento === 'a_combinar') return [];
 
     const now = getDataHoraBrasil();
     const base = {
@@ -27929,7 +28332,8 @@ function renderNFXmlFinanceBlock() {
                 ${[
                     ['avista', 'Pagamento ÃƒÆ’Ã‚Â  vista', 'Gera uma ÃƒÆ’Ã‚Âºnica parcela paga com data atual.'],
                     ['xml', 'Parcelas da nota', state.duplicatas.length ? 'Usa vencimentos e valores do XML.' : 'XML sem parcelas. Use editar pagamentos.'],
-                    ['editar', 'Editar pagamentos', 'Ajuste parcelas, datas, valores e formas antes de salvar.']
+                    ['editar', 'Criar condicao negociada', 'Ajuste parcelas, datas, valores e formas antes de salvar.'],
+                    ['a_combinar', 'A combinar', 'Recebe estoque agora e deixa pagamento pendente para definir depois.']
                 ].map(([mode, label, description]) => `
                     <button type="button" class="${fin.modoPagamento === mode ? 'active' : ''}" ${mode === 'xml' && !state.duplicatas.length ? 'disabled' : ''} onclick="updateNFXmlFinanceOption('${mode}')">
                         <strong>${label}</strong>
@@ -27937,6 +28341,16 @@ function renderNFXmlFinanceBlock() {
                     </button>
                 `).join('')}
             </div>
+            ${fin.modoPagamento === 'a_combinar' ? `
+                <div class="nfxml-finance-warning nfxml-a-combinar-warning">
+                    <span class="material-symbols-rounded">event_note</span>
+                    Esta nota sera recebida no estoque, mas ficara pendente para definicao de pagamento no financeiro.
+                </div>
+                <label class="nfxml-a-combinar-note">
+                    <span>Observacao financeira</span>
+                    <textarea rows="2" oninput="entradaNfXmlState.financeiro.observacaoFinanceira = this.value; saveEntradaNFXMLDraft();">${escapeKitAttribute(fin.observacaoFinanceira || '')}</textarea>
+                </label>
+            ` : ''}
 
             ${fin.modoPagamento === 'editar' ? `
                 <div class="nfxml-payment-editor-toolbar">
@@ -28156,6 +28570,26 @@ function renderNFXmlPreview() {
 function renderNFXmlItemCard(item, allowLink = true) {
     const linked = !!item.id_interno;
     const custo = formatarResumoCustoReal(item);
+    const factor = nfXmlMoney(item.fator_conversao_usado) || 1;
+    const showConversion = linked || factor !== 1 || String(item.unidade_nf || item.unidade || '').trim();
+    const conversionHtml = showConversion ? `
+        <div class="nfxml-conversion-card">
+            <div class="nfxml-conversion-head">
+                <span class="material-symbols-rounded">sync_alt</span>
+                <strong>Convers&atilde;o de compra</strong>
+            </div>
+            <div class="nfxml-conversion-grid">
+                <span><b>NF</b>${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${escapeKitAttribute(item.unidade_nf || item.unidade || '')}</span>
+                <label>
+                    <b>Fator</b>
+                    <input type="number" min="0.000001" step="0.000001" value="${escapeKitAttribute(factor)}" onchange="updateNFXmlItemConversionFactor(${item.numero_item}, this.value)">
+                </label>
+                <span><b>Entrada estoque</b>${formatStockNumber(item.quantidade_estoque_calculada ?? item.quantidade)} ${escapeKitAttribute(item.unidade_estoque || 'UN')}</span>
+                <span><b>Custo NF</b>${nfXmlFormatMoney(item.custo_unitario_nf ?? item.custo_nota_unitario ?? item.valor_unitario)} / ${escapeKitAttribute(item.unidade_nf || item.unidade || 'UN')}</span>
+                <span class="nfxml-conversion-real"><b>Custo real</b>${nfXmlFormatMoney(item.custo_unitario_estoque ?? item.custo_real_unitario)} / ${escapeKitAttribute(item.unidade_estoque || 'UN')}</span>
+            </div>
+        </div>
+    ` : '';
     return `
         <article class="nfxml-item-card ${linked ? 'is-linked' : 'is-pending'}">
             <button type="button" class="nfxml-item-more" aria-label="Mais opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes">
@@ -28185,6 +28619,7 @@ function renderNFXmlItemCard(item, allowLink = true) {
                         <span>Complemento rateado: <strong>${custo.complementoRateado}</strong></span>
                         <span class="nf-cost-real">Custo real unitÃƒÆ’Ã‚Â¡rio: <strong>${custo.custoRealUnitario}</strong></span>
                     </div>
+                    ${conversionHtml}
                 </div>
                 ${allowLink ? `
                     <div class="nfxml-item-link-panel">
@@ -28292,6 +28727,11 @@ async function salvarEntradaNFXml() {
             afeta_financeiro: tipoConfig.afetaFinanceiro,
             estoque_finalizado: false,
             financeiro_lancado: false,
+            status_financeiro: state.financeiro?.modoPagamento === 'a_combinar' ? 'a_combinar' : 'gerado',
+            tipo_condicao_financeira: state.financeiro?.modoPagamento === 'a_combinar' ? 'a_combinar' : (state.financeiro?.modoPagamento === 'editar' ? 'manual' : 'parcelas_nf'),
+            observacao_financeira: state.financeiro?.observacaoFinanceira || null,
+            financeiro_configurado_em: state.financeiro?.modoPagamento === 'a_combinar' ? null : getDataHoraBrasil(),
+            financeiro_configurado_por: state.financeiro?.modoPagamento === 'a_combinar' ? null : localStorage.getItem('currentUser'),
             origem: 'xml',
             xml_original: state.xmlText,
             atualizado_em: getDataHoraBrasil()
@@ -28326,6 +28766,13 @@ async function salvarEntradaNFXml() {
             quantidade: item.quantidade,
             valor_unitario: item.valor_unitario,
             valor_total: item.valor_total,
+            unidade_nf: item.unidade_nf || item.unidade,
+            fator_conversao_usado: item.fator_conversao_usado || 1,
+            quantidade_nf_original: item.quantidade_nf_original ?? item.quantidade,
+            quantidade_estoque_calculada: item.quantidade_estoque_calculada ?? item.quantidade,
+            custo_unitario_nf: item.custo_unitario_nf ?? item.custo_nota_unitario ?? item.valor_unitario,
+            custo_unitario_estoque: item.custo_unitario_estoque ?? item.custo_real_unitario ?? item.valor_unitario,
+            custo_total_real_item: item.custo_total_real_item ?? item.custo_real_total ?? item.valor_total,
             custo_nota_unitario: item.custo_nota_unitario,
             custo_nota_total: item.custo_nota_total,
             valor_ipi: item.valor_ipi,
@@ -28353,14 +28800,23 @@ async function salvarEntradaNFXml() {
         }
         if (itensError) throw itensError;
 
-        if (tipoConfig.afetaFinanceiro) {
+        if (tipoConfig.afetaFinanceiro && state.financeiro?.modoPagamento !== 'a_combinar') {
             const contasPayload = buildNFXmlFinancePayload(entrada.id);
             if (!contasPayload.length) throw new Error('Selecione ao menos uma forma de lanÃƒÆ’Ã‚Â§amento no Financeiro da Entrada.');
             const { error: contasError } = await client.from('contas_pagar').insert(contasPayload);
             if (contasError) throw contasError;
             state.financeiro.existentes = contasPayload;
             state.financeiro_lancado = true;
-            await client.from('entradas_nf').update({ financeiro_lancado: true, atualizado_em: getDataHoraBrasil() }).eq('id', entrada.id);
+            await client.from('entradas_nf').update({
+                financeiro_lancado: true,
+                status_financeiro: 'gerado',
+                financeiro_configurado_em: getDataHoraBrasil(),
+                financeiro_configurado_por: localStorage.getItem('currentUser'),
+                atualizado_em: getDataHoraBrasil()
+            }).eq('id', entrada.id);
+        } else if (tipoConfig.afetaFinanceiro && state.financeiro?.modoPagamento === 'a_combinar') {
+            state.financeiro_lancado = false;
+            console.log('[ENTRADA_NF_FINANCEIRO] NF salva como a_combinar; contas_pagar definitivo nao gerado.');
         }
 
         if (state.tipo_lancamento === 'entrada_normal') {
@@ -28442,9 +28898,10 @@ async function atualizarCustoProdutosEntradaNF(itens = []) {
     if (!client) return;
 
     for (const item of itens) {
-        if (!item.id_interno || !Number.isFinite(Number(item.custo_real_unitario)) || Number(item.custo_real_unitario) <= 0) continue;
+        const custoEstoque = getEntradaNFStockUnitCost(item);
+        if (!item.id_interno || !Number.isFinite(Number(custoEstoque)) || Number(custoEstoque) <= 0) continue;
         const payload = {
-            preco_custo: nfXmlRoundMoney(item.custo_real_unitario, 6),
+            preco_custo: nfXmlRoundMoney(custoEstoque, 6),
             atualizado_em: getDataHoraBrasil()
         };
 
@@ -28456,7 +28913,7 @@ async function atualizarCustoProdutosEntradaNF(itens = []) {
         if (error) {
             console.warn('[ENTRADA_NF_CUSTO_REAL] erro ao atualizar custo do produto', {
                 id_interno: item.id_interno,
-                custo_real_unitario: item.custo_real_unitario,
+                custo_real_unitario: custoEstoque,
                 error
             });
         } else {
@@ -28490,7 +28947,7 @@ async function finalizarEntradaNFXml() {
         return;
     }
 
-    if (!state.financeiro_lancado && state.afeta_financeiro) {
+    if (!state.financeiro_lancado && state.afeta_financeiro && state.financeiro?.modoPagamento !== 'a_combinar') {
         showToast('Confira e salve o financeiro antes de finalizar a entrada.', 'warning');
         return;
     }
@@ -28512,21 +28969,22 @@ async function finalizarEntradaNFXmlConfirmado() {
         console.log('[ENTRADA_NF_XML] finalizando entrada', state.savedEntradaId);
         recalcularCustosReaisEntradaNFXML({ log: true });
         for (const item of state.itens) {
+            const quantidadeEntrada = getEntradaNFStockQuantity(item);
             await applyStockChangeWithRequiredMovement({
                 idInterno: item.id_interno,
                 local: 'TERREO',
                 operacao: 'soma',
-                quantidade: item.quantidade,
+                quantidade: quantidadeEntrada,
                 contextLabel: `movimento da NF ${state.numero_nf}`,
                 movPayload: {
                 tipo: 'ENTRADA',
                 id_interno: item.id_interno,
                 local_origem: null,
                 local_destino: 'TERREO',
-                quantidade: item.quantidade,
+                quantidade: quantidadeEntrada,
                 usuario: localStorage.getItem('currentUser'),
                 origem: 'APP_COMPRAS',
-                observacao: `NF ${state.numero_nf} - ${state.chave_acesso} | custo_real_unit=${nfXmlFormatMoney(item.custo_real_unitario)} | custo_real_total=${nfXmlFormatMoney(item.custo_real_total)}`
+                observacao: `NF ${state.numero_nf} - ${state.chave_acesso} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
                 }
             });
         }
@@ -28574,13 +29032,22 @@ async function finalizarEntradaNFXmlConfirmado() {
 }
 
 function normalizeEntradaNFItemForStock(item = {}) {
+    const quantidadeOriginal = parseDecimal(item.quantidade_nf_original ?? item.quantidade);
+    const fator = parseDecimal(item.fator_conversao_usado || 1) || 1;
+    const quantidadeEstoque = parseDecimal(item.quantidade_estoque_calculada) || (quantidadeOriginal * fator);
+    const custoTotal = parseDecimal(item.custo_total_real_item ?? item.custo_real_total ?? item.valor_total);
     return {
         ...item,
         id_interno: item.id_interno || item.produto_id_interno || '',
         produto_id: item.produto_id || null,
         quantidade: parseDecimal(item.quantidade),
+        fator_conversao_usado: fator,
+        quantidade_nf_original: quantidadeOriginal,
+        quantidade_estoque_calculada: quantidadeEstoque,
         custo_real_unitario: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
-        custo_real_total: parseDecimal(item.custo_real_total ?? item.valor_total)
+        custo_real_total: parseDecimal(item.custo_real_total ?? item.valor_total),
+        custo_unitario_estoque: parseDecimal(item.custo_unitario_estoque) || (quantidadeEstoque > 0 ? custoTotal / quantidadeEstoque : parseDecimal(item.custo_real_unitario ?? item.valor_unitario)),
+        custo_total_real_item: custoTotal
     };
 }
 
@@ -28624,7 +29091,7 @@ async function finalizarEntradaNFAberta(entradaId) {
 
         const itens = await fetchEntradaNFItens(entrada.id);
         if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
-        const pendentes = itens.filter(item => !item.id_interno || parseDecimal(item.quantidade) <= 0);
+        const pendentes = itens.filter(item => !item.id_interno || getEntradaNFStockQuantity(item) <= 0);
         if (pendentes.length) throw new Error('Existem itens sem vÃƒÆ’Ã‚Â­nculo interno ou quantidade vÃƒÆ’Ã‚Â¡lida.');
         console.log('[ENTRADA_NF_CUSTO_REAL]', {
             numero_nf: entrada.numero_nf,
@@ -28641,21 +29108,22 @@ async function finalizarEntradaNFAberta(entradaId) {
         });
 
         for (const item of itens) {
+            const quantidadeEntrada = getEntradaNFStockQuantity(item);
             await applyStockChangeWithRequiredMovement({
                 idInterno: item.id_interno,
                 local: 'TERREO',
                 operacao: 'soma',
-                quantidade: item.quantidade,
+                quantidade: quantidadeEntrada,
                 contextLabel: `movimento da NF ${entrada.numero_nf || entrada.id}`,
                 movPayload: {
                 tipo: 'ENTRADA',
                 id_interno: item.id_interno,
                 local_origem: null,
                 local_destino: 'TERREO',
-                quantidade: item.quantidade,
+                quantidade: quantidadeEntrada,
                 usuario: localStorage.getItem('currentUser'),
                 origem: 'APP_COMPRAS',
-                observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id} | custo_real_unit=${nfXmlFormatMoney(item.custo_real_unitario)} | custo_real_total=${nfXmlFormatMoney(item.custo_real_total)}`
+                observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
                 }
             });
         }

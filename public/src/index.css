@@ -61346,10 +61346,130 @@ body:not(.login-active) #app > .dashboard-screen.product-search-screen > .top-ac
     color: #526176 !important;
   }
 
-  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-image-wrapper,
+body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-image-wrapper,
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-image-wrapper img {
     filter: none !important;
     transform: none !important;
     will-change: auto !important;
+  }
+}
+
+/* Entrada NF: purchase conversion and negotiated finance cues. */
+.nfxml-conversion-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(37, 99, 235, .18);
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #0f172a;
+}
+
+.nfxml-conversion-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  color: #1d4ed8;
+  font-size: .76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.nfxml-conversion-head .material-symbols-rounded {
+  font-size: 18px !important;
+}
+
+.nfxml-conversion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.nfxml-conversion-grid span,
+.nfxml-conversion-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: #334155;
+  font-size: .78rem;
+  font-weight: 850;
+}
+
+.nfxml-conversion-grid b {
+  color: #64748b;
+  font-family: 'Oswald', sans-serif;
+  font-size: .68rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.nfxml-conversion-grid input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 900;
+  padding: 0 9px;
+}
+
+.nfxml-conversion-real {
+  color: #047857 !important;
+}
+
+.nfxml-a-combinar-warning {
+  margin-top: 12px;
+  background: #fff7ed !important;
+  border-color: rgba(217, 119, 6, .28) !important;
+  color: #92400e !important;
+}
+
+.nfxml-a-combinar-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.nfxml-a-combinar-note span {
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.nfxml-a-combinar-note textarea {
+  min-height: 68px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #111827;
+  font-weight: 800;
+  padding: 10px;
+}
+
+.financeiro-row-a-combinar {
+  grid-template-columns: minmax(0, 1.5fr) minmax(130px, .5fr) auto !important;
+  align-items: center !important;
+}
+
+.financeiro-row-a-combinar .btn-action {
+  min-height: 38px;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background: #f59e0b !important;
+  color: #ffffff !important;
+}
+
+@media (max-width: 767px) {
+  .financeiro-row-a-combinar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .financeiro-row-a-combinar .btn-action {
+    width: 100%;
+    justify-content: center;
   }
 }
