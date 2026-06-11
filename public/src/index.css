@@ -72,6 +72,14 @@
         }
 
         @font-face {
+            font-family: 'Fjalla One';
+            src: url('/assets/fontes/FjallaOne-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
             font-family: 'DY Oswald';
             src: url('/assets/fontes/Oswald-Regular.ttf') format('truetype');
             font-weight: 400;
@@ -98,6 +106,70 @@
         @font-face {
             font-family: 'DY Oswald';
             src: url('/assets/fontes/Oswald-Bold.ttf') format('truetype');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Oswald';
+            src: url('/assets/fontes/Oswald-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Oswald';
+            src: url('/assets/fontes/Oswald-Medium.ttf') format('truetype');
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Oswald';
+            src: url('/assets/fontes/Oswald-SemiBold.ttf') format('truetype');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Oswald';
+            src: url('/assets/fontes/Oswald-Bold.ttf') format('truetype');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'DY PT Sans Narrow';
+            src: url('/assets/fontes/PTSansNarrow-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'DY PT Sans Narrow';
+            src: url('/assets/fontes/PTSansNarrow-Bold.ttf') format('truetype');
+            font-weight: 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('/assets/fontes/PTSansNarrow-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'PT Sans Narrow';
+            src: url('/assets/fontes/PTSansNarrow-Bold.ttf') format('truetype');
             font-weight: 700;
             font-style: normal;
             font-display: swap;
@@ -41224,6 +41296,129 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .module-si
   display: inline-flex !important;
 }
 
+.app-pick-mode-overlay .pick-mode-choice {
+  justify-content: space-between !important;
+  min-height: 190px !important;
+}
+
+.app-pick-mode-overlay .pick-mode-choice .material-symbols-rounded:first-child {
+  background: rgba(37, 99, 235, .10) !important;
+  color: #2563eb !important;
+}
+
+.app-pick-mode-overlay .pick-mode-normal {
+  border-color: rgba(37, 99, 235, .18) !important;
+}
+
+.app-pick-mode-overlay .pick-mode-normal.is-selected {
+  background: #f8fbff !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .12), 0 18px 38px rgba(37, 99, 235, .14) !important;
+}
+
+.app-pick-mode-overlay .pick-mode-normal .pick-mode-check {
+  background: #2563eb !important;
+}
+
+.app-pick-mode-overlay .pick-mode-fast {
+  background: #ffffff !important;
+  border-color: rgba(217, 119, 6, .42) !important;
+  box-shadow: 0 12px 28px rgba(146, 64, 14, .10) !important;
+  color: #111827 !important;
+}
+
+.app-pick-mode-overlay .pick-mode-fast .material-symbols-rounded:first-child {
+  background: rgba(217, 119, 6, .12) !important;
+  color: #d97706 !important;
+}
+
+.app-pick-mode-overlay .pick-mode-fast small {
+  color: #6b4a14 !important;
+}
+
+.app-pick-mode-overlay .pick-mode-fast.is-selected {
+  background: #fffaf0 !important;
+  border-color: #d97706 !important;
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, .14), 0 18px 38px rgba(217, 119, 6, .16) !important;
+}
+
+.app-pick-mode-overlay .pick-mode-fast .pick-mode-check {
+  background: #d97706 !important;
+}
+
+.pick-mode-note {
+  align-items: center;
+  align-self: stretch;
+  border-radius: 12px;
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  margin-top: auto;
+  min-height: 36px;
+  padding: 7px 9px;
+  font-size: .7rem;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1.18;
+}
+
+.pick-mode-note .material-symbols-rounded {
+  background: transparent !important;
+  font-size: 17px !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.pick-mode-normal .pick-mode-note {
+  background: rgba(37, 99, 235, .08);
+  color: #1d4ed8;
+}
+
+.pick-mode-fast .pick-mode-note {
+  background: rgba(217, 119, 6, .10);
+  color: #92400e;
+}
+
+.pick-mode-fast-warning {
+  align-items: flex-start;
+  background: rgba(217, 119, 6, .10);
+  border: 1px solid rgba(217, 119, 6, .30);
+  border-radius: 14px;
+  color: #7c2d12;
+  display: none;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.app-pick-mode-overlay.is-fast-selected .pick-mode-fast-warning {
+  display: flex;
+}
+
+.pick-mode-fast-warning > .material-symbols-rounded {
+  color: #d97706;
+  flex: 0 0 auto;
+  font-size: 24px !important;
+  margin-top: 1px;
+}
+
+.pick-mode-fast-warning strong {
+  color: #92400e;
+  display: block;
+  font-family: 'Fjalla One', 'Oswald', sans-serif;
+  font-size: .98rem;
+  line-height: 1;
+}
+
+.pick-mode-fast-warning p {
+  color: #7c2d12;
+  font-size: .78rem;
+  font-weight: 850;
+  line-height: 1.25;
+  margin: 5px 0 0;
+}
+
 @media (max-width: 640px) {
   .app-confirm-dialog,
   .high-qty-card,
@@ -58992,6 +59187,107 @@ html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.produc
   background: #f8fafc !important;
 }
 
+/* Separation mobile controls: scanner focus, compact package stepper and icon actions. */
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-field {
+    gap: 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control {
+    display: grid !important;
+    grid-template-columns: 28px minmax(34px, 1fr) 28px !important;
+    align-items: center !important;
+    gap: 3px !important;
+    width: 100% !important;
+    max-width: 108px !important;
+    margin: 0 auto !important;
+    padding: 2px !important;
+    border-radius: 999px !important;
+    background: rgba(148, 163, 184, 0.14) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    grid-row: auto !important;
+    grid-column: auto !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-minus {
+    background: #e5e7eb !important;
+    color: #111827 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-plus {
+    background: #ef2b2d !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .material-symbols-rounded {
+    display: inline-flex !important;
+    font-size: 22px !important;
+    line-height: 1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-input {
+    width: 100% !important;
+    max-width: 38px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-align: center !important;
+    font-size: 1.12rem !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    width: 100% !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn {
+    grid-row: auto !important;
+    grid-column: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    height: 42px !important;
+    width: 100% !important;
+    padding: 0 5px !important;
+    border-radius: 10px !important;
+    font-size: clamp(0.58rem, 2.35vw, 0.72rem) !important;
+    font-weight: 950 !important;
+    letter-spacing: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    gap: 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn .material-symbols-rounded {
+    display: inline-flex !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+  }
+}
+
 html[data-theme="light"] #app > .dashboard-screen.product-search-screen .product-search-summary-bar,
 html[data-theme="light"] #app > .dashboard-screen.product-search-screen .search-result-card {
   background: #ffffff !important;
@@ -60417,19 +60713,23 @@ body:not(.login-active) #app > .dashboard-screen.product-search-screen > .top-ac
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-center {
     width: min(100%, 1700px) !important;
     max-width: 1700px !important;
-    height: auto !important;
-    max-height: none !important;
-    min-height: 100vh !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    min-height: 0 !important;
     padding: 76px 34px 28px !important;
-    overflow: visible !important;
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    overflow: hidden !important;
   }
 
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-workbench,
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-main-panel {
-    height: auto !important;
-    max-height: none !important;
+    height: 100% !important;
+    max-height: 100% !important;
     min-height: 0 !important;
-    overflow: visible !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    overflow: hidden !important;
   }
 
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-summary-bar {
@@ -60506,15 +60806,39 @@ body:not(.login-active) #app > .dashboard-screen.product-search-screen > .top-ac
   }
 
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results {
-    height: auto !important;
-    max-height: none !important;
+    height: 100% !important;
+    max-height: 100% !important;
     min-height: 0 !important;
-    overflow: visible !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(15, 23, 42, .28) rgba(148, 163, 184, .12) !important;
+    padding-right: 8px !important;
   }
 
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results-list {
     gap: 12px !important;
     overflow: visible !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results::-webkit-scrollbar {
+    width: 12px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, .12) !important;
+    border-radius: 999px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, .28) !important;
+    border: 3px solid rgba(243, 244, 246, 1) !important;
+    border-radius: 999px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results::-webkit-scrollbar-thumb:hover {
+    background: rgba(239, 43, 45, .7) !important;
   }
 
   body:not(.login-active) #app > .dashboard-screen.product-search-screen .search-result-card {
@@ -60594,5 +60918,438 @@ body:not(.login-active) #app > .dashboard-screen.product-search-screen > .top-ac
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
+  }
+}
+
+/* Final override: Separation mobile compact package control and action icons. */
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-field {
+    gap: 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control {
+    display: grid !important;
+    grid-template-columns: 28px minmax(34px, 1fr) 28px !important;
+    align-items: center !important;
+    gap: 3px !important;
+    width: 100% !important;
+    max-width: 108px !important;
+    margin: 0 auto !important;
+    padding: 2px !important;
+    border-radius: 999px !important;
+    background: rgba(148, 163, 184, 0.14) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    grid-row: auto !important;
+    grid-column: auto !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-minus {
+    background: #e5e7eb !important;
+    color: #111827 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-plus {
+    background: #ef2b2d !important;
+    color: #ffffff !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .material-symbols-rounded {
+    display: inline-flex !important;
+    font-size: 22px !important;
+    line-height: 1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-input {
+    width: 100% !important;
+    max-width: 38px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-align: center !important;
+    font-size: 1.12rem !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    width: 100% !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn {
+    grid-row: auto !important;
+    grid-column: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    height: 42px !important;
+    width: 100% !important;
+    padding: 0 5px !important;
+    border-radius: 10px !important;
+    font-size: clamp(0.58rem, 2.35vw, 0.72rem) !important;
+    font-weight: 950 !important;
+    letter-spacing: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    gap: 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn .material-symbols-rounded {
+    display: inline-flex !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+  }
+}
+
+/* Final operational polish: pick mode copy, package card and mobile action icons. */
+.app-pick-mode-dialog #pick-mode-title,
+.app-pick-mode-dialog > p {
+  text-align: left !important;
+}
+
+.app-pick-mode-dialog #pick-mode-title {
+  align-self: stretch !important;
+  color: #111827 !important;
+  font-size: clamp(1.18rem, 3.2vw, 1.48rem) !important;
+  line-height: 1.12 !important;
+  margin-top: 8px !important;
+}
+
+.app-pick-mode-dialog > p {
+  align-self: stretch !important;
+  color: #475569 !important;
+  font-size: .94rem !important;
+  font-weight: 800 !important;
+  line-height: 1.42 !important;
+  margin-inline: 0 !important;
+  max-width: none !important;
+}
+
+.app-pick-mode-overlay .pick-mode-choice {
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.app-pick-mode-overlay .pick-mode-choice > strong,
+.app-pick-mode-overlay .pick-mode-choice > small {
+  text-align: left !important;
+  width: 100% !important;
+}
+
+.app-pick-mode-overlay .pick-mode-choice > .material-symbols-rounded:first-child {
+  align-self: flex-start !important;
+}
+
+.app-pick-mode-overlay .pick-mode-note {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics .pick-package-count-field {
+    background: #fef3c7 !important;
+    border: 1px solid rgba(217, 119, 6, .38) !important;
+    box-shadow: 0 10px 20px rgba(217, 119, 6, .14) !important;
+    color: #78350f !important;
+    gap: 4px !important;
+    padding: 6px 5px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-metrics .pick-package-count-field > span {
+    color: #92400e !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control {
+    background: rgba(251, 191, 36, .28) !important;
+    border: 1px solid rgba(217, 119, 6, .22) !important;
+    border-radius: 999px !important;
+    display: grid !important;
+    grid-template-columns: 24px minmax(24px, 1fr) 24px !important;
+    gap: 2px !important;
+    max-width: 92px !important;
+    padding: 2px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-inline-control .pick-package-btn {
+    background: #f59e0b !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    color: #ffffff !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    min-width: 24px !important;
+    width: 24px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-package-count-input {
+    color: #111827 !important;
+    font-size: 1rem !important;
+    font-weight: 950 !important;
+    height: 24px !important;
+    min-height: 24px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-package-btn {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn .material-symbols-rounded,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn .material-symbols-rounded {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn::before,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn::before {
+    align-items: center !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 1rem !important;
+    font-weight: 950 !important;
+    height: 24px !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    margin: 0 6px 0 0 !important;
+    vertical-align: 0 !important;
+    width: 24px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn::before {
+    background: rgba(255, 255, 255, .20) !important;
+    color: #ffffff !important;
+    content: "✓" !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn::before {
+    background: rgba(17, 24, 39, .08) !important;
+    color: currentColor !important;
+    content: "Ⅱ" !important;
+  }
+}
+
+/* Mobile rendering safety: avoid Android/WebView paint artifacts on product detail. */
+@media (max-width: 767px) {
+  html body:not(.login-active) #app > .dashboard-screen.product-detail,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar.product-detail,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar {
+    background: #f3f6fb !important;
+    background-image: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail > main.product-detail-screen,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar > main.product-detail-screen {
+    background: #f3f6fb !important;
+    background-image: none !important;
+    min-height: 100dvh !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail :where(.product-detail-card,.product-price-card,.product-stock-location,.product-detail-img,.product-stock-group,.product-stock-grid),
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar :where(.product-detail-card,.product-price-card,.product-stock-location,.product-detail-img,.product-stock-group,.product-stock-grid) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    filter: none !important;
+    transform: none !important;
+    will-change: auto !important;
+    contain: paint !important;
+    isolation: isolate !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-card,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-detail-card {
+    background: #ffffff !important;
+    background-image: none !important;
+    border: 1px solid #dbe3ee !important;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .10) !important;
+    overflow: hidden !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-price-card {
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-varejo,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-price-card-varejo {
+    background: #fff1f2 !important;
+    background-image: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-main-card,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-stock-main-card {
+    background: #fffbeb !important;
+    background-image: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-atacado,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-price-card-atacado {
+    background: #eff6ff !important;
+    background-image: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-ghost,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-price-ghost {
+    display: none !important;
+    content: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-img img,
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar .product-detail-img img {
+    filter: none !important;
+    transform: none !important;
+    image-rendering: auto !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.product-detail :where(.product-price-card:hover,.product-stock-location:hover),
+  html body:not(.login-active) #app > .dashboard-screen.fade-in.internal.no-top-bar :where(.product-price-card:hover,.product-stock-location:hover) {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Mobile product search: stronger contrast and native finger scrolling. */
+@media (max-width: 767px) {
+  html:has(body:not(.login-active) #app > .dashboard-screen.product-search-screen),
+  body:not(.login-active):has(#app > .dashboard-screen.product-search-screen),
+  body:not(.login-active):has(#app > .dashboard-screen.product-search-screen) #app {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen {
+    position: fixed !important;
+    inset: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: #edf2f7 !important;
+    touch-action: pan-y !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-center {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: calc(62px + env(safe-area-inset-top, 0px)) 10px max(12px, env(safe-area-inset-bottom, 0px)) !important;
+    overflow: hidden !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-workbench,
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-main-panel {
+    min-height: 0 !important;
+    height: 100% !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-command-bar {
+    position: relative !important;
+    top: auto !important;
+    z-index: 5 !important;
+    border-color: #d3dde9 !important;
+    background: #ffffff !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .08) !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    margin-top: 0 !important;
+    padding: 0 2px 16px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    touch-action: pan-y !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(100, 116, 139, .42) transparent !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-results-list {
+    gap: 9px !important;
+    padding-bottom: 20px !important;
+    overflow: visible !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .search-result-card {
+    border-color: #d8e1ee !important;
+    background: #ffffff !important;
+    box-shadow: 0 5px 14px rgba(15, 23, 42, .08) !important;
+    color: #0f172a !important;
+    overflow: hidden !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(227, 6, 19, .10) !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .search-result-card:active {
+    border-color: rgba(227, 6, 19, .36) !important;
+    background: #fffafa !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-title {
+    color: #050816 !important;
+    font-size: 1.02rem !important;
+    line-height: 1.16 !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-meta-chip,
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .stock-sellable-location {
+    color: #1f2937 !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-meta-chip strong,
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .stock-label,
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .price-label {
+    color: #526176 !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-image-wrapper,
+  body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-image-wrapper img {
+    filter: none !important;
+    transform: none !important;
+    will-change: auto !important;
   }
 }

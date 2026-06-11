@@ -1730,36 +1730,44 @@ const DataClient = (function () {
             return null;
         }
 
-        console.log('[GARANTIA DEBUG] salvando garantia', garantiaData);
+        const executionId = garantiaData.executionId || `gar_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const rpcPayload = {
+            p_id_interno: garantiaData.id_interno,
+            p_descricao_produto: garantiaData.descricao_produto,
+            p_fornecedor: garantiaData.fornecedor,
+            p_tipo_operacao: garantiaData.tipo_operacao,
+            p_motivo: garantiaData.motivo,
+            p_observacao: garantiaData.observacao,
+            p_origem_estoque: normalizeLocal(garantiaData.origem_estoque),
+            p_quantidade: Number(garantiaData.quantidade || 0),
+            p_custo_unitario: Number(garantiaData.custo_unitario || 0),
+            p_custo_total: Number(garantiaData.custo_total || 0),
+            p_usuario: localStorage.getItem('currentUser') || 'N/A',
+            p_execution_id: executionId
+        };
 
-        const { data, error } = await client
-            .from('garantias')
-            .insert([{
-                garantia_id: `GAR-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                data_envio: getDataHoraBrasil(),
-                id_interno: garantiaData.id_interno,
-                descricao_produto: garantiaData.descricao_produto,
-                fornecedor: garantiaData.fornecedor,
-                tipo_operacao: garantiaData.tipo_operacao,
-                motivo: garantiaData.motivo,
-                observacao: garantiaData.observacao,
-                origem_estoque: normalizeLocal(garantiaData.origem_estoque),
-                quantidade: garantiaData.quantidade,
-                custo_unitario: garantiaData.custo_unitario,
-                custo_total: garantiaData.custo_total,
-                status: 'ENVIADO',
-                usuario: localStorage.getItem('currentUser')
-            }])
-            .select();
+        console.log('[GARANTIA RPC] enviando garantia', rpcPayload);
+
+        const { data, error } = await client.rpc('enviar_garantia', rpcPayload);
 
         if (error) {
-            console.error('[GARANTIA DEBUG] erro supabase:', error);
-            return null;
+            console.error('[GARANTIA RPC] erro supabase:', error);
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('enviar_garantia');
+            const rpcError = new Error(missingRpc
+                ? 'RPC enviar_garantia ainda nao aplicada no Supabase. O envio foi bloqueado para evitar saldo parcial.'
+                : (error.message || 'Erro ao enviar produto para garantia no Supabase'));
+            rpcError.code = error.code;
+            rpcError.details = error.details;
+            rpcError.hint = error.hint;
+            rpcError.supabaseError = error;
+            throw rpcError;
         }
 
-        console.log('[GARANTIA DEBUG] Garantia salva', data);
+        console.log('[GARANTIA RPC] garantia enviada', data);
         invalidateCache('garantia');
-        return data ? data[0] : null;
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
     }
 
 

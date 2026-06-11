@@ -17,6 +17,110 @@ window.onerror = function (msg, url, lineNo, columnNo, error) {
 const app = document.getElementById('app');
 const toast = document.getElementById('toast');
 
+const MOJIBAKE_REPLACEMENTS = [
+    ['ÃƒÆ’Ã¢â‚¬Â¡', 'Ç'], ['ÃƒÆ’Ã¢â‚¬Â°', 'É'], ['ÃƒÆ’Ã¢â‚¬Å“', 'Ó'], ['ÃƒÆ’Ã…Â¡', 'Ú'], ['ÃƒÆ’Ã‚Â', 'Á'],
+    ['ÃƒÆ’Ã‚Â§', 'ç'], ['ÃƒÆ’Ã‚Â£', 'ã'], ['ÃƒÆ’Ã‚Âµ', 'õ'], ['ÃƒÆ’Ã‚Â¡', 'á'], ['ÃƒÆ’Ã‚Â©', 'é'],
+    ['ÃƒÆ’Ã‚Âª', 'ê'], ['ÃƒÆ’Ã‚Â­', 'í'], ['ÃƒÆ’Ã‚Â³', 'ó'], ['ÃƒÆ’Ã‚Âº', 'ú'], ['ÃƒÆ’Ã‚Â¢', 'â'],
+    ['ÃƒÆ’Ã‚Â´', 'ô'], ['ÃƒÆ’Ã‚Â ', 'à'], ['ÃƒÆ’Ã‚ÂÁ', 'Á'], ['ÃƒÆ’Ã‚Â‰', 'É'], ['ÃƒÆ’Ã‚Â“', 'Ó'],
+    ['ÃƒÂ§', 'ç'], ['ÃƒÂ£', 'ã'], ['ÃƒÂµ', 'õ'], ['ÃƒÂ¡', 'á'], ['ÃƒÂ©', 'é'], ['ÃƒÂª', 'ê'],
+    ['ÃƒÂ­', 'í'], ['ÃƒÂ³', 'ó'], ['ÃƒÂº', 'ú'], ['ÃƒÂ¢', 'â'], ['ÃƒÂ´', 'ô'], ['ÃƒÂ ', 'à'],
+    ['Ã‡', 'Ç'], ['Ã‰', 'É'], ['Ã“', 'Ó'], ['Ãš', 'Ú'], ['Ã', 'Á'], ['Ã§', 'ç'], ['Ã£', 'ã'],
+    ['Ãµ', 'õ'], ['Ã¡', 'á'], ['Ã©', 'é'], ['Ãª', 'ê'], ['Ã­', 'í'], ['Ã³', 'ó'], ['Ãº', 'ú'],
+    ['Ã¢', 'â'], ['Ã´', 'ô'], ['Ã ', 'à'], ['Âº', 'º'], ['Âª', 'ª'], ['Â°', '°'], ['Â·', '·'],
+    ['â€“', '-'], ['â€”', '-'], ['â€˜', "'"], ['â€™', "'"], ['â€œ', '"'], ['â€', '"'], ['â€¦', '...'],
+    ['â€¢', '•'], ['â†’', '→'], ['âˆ’', '-'], ['ï¿½', '']
+];
+
+function repairMojibakeText(value) {
+    if (value === undefined || value === null) return '';
+    const decodeLatin1AsUtf8 = (text) => {
+        if (!/[\u00c3\u00c2\u00e2\u00ef]/.test(text)) return text;
+        try {
+            const bytes = Uint8Array.from(Array.from(text), ch => ch.charCodeAt(0) & 255);
+            return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        } catch (err) {
+            return text;
+        }
+    };
+    let output = String(value);
+    for (let pass = 0; pass < 4; pass++) {
+        const before = output;
+        output = decodeLatin1AsUtf8(output)
+            .replace(/\u00c2([\u00ba\u00aa\u00b0\u00b7])/g, '$1')
+            .replace(/\u00e2\u20ac[\u201c\u201d]/g, '-')
+            .replace(/\u00e2\u20ac\u02dc/g, "'")
+            .replace(/\u00e2\u20ac\u2122/g, "'")
+            .replace(/\u00e2\u20ac\u0153/g, '"')
+            .replace(/\u00e2\u20ac\u009d/g, '"')
+            .replace(/\u00e2\u20ac\u00a6/g, '...')
+            .replace(/\u00ef\u00bf\u00bd/g, '');
+        if (output === before) break;
+    }
+    output = output
+        .replace(/PRE(?=[^\s]*[^\x00-\x7F])\S*O/gi, match => match === match.toUpperCase() ? 'PRE\u00c7O' : 'Pre\u00e7o')
+        .replace(/PREA\S*O/gi, match => match === match.toUpperCase() ? 'PRE\u00c7O' : 'Pre\u00e7o')
+        .replace(/T(?=[^\s]*[^\x00-\x7F])\S*RREO/gi, match => match === match.toUpperCase() ? 'T\u00c9RREO' : 'T\u00e9rreo')
+        .replace(/T\S*RREO/gi, match => match === match.toUpperCase() ? 'T\u00c9RREO' : 'T\u00e9rreo')
+        .replace(/SEPARA\S*O/gi, match => match === match.toUpperCase() ? 'SEPARA\u00c7\u00c3O' : 'Separa\u00e7\u00e3o')
+        .replace(/CONFER\S*NCIA/gi, match => match === match.toUpperCase() ? 'CONFER\u00caNCIA' : 'Confer\u00eancia')
+        .replace(/C\S*DIGO/gi, match => match === match.toUpperCase() ? 'C\u00d3DIGO' : 'C\u00f3digo')
+        .replace(/A\S*ES\b/gi, match => match === match.toUpperCase() ? 'A\u00c7\u00d5ES' : 'A\u00e7\u00f5es')
+        .replace(/USU\S*RIO/gi, match => match === match.toUpperCase() ? 'USU\u00c1RIO' : 'Usu\u00e1rio')
+        .replace(/HIST\S*RICO/gi, match => match === match.toUpperCase() ? 'HIST\u00d3RICO' : 'Hist\u00f3rico')
+        .replace(/DISPON\S*VEL/gi, match => match === match.toUpperCase() ? 'DISPON\u00cdVEL' : 'Dispon\u00edvel')
+        .replace(/(\d+)(?=[^\s]*[^\x00-\x7F])\S*\s+ANDAR/gi, '$1\u00ba ANDAR');
+    return output;
+}
+
+function sanitizeTextNode(node) {
+    if (!node || node.nodeType !== Node.TEXT_NODE) return;
+    const parent = node.parentElement;
+    if (!parent || parent.closest('script,style,textarea,code,pre,.material-symbols-rounded')) return;
+    const fixed = repairMojibakeText(node.nodeValue);
+    if (fixed !== node.nodeValue) node.nodeValue = fixed;
+}
+
+function sanitizeElementText(root = document) {
+    const attrNames = ['title', 'aria-label', 'placeholder', 'alt'];
+    const childElements = root.querySelectorAll ? Array.from(root.querySelectorAll('*')) : [];
+    const elements = root.matches?.('*') ? [root, ...childElements] : childElements;
+    elements.forEach(el => {
+        if (el.matches?.('script,style,textarea,code,pre')) return;
+        attrNames.forEach(attr => {
+            if (!el.hasAttribute?.(attr)) return;
+            const current = el.getAttribute(attr);
+            const fixed = repairMojibakeText(current);
+            if (fixed !== current) el.setAttribute(attr, fixed);
+        });
+    });
+
+    const walker = document.createTreeWalker(root === document ? document.body : root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(sanitizeTextNode);
+}
+
+function startTextSanitizerObserver() {
+    sanitizeElementText(document);
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE) sanitizeTextNode(node);
+                if (node.nodeType === Node.ELEMENT_NODE) sanitizeElementText(node);
+            });
+            if (mutation.type === 'characterData') sanitizeTextNode(mutation.target);
+            if (mutation.type === 'attributes') sanitizeElementText(mutation.target);
+        });
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['title', 'aria-label', 'placeholder', 'alt']
+    });
+}
+
 const MATERIAL_ICON_FALLBACKS = {
     add: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
     add_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -160,7 +264,7 @@ function classifyProductInput(rawValue) {
         };
     }
 
-    // EAN: 8, 12, 13, 14 dígitos
+    // EAN: 8, 12, 13, 14 dÃƒÆ’Ã‚Â­gitos
     if (/^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(clean)) {
         return {
             type: 'ean',
@@ -168,7 +272,7 @@ function classifyProductInput(rawValue) {
         };
     }
 
-    // Code 128 / SKU Fornecedor (Alfanumérico com números)
+    // Code 128 / SKU Fornecedor (AlfanumÃƒÆ’Ã‚Â©rico com nÃƒÆ’Ã‚Âºmeros)
     if (/^[A-Z0-9\-_.]{4,}$/i.test(clean) && /\d/.test(clean)) {
         return {
             type: 'code128',
@@ -228,7 +332,7 @@ function playFeedbackSound(type) {
             osc.stop(ctx.currentTime + note.t + note.d + 0.02);
         });
     } catch (err) {
-        console.warn('[AUDIO] feedback indisponível', err);
+        console.warn('[AUDIO] feedback indisponÃƒÆ’Ã‚Â­vel', err);
     }
 }
 
@@ -242,6 +346,7 @@ function triggerScanFeedback(type = 'success') {
         overlay = document.createElement('div');
         overlay.id = 'scan-feedback-overlay';
         overlay.className = 'scan-feedback-overlay';
+
         document.body.appendChild(overlay);
     }
 
@@ -300,7 +405,7 @@ function showPageSearchSignal(type) {
 
 async function handleProductScan(rawValue, context = 'search') {
     const classification = classifyProductInput(rawValue);
-    console.log(`[SCAN] Classificação:`, classification);
+    console.log(`[SCAN] ClassificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:`, classification);
 
     if (classification.type === 'text') {
         // Se for texto na busca, apenas performSearch normal
@@ -315,7 +420,7 @@ async function handleProductScan(rawValue, context = 'search') {
     }
 
     if (classification.type === 'invalid' || classification.type === 'empty') {
-        showScanFeedback('error', 'Código Inválido');
+        showScanFeedback('error', 'CÃƒÆ’Ã‚Â³digo InvÃƒÆ’Ã‚Â¡lido');
         return;
     }
 
@@ -370,10 +475,10 @@ async function handleProductScan(rawValue, context = 'search') {
         
         return product;
     } else {
-        // Mostrar alerta apenas se a leitura for real (scanner/câmera).
-        // Não mostrar enquanto o usuário estiver digitando (context === 'search')
+        // Mostrar alerta apenas se a leitura for real (scanner/cÃƒÆ’Ã‚Â¢mera).
+        // NÃƒÆ’Ã‚Â£o mostrar enquanto o usuÃƒÆ’Ã‚Â¡rio estiver digitando (context === 'search')
         if (context !== 'search') {
-            showScanFeedback('warning', 'Produto não cadastrado');
+            showScanFeedback('warning', 'Produto nÃƒÆ’Ã‚Â£o cadastrado');
         }
         return null;
     }
@@ -389,7 +494,7 @@ let currentSessionItems = [];
 let isModoRapido = false;
 
 // ==== NAVIGATION MANAGEMENT ====
-// Permite que o botão voltar do navegador (e do Android) funcione corretamente
+// Permite que o botÃƒÆ’Ã‚Â£o voltar do navegador (e do Android) funcione corretamente
 window.addEventListener('popstate', (event) => {
     if (event.state && event.state.screen) {
         console.log('[NAV] Popstate para:', event.state.screen);
@@ -401,19 +506,19 @@ window.addEventListener('popstate', (event) => {
 
 function pushNav(screen) {
     if (!screen) return;
-    // Evita duplicar o mesmo estado no topo do histórico
+    // Evita duplicar o mesmo estado no topo do histÃƒÆ’Ã‚Â³rico
     if (history.state && history.state.screen === screen) return;
     console.log('[NAV] PushState:', screen);
     history.pushState({ screen }, '', '');
 }
 
 function goBack() {
-    // Se tivermos um estado no histórico, usamos a navegação do navegador
+    // Se tivermos um estado no histÃƒÆ’Ã‚Â³rico, usamos a navegaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do navegador
     if (history.state && history.state.screen && history.state.screen !== 'login') {
         console.log('[NAV] history.back()');
         history.back();
     } else {
-        // Fallback lógico para garantir que o usuário nunca fique preso
+        // Fallback lÃƒÆ’Ã‚Â³gico para garantir que o usuÃƒÆ’Ã‚Â¡rio nunca fique preso
         if (currentScreen === 'search') renderMenu();
         else if (currentScreen === 'menu') renderLogin();
         else renderMenu();
@@ -433,7 +538,7 @@ function renderScreenByName(name, push = true) {
     }
 }
 
-// ==== MODO TELA LIMPA (LÓGICA OPERACIONAL) ====
+// ==== MODO TELA LIMPA (LÃƒÆ’Ã¢â‚¬Å“GICA OPERACIONAL) ====
 window.handleUserClick = async function(e) {
     if(e) {
         e.preventDefault();
@@ -442,7 +547,7 @@ window.handleUserClick = async function(e) {
     console.log('CLICK USUARIO OK');
     showToast('CLICK USUARIO OK', 'success'); // Opcional, feedback no sistema do app
     
-    // Ação real solicitada pela interface
+    // AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o real solicitada pela interface
     if (typeof renderConfigSubMenu === 'function') {
         renderConfigSubMenu();
     } else {
@@ -452,6 +557,7 @@ window.handleUserClick = async function(e) {
 
 window.addEventListener('DOMContentLoaded', () => {
     startMaterialIconFallbackObserver();
+    startTextSanitizerObserver();
     [
         'loginBackgroundImage',
         'loginBackgroundDesktop',
@@ -567,8 +673,8 @@ if ('serviceWorker' in navigator) {
                 newWorker.addEventListener('statechange', async () => {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                         const shouldUpdate = await showAppConfirm({
-                            title: 'Nova versão disponível',
-                            message: 'Nova versão disponível. Atualizar?',
+                            title: 'Nova versÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel',
+                            message: 'Nova versÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel. Atualizar?',
                             confirmLabel: 'Atualizar',
                             cancelLabel: 'Depois'
                         });
@@ -643,7 +749,7 @@ async function copyToClipboard(text, elementId = null) {
         }
     } catch (err) {
         console.error("Erro ao copiar:", err);
-        showToast("Erro ao copiar para a área de transferência.");
+        showToast("Erro ao copiar para a ÃƒÆ’Ã‚Â¡rea de transferÃƒÆ’Ã‚Âªncia.");
     }
 }
 
@@ -677,7 +783,7 @@ function highlightText(text, term) {
 }
 
 /**
- * Realiza uma requisição GET para a API_BASE com parâmetros
+ * Realiza uma requisiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o GET para a API_BASE com parÃƒÆ’Ã‚Â¢metros
  */
 async function dyGet(params = {}) {
     const query = new URLSearchParams();
@@ -711,7 +817,7 @@ async function safeGet(queryString) {
 }
 
 /**
- * Verifica a conexão com a planilha
+ * Verifica a conexÃƒÆ’Ã‚Â£o com a planilha
  */
 async function verificarConexao() {
     try {
@@ -724,13 +830,13 @@ async function verificarConexao() {
             return false;
         }
     } catch (err) {
-        console.error("Erro fatal ao verificar conexão:", err);
+        console.error("Erro fatal ao verificar conexÃƒÆ’Ã‚Â£o:", err);
         return false;
     }
 }
 
 /**
- * Normaliza textos para busca (minúsculas, sem acentos, sem espaços extras)
+ * Normaliza textos para busca (minÃƒÆ’Ã‚Âºsculas, sem acentos, sem espaÃƒÆ’Ã‚Â§os extras)
  */
 function normalizar(texto) {
     return (texto || "")
@@ -741,7 +847,7 @@ function normalizar(texto) {
 }
 
 /**
- * Busca Kit Lâmpada na API com os parâmetros informados
+ * Busca Kit LÃƒÆ’Ã‚Â¢mpada na API com os parÃƒÆ’Ã‚Â¢metros informados
  */
 async function buscarKitLampada(termo, ano, montadora) {
     return dyGet({
@@ -752,20 +858,20 @@ async function buscarKitLampada(termo, ano, montadora) {
     });
 }
 
-// Auxiliar para gerar ID de execução técnica (idempotência)
+// Auxiliar para gerar ID de execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o tÃƒÆ’Ã‚Â©cnica (idempotÃƒÆ’Ã‚Âªncia)
 function generateExecutionId() {
     return 'exec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
 /**
- * Camada de Normalização Contextual: Garante que valores respeitem as validações da ABA específica
+ * Camada de NormalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o Contextual: Garante que valores respeitem as validaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes da ABA especÃƒÆ’Ã‚Â­fica
  */
 function normalizeSheetValue(sheet, field, value) {
     if (value === null || value === undefined) return '';
     const str = String(value).trim();
     const lower = str.toLowerCase();
 
-    // Regras por ABA e CAMPO (Explícitas)
+    // Regras por ABA e CAMPO (ExplÃƒÆ’Ã‚Â­citas)
     
     // ABA: Produtos
     if (sheet === 'produtos' && field === 'status') {
@@ -837,7 +943,7 @@ function normalizePayloadForSheet(payload) {
     let sheetContext = payload.sheet || payload.action || '';
     if (sheetContext === 'movimento') sheetContext = 'movimentos';
 
-    // Lista de campos que PODEM precisar de normalização
+    // Lista de campos que PODEM precisar de normalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
     const fieldsToCheck = [
         'status', 'tipo', 'local', 'local_origem', 'local_destino', 
         'ativo', 'perfil'
@@ -849,7 +955,7 @@ function normalizePayloadForSheet(payload) {
         }
     });
 
-    // Normalizar também campos aninhados em 'data'
+    // Normalizar tambÃƒÆ’Ã‚Â©m campos aninhados em 'data'
     if (normalized.data && typeof normalized.data === 'object') {
         const dataNormalized = { ...normalized.data };
         Object.keys(dataNormalized).forEach(key => {
@@ -885,17 +991,17 @@ async function revertStockMovement(sessionId, row, operatorId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(normalizePayloadForSheet({
                 action: 'movimento',
-                tipo: 'SAIDA', // Normalizado para 'saida' (estorno é uma saída de correção)
+                tipo: 'SAIDA', // Normalizado para 'saida' (estorno ÃƒÆ’Ã‚Â© uma saÃƒÆ’Ã‚Â­da de correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o)
                 id_interno: row.id_interno,
                 local: '1andar', // Canonical 1andar
                 quantidade: row.qtd_conferida, 
                 data_hora: now,
                 usuario: operatorId,
                 origem: 'MANUAL',
-                observacao: `REVERSAO-${sessionId} | Correção de erro operacional da sessao ${sessionId}`
+                observacao: `REVERSAO-${sessionId} | CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de erro operacional da sessao ${sessionId}`
             }))
         });
-        showToast(`Estorno concluído (sincronizado).`);
+        showToast(`Estorno concluÃƒÆ’Ã‚Â­do (sincronizado).`);
     } catch (err) {
         console.error("Estorno Falhou:", err);
         showToast("Erro ao processar estorno!");
@@ -994,7 +1100,7 @@ function cycleLoginTheme() {
 }
 
 function getThemeLabel(theme) {
-    return theme === 'auto' ? 'Automático' : theme === 'light' ? 'Claro' : 'Escuro';
+    return theme === 'auto' ? 'AutomÃƒÆ’Ã‚Â¡tico' : theme === 'light' ? 'Claro' : 'Escuro';
 }
 
 function updateThemeControlsUI(theme = getStoredTheme()) {
@@ -1431,8 +1537,8 @@ function validatePickingStockForExit(items = [], point = 'separacao') {
 function formatPickingStockIssueMessage(validation) {
     const first = validation?.issues?.[0];
     if (!first) return '';
-    const suffix = validation.issues.length > 1 ? ` Outros ${validation.issues.length - 1} item(ns) também estão insuficientes.` : '';
-    return `${first.descricao || first.productId}: solicitado ${first.quantidadeSolicitada}, disponível ${first.estoqueAtual}, faltam ${first.faltante}.${suffix}`;
+    const suffix = validation.issues.length > 1 ? ` Outros ${validation.issues.length - 1} item(ns) tambÃƒÆ’Ã‚Â©m estÃƒÆ’Ã‚Â£o insuficientes.` : '';
+    return `${first.descricao || first.productId}: solicitado ${first.quantidadeSolicitada}, disponÃƒÆ’Ã‚Â­vel ${first.estoqueAtual}, faltam ${first.faltante}.${suffix}`;
 }
 
 async function confirmPickingNegativeStockIfNeeded(validation, point = 'separacao') {
@@ -1441,7 +1547,7 @@ async function confirmPickingNegativeStockIfNeeded(validation, point = 'separaca
         await showAppModal({
             type: 'error',
             title: 'Estoque insuficiente',
-            message: 'Estoque insuficiente para finalizar a separação. Ative “Permitir estoque negativo” em Configurações ou ajuste a quantidade.',
+            message: 'Estoque insuficiente para finalizar a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Ative ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œPermitir estoque negativoÃƒÂ¢Ã¢â€šÂ¬Ã‚Â em ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes ou ajuste a quantidade.',
             detail: formatPickingStockIssueMessage(validation),
             confirmText: 'Entendi'
         });
@@ -1453,7 +1559,7 @@ async function confirmPickingNegativeStockIfNeeded(validation, point = 'separaca
     return showAppModal({
         type: 'warning',
         title: 'Estoque negativo permitido',
-        message: 'Estoque insuficiente, mas a configuração permite estoque negativo. A separação será finalizada e o produto ficará com saldo negativo.',
+        message: 'Estoque insuficiente, mas a configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o permite estoque negativo. A separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o serÃƒÆ’Ã‚Â¡ finalizada e o produto ficarÃƒÆ’Ã‚Â¡ com saldo negativo.',
         detail: formatPickingStockIssueMessage(validation),
         confirmText: 'Finalizar mesmo assim',
         cancelText: 'Revisar itens'
@@ -1477,7 +1583,7 @@ const LOGO_SMALL_URL = LOGO_DARK_BG;
 const LOGO_BLACK = LOGO_DARK_BG;
 const LOGO_WHITE = LOGO_LIGHT_BG;
 
-// Função para selecionar o logo baseado na cor do topo/header (REALIDADE VISUAL)
+// FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para selecionar o logo baseado na cor do topo/header (REALIDADE VISUAL)
 // Fundo PRETO/ESCURO -> logo branco
 // Fundo BRANCO/CLARO -> logo preto
 function getLogoForHeader(headerBgColor) {
@@ -1497,24 +1603,24 @@ function getLogoForHeader(headerBgColor) {
         return LOGO_LIGHT_BG;
     }
     
-    // Padrão
+    // PadrÃƒÆ’Ã‚Â£o
     return LOGO_LIGHT_BG;
 }
 
 
 
 
-// Função para garantir que links do Drive funcionem como imagem direta
+// FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para garantir que links do Drive funcionem como imagem direta
 function formatImageUrl(url) {
     if (!url) return '';
     
-    // Se for um path do Supabase (não é URL completa), gerar URL pública
+    // Se for um path do Supabase (nÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© URL completa), gerar URL pÃƒÆ’Ã‚Âºblica
     if (url.startsWith('produtos/') || url.startsWith('branding/')) {
         try {
             const publicUrl = getPublicUrl(url);
             if (publicUrl) return publicUrl;
         } catch (e) {
-            console.log('[formatImageUrl] Erro ao gerar URL pública:', e);
+            console.log('[formatImageUrl] Erro ao gerar URL pÃƒÆ’Ã‚Âºblica:', e);
         }
     }
     
@@ -1532,12 +1638,12 @@ function formatImageUrl(url) {
 
 const attributeNameMap = {
     voltagem: "Voltagem",
-    potencia: "Potência",
-    tipo_lampada: "Tipo da lâmpada",
+    potencia: "PotÃƒÆ’Ã‚Âªncia",
+    tipo_lampada: "Tipo da lÃƒÆ’Ã‚Â¢mpada",
     temperatura_cor: "Temperatura de cor",
     lumens: "Lumens",
     encaixe: "Encaixe",
-    codigo_equivalente: "Código equivalente",
+    codigo_equivalente: "CÃƒÆ’Ã‚Â³digo equivalente",
     linha: "Linha",
     ip_rate: "IP Rate",
     chip_led: "Chip LED",
@@ -1546,12 +1652,12 @@ const attributeNameMap = {
     driver: "Driver",
     material_lente: "Material da lente",
     textura_lente: "Textura da lente",
-    material_carcaca: "Material da carcaça",
+    material_carcaca: "Material da carcaÃƒÆ’Ã‚Â§a",
     regulagem: "Regulagem",
-    modelo_botao: "Modelo do botão",
-    cor_botao: "Cor do botão",
-    veiculo: "Veículo",
-    ano_aplicacao: "Ano de aplicação"
+    modelo_botao: "Modelo do botÃƒÆ’Ã‚Â£o",
+    cor_botao: "Cor do botÃƒÆ’Ã‚Â£o",
+    veiculo: "VeÃƒÆ’Ã‚Â­culo",
+    ano_aplicacao: "Ano de aplicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o"
 };
 
 const attributeValueReplacements = [
@@ -1563,7 +1669,7 @@ const attributeValueReplacements = [
     [/(\d+)_(\d+)/g, '$1 a $2'],
     [/^com_/i, 'Com '],
     [/^sem_/i, 'Sem '],
-    [/^a_prova_d/i, 'À prova d'],
+    [/^a_prova_d/i, 'ÃƒÆ’Ã¢â€šÂ¬ prova d'],
     [/_/g, ' / ']
 ];
 
@@ -1606,7 +1712,7 @@ function isValidUrl(value) {
         const url = new URL(s);
         return url.protocol === 'http:' || url.protocol === 'https:';
     } catch (e) {
-        // Aceita caminhos relativos internos (começando com /)
+        // Aceita caminhos relativos internos (comeÃƒÆ’Ã‚Â§ando com /)
         return s.startsWith('/');
     }
 }
@@ -1691,11 +1797,11 @@ try {
 }
 
 
-// Diagnóstico inicial e Limpeza de cache de produtos legado
+// DiagnÃƒÆ’Ã‚Â³stico inicial e Limpeza de cache de produtos legado
 const emergencyProductsCache = Array.isArray(appData.products) ? [...appData.products] : [];
 if (appData.products && appData.products.length > 0) {
     console.log(`[Cache] Detectados ${appData.products.length} produtos no localStorage. Limpando para garantir carga fresca do Supabase.`);
-    appData.products = []; // Força a limpeza para evitar uso de dados legados das planilhas
+    appData.products = []; // ForÃƒÆ’Ã‚Â§a a limpeza para evitar uso de dados legados das planilhas
 }
 
 console.log("[DIAGNOSTICO] appData inicial:", {
@@ -1703,7 +1809,7 @@ console.log("[DIAGNOSTICO] appData inicial:", {
     lastSync: appData.lastSyncTime
 });
 
-const DATA_MAX_AGE_MS = 5 * 60 * 1000; // 5 Minutos de validade para processos críticos
+const DATA_MAX_AGE_MS = 5 * 60 * 1000; // 5 Minutos de validade para processos crÃƒÆ’Ã‚Â­ticos
 
 function isDataFresh() {
     if (!appData.lastSyncTimestamp) return false;
@@ -1712,7 +1818,7 @@ function isDataFresh() {
 }
 
 /**
- * Interceptor para garantir dados novos em processos críticos
+ * Interceptor para garantir dados novos em processos crÃƒÆ’Ã‚Â­ticos
  */
 async function ensureFreshData(callback) {
     if (isDataFresh()) {
@@ -1720,20 +1826,20 @@ async function ensureFreshData(callback) {
         return callback();
     }
 
-    addTechnicalLog('SYNC_CHECK', 'STALE', 'Dados antigos. Disparando sync obrigatória...');
+    addTechnicalLog('SYNC_CHECK', 'STALE', 'Dados antigos. Disparando sync obrigatÃƒÆ’Ã‚Â³ria...');
     
-    // Mostra loader somente nos casos críticos
+    // Mostra loader somente nos casos crÃƒÆ’Ã‚Â­ticos
     const success = await loadAllData(false); 
     
     if (success) {
         callback();
     } else {
-        showToast("Falha na sincronização. Verifique sua conexão.");
+        showToast("Falha na sincronizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Verifique sua conexÃƒÆ’Ã‚Â£o.");
     }
 }
 
 /**
- * Log Técnico Interno (Background)
+ * Log TÃƒÆ’Ã‚Â©cnico Interno (Background)
  */
 function addTechnicalLog(action, status, details = "") {
     const logs = JSON.parse(localStorage.getItem('tech_logs') || '[]');
@@ -1743,7 +1849,7 @@ function addTechnicalLog(action, status, details = "") {
         status,
         details
     });
-    // Manter apenas os últimos 100 logs
+    // Manter apenas os ÃƒÆ’Ã‚Âºltimos 100 logs
     localStorage.setItem('tech_logs', JSON.stringify(logs.slice(0, 100)));
     console.log(`[TECH-LOG] ${action}: ${status} ${details}`);
 }
@@ -1783,7 +1889,7 @@ window.addEventListener("offline", atualizarStatusConexao);
 
 const BOOT_CONFIG = {
     TIMEOUT_MS: 10000,        // 10s timeout por etapa
-    MAX_RETRIES: 1,          // máximo 1 retry
+    MAX_RETRIES: 1,          // mÃƒÆ’Ã‚Â¡ximo 1 retry
     BOOT_TIMEOUT_MS: 30000    // 30s timeout total do bootstrap
 };
 
@@ -1841,15 +1947,15 @@ async function initApp() {
         console.log('[INIT] Error loading custom bg, using default');
     }
     
-    // 1. GUARDA DE REENTRADA - impedir múltiplas inicializações
+    // 1. GUARDA DE REENTRADA - impedir mÃƒÆ’Ã‚Âºltiplas inicializaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes
     if (bootstrapState.running) {
-        console.log('[BOOT] Reentrada bloqueada - bootstrap já em execução');
+        console.log('[BOOT] Reentrada bloqueada - bootstrap jÃƒÆ’Ã‚Â¡ em execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
         addSyncTrace('initApp', 'BLOCK', 'reentrada');
         return;
     }
     if (bootstrapState.completed) {
-        console.log('[BOOT] Reentrada bloqueada - bootstrap já concluído');
-        addSyncTrace('initApp', 'BLOCK', 'já completado');
+        console.log('[BOOT] Reentrada bloqueada - bootstrap jÃƒÆ’Ã‚Â¡ concluÃƒÆ’Ã‚Â­do');
+        addSyncTrace('initApp', 'BLOCK', 'jÃƒÆ’Ã‚Â¡ completado');
         return;
     }
 
@@ -1859,7 +1965,7 @@ async function initApp() {
     bootstrapState.abortController = new AbortController();
 
     console.log('[BOOT] ==========================================');
-    console.log('[BOOT] INÍCIO DO BOOTSTRAP');
+    console.log('[BOOT] INÃƒÆ’Ã‚ÂCIO DO BOOTSTRAP');
     console.log('[BOOT] ==========================================');
 
     // 3. TIMEOUT TOTAL DO BOOTSTRAP
@@ -1867,7 +1973,7 @@ async function initApp() {
         if (bootstrapState.running && !bootstrapState.completed) {
             console.error('[BOOT] TIMEOUT TOTAL DE INICIALIZACAO');
             bootstrapState.abortController.abort();
-            showBootstrapError('Timeout de inicialização');
+            showBootstrapError('Timeout de inicializaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
         }
     }, BOOT_CONFIG.BOOT_TIMEOUT_MS);
 
@@ -1875,7 +1981,7 @@ async function initApp() {
         // 4. ESCONDER SPLASH IMEDIATAMENTE
         hideSplash();
 
-        // 5. VERIFICAR SUPABASE (não bloqueante)
+        // 5. VERIFICAR SUPABASE (nÃƒÆ’Ã‚Â£o bloqueante)
         console.log('[BOOT] Verificando Supabase...');
         try {
             if (window.supabaseClientReady) {
@@ -1894,7 +2000,7 @@ async function initApp() {
                 testeSupabase();
             }
         } catch (se) {
-            console.warn('[BOOT] Supabase não disponível:', se.message);
+            console.warn('[BOOT] Supabase nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel:', se.message);
         }
 
         atualizarStatusConexao();
@@ -1908,20 +2014,20 @@ async function initApp() {
         }
         startSecurityDeviceWatch();
 
-        // 6. CARREGAR USUÁRIOS COM TIMEOUT E FALLBACK ÚNICO
-        console.log('[BOOT] Carregando usuários...');
+        // 6. CARREGAR USUÃƒÆ’Ã‚ÂRIOS COM TIMEOUT E FALLBACK ÃƒÆ’Ã…Â¡NICO
+        console.log('[BOOT] Carregando usuÃƒÆ’Ã‚Â¡rios...');
         const usersLoaded = await loadUsersWithFallback();
         
         if (usersLoaded) {
-            console.log(`[BOOT] Usuários carregados: ${appData.users?.length || 0}`);
+            console.log(`[BOOT] UsuÃƒÆ’Ã‚Â¡rios carregados: ${appData.users?.length || 0}`);
         } else {
-        console.warn('[BOOT] Usuários não carregados, usando fallback');
+        console.warn('[BOOT] UsuÃƒÆ’Ã‚Â¡rios nÃƒÆ’Ã‚Â£o carregados, usando fallback');
         }
 
-        // 7. CARGA INICIAL (separacao) - apenas se necessário
+        // 7. CARGA INICIAL (separacao) - apenas se necessÃƒÆ’Ã‚Â¡rio
         const currentUser = localStorage.getItem('currentUser');
         if (!currentUser) {
-            console.log('[BOOT] Carregando dados mínimos (separacao)...');
+            console.log('[BOOT] Carregando dados mÃƒÆ’Ã‚Â­nimos (separacao)...');
             try {
                 await withTimeout(
                     loadAllData(true, 'initApp'),
@@ -1944,13 +2050,13 @@ async function initApp() {
         
         const elapsed = Date.now() - bootstrapState.startTime;
         console.log('[BOOT] ==========================================');
-        console.log(`[BOOT] BOOTSTRAP CONCLUÍDO (${elapsed}ms)`);
+        console.log(`[BOOT] BOOTSTRAP CONCLUÃƒÆ’Ã‚ÂDO (${elapsed}ms)`);
         console.log('[BOOT] ==========================================');
         addSyncTrace('initApp', 'COMPLETE', `sucesso em ${elapsed}ms`);
 
     } catch (err) {
         clearTimeout(totalTimeout);
-        console.error('[BOOT] Erro crítico no bootstrap:', err);
+        console.error('[BOOT] Erro crÃƒÆ’Ã‚Â­tico no bootstrap:', err);
         addSyncTrace('initApp', 'ERROR', err.message);
         
         // SEMPRE renderizar login em caso de erro
@@ -1958,7 +2064,7 @@ async function initApp() {
         try {
             renderLogin();
         } catch (e2) {
-            console.error('[BOOT] Também falhou renderLogin:', e2);
+            console.error('[BOOT] TambÃƒÆ’Ã‚Â©m falhou renderLogin:', e2);
         }
         
         bootstrapState.completed = true;
@@ -1967,8 +2073,8 @@ async function initApp() {
 }
 
 async function loadUsersWithFallback() {
-    // TENTATIVA ÚNICA: Supabase (SSOT)
-    console.log('[BOOT] Carregando usuários do Supabase...');
+    // TENTATIVA ÃƒÆ’Ã…Â¡NICA: Supabase (SSOT)
+    console.log('[BOOT] Carregando usuÃƒÆ’Ã‚Â¡rios do Supabase...');
     try {
         const data = await withTimeout(
             DataClient.fetchUsuariosSupabase(),
@@ -1979,31 +2085,31 @@ async function loadUsersWithFallback() {
         if (data && data.length > 0) {
             appData.users = data.map(u => ({
                 ...u,
-                avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+                avatar_url: (u.avatar_url && !['sim', 'nao', 'nÃƒÆ’Ã‚Â£o'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
             }));
-            console.log(`[DATA] usuarios -> Supabase (${appData.users.length} usuários)`);
+            console.log(`[DATA] usuarios -> Supabase (${appData.users.length} usuÃƒÆ’Ã‚Â¡rios)`);
             console.log(`[DATA] Google Sheets ignorado para 'usuarios'`);
             return true;
         }
         
-        console.error('[BOOT] Supabase retornou vazio para usuários (SSOT FALHOU)');
+        console.error('[BOOT] Supabase retornou vazio para usuÃƒÆ’Ã‚Â¡rios (SSOT FALHOU)');
     } catch (e) {
-        console.error(`[BOOT] Erro crítico ao carregar usuários do Supabase: ${e.message}`);
+        console.error(`[BOOT] Erro crÃƒÆ’Ã‚Â­tico ao carregar usuÃƒÆ’Ã‚Â¡rios do Supabase: ${e.message}`);
     }
 
     // SEM FALLBACK PARA SHEETS (Consolidado)
-    addSyncTrace('loadUsersWithFallback', 'ABORT', 'Supabase falhou e Sheets está desativado como fallback');
+    addSyncTrace('loadUsersWithFallback', 'ABORT', 'Supabase falhou e Sheets estÃƒÆ’Ã‚Â¡ desativado como fallback');
     return false;
 }
 
 
 
-// Inicialização segura baseada no estado do documento
+// InicializaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o segura baseada no estado do documento
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initApp);
 } else {
-    // Usar setTimeout para evitar bloqueio síncrono
+    // Usar setTimeout para evitar bloqueio sÃƒÆ’Ã‚Â­ncrono
     setTimeout(initApp, 0);
 }
 
@@ -2190,7 +2296,7 @@ async function syncOperationOutbox(caller = 'unknown') {
 async function processSyncQueue(caller = 'unknown') {
     const now = Date.now();
     if (now - lastProcessSyncQueueCall < PROCESS_SYNC_QUEUE_DEBOUNCE_MS) {
-        console.log(`[SYNC] processSyncQueue ignorado (debounce): ${caller} | Última: ${now - lastProcessSyncQueueCall}ms`);
+        console.log(`[SYNC] processSyncQueue ignorado (debounce): ${caller} | ÃƒÆ’Ã…Â¡ltima: ${now - lastProcessSyncQueueCall}ms`);
         addSyncTrace('processSyncQueue', 'DEBOUNCE', caller);
         return;
     }
@@ -2253,14 +2359,14 @@ async function processSyncQueue(caller = 'unknown') {
         operacoesPendentes = queue.length;
         atualizarPendentes();
 
-        // Só recarrega dados se realmente houve mudança (itens processados)
+        // SÃƒÆ’Ã‚Â³ recarrega dados se realmente houve mudanÃƒÆ’Ã‚Â§a (itens processados)
         if (queue.length === 0 && itemsProcessed > 0) {
             console.log(`[SYNC] Fila limpa (${itemsProcessed} itens). Atualizando dados locais...`);
             addSyncTrace('processSyncQueue', 'CALL', `loadAllData (fila processada: ${itemsProcessed} itens)`);
             showToast("Sincronizado com sucesso!");
             loadAllData(true, 'processSyncQueue_success');
         } else if (queue.length === 0) {
-            console.log(`[SYNC] Fila já estava vazia. Nenhuma carga adicional necessária.`);
+            console.log(`[SYNC] Fila jÃƒÆ’Ã‚Â¡ estava vazia. Nenhuma carga adicional necessÃƒÆ’Ã‚Â¡ria.`);
             addSyncTrace('processSyncQueue', 'SKIP', 'fila vazia');
         }
         addSyncTrace('processSyncQueue', 'COMPLETE', `processados=${itemsProcessed} restantes=${queue.length}`);
@@ -2269,7 +2375,7 @@ async function processSyncQueue(caller = 'unknown') {
 
 async function safePost(payload) {
     const executionId = generateExecutionId();
-    // Aplicar a Camada de Normalização imediatamente
+    // Aplicar a Camada de NormalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o imediatamente
     const normalizedPayload = normalizePayloadForSheet({ ...payload, executionId });
 
     const syncItem = {
@@ -2278,7 +2384,7 @@ async function safePost(payload) {
         payload: normalizedPayload
     };
 
-    // Log para debug - útil para identificar problemas de comunicação
+    // Log para debug - ÃƒÆ’Ã‚Âºtil para identificar problemas de comunicaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
     console.log("[safePost] Enviando para SCRIPT_URL:", SCRIPT_URL);
     console.log("[safePost] Payload:", JSON.stringify(syncItem.payload, null, 2));
 
@@ -2296,20 +2402,20 @@ async function safePost(payload) {
             body: JSON.stringify(syncItem.payload)
         });
         
-        // Com no-cors, não podemos ver a resposta, mas se não threw erro, considera-se sucesso
-        console.log("[safePost] Envio concluído com sucesso (mode: no-cors)");
+        // Com no-cors, nÃƒÆ’Ã‚Â£o podemos ver a resposta, mas se nÃƒÆ’Ã‚Â£o threw erro, considera-se sucesso
+        console.log("[safePost] Envio concluÃƒÆ’Ã‚Â­do com sucesso (mode: no-cors)");
         return true;
     } catch (error) {
-        console.error("[safePost] Erro na requisição:", error);
+        console.error("[safePost] Erro na requisiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:", error);
         
         // Adicionar a fila mesmo em caso de erro
         await queueOperation('google_sheets_post', syncItem.payload, { backupTarget: 'google_sheets' });
         
-        // Mostrar erro mais específico
+        // Mostrar erro mais especÃƒÆ’Ã‚Â­fico
         if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            showToast("Erro de conexão: Salvando em fila local.");
+            showToast("Erro de conexÃƒÆ’Ã‚Â£o: Salvando em fila local.");
         } else if (error.name === 'AbortError') {
-            showToast("Timeout: Operação cancelada. Salvando em fila.");
+            showToast("Timeout: OperaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o cancelada. Salvando em fila.");
         } else {
             showToast("Erro ao salvar: " + error.message);
         }
@@ -2351,12 +2457,12 @@ async function fetchSheetData(sheetName, timeoutMs = 20000) {
         const data = result.data || [];
 
         // Mapear dados retornados pelo GAS para o formato esperado pelo app
-        // O GAS retorna objetos com as chaves sendo o nome exato dos cabeçalhos
+        // O GAS retorna objetos com as chaves sendo o nome exato dos cabeÃƒÆ’Ã‚Â§alhos
         return data.map(record => {
             const obj = {};
             Object.entries(record).forEach(([key, value], index) => {
                 const colLetter = getColumnLetter(index);
-                // Normalização consistente com o formato anterior
+                // NormalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o consistente com o formato anterior
                 const colName = key.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
 
                 obj[colName] = value;
@@ -2378,7 +2484,7 @@ async function fetchSheetData(sheetName, timeoutMs = 20000) {
         if (error.name === 'AbortError') {
             showToast(`Timeout ao buscar dados de '${sheetName}'`, "error");
         } else if (error.message.includes('Failed to fetch')) {
-            showToast(`Erro de conexão ao buscar '${sheetName}'`, "error");
+            showToast(`Erro de conexÃƒÆ’Ã‚Â£o ao buscar '${sheetName}'`, "error");
         } else {
             showToast(`Erro ao buscar '${sheetName}': ${error.message}`, "error");
         }
@@ -2401,7 +2507,7 @@ function getOfflinePendingCount() {
     return (window.appData && window.appData.offlineQueue) ? window.appData.offlineQueue.length : 0;
 }
 
-// Listener para atualização de status online/offline
+// Listener para atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de status online/offline
 window.addEventListener('online', () => updateMenuStatusUI());
 window.addEventListener('offline', () => updateMenuStatusUI());
 
@@ -2464,10 +2570,10 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
                 </button>
                 ` : ''}
                 ${isMenu ? `
-                <button class="fab-icon-btn fab-config" type="button" onclick="renderConfigSubMenu()" aria-label="Configurações">
+                <button class="fab-icon-btn fab-config" type="button" onclick="renderConfigSubMenu()" aria-label="ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes">
                     ${getInlineAppIconHTML('settings')}
                 </button>
-                <button class="fab-icon-btn fab-desligar" type="button" onclick="logout()" aria-label="Encerrar sessão">
+                <button class="fab-icon-btn fab-desligar" type="button" onclick="logout()" aria-label="Encerrar sessÃƒÆ’Ã‚Â£o">
                     ${getInlineAppIconHTML('power_settings_new')}
                 </button>
                 ` : ''}
@@ -2478,7 +2584,7 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
 
 function getOperationalIdentityHTML(type = 'PICKING') {
     const isPick = type === 'PICKING';
-    const label = isPick ? 'SEPARACAO (PICK)' : 'CONFERÊNCIA (PACK)';
+    const label = isPick ? 'SEPARACAO (PICK)' : 'CONFERÃƒÆ’Ã…Â NCIA (PACK)';
     const icon = isPick ? 'inventory_2' : 'verified';
     const mobileGradient = isPick
         ? 'linear-gradient(90deg, #EF4444 0%, #B91C1C 100%)'
@@ -2503,7 +2609,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
     `;
 }
 
-// Barra lateral para módulos internos (Produtos, Inventário, NF, etc.)
+// Barra lateral para mÃƒÆ’Ã‚Â³dulos internos (Produtos, InventÃƒÆ’Ã‚Â¡rio, NF, etc.)
 const MODULE_SIDEBAR_CONFIG = {
     produtos:      { label: 'PRODUTOS',      icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
     kit_lampada:   { label: 'KIT LAMPADAS', icon: 'lightbulb',    colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
@@ -2588,11 +2694,11 @@ async function loadUsersOnly() {
         if (data && data.length > 0) {
             appData.users = data.map(u => ({
                 ...u,
-                avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+                avatar_url: (u.avatar_url && !['sim', 'nao', 'nÃƒÆ’Ã‚Â£o'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
             }));
-            console.log(`[BOOT] usuarios -> Supabase (${appData.users.length} usuários carregados)`);
+            console.log(`[BOOT] usuarios -> Supabase (${appData.users.length} usuÃƒÆ’Ã‚Â¡rios carregados)`);
         } else {
-            console.log('[BOOT] usuários: fallback para dados em memória ou fallback');
+            console.log('[BOOT] usuÃƒÆ’Ã‚Â¡rios: fallback para dados em memÃƒÆ’Ã‚Â³ria ou fallback');
         }
     } catch (e) {
         console.warn('[BOOT] Erro ao carregar usuarios do Supabase, tentando fetchSheetData:', e);
@@ -2603,11 +2709,11 @@ async function loadUsersOnly() {
                     .filter(u => String(u.ativo).toLowerCase() === 'sim')
                     .map(u => ({
                         ...u,
-                        avatar_url: (u.avatar_url && !['sim', 'nao', 'não'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
+                        avatar_url: (u.avatar_url && !['sim', 'nao', 'nÃƒÆ’Ã‚Â£o'].includes(String(u.avatar_url).toLowerCase()) && (String(u.avatar_url).startsWith('http') || String(u.avatar_url).startsWith('data:'))) ? u.avatar_url : ''
                     }));
             }
         } catch (e2) {
-            console.warn('[BOOT] Também falhou fetchSheetData:', e2);
+            console.warn('[BOOT] TambÃƒÆ’Ã‚Â©m falhou fetchSheetData:', e2);
         }
     }
 }
@@ -2618,7 +2724,7 @@ const LOAD_ALL_DATA_DEBOUNCE_MS = 3000;
 async function loadAllData(silent = false, caller = 'unknown') {
     const now = Date.now();
     if (now - lastLoadAllDataCall < LOAD_ALL_DATA_DEBOUNCE_MS) {
-        console.log(`[SYNC] loadAllData ignorado (debounce): ${caller} | Última: ${now - lastLoadAllDataCall}ms`);
+        console.log(`[SYNC] loadAllData ignorado (debounce): ${caller} | ÃƒÆ’Ã…Â¡ltima: ${now - lastLoadAllDataCall}ms`);
         addSyncTrace('loadAllData', 'DEBOUNCE', caller);
         return false;
     }
@@ -2641,10 +2747,10 @@ async function loadAllData(silent = false, caller = 'unknown') {
         addTechnicalLog('SYNC', 'START', `${silent ? 'Silent' : 'UI'} | Caller: ${caller}`);
         console.log(`[SYNC] loadAllData disparado por: ${caller} (Silent: ${silent})`);
 
-        // Carregar apenas dados mínimos para o app funcionar (login + menu)
-        // Cada módulo carregará seus próprios dados sob demanda via DataClient
-        // ATENCAO: usuarios, canais_envio e produtos agora vem do Supabase, não mais do Google Sheets
-        // separacao e separacao_itens removidos: só devem ser carregados ao entrar na tela de separação/conferência
+        // Carregar apenas dados mÃƒÆ’Ã‚Â­nimos para o app funcionar (login + menu)
+        // Cada mÃƒÆ’Ã‚Â³dulo carregarÃƒÆ’Ã‚Â¡ seus prÃƒÆ’Ã‚Â³prios dados sob demanda via DataClient
+        // ATENCAO: usuarios, canais_envio e produtos agora vem do Supabase, nÃƒÆ’Ã‚Â£o mais do Google Sheets
+        // separacao e separacao_itens removidos: sÃƒÆ’Ã‚Â³ devem ser carregados ao entrar na tela de separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o/conferÃƒÆ’Ã‚Âªncia
         const essentialTables = [
         ];
 
@@ -2669,15 +2775,15 @@ async function loadAllData(silent = false, caller = 'unknown') {
 
         await Promise.allSettled(promises);
 
-        // Não salvar todo o appData no localStorage para evitar dados desatualizados
-        // Cada módulo gerencia seu próprio cache via DataClient
+        // NÃƒÆ’Ã‚Â£o salvar todo o appData no localStorage para evitar dados desatualizados
+        // Cada mÃƒÆ’Ã‚Â³dulo gerencia seu prÃƒÆ’Ã‚Â³prio cache via DataClient
         appData.lastSyncTime = formatTimeBR();
         appData.lastSyncTimestamp = Date.now();
         
         addTechnicalLog('SYNC', 'SUCCESS');
 
-        // Estoque crítico será verificado quando o módulo de produtos for carregado
-        // via DataClient para não impactar inicialização
+        // Estoque crÃƒÆ’Ã‚Â­tico serÃƒÆ’Ã‚Â¡ verificado quando o mÃƒÆ’Ã‚Â³dulo de produtos for carregado
+        // via DataClient para nÃƒÆ’Ã‚Â£o impactar inicializaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
         hasCriticalStock = false;
         addSyncTrace('loadAllData', 'SUCCESS', caller);
         return true;
@@ -2692,7 +2798,7 @@ async function loadAllData(silent = false, caller = 'unknown') {
         appData.isLoading = false;
         addSyncTrace('loadAllData', 'FINALLY', `caller=${caller} screen=${currentScreen}`);
         
-        // Anti-Blink: Não atualiza a UI se for silêncioso ou se estiver no login
+        // Anti-Blink: NÃƒÆ’Ã‚Â£o atualiza a UI se for silÃƒÆ’Ã‚Âªncioso ou se estiver no login
         if (!silent && currentScreen === 'menu') {
             renderMenu();
         }
@@ -2700,8 +2806,8 @@ async function loadAllData(silent = false, caller = 'unknown') {
 }
 
 /**
- * Função crítica para garantir que os produtos foram carregados via DataClient
- * se ainda não estiverem no appData.
+ * FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o crÃƒÆ’Ã‚Â­tica para garantir que os produtos foram carregados via DataClient
+ * se ainda nÃƒÆ’Ã‚Â£o estiverem no appData.
  */
 function hydrateProdutosForSearch(products) {
     return (Array.isArray(products) ? products : []).map(p => {
@@ -2800,7 +2906,7 @@ async function ensureCanaisLoaded(force = false) {
     console.log('[CANAIS DEBUG] ensureCanaisLoaded chamado, force =', force);
     console.log('[CANAIS DEBUG] cache atual appData.channels =', appData.channels ? appData.channels.length : 'undefined');
 
-    // Se já temos canais em cache e não é forçado, usar cache
+    // Se jÃƒÆ’Ã‚Â¡ temos canais em cache e nÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© forÃƒÆ’Ã‚Â§ado, usar cache
     if (!force && appData.channels && appData.channels.length > 0) {
         console.log(`[CANAIS DEBUG] Usando ${appData.channels.length} canais do cache appData`);
         return true;
@@ -2810,7 +2916,7 @@ async function ensureCanaisLoaded(force = false) {
         console.log('[CANAIS DEBUG] supabase client existe?', !!window.supabaseClient);
         console.log('[CANAIS DEBUG] buscando tabela canais_envio via DataClient...');
         
-        // Sempre forçar refresh para canais (evitar cache vazio)
+        // Sempre forÃƒÆ’Ã‚Â§ar refresh para canais (evitar cache vazio)
         const data = await window.DataClient.loadModule('channels', true);
         
         console.log('[CANAIS DEBUG] resposta DataClient.loadModule:', data);
@@ -2954,7 +3060,7 @@ function hideSyncLoader() {
 }
 
 async function setUser(userName, userId, userProfile) {
-    console.log('[LOGIN DEBUG] usuário clicado');
+    console.log('[LOGIN DEBUG] usuÃƒÆ’Ã‚Â¡rio clicado');
     console.log(`[LOGIN DEBUG] isSyncingFlowActive antes: ${isSyncingFlowActive}`);
 
     if (isSyncingFlowActive) {
@@ -2981,10 +3087,10 @@ async function setUser(userName, userId, userProfile) {
         // Entrada INSTANTANEA no menu
         renderMenu();
 
-        // Sincronização silenciosa em background - COORDENADA
+        // SincronizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o silenciosa em background - COORDENADA
         if (navigator.onLine) {
             addTechnicalLog('LOGIN', 'SILENT_SYNC_START', userName);
-            console.log("[SYNC] setUser coordenando sincronização inicial...");
+            console.log("[SYNC] setUser coordenando sincronizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o inicial...");
             addSyncTrace('setUser', 'CALL', 'processSyncQueue + loadAllData');
             processSyncQueue('setUser');
             loadAllData(true, 'setUser');
@@ -3003,7 +3109,7 @@ function logout() {
     localStorage.removeItem(PICK_CURRENT_DRAFT_STORAGE_KEY);
     localStorage.removeItem(PICK_DRAFT_SESSIONS_STORAGE_KEY);
     
-    // Limpar estados de memória
+    // Limpar estados de memÃƒÆ’Ã‚Â³ria
     currentPackSession = null;
     currentSessionItems = [];
     
@@ -3026,7 +3132,7 @@ function toggleCostVisibility() {
             // Estava oculto, vai mostrar
             costField.classList.remove('cost-masked');
             toggleIcon.innerText = 'visibility';
-            // Precisamos do dado do produto, mas como não temos aqui, o fallback é re-render
+            // Precisamos do dado do produto, mas como nÃƒÆ’Ã‚Â£o temos aqui, o fallback ÃƒÆ’Ã‚Â© re-render
             const activeEan = document.querySelector('[data-ean]')?.dataset.ean;
             if (activeEan) {
                 const p = appData.products.find(x => x.ean === activeEan || x.id_interno === activeEan);
@@ -3034,10 +3140,10 @@ function toggleCostVisibility() {
                    costField.innerText = ((p.preco_custo || '0,00').toString().includes('R$') ? '' : 'R$ ') + (p.preco_custo || '0,00');
                 }
             } else {
-                console.warn("Contexto do produto perdido para exibição do custo.");
+                console.warn("Contexto do produto perdido para exibiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do custo.");
             }
         } else {
-            // Estava visível, vai ocultar
+            // Estava visÃƒÆ’Ã‚Â­vel, vai ocultar
             costField.classList.add('cost-masked');
             toggleIcon.innerText = 'visibility_off';
             costField.innerText = 'R$ ------';
@@ -3144,7 +3250,7 @@ function renderLogin(push = true) {
         usersToRender = fallbackUsers;
     }
 
-    // Função para extrair iniciais (primeira letra do nome + primeira letra do último sobrenome)
+    // FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para extrair iniciais (primeira letra do nome + primeira letra do ÃƒÆ’Ã‚Âºltimo sobrenome)
     const getUserInitials = (name) => {
         if (!name) return '?';
         const parts = name.trim().split(/\s+/);
@@ -3224,9 +3330,9 @@ function renderLogin(push = true) {
             <div class="user-grid login-user-grid">
                 ${userGridHTML}
             </div>
-            <div class="login-user-hint" aria-label="Selecione seu usuário">
+            <div class="login-user-hint" aria-label="Selecione seu usuÃƒÆ’Ã‚Â¡rio">
                 <span class="material-symbols-rounded">person</span>
-                <span class="login-user-hint-text">SELECIONE SEU USUÁRIO</span>
+                <span class="login-user-hint-text">SELECIONE SEU USUÃƒÆ’Ã‚ÂRIO</span>
             </div>
         </div>
     `;
@@ -3234,7 +3340,7 @@ function renderLogin(push = true) {
     const appContainer = document.getElementById('app');
     if (!appContainer) return;
 
-    // Se já estiver na tela de login, apenas atualiza a grid se houver mudanças reais para evitar flicker
+    // Se jÃƒÆ’Ã‚Â¡ estiver na tela de login, apenas atualiza a grid se houver mudanÃƒÆ’Ã‚Â§as reais para evitar flicker
     const existingScreen = appContainer.querySelector('.login-screen');
     if (existingScreen) {
         existingScreen.style.background = backgroundStyleValue;
@@ -3250,9 +3356,9 @@ function renderLogin(push = true) {
             }
             if (!existingScreen.querySelector('.login-user-hint')) {
                 existingScreen.insertAdjacentHTML('beforeend', `
-                    <div class="login-user-hint" aria-label="Selecione seu usuário">
+                    <div class="login-user-hint" aria-label="Selecione seu usuÃƒÆ’Ã‚Â¡rio">
                         <span class="material-symbols-rounded">person</span>
-                        <span class="login-user-hint-text">SELECIONE SEU USUÁRIO</span>
+                        <span class="login-user-hint-text">SELECIONE SEU USUÃƒÆ’Ã‚ÂRIO</span>
                     </div>
                 `);
             }
@@ -3334,8 +3440,8 @@ async function renderAlerts() {
                     <div class="menu-card operational-alert-card operational-alert-card-critical" onclick="renderEstoqueAtual()" style="cursor: pointer;">
                         <span class="material-symbols-rounded icon operational-alert-icon">inventory</span>
                         <div class="operational-alert-copy">
-                            <span class="label operational-alert-title">Estoque Crítico</span>
-                            <span class="operational-alert-subtitle">Produtos abaixo do estoque mínimo</span>
+                            <span class="label operational-alert-title">Estoque CrÃƒÆ’Ã‚Â­tico</span>
+                            <span class="operational-alert-subtitle">Produtos abaixo do estoque mÃƒÆ’Ã‚Â­nimo</span>
                         </div>
                         ${criticalCount > 0 ? `<span class="operational-alert-badge danger">${criticalCount}</span>` : '<span class="material-symbols-rounded operational-alert-ok">check_circle</span>'}
                     </div>
@@ -3343,8 +3449,8 @@ async function renderAlerts() {
                     <div class="menu-card operational-alert-card operational-alert-card-pending" onclick="openPickModeChoice()" style="cursor: pointer;">
                         <span class="material-symbols-rounded icon operational-alert-icon">conveyor_belt</span>
                         <div class="operational-alert-copy">
-                            <span class="label operational-alert-title">Separações Pendentes</span>
-                            <span class="operational-alert-subtitle">Filas de separação aguardando</span>
+                            <span class="label operational-alert-title">SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes Pendentes</span>
+                            <span class="operational-alert-subtitle">Filas de separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o aguardando</span>
                         </div>
                         ${pendingCount > 0 ? `<span class="operational-alert-badge warning">${pendingCount}</span>` : '<span class="material-symbols-rounded operational-alert-ok">check_circle</span>'}
                     </div>
@@ -3353,7 +3459,7 @@ async function renderAlerts() {
                         <span class="material-symbols-rounded icon operational-alert-icon">local_shipping</span>
                         <div class="operational-alert-copy">
                             <span class="label operational-alert-title">Compras a Caminho</span>
-                            <span class="operational-alert-subtitle">Pedidos de compra em trânsito</span>
+                            <span class="operational-alert-subtitle">Pedidos de compra em trÃƒÆ’Ã‚Â¢nsito</span>
                         </div>
                         <span class="operational-alert-badge muted">Em breve</span>
                     </div>
@@ -3371,8 +3477,8 @@ async function renderAlerts() {
 }
 
 // ========================================================
-// CONFIGURACAO CENTRALIZADA DOS MÓDULOS DO MENU
-// Estrutura única: tipo = "principal" | "em_breve"
+// CONFIGURACAO CENTRALIZADA DOS MÃƒÆ’Ã¢â‚¬Å“DULOS DO MENU
+// Estrutura ÃƒÆ’Ã‚Âºnica: tipo = "principal" | "em_breve"
 // Preparado para migrar para tabela no Supabase
 // ========================================================
 const menuModulesConfig = [
@@ -3404,7 +3510,7 @@ const menu3DIcons = {
     financeiro_vencidas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 16 L50 48 H14 Z" fill="#fff" opacity="0.95"/><path d="M32 27 V36" stroke="#EF4444" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="42" r="2.6" fill="#EF4444"/></svg>',
     financeiro_pendentes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M20 20 H44 V46 H20 Z" fill="#fff" opacity="0.95"/><path d="M26 28 H38 M26 34 H38 M26 40 H34" stroke="#3B82F6" stroke-width="3" stroke-linecap="round"/></svg>',
     financeiro_pagas_mes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M19 32 L28 41 L46 23" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="20" stroke="#fff" stroke-width="3" fill="none" opacity="0.35"/></svg>',
-    // Ícones dos Sub-módulos
+    // ÃƒÆ’Ã‚Âcones dos Sub-mÃƒÆ’Ã‚Â³dulos
     busca: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><circle cx="28" cy="28" r="8" stroke="#fff" stroke-width="3" fill="none"/><line x1="34" y1="34" x2="42" y2="42" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
     cadastrar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><line x1="32" y1="20" x2="32" y2="44" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line x1="20" y1="32" x2="44" y2="32" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>',
     transferencia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M22 28 L30 20 L38 28 M30 20 V44" stroke="#fff" stroke-width="3" fill="none"/><path d="M42 36 L34 44 L26 36" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/></svg>',
@@ -3435,9 +3541,9 @@ const channel3DIcons = {
 };
 
 
-// Função para obter os itens do menu baseados na configuração centralizada
+// FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para obter os itens do menu baseados na configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o centralizada
 function getMenuItemsFromConfig() {
-    // Aplicar lógica baseada na configuração (todos os módulos sempre visíveis)
+    // Aplicar lÃƒÆ’Ã‚Â³gica baseada na configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o (todos os mÃƒÆ’Ã‚Â³dulos sempre visÃƒÆ’Ã‚Â­veis)
     return menuModulesConfig
         .sort((a, b) => a.order - b.order)
         .map(module => {
@@ -3459,7 +3565,7 @@ function getMenuItemsFromConfig() {
         });
 }
 
-// Rota mapeada para cada módulo
+// Rota mapeada para cada mÃƒÆ’Ã‚Â³dulo
 const menuRoutes = {
     dashboard: 'renderAlerts()',
     produtos: 'renderProductSubMenu()',
@@ -3483,17 +3589,17 @@ function getQuickActionsHTML(modoRapidoAtivo) {
         pendingSeparationsCount = 0;
     }
     const pendingSeparationsBadge = pendingSeparationsCount > 0
-        ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separações pendentes">${pendingSeparationsCount}</span>`
+        ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes pendentes">${pendingSeparationsCount}</span>`
         : '';
     const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
     return `
         <div id="quick-actions-overlay" class="quick-actions-overlay hidden" onclick="toggleQuickActions()" aria-hidden="true"></div>
-        <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="Ações rápidas">
+        <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
             <span class="quick-sheet-grabber" aria-hidden="true"></span>
             <div class="quick-actions-list" role="none">
                 <button class="quick-action-item quick-action-card quick-action-priority quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="quickActionSeparacoesAndamento()">
                     <span class="quick-action-icon quick-action-icon-picking-drafts material-symbols-rounded">folder_open</span>
-                    <span class="quick-action-label">SEPARAÇÕES</span>
+                    <span class="quick-action-label">SEPARAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã¢â‚¬Â¢ES</span>
                     ${pendingSeparationsBadge}
                     <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
                 </button>
@@ -3504,12 +3610,12 @@ function getQuickActionsHTML(modoRapidoAtivo) {
                 </button>
                 <button class="quick-action-item quick-action-card quick-action-replacement" type="button" role="menuitem" onclick="quickActionReposicao()">
                     <span class="quick-action-icon quick-action-icon-replacement material-symbols-rounded">local_shipping</span>
-                    <span class="quick-action-label">REPOSIÇÃO</span>
+                    <span class="quick-action-label">REPOSIÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O</span>
                     <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
                 </button>
                 <button class="quick-action-item quick-action-card quick-action-commission" type="button" role="menuitem" onclick="quickActionComissoes()">
                     <span class="quick-action-icon quick-action-icon-commission material-symbols-rounded">percent</span>
-                    <span class="quick-action-label">COMISSÕES</span>
+                    <span class="quick-action-label">COMISSÃƒÆ’Ã¢â‚¬Â¢ES</span>
                     <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
                 </button>
                 <button class="quick-action-item quick-action-card quick-action-catalog" type="button" role="menuitem" onclick="quickActionCatalogoProdutos()">
@@ -3524,13 +3630,13 @@ function getQuickActionsHTML(modoRapidoAtivo) {
                 </button>
                 <button class="quick-action-item quick-action-card quick-action-quote" type="button" role="menuitem" onclick="quickActionOrcamentoCliente()">
                     <span class="quick-action-icon quick-action-icon-quote material-symbols-rounded">request_quote</span>
-                    <span class="quick-action-label">ORÇAMENTO CLIENTE</span>
+                    <span class="quick-action-label">ORÃƒÆ’Ã¢â‚¬Â¡AMENTO CLIENTE</span>
                     <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
                 </button>
             </div>
         </div>
         
-        <button class="quick-action-fab fab-icon-btn fab-funcoes" type="button" onclick="toggleQuickActions()" aria-label="Funções rápidas" title="Funções rápidas">
+        <button class="quick-action-fab fab-icon-btn fab-funcoes" type="button" onclick="toggleQuickActions()" aria-label="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas" title="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
             <span class="quick-action-fab-fallback material-symbols-rounded notranslate" translate="no" aria-hidden="true">menu</span>
         </button>
     `;
@@ -3549,7 +3655,7 @@ function renderMenu(push = true) {
     }
     document.body.classList.add('menu-active');
 
-    // Usar configuração centralizada
+    // Usar configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o centralizada
     const finalMenuItems = getMenuItemsFromConfig();
 
     app.innerHTML = `
@@ -3603,7 +3709,7 @@ async function renderEstoqueAtual() {
             consolidated[id] = {
                 id_interno: id,
                 sku: product ? (product.sku_fornecedor || product.col_c || '-') : '-',
-                descricao: product ? (product.descricao_base || product.nome || product.col_b) : (item.descricao || item.col_b || 'Sem Descrição'),
+                descricao: product ? (product.descricao_base || product.nome || product.col_b) : (item.descricao || item.col_b || 'Sem DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o'),
                 saldo_total: 0,
                 saldo_disponivel: 0,
                 saldo_reservado: 0,
@@ -3668,7 +3774,7 @@ async function renderEstoqueAtual() {
                                         
                                         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
                                             <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
-                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">Disponível</div>
+                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">DisponÃƒÆ’Ã‚Â­vel</div>
                                                 <div style="font-size: 0.8rem; font-weight: 700; color: #22c55e;">${item.saldo_disponivel}</div>
                                             </div>
                                             <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
@@ -3676,7 +3782,7 @@ async function renderEstoqueAtual() {
                                                 <div style="font-size: 0.8rem; font-weight: 700; color: #f59e0b;">${item.saldo_reservado}</div>
                                             </div>
                                             <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
-                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">Trânsito</div>
+                                                <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">TrÃƒÆ’Ã‚Â¢nsito</div>
                                                 <div style="font-size: 0.8rem; font-weight: 700; color: #3b82f6;">${item.saldo_em_transito}</div>
                                             </div>
                                         </div>
@@ -3781,26 +3887,26 @@ function renderComprasSubMenu() {
             onclick: 'renderPedidoCompraScreen()'
         },
         {
-            label: 'COTAÇÃO',
-            description: 'Compare preços e condições entre fornecedores antes de comprar.',
+            label: 'COTAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O',
+            description: 'Compare preÃƒÆ’Ã‚Â§os e condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes entre fornecedores antes de comprar.',
             icon: 'pedido_compra',
             onclick: 'renderCotacaoComprasScreen()'
         },
         {
             label: 'FORNECEDORES',
-            description: 'Cadastre e gerencie seus fornecedores e informações comerciais.',
+            description: 'Cadastre e gerencie seus fornecedores e informaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes comerciais.',
             icon: 'fornecedores',
             onclick: 'renderFornecedoresScreen()'
         },
         {
-            label: 'PEDIDOS EM TRÂNSITO',
-            description: 'Acompanhe pedidos que já foram despachados pelos fornecedores.',
+            label: 'PEDIDOS EM TRÃƒÆ’Ã¢â‚¬Å¡NSITO',
+            description: 'Acompanhe pedidos que jÃƒÆ’Ã‚Â¡ foram despachados pelos fornecedores.',
             icon: 'transporte',
             onclick: 'renderPedidosTransporteScreen()'
         },
         {
-            label: 'HISTÓRICO DE COMPRAS',
-            description: 'Consulte histórico de compras, preços e entradas de mercadorias.',
+            label: 'HISTÃƒÆ’Ã¢â‚¬Å“RICO DE COMPRAS',
+            description: 'Consulte histÃƒÆ’Ã‚Â³rico de compras, preÃƒÆ’Ã‚Â§os e entradas de mercadorias.',
             icon: 'historico',
             onclick: 'renderHistoricoComprasScreen()'
         }
@@ -3852,7 +3958,7 @@ function renderComprasShell(title, subtitle, contentHTML) {
 async function loadFornecedoresCompras() {
     const client = window.supabaseClient;
     if (!client) {
-        console.warn('[FORNECEDORES] Supabase indisponível para carregar fornecedores.');
+        console.warn('[FORNECEDORES] Supabase indisponÃƒÆ’Ã‚Â­vel para carregar fornecedores.');
         return [];
     }
 
@@ -3863,7 +3969,7 @@ async function loadFornecedoresCompras() {
 
     if (error) {
         console.error('[FORNECEDORES] erro ao carregar fornecedores', error);
-        showToast('Erro ao carregar fornecedores. Verifique a conexão com o Supabase.', 'error');
+        showToast('Erro ao carregar fornecedores. Verifique a conexÃƒÆ’Ã‚Â£o com o Supabase.', 'error');
         return [];
     }
 
@@ -3897,7 +4003,7 @@ function renderFornecedoresComprasList(fornecedores = []) {
             <div class="compras-empty-state fornecedores-empty-state">
                 <span class="material-symbols-rounded">domain_disabled</span>
                 <strong>Nenhum fornecedor encontrado</strong>
-                <p>Fornecedores importados pela Entrada NF aparecerão aqui automaticamente.</p>
+                <p>Fornecedores importados pela Entrada NF aparecerÃƒÆ’Ã‚Â£o aqui automaticamente.</p>
             </div>
         `;
         return;
@@ -3906,7 +4012,7 @@ function renderFornecedoresComprasList(fornecedores = []) {
     list.innerHTML = fornecedores.map(fornecedor => {
         const nome = getFornecedorDisplayName(fornecedor);
         const cidadeUf = [fornecedor.cidade, fornecedor.estado || fornecedor.uf].filter(Boolean).join(' / ');
-        const contato = [fornecedor.telefone, fornecedor.email].filter(Boolean).join(' • ');
+        const contato = [fornecedor.telefone, fornecedor.email].filter(Boolean).join(' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ');
 
         return `
             <article class="fornecedor-card">
@@ -3917,7 +4023,7 @@ function renderFornecedoresComprasList(fornecedores = []) {
                     <div class="fornecedor-card-head">
                         <div>
                             <strong>${escapeKitAttribute(nome)}</strong>
-                            <small>${escapeKitAttribute(fornecedor.nome_fantasia && fornecedor.nome_fantasia !== nome ? fornecedor.nome_fantasia : fornecedor.cnpj || 'CNPJ não informado')}</small>
+                            <small>${escapeKitAttribute(fornecedor.nome_fantasia && fornecedor.nome_fantasia !== nome ? fornecedor.nome_fantasia : fornecedor.cnpj || 'CNPJ nÃƒÆ’Ã‚Â£o informado')}</small>
                         </div>
                         <span class="fornecedor-status-pill status-${escapeKitAttribute(fornecedor.status || 'ativo')}">${escapeKitAttribute(fornecedor.status || 'ativo')}</span>
                     </div>
@@ -3938,14 +4044,14 @@ function searchFornecedoresCompras(value) {
 }
 
 async function renderFornecedoresScreen() {
-    renderComprasShell('FORNECEDORES', 'Cadastro único usado por Entrada NF, Compras, Cotações e Financeiro.', `
+    renderComprasShell('FORNECEDORES', 'Cadastro ÃƒÆ’Ã‚Âºnico usado por Entrada NF, Compras, CotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes e Financeiro.', `
         <section class="compras-panel fornecedores-panel">
             <div class="compras-toolbar">
                 <label class="compras-search-field">
                     <span class="material-symbols-rounded">search</span>
-                    <input type="search" placeholder="Buscar por razão social, fantasia ou CNPJ..." aria-label="Buscar fornecedor" oninput="searchFornecedoresCompras(this.value)">
+                    <input type="search" placeholder="Buscar por razÃƒÆ’Ã‚Â£o social, fantasia ou CNPJ..." aria-label="Buscar fornecedor" oninput="searchFornecedoresCompras(this.value)">
                 </label>
-                <button class="compras-primary-btn" type="button" onclick="showToast('Fornecedores novos são criados automaticamente pela Entrada NF ao importar XML.', 'info')">
+                <button class="compras-primary-btn" type="button" onclick="showToast('Fornecedores novos sÃƒÆ’Ã‚Â£o criados automaticamente pela Entrada NF ao importar XML.', 'info')">
                     <span class="material-symbols-rounded">add_business</span>
                     Novo Fornecedor
                 </button>
@@ -3954,7 +4060,7 @@ async function renderFornecedoresScreen() {
                 <div class="compras-empty-state fornecedores-loading-state">
                     <span class="material-symbols-rounded">sync</span>
                     <strong>Carregando fornecedores</strong>
-                    <p>Buscando o cadastro único no Supabase.</p>
+                    <p>Buscando o cadastro ÃƒÆ’Ã‚Âºnico no Supabase.</p>
                 </div>
             </div>
         </section>
@@ -3979,7 +4085,7 @@ function renderPedidoCompraScreen() {
                     <span>Adicionar produtos</span>
                     <input type="text" placeholder="Buscar produto por EAN, SKU ou nome">
                 </label>
-                <button class="compras-secondary-btn" type="button" onclick="showToast('Itens do pedido serão integrados em uma próxima fase.', 'info')">
+                <button class="compras-secondary-btn" type="button" onclick="showToast('Itens do pedido serÃƒÆ’Ã‚Â£o integrados em uma prÃƒÆ’Ã‚Â³xima fase.', 'info')">
                     <span class="material-symbols-rounded">add</span>
                     Adicionar
                 </button>
@@ -3987,12 +4093,12 @@ function renderPedidoCompraScreen() {
             <div class="compras-list-placeholder">
                 <span class="material-symbols-rounded">inventory_2</span>
                 <strong>Lista de itens vazia</strong>
-                <p>Os produtos adicionados ao pedido aparecerão aqui.</p>
+                <p>Os produtos adicionados ao pedido aparecerÃƒÆ’Ã‚Â£o aqui.</p>
             </div>
             <div class="compras-summary-row">
                 <span>Total</span>
                 <strong>R$ 0,00</strong>
-                <button class="compras-primary-btn" type="button" onclick="showToast('Finalização visual preparada para fase futura.', 'info')">
+                <button class="compras-primary-btn" type="button" onclick="showToast('FinalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o visual preparada para fase futura.', 'info')">
                     <span class="material-symbols-rounded">check</span>
                     Finalizar
                 </button>
@@ -4002,35 +4108,35 @@ function renderPedidoCompraScreen() {
 }
 
 function renderCotacaoComprasScreen() {
-    renderComprasShell('COTAÇÃO', 'Comparação de fornecedores preparada para fase futura.', `
+    renderComprasShell('COTAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O', 'ComparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de fornecedores preparada para fase futura.', `
         <section class="compras-panel">
             <div class="compras-empty-state">
                 <span class="material-symbols-rounded">request_quote</span>
-                <strong>Cotações em preparação</strong>
-                <p>Este espaço ficará reservado para comparar fornecedores, preços, prazos e condições.</p>
+                <strong>CotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes em preparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</strong>
+                <p>Este espaÃƒÆ’Ã‚Â§o ficarÃƒÆ’Ã‚Â¡ reservado para comparar fornecedores, preÃƒÆ’Ã‚Â§os, prazos e condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes.</p>
             </div>
         </section>
     `);
 }
 
 function renderProdutosAbaixoMinimoComprasScreen() {
-    renderComprasShell('PRODUTOS ABAIXO DO MÍNIMO', 'Consulta visual de produtos abaixo do estoque mínimo.', `
+    renderComprasShell('PRODUTOS ABAIXO DO MÃƒÆ’Ã‚ÂNIMO', 'Consulta visual de produtos abaixo do estoque mÃƒÆ’Ã‚Â­nimo.', `
         <section class="compras-panel">
             <div class="compras-empty-state">
                 <span class="material-symbols-rounded">production_quantity_limits</span>
-                <strong>Consulta de reposição</strong>
-                <p>Atalho visual reservado para produtos abaixo do mínimo. Nenhuma compra automática será gerada.</p>
+                <strong>Consulta de reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</strong>
+                <p>Atalho visual reservado para produtos abaixo do mÃƒÆ’Ã‚Â­nimo. Nenhuma compra automÃƒÆ’Ã‚Â¡tica serÃƒÆ’Ã‚Â¡ gerada.</p>
             </div>
         </section>
     `);
 }
 
 function renderPedidosTransporteScreen() {
-    renderComprasShell('PEDIDOS EM TRANSPORTE', 'Pedidos comprados que ainda não chegaram.', `
+    renderComprasShell('PEDIDOS EM TRANSPORTE', 'Pedidos comprados que ainda nÃƒÆ’Ã‚Â£o chegaram.', `
         <section class="compras-panel">
             <div class="compras-status-strip">
                 <div>
-                    <span>Em trânsito</span>
+                    <span>Em trÃƒÆ’Ã‚Â¢nsito</span>
                     <strong>0</strong>
                 </div>
                 <div>
@@ -4045,8 +4151,8 @@ function renderPedidosTransporteScreen() {
                 <div class="inv-initial-note">
                     <span class="material-symbols-rounded">info</span>
                     <div>
-                        <strong>INVENTÁRIO INICIAL</strong>
-                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                        <strong>INVENTÃƒÆ’Ã‚ÂRIO INICIAL</strong>
+                        <p>Como este ÃƒÆ’Ã‚Â© o primeiro inventÃƒÆ’Ã‚Â¡rio, nÃƒÆ’Ã‚Â£o existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
                     </div>
                 </div>
                 ` : ''}
@@ -4054,21 +4160,21 @@ function renderPedidosTransporteScreen() {
             <div class="compras-empty-state">
                 <span class="material-symbols-rounded">local_shipping</span>
                 <strong>Nenhum pedido em transporte</strong>
-                <p>Futuramente, compras pendentes de recebimento serão acompanhadas aqui.</p>
+                <p>Futuramente, compras pendentes de recebimento serÃƒÆ’Ã‚Â£o acompanhadas aqui.</p>
             </div>
         </section>
     `);
 }
 
 function renderHistoricoComprasScreen() {
-    renderComprasShell('HISTÓRICO DE COMPRAS', 'Consulta visual preparada para compras finalizadas.', `
+    renderComprasShell('HISTÃƒÆ’Ã¢â‚¬Å“RICO DE COMPRAS', 'Consulta visual preparada para compras finalizadas.', `
         <section class="compras-panel">
             <div class="compras-toolbar compras-history-toolbar">
                 <label class="compras-search-field">
                     <span class="material-symbols-rounded">search</span>
-                    <input type="search" placeholder="Buscar compra, fornecedor ou NF..." aria-label="Buscar histórico de compras">
+                    <input type="search" placeholder="Buscar compra, fornecedor ou NF..." aria-label="Buscar histÃƒÆ’Ã‚Â³rico de compras">
                 </label>
-                <div class="compras-filter-row" aria-label="Filtros de histórico">
+                <div class="compras-filter-row" aria-label="Filtros de histÃƒÆ’Ã‚Â³rico">
                     <button type="button">Todos</button>
                     <button type="button">Abertos</button>
                     <button type="button">Finalizados</button>
@@ -4077,16 +4183,16 @@ function renderHistoricoComprasScreen() {
                 <div class="inv-initial-note">
                     <span class="material-symbols-rounded">info</span>
                     <div>
-                        <strong>INVENTÁRIO INICIAL</strong>
-                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                        <strong>INVENTÃƒÆ’Ã‚ÂRIO INICIAL</strong>
+                        <p>Como este ÃƒÆ’Ã‚Â© o primeiro inventÃƒÆ’Ã‚Â¡rio, nÃƒÆ’Ã‚Â£o existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
                     </div>
                 </div>
                 ` : ''}
             </div>
             <div class="compras-list-placeholder compras-table-empty">
                 <span class="material-symbols-rounded">history</span>
-                <strong>Nenhum histórico de compras</strong>
-                <p>As compras registradas aparecerão nesta área em formato de lista/tabela.</p>
+                <strong>Nenhum histÃƒÆ’Ã‚Â³rico de compras</strong>
+                <p>As compras registradas aparecerÃƒÆ’Ã‚Â£o nesta ÃƒÆ’Ã‚Â¡rea em formato de lista/tabela.</p>
             </div>
         </section>
     `);
@@ -4112,10 +4218,10 @@ function handleModuleClick(item, backFunc) {
 function renderMovimentacoesSubMenu() {
     const currentUser = localStorage.getItem('currentUser');
     const subItems = [
-        { id: 'transferencia', label: 'TRANSFERÊNCIA', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
+        { id: 'transferencia', label: 'TRANSFERÃƒÆ’Ã…Â NCIA', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
         { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo do ajuste.' },
-        { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolução ao fornecedor.' },
-        { id: 'historico_mov', label: 'HISTÓRICO MOVIMENTO', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar movimentações registradas, ajustes, transferências e garantias.' }
+        { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ao fornecedor.' },
+        { id: 'historico_mov', label: 'HISTÃƒÆ’Ã¢â‚¬Å“RICO MOVIMENTO', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes registradas, ajustes, transferÃƒÆ’Ã‚Âªncias e garantias.' }
     ];
 
     app.innerHTML = `
@@ -4137,22 +4243,22 @@ function renderEnvioDefeitoForm() {
             <main class="container" style="display: flex; align-items: center; justify-content: center; height: calc(100vh - 80px);">
                 <div style="text-align: center; color: var(--muted);">
                     <span class="material-symbols-rounded" style="font-size: 64px; margin-bottom: 20px; opacity: 0.5;">construction</span>
-                    <p>Formulário de Envio para Defeito em desenvolvimento.</p>
+                    <p>FormulÃƒÆ’Ã‚Â¡rio de Envio para Defeito em desenvolvimento.</p>
                 </div>
             </main>
         </div>
     `;
 }
 
-const STOCK_LOCALS = ['TÉRREO', 'MOSTRUÁRIO', '1º ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE'];
+const STOCK_LOCALS = ['TÃƒÆ’Ã¢â‚¬Â°RREO', 'MOSTRUÃƒÆ’Ã‚ÂRIO', '1Ãƒâ€šÃ‚Âº ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE'];
 
 const MOVIMENTACAO_ORIGINS = [
     { value: 'MANUAL', label: 'Manual' },
     { value: 'PEDIDO', label: 'Pedido' },
     { value: 'NOTA_FISCAL', label: 'Nota Fiscal' },
-    { value: 'INVENTARIO', label: 'Inventário' },
-    { value: 'CONFERENCIA', label: 'Conferência' },
-    { value: 'SEPARACAO', label: 'Separação' }
+    { value: 'INVENTARIO', label: 'InventÃƒÆ’Ã‚Â¡rio' },
+    { value: 'CONFERENCIA', label: 'ConferÃƒÆ’Ã‚Âªncia' },
+    { value: 'SEPARACAO', label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o' }
 ];
 
 function renderMovimentacoes() {
@@ -4179,7 +4285,7 @@ function renderMovimentacoesList(history) {
             'ENTRADA': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
             'ENTRADA_NF': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
             'SAIDA': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
-            'SAÍDA': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
+            'SAÃƒÆ’Ã‚ÂDA': { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
             'TRANSFERENCIA': { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
             'AJUSTE': { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
             'AJUSTE+': { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
@@ -4278,12 +4384,12 @@ function filterMovimentacoes() {
 const MOV_HISTORY_FILTERS = [
     { id: 'todos', label: 'Todos' },
     { id: 'entrada_nf', label: 'Entrada NF' },
-    { id: 'inventario', label: 'Inventário' },
-    { id: 'transferencia', label: 'Transferência' },
+    { id: 'inventario', label: 'InventÃƒÆ’Ã‚Â¡rio' },
+    { id: 'transferencia', label: 'TransferÃƒÆ’Ã‚Âªncia' },
     { id: 'ajuste', label: 'Ajuste' },
     { id: 'garantia', label: 'Garantia' },
-    { id: 'separacao', label: 'Separação' },
-    { id: 'conferencia', label: 'Conferência' }
+    { id: 'separacao', label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o' },
+    { id: 'conferencia', label: 'ConferÃƒÆ’Ã‚Âªncia' }
 ];
 
 const MOV_HISTORY_PERIODS = [
@@ -4297,10 +4403,10 @@ const MOV_HISTORY_PAGE_SIZES = [10, 25, 50];
 const PRODUCT_MOVEMENT_FILTERS = [
     { id: 'todos', label: 'Todos' },
     { id: 'entrada', label: 'Entrada' },
-    { id: 'saida', label: 'Saída' },
-    { id: 'transferencia', label: 'Transferência' },
+    { id: 'saida', label: 'SaÃƒÆ’Ã‚Â­da' },
+    { id: 'transferencia', label: 'TransferÃƒÆ’Ã‚Âªncia' },
     { id: 'ajuste', label: 'Ajuste' },
-    { id: 'inventario', label: 'Inventário' },
+    { id: 'inventario', label: 'InventÃƒÆ’Ã‚Â¡rio' },
     { id: 'garantia', label: 'Garantia' }
 ];
 
@@ -4340,12 +4446,12 @@ function formatMovHistoryMoney(value) {
 function getMovHistoryTypeConfig(type) {
     const map = {
         entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e' },
-        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8' },
-        transferencia: { label: 'Transferência', icon: 'sync_alt', color: '#60a5fa' },
+        inventario: { label: 'InventÃƒÆ’Ã‚Â¡rio', icon: 'fact_check', color: '#38bdf8' },
+        transferencia: { label: 'TransferÃƒÆ’Ã‚Âªncia', icon: 'sync_alt', color: '#60a5fa' },
         ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b' },
         garantia: { label: 'Garantia', icon: 'shield', color: '#a78bfa' },
-        separacao: { label: 'Separação', icon: 'inventory_2', color: '#ef4444' },
-        conferencia: { label: 'Conferência', icon: 'task_alt', color: '#14b8a6' },
+        separacao: { label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', icon: 'inventory_2', color: '#ef4444' },
+        conferencia: { label: 'ConferÃƒÆ’Ã‚Âªncia', icon: 'task_alt', color: '#14b8a6' },
         outro: { label: 'Movimento', icon: 'history', color: '#94a3b8' }
     };
     return map[type] || map.outro;
@@ -4387,12 +4493,12 @@ function getProductMovementConfig(mov = {}) {
     const map = {
         entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e', sign: '+' },
         entrada: { label: 'Entrada', icon: 'add_circle', color: '#22c55e', sign: '+' },
-        saida: { label: 'Saída', icon: 'remove_circle', color: '#ef4444', sign: '-' },
-        separacao: { label: 'Separação', icon: 'inventory_2', color: '#ef4444', sign: '-' },
-        conferencia: { label: 'Conferência', icon: 'task_alt', color: '#14b8a6', sign: '-' },
-        transferencia: { label: 'Transferência', icon: 'sync_alt', color: '#60a5fa', sign: '+' },
+        saida: { label: 'SaÃƒÆ’Ã‚Â­da', icon: 'remove_circle', color: '#ef4444', sign: '-' },
+        separacao: { label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', icon: 'inventory_2', color: '#ef4444', sign: '-' },
+        conferencia: { label: 'ConferÃƒÆ’Ã‚Âªncia', icon: 'task_alt', color: '#14b8a6', sign: '-' },
+        transferencia: { label: 'TransferÃƒÆ’Ã‚Âªncia', icon: 'sync_alt', color: '#60a5fa', sign: '+' },
         ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b', sign: '' },
-        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8', sign: '' },
+        inventario: { label: 'InventÃƒÆ’Ã‚Â¡rio', icon: 'fact_check', color: '#38bdf8', sign: '' },
         garantia: { label: 'Garantia/Defeito', icon: 'shield', color: '#a78bfa', sign: '-' },
         cancelamento: { label: 'Cancelamento', icon: 'cancel', color: '#fb7185', sign: '' }
     };
@@ -4408,7 +4514,7 @@ function getProductMovementDocument(mov = {}) {
 }
 
 function getProductMovementRoute(mov = {}) {
-    return [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' → ');
+    return [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ');
 }
 
 function getProductMovementSearchText(mov = {}) {
@@ -4456,14 +4562,14 @@ function renderProductMovementHero(product, stockEntries = []) {
             </div>
             <div class="product-mov-title">
                 <span>Rastreabilidade do produto</span>
-                <h1>${escapeKitAttribute(product?.descricao_completa || product?.descricao_base || 'Produto sem descrição')}</h1>
+                <h1>${escapeKitAttribute(product?.descricao_completa || product?.descricao_base || 'Produto sem descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o')}</h1>
                 <div class="product-mov-meta">
                     <strong>${escapeKitAttribute(product?.marca || 'Sem marca')}</strong>
                     <em>ID ${escapeKitAttribute(idInterno || '-')}</em>
                 </div>
             </div>
             <div class="product-mov-stock">
-                <span>Estoque disponível</span>
+                <span>Estoque disponÃƒÆ’Ã‚Â­vel</span>
                 <strong>${formatStockNumber(available)} <small>${escapeKitAttribute(product?.unidade || 'UN')}</small></strong>
                 <em>${escapeKitAttribute(getProductMovementLocationSummary(stockEntries))}</em>
             </div>
@@ -4473,7 +4579,7 @@ function renderProductMovementHero(product, stockEntries = []) {
 
 function renderProductMovementFilters() {
     return `
-        <div class="product-mov-filters" role="tablist" aria-label="Filtros de movimentação">
+        <div class="product-mov-filters" role="tablist" aria-label="Filtros de movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">
             ${PRODUCT_MOVEMENT_FILTERS.map(item => `
                 <button type="button" class="${productMovementState.filter === item.id ? 'active' : ''}" onclick="setProductMovementFilter('${item.id}')">
                     ${item.label}
@@ -4488,7 +4594,7 @@ function renderProductMovementRows(items) {
         return `
             <div class="product-mov-empty">
                 <span class="material-symbols-rounded">sync</span>
-                <strong>Carregando movimentações...</strong>
+                <strong>Carregando movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes...</strong>
             </div>
         `;
     }
@@ -4496,7 +4602,7 @@ function renderProductMovementRows(items) {
         return `
             <div class="product-mov-empty">
                 <span class="material-symbols-rounded">error</span>
-                <strong>Não foi possível carregar o histórico</strong>
+                <strong>NÃƒÆ’Ã‚Â£o foi possÃƒÆ’Ã‚Â­vel carregar o histÃƒÆ’Ã‚Â³rico</strong>
                 <small>${escapeKitAttribute(productMovementState.error)}</small>
             </div>
         `;
@@ -4505,8 +4611,8 @@ function renderProductMovementRows(items) {
         return `
             <div class="product-mov-empty">
                 <span class="material-symbols-rounded">history</span>
-                <strong>Nenhuma movimentação encontrada</strong>
-                <small>Este filtro não possui registros para o produto selecionado.</small>
+                <strong>Nenhuma movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o encontrada</strong>
+                <small>Este filtro nÃƒÆ’Ã‚Â£o possui registros para o produto selecionado.</small>
             </div>
         `;
     }
@@ -4534,10 +4640,10 @@ function renderProductMovementRows(items) {
                     </div>
                     <div class="product-mov-details">
                         ${route ? `<span><b>Origem/Destino</b>${escapeKitAttribute(route)}</span>` : ''}
-                        ${mov.usuario ? `<span><b>Usuário</b>${escapeKitAttribute(mov.usuario)}</span>` : ''}
+                        ${mov.usuario ? `<span><b>UsuÃƒÆ’Ã‚Â¡rio</b>${escapeKitAttribute(mov.usuario)}</span>` : ''}
                         ${mov.origem ? `<span><b>Origem do registro</b>${escapeKitAttribute(mov.origem)}</span>` : ''}
                         ${fifo ? `<span><b>Custo/FIFO</b>${escapeKitAttribute(fifo)}</span>` : ''}
-                        ${obs ? `<span class="wide"><b>Observação</b>${escapeKitAttribute(obs)}</span>` : ''}
+                        ${obs ? `<span class="wide"><b>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</b>${escapeKitAttribute(obs)}</span>` : ''}
                     </div>
                 </div>
             </article>
@@ -4584,7 +4690,7 @@ function setProductMovementFilter(filter) {
 async function openProductMovementsFromDetail() {
     const product = window.currentProductDetailForEdit || window.currentProductMovementProduct;
     if (!product) {
-        showToast('Produto não encontrado para carregar movimentações.', 'error');
+        showToast('Produto nÃƒÆ’Ã‚Â£o encontrado para carregar movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes.', 'error');
         return;
     }
     await renderProductMovementsScreen(product);
@@ -4616,7 +4722,7 @@ async function renderProductMovementsScreen(product) {
         productMovementState.movements = movements || [];
         productMovementState.loading = false;
     } catch (error) {
-        console.error('[PRODUCT_MOV] erro ao carregar movimentações do produto', error);
+        console.error('[PRODUCT_MOV] erro ao carregar movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes do produto', error);
         productMovementState.loading = false;
         productMovementState.error = error?.message || String(error);
     }
@@ -4702,7 +4808,7 @@ function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set(
         const key = buildMovHistoryMovementKey(mov);
         if (!groups.has(key)) {
             const config = getMovHistoryTypeConfig(type);
-            const route = [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' → ');
+            const route = [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join(' ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ');
             groups.set(key, {
                 id: key,
                 type,
@@ -5033,14 +5139,14 @@ function getMovHistorySummary() {
     const totalPackages = ops.reduce((sum, op) => sum + (Number(op.packageCount || 0) || 0), 0);
     return [
         { label: 'Pacotes', value: totalPackages, sub: 'volumes separados', icon: 'package_2', type: 'separacao' },
-        { label: 'Total de operações', value: ops.length, sub: 'no período filtrado', icon: 'analytics', type: 'outro' },
+        { label: 'Total de operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes', value: ops.length, sub: 'no perÃƒÆ’Ã‚Â­odo filtrado', icon: 'analytics', type: 'outro' },
         { label: 'Entrada NF', value: count('entrada_nf'), sub: 'notas finalizadas', icon: 'receipt_long', type: 'entrada_nf' },
-        { label: 'Inventários', value: count('inventario'), sub: 'contagens e ajustes', icon: 'fact_check', type: 'inventario' },
-        { label: 'Transferências', value: count('transferencia'), sub: 'entre locais', icon: 'sync_alt', type: 'transferencia' },
-        { label: 'Ajustes', value: count('ajuste'), sub: 'correções manuais', icon: 'tune', type: 'ajuste' },
+        { label: 'InventÃƒÆ’Ã‚Â¡rios', value: count('inventario'), sub: 'contagens e ajustes', icon: 'fact_check', type: 'inventario' },
+        { label: 'TransferÃƒÆ’Ã‚Âªncias', value: count('transferencia'), sub: 'entre locais', icon: 'sync_alt', type: 'transferencia' },
+        { label: 'Ajustes', value: count('ajuste'), sub: 'correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes manuais', icon: 'tune', type: 'ajuste' },
         { label: 'Garantias', value: count('garantia'), sub: 'envios e retornos', icon: 'shield', type: 'garantia' },
-        { label: 'Separações', value: count('separacao'), sub: 'processos e baixas', icon: 'inventory_2', type: 'separacao' },
-        { label: 'Conferências', value: count('conferencia'), sub: 'pack e validacao', icon: 'task_alt', type: 'conferencia' }
+        { label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes', value: count('separacao'), sub: 'processos e baixas', icon: 'inventory_2', type: 'separacao' },
+        { label: 'ConferÃƒÆ’Ã‚Âªncias', value: count('conferencia'), sub: 'pack e validacao', icon: 'task_alt', type: 'conferencia' }
     ];
 }
 
@@ -5061,8 +5167,8 @@ function renderMovHistoryShell(loading = false) {
                         <span class="material-symbols-rounded">history</span>
                     </div>
                     <div>
-                        <h1>HISTÓRICO DE MOVIMENTOS</h1>
-                        <p>Operações agrupadas por documento, origem ou processo.</p>
+                        <h1>HISTÃƒÆ’Ã¢â‚¬Å“RICO DE MOVIMENTOS</h1>
+                        <p>OperaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes agrupadas por documento, origem ou processo.</p>
                     </div>
                 </header>
 
@@ -5105,14 +5211,14 @@ function renderMovHistoryShell(loading = false) {
 
                 <section class="mov-history-list-panel">
                     <div class="mov-history-table-head">
-                        <span>Operação</span>
-                        <span>Identificação</span>
+                        <span>OperaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
+                        <span>IdentificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                         <span>Data/Hora</span>
-                        <span>Usuário</span>
+                        <span>UsuÃƒÆ’Ã‚Â¡rio</span>
                         <span>Produtos</span>
                         <span>Qtde total</span>
                         <span>Pacotes</span>
-                        <span>Ações</span>
+                        <span>AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                     </div>
                     <div id="mov-history-list" class="mov-history-list">
                         ${loading ? renderMovHistoryLoadingHTML() : renderMovHistoryRows(pageItems)}
@@ -5138,8 +5244,8 @@ function renderMovHistoryRows(items) {
         return `
             <div class="mov-history-empty">
                 <span class="material-symbols-rounded">history</span>
-                <strong>Nenhuma operação encontrada</strong>
-                <small>Ajuste os filtros ou confira se há movimentos gravados no Supabase.</small>
+                <strong>Nenhuma operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o encontrada</strong>
+                <small>Ajuste os filtros ou confira se hÃƒÆ’Ã‚Â¡ movimentos gravados no Supabase.</small>
             </div>
         `;
     }
@@ -5154,9 +5260,9 @@ function renderMovHistoryRows(items) {
                         <span class="mov-history-type-icon material-symbols-rounded">${cfg.icon}</span>
                         <span><strong>${cfg.label}</strong><small>${escapeKitAttribute(op.subtitle || '-')}</small></span>
                     </span>
-                    <span class="mov-history-id" data-label="Identificação">${escapeKitAttribute(op.identification || '-')}</span>
+                    <span class="mov-history-id" data-label="IdentificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">${escapeKitAttribute(op.identification || '-')}</span>
                     <span data-label="Data/Hora">${formatMovHistoryDate(op.date)}</span>
-                    <span data-label="Usuário">${escapeKitAttribute(op.user || '-')}</span>
+                    <span data-label="UsuÃƒÆ’Ã‚Â¡rio">${escapeKitAttribute(op.user || '-')}</span>
                     <span data-label="Produtos">${formatStockNumber(op.productsCount || 0)}</span>
                     <span data-label="Qtde total">${formatStockNumber(op.quantityTotal || 0)}</span>
                     <span data-label="Pacotes">${formatStockNumber(op.packageCount || 0)}</span>
@@ -5201,8 +5307,8 @@ function renderMovHistoryDetails(op) {
                 ${op.supplier ? `<span><b>Fornecedor</b>${escapeKitAttribute(op.supplier)}</span>` : ''}
                 ${op.packageCount ? `<span><b>Pacotes/volumes</b>${formatStockNumber(op.packageCount)}</span>` : ''}
                 ${op.valueTotal ? `<span><b>Valor total</b>${formatMovHistoryMoney(op.valueTotal)}</span>` : ''}
-                <span><b>Usuário responsável</b>${escapeKitAttribute(op.user || '-')}</span>
-                ${(op.notes || []).map(note => `<span><b>Observação</b>${escapeKitAttribute(note)}</span>`).join('')}
+                <span><b>UsuÃƒÆ’Ã‚Â¡rio responsÃƒÆ’Ã‚Â¡vel</b>${escapeKitAttribute(op.user || '-')}</span>
+                ${(op.notes || []).map(note => `<span><b>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</b>${escapeKitAttribute(note)}</span>`).join('')}
                 ${op.finance?.length ? `<span><b>Financeiro vinculado</b>${op.finance.length} parcela(s)</span>` : ''}
             </div>
             <div class="mov-history-items">
@@ -5213,7 +5319,7 @@ function renderMovHistoryDetails(op) {
                             <small>ID: ${escapeKitAttribute(item.idInterno || '-')}</small>
                         </div>
                         <span><b>Qtd</b>${formatStockNumber(item.quantidade || 0)}</span>
-                        <span><b>Origem/Destino</b>${escapeKitAttribute([prettyLocal(item.origem), prettyLocal(item.destino)].filter(Boolean).join(' → ') || '-')}</span>
+                        <span><b>Origem/Destino</b>${escapeKitAttribute([prettyLocal(item.origem), prettyLocal(item.destino)].filter(Boolean).join(' ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ') || '-')}</span>
                         <span><b>Custo real</b>${formatMovHistoryMoney(item.custo || item.total || 0)}</span>
                         <span><b>Lote/FIFO</b>${escapeKitAttribute(item.lote || '-')}</span>
                     </div>
@@ -5255,9 +5361,9 @@ function showMovHistoryOperationalSummary(operationId) {
 function renderMovHistoryPagination(totalPages, totalItems) {
     return `
         <footer class="mov-history-pagination">
-            <span>${formatStockNumber(totalItems)} operação(ões)</span>
+            <span>${formatStockNumber(totalItems)} operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o(ÃƒÆ’Ã‚Âµes)</span>
             <label>
-                Itens por página
+                Itens por pÃƒÆ’Ã‚Â¡gina
                 <select onchange="setMovHistoryPageSize(this.value)">
                     ${MOV_HISTORY_PAGE_SIZES.map(size => `<option value="${size}" ${movementHistoryState.pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
                 </select>
@@ -5336,7 +5442,7 @@ function toggleMovHistoryOperation(id) {
 }
 
 function openNovaMovimentacaoModal() {
-    console.log('[MOV] clique em Nova movimentação');
+    console.log('[MOV] clique em Nova movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
     console.log('[MOV] abrindo modal');
     const isInitialType = false;
     
@@ -5344,18 +5450,18 @@ function openNovaMovimentacaoModal() {
         <div id="nova-mov-modal" class="modal-overlay" onclick="closeNovaMovimentacaoModal(event)">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2 style="font-size: 1.1rem; font-weight: 700; margin: 0;">Nova Movimentação</h2>
+                    <h2 style="font-size: 1.1rem; font-weight: 700; margin: 0;">Nova MovimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</h2>
                     <button onclick="closeNovaMovimentacaoModal()" style="background: none; border: none; color: var(--muted); cursor: pointer; padding: 8px;">
                         <span class="material-symbols-rounded">close</span>
                     </button>
                 </div>
 
                 <div class="input-group" style="margin-bottom: 20px;">
-                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; display: block;">Tipo de Movimentação</label>
+                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; display: block;">Tipo de MovimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</label>
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
                         ${['ENTRADA', 'SAIDA', 'TRANSFERENCIA', 'AJUSTE'].map(tipo => `
                             <button type="button" class="tipo-mov-btn" data-tipo="${tipo}" onclick="selectTipoMovimentacao('${tipo}', this)" style="padding: 12px 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: rgba(255,255,255,0.02); color: white; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.2s;">
-                                ${tipo === 'ENTRADA' ? 'Entrada' : tipo === 'SAIDA' ? 'Saída' : tipo === 'TRANSFERENCIA' ? 'Transferência' : 'Ajuste'}
+                                ${tipo === 'ENTRADA' ? 'Entrada' : tipo === 'SAIDA' ? 'SaÃƒÆ’Ã‚Â­da' : tipo === 'TRANSFERENCIA' ? 'TransferÃƒÆ’Ã‚Âªncia' : 'Ajuste'}
                             </button>
                         `).join('')}
                     </div>
@@ -5364,15 +5470,15 @@ function openNovaMovimentacaoModal() {
                 <div id="mov-form-container">
                     <div style="text-align: center; padding: 40px 20px; color: var(--muted);">
                         <span class="material-symbols-rounded" style="font-size: 40px; margin-bottom: 12px; opacity: 0.5;">touch_app</span>
-                        <p style="font-size: 0.85rem;">Selecione o tipo de movimentação acima</p>
+                        <p style="font-size: 0.85rem;">Selecione o tipo de movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o acima</p>
                     </div>
                 </div>
                 ${false ? `
                 <div class="inv-initial-note">
                     <span class="material-symbols-rounded">info</span>
                     <div>
-                        <strong>INVENTÁRIO INICIAL</strong>
-                        <p>Como este é o primeiro inventário, não existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
+                        <strong>INVENTÃƒÆ’Ã‚ÂRIO INICIAL</strong>
+                        <p>Como este ÃƒÆ’Ã‚Â© o primeiro inventÃƒÆ’Ã‚Â¡rio, nÃƒÆ’Ã‚Â£o existe saldo anterior no sistema. Por isso, exibimos apenas o Saldo Inicial (quantidade contada).</p>
                     </div>
                 </div>
                 ` : ''}
@@ -5512,7 +5618,7 @@ function showAppModal({
     });
 }
 
-function showAppConfirm({ title = 'Confirmar ação', message = '', detail = '', summary = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false } = {}) {
+function showAppConfirm({ title = 'Confirmar aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', message = '', detail = '', summary = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false } = {}) {
     return showAppModal({
         type: danger ? 'error' : 'confirm',
         title,
@@ -5571,19 +5677,19 @@ function showPickModeChoiceModal() {
                 <div class="app-confirm-icon info">
                     <span class="material-symbols-rounded">rule_settings</span>
                 </div>
-                <h3 id="pick-mode-title">Como deseja fazer a separação?</h3>
-                <p>Escolha o fluxo que será utilizado nesta separação. Essa escolha evita baixa de estoque no momento errado.</p>
-                <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da separação">
+                <h3 id="pick-mode-title">Como deseja fazer a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o?</h3>
+                <p>Escolha o fluxo que serÃƒÆ’Ã‚Â¡ utilizado nesta separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Essa escolha evita baixa de estoque no momento errado.</p>
+                <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">
                     <button type="button" class="pick-mode-choice pick-mode-fast" data-pick-mode="fast" aria-pressed="false">
                         <span class="material-symbols-rounded">bolt</span>
-                        <strong>Modo rápido</strong>
-                        <small>Para quando tem somente 1 operador. Finaliza a separação e já baixa o estoque, sem conferência.</small>
+                        <strong>Modo rÃƒÆ’Ã‚Â¡pido</strong>
+                        <small>Para quando tem somente 1 operador. Finaliza a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o e jÃƒÆ’Ã‚Â¡ baixa o estoque, sem conferÃƒÆ’Ã‚Âªncia.</small>
                         <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
                     </button>
                     <button type="button" class="pick-mode-choice pick-mode-normal" data-pick-mode="normal" aria-pressed="false">
                         <span class="material-symbols-rounded">verified</span>
                         <strong>Modo normal</strong>
-                        <small>Para separador + conferente. A baixa do estoque acontece só depois da conferência.</small>
+                        <small>Para separador + conferente. A baixa do estoque acontece sÃƒÆ’Ã‚Â³ depois da conferÃƒÆ’Ã‚Âªncia.</small>
                         <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
                     </button>
                 </div>
@@ -5595,7 +5701,7 @@ function showPickModeChoiceModal() {
         `;
 
         let settled = false;
-        let selectedMode = null;
+        let selectedMode = 'normal';
         const close = (choice = null) => {
             if (settled) return;
             settled = true;
@@ -5618,6 +5724,7 @@ function showPickModeChoiceModal() {
                     card.classList.toggle('is-selected', selected);
                     card.setAttribute('aria-pressed', selected ? 'true' : 'false');
                 });
+                overlay.classList.toggle('is-fast-selected', selectedMode === 'fast');
                 const confirmButton = overlay.querySelector('[data-action="confirm"]');
                 if (confirmButton) confirmButton.disabled = false;
             }
@@ -5632,6 +5739,48 @@ function showPickModeChoiceModal() {
             if (event.key === 'Enter' && selectedMode) close(selectedMode);
         };
         document.addEventListener('keydown', onKeyDown);
+
+        const modeGrid = overlay.querySelector('.pick-mode-choice-grid');
+        const normalCard = overlay.querySelector('[data-pick-mode="normal"]');
+        const fastCard = overlay.querySelector('[data-pick-mode="fast"]');
+        const confirmButton = overlay.querySelector('[data-action="confirm"]');
+        const titleEl = overlay.querySelector('#pick-mode-title');
+        const introEl = overlay.querySelector('#pick-mode-title + p');
+        if (titleEl) titleEl.innerHTML = 'Como deseja fazer a separa&ccedil;&atilde;o?';
+        if (introEl) introEl.innerHTML = 'Escolha o fluxo que ser&aacute; utilizado nesta separa&ccedil;&atilde;o. Essa escolha evita baixa de estoque no momento errado.';
+        if (normalCard && fastCard && modeGrid) {
+            normalCard.classList.add('is-selected');
+            normalCard.setAttribute('aria-pressed', 'true');
+            fastCard.classList.remove('is-selected');
+            fastCard.setAttribute('aria-pressed', 'false');
+            normalCard.innerHTML = `
+                <span class="material-symbols-rounded">verified</span>
+                <strong>Modo normal</strong>
+                <small>Para separador + conferente.<br>A baixa do estoque acontece somente ap&oacute;s a confer&ecirc;ncia.</small>
+                <em class="pick-mode-note"><span class="material-symbols-rounded">shield</span>Fluxo padr&atilde;o da opera&ccedil;&atilde;o.</em>
+                <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
+            `;
+            fastCard.innerHTML = `
+                <span class="material-symbols-rounded">bolt</span>
+                <strong>Modo r&aacute;pido</strong>
+                <small>Para quando houver apenas 1 operador.<br>A baixa do estoque acontece imediatamente ao finalizar a separa&ccedil;&atilde;o.</small>
+                <em class="pick-mode-note"><span class="material-symbols-rounded">warning</span>Use apenas em finais de semana, feriados ou quando n&atilde;o houver conferente dispon&iacute;vel.</em>
+                <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
+            `;
+            modeGrid.prepend(normalCard);
+            const fastWarning = document.createElement('div');
+            fastWarning.className = 'pick-mode-fast-warning';
+            fastWarning.setAttribute('aria-live', 'polite');
+            fastWarning.innerHTML = `
+                <span class="material-symbols-rounded">warning</span>
+                <div>
+                    <strong>Aten&ccedil;&atilde;o</strong>
+                    <p>Neste modo n&atilde;o haver&aacute; confer&ecirc;ncia.<br>A baixa do estoque ocorrer&aacute; imediatamente ao finalizar a separa&ccedil;&atilde;o.</p>
+                </div>
+            `;
+            modeGrid.insertAdjacentElement('afterend', fastWarning);
+        }
+        if (confirmButton) confirmButton.disabled = false;
 
         document.body.appendChild(overlay);
         requestAnimationFrame(() => overlay.classList.add('open'));
@@ -5718,11 +5867,11 @@ function isMissingSecurityTableError(error) {
 
 async function verifySecurityInstalled() {
     const client = getSecurityClient();
-    if (!client) return { installed: false, configured: false, error: new Error('Supabase indisponível.') };
+    if (!client) return { installed: false, configured: false, error: new Error('Supabase indisponÃƒÆ’Ã‚Â­vel.') };
 
     const { data, error } = await client.rpc('pin_mestre_configurado');
     if (error) {
-        logSecurityError('[SECURITY] erro ao verificar instalação', error);
+        logSecurityError('[SECURITY] erro ao verificar instalaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', error);
         if (isMissingSecurityTableError(error)) {
             return { installed: false, configured: false, error };
         }
@@ -5747,7 +5896,7 @@ async function ensureCurrentDeviceRegistered({
     try {
         const securityStatus = await verifySecurityInstalled();
         if (!securityStatus.installed) {
-            if (!silent) showToast('Tabelas de segurança ainda não aplicadas no Supabase.', 'warning');
+            if (!silent) showToast('Tabelas de seguranÃƒÆ’Ã‚Â§a ainda nÃƒÆ’Ã‚Â£o aplicadas no Supabase.', 'warning');
             return { allowed: true, deviceId, degraded: true, error: securityStatus.error };
         }
 
@@ -5783,7 +5932,7 @@ async function ensureCurrentDeviceRegistered({
         };
 
         console.log('[SECURITY] payload dispositivo', payload);
-        console.log('[SECURITY] supabase url', typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '(SUPABASE_URL indisponível)');
+        console.log('[SECURITY] supabase url', typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '(SUPABASE_URL indisponÃƒÆ’Ã‚Â­vel)');
 
         const { data: savedDevice, error: upsertError } = await client
             .from('dispositivos_autorizados')
@@ -5817,10 +5966,10 @@ async function ensureCurrentDeviceRegistered({
     } catch (error) {
         logSecurityError('[SECURITY] update dispositivo', error, { deviceId, source });
         if (isMissingSecurityTableError(error)) {
-            console.warn('[SEGURANCA] consulta de dispositivo falhou após RPC instalada; acesso liberado em modo compatibilidade.', error);
+            console.warn('[SEGURANCA] consulta de dispositivo falhou apÃƒÆ’Ã‚Â³s RPC instalada; acesso liberado em modo compatibilidade.', error);
             return { allowed: true, deviceId, degraded: true, error };
         }
-        console.warn('[SEGURANCA] falha na validação do dispositivo:', error);
+        console.warn('[SEGURANCA] falha na validaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do dispositivo:', error);
         return { allowed: true, deviceId, degraded: true, error };
     }
 }
@@ -5836,7 +5985,7 @@ function renderBlockedDeviceScreen() {
             <div class="security-blocked-card">
                 <span class="material-symbols-rounded">phonelink_lock</span>
                 <h1>Dispositivo bloqueado</h1>
-                <p>Este dispositivo foi removido por segurança.</p>
+                <p>Este dispositivo foi removido por seguranÃƒÆ’Ã‚Â§a.</p>
                 <button type="button" onclick="location.reload()">Verificar novamente</button>
             </div>
         </div>
@@ -5858,16 +6007,16 @@ window.addEventListener('focus', () => ensureCurrentDeviceRegistered({ silent: t
 
 async function isMasterPinConfigured() {
     const status = await verifySecurityInstalled();
-    if (!status.installed) throw status.error || new Error('Segurança não instalada.');
+    if (!status.installed) throw status.error || new Error('SeguranÃƒÆ’Ã‚Â§a nÃƒÆ’Ã‚Â£o instalada.');
     if (status.error) throw status.error;
     return status.configured === true;
 }
 
 async function saveMasterPin(pin) {
     const client = getSecurityClient();
-    if (!client) throw new Error('Supabase indisponível.');
+    if (!client) throw new Error('Supabase indisponÃƒÆ’Ã‚Â­vel.');
     const cleanPin = String(pin || '').trim();
-    if (cleanPin.length < 4) throw new Error('PIN deve ter pelo menos 4 dígitos.');
+    if (cleanPin.length < 4) throw new Error('PIN deve ter pelo menos 4 dÃƒÆ’Ã‚Â­gitos.');
     const { error } = await client.rpc('set_pin_mestre', {
         p_pin: cleanPin,
         p_usuario: localStorage.getItem('currentUser') || 'Sistema'
@@ -5880,8 +6029,8 @@ async function saveMasterPin(pin) {
 async function promptCreateMasterPin() {
     const pin = await showAppPrompt({
         title: 'Criar PIN mestre',
-        message: 'Defina um PIN mestre para proteger configurações sensíveis.',
-        detail: 'O PIN será salvo apenas como hash seguro. Não use PIN óbvio.',
+        message: 'Defina um PIN mestre para proteger configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes sensÃƒÆ’Ã‚Â­veis.',
+        detail: 'O PIN serÃƒÆ’Ã‚Â¡ salvo apenas como hash seguro. NÃƒÆ’Ã‚Â£o use PIN ÃƒÆ’Ã‚Â³bvio.',
         label: 'Novo PIN',
         inputType: 'password',
         confirmLabel: 'Salvar PIN',
@@ -5898,7 +6047,7 @@ async function promptCreateMasterPin() {
     });
     if (!confirmPin) return false;
     if (String(pin) !== String(confirmPin)) {
-        await showAppAlert({ title: 'PIN não confere', message: 'Os PINs informados são diferentes.', icon: 'warning' });
+        await showAppAlert({ title: 'PIN nÃƒÆ’Ã‚Â£o confere', message: 'Os PINs informados sÃƒÆ’Ã‚Â£o diferentes.', icon: 'warning' });
         return false;
     }
     try {
@@ -5911,7 +6060,7 @@ async function promptCreateMasterPin() {
     }
 }
 
-async function requireMasterPin(reason = 'ação sensível') {
+async function requireMasterPin(reason = 'aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o sensÃƒÆ’Ã‚Â­vel') {
     const deviceStatus = await ensureCurrentDeviceRegistered({ silent: true, source: 'acao_sensivel', logUpdate: false });
     if (deviceStatus.allowed === false) return false;
 
@@ -5924,21 +6073,21 @@ async function requireMasterPin(reason = 'ação sensível') {
     } catch (error) {
         if (isMissingSecurityTableError(error)) {
             await showAppAlert({
-                title: 'Segurança não configurada',
-                message: 'Aplique a migration de segurança no Supabase antes de acessar esta área.',
+                title: 'SeguranÃƒÆ’Ã‚Â§a nÃƒÆ’Ã‚Â£o configurada',
+                message: 'Aplique a migration de seguranÃƒÆ’Ã‚Â§a no Supabase antes de acessar esta ÃƒÆ’Ã‚Â¡rea.',
                 buttonLabel: 'OK',
                 icon: 'warning'
             });
             return false;
         }
-        await showAppAlert({ title: 'Erro de segurança', message: error.message || String(error), danger: true, icon: 'error' });
+        await showAppAlert({ title: 'Erro de seguranÃƒÆ’Ã‚Â§a', message: error.message || String(error), danger: true, icon: 'error' });
         return false;
     }
 
     if (!pinConfigured) {
         await showAppAlert({
             title: 'PIN mestre pendente',
-            message: 'O valor atual de segurança é temporário e será substituído por um hash seguro.',
+            message: 'O valor atual de seguranÃƒÆ’Ã‚Â§a ÃƒÆ’Ã‚Â© temporÃƒÆ’Ã‚Â¡rio e serÃƒÆ’Ã‚Â¡ substituÃƒÆ’Ã‚Â­do por um hash seguro.',
             detail: 'Crie um novo PIN mestre para continuar.',
             buttonLabel: 'Criar PIN',
             icon: 'warning'
@@ -5967,7 +6116,7 @@ async function requireMasterPin(reason = 'ação sensível') {
     }
     if (!valid) {
         await logSecurityEvent('pin_incorreto', `PIN incorreto ao tentar ${reason}.`);
-        await showAppAlert({ title: 'PIN incorreto', message: 'O PIN informado não confere.', danger: true, icon: 'error' });
+        await showAppAlert({ title: 'PIN incorreto', message: 'O PIN informado nÃƒÆ’Ã‚Â£o confere.', danger: true, icon: 'error' });
         return false;
     }
 
@@ -6047,7 +6196,7 @@ function renderMovimentacaoForm(tipo) {
 
     const getObservacaoField = () => `
         <div class="input-group full-width">
-            <label>Observação</label>
+            <label>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</label>
             <input type="text" id="mov-obs" class="input-field" placeholder="Opcional">
         </div>
     `;
@@ -6065,7 +6214,7 @@ function renderMovimentacaoForm(tipo) {
     const getMotivoField = () => `
         <div class="input-group full-width">
             <label>Motivo</label>
-            <input type="text" id="mov-motivo" class="input-field" placeholder="Ex: Contagem inventário, ajuste sistema...">
+            <input type="text" id="mov-motivo" class="input-field" placeholder="Ex: Contagem inventÃƒÆ’Ã‚Â¡rio, ajuste sistema...">
         </div>
     `;
 
@@ -6081,12 +6230,12 @@ function renderMovimentacaoForm(tipo) {
             break;
         case 'SAIDA':
             fieldsHTML = getCommonFields() + getLocalField() + getOrigemField() + getQuantidadeField() + getObservacaoField();
-            submitLabel = 'Registrar Saída';
+            submitLabel = 'Registrar SaÃƒÆ’Ã‚Â­da';
             submitFunc = "saveNovaMovimentacao('SAIDA')";
             break;
         case 'TRANSFERENCIA':
             fieldsHTML = getCommonFields() + getLocalField().replace('id="mov-local"', 'id="mov-origem"') + getDestinoField() + getQuantidadeField() + getObservacaoField();
-            submitLabel = 'Confirmar Transferência';
+            submitLabel = 'Confirmar TransferÃƒÆ’Ã‚Âªncia';
             submitFunc = "saveNovaMovimentacao('TRANSFERENCIA')";
             break;
         case 'AJUSTE':
@@ -6175,7 +6324,7 @@ async function saveNovaMovimentacao(tipo) {
     // ==========================================
     console.log('========== VALIDACAO DETALHADA ==========');
     
-    // Primeiro: verificar se produtos estão carregados no appData
+    // Primeiro: verificar se produtos estÃƒÆ’Ã‚Â£o carregados no appData
     const produtosDisponiveis = appData.products || [];
     console.log('[MOV] produtos carregados no appData:', produtosDisponiveis.length);
     
@@ -6185,7 +6334,7 @@ async function saveNovaMovimentacao(tipo) {
     console.log('[MOV] valor do input produto:', inputValue);
     console.log('[MOV] selectedProductForMov do state:', selectedProductForMov);
     
-    // Terceiro: se não tem produto no state mas tem texto, buscar
+    // Terceiro: se nÃƒÆ’Ã‚Â£o tem produto no state mas tem texto, buscar
     if (!selectedProductForMov && inputValue) {
         console.log('[MOV] trying to find product by text in appData...');
         
@@ -6202,8 +6351,8 @@ async function saveNovaMovimentacao(tipo) {
             selectedProductForMov = produtoEncontrado;
             console.log('[MOV] produto encontrado em appData.products:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
         } else {
-            // Se não achou em appData, tentar DataClient
-            console.log('[MOV] não achou em appData, tentando DataClient...');
+            // Se nÃƒÆ’Ã‚Â£o achou em appData, tentar DataClient
+            console.log('[MOV] nÃƒÆ’Ã‚Â£o achou em appData, tentando DataClient...');
             try {
                 const data = await DataClient.loadModule('produtos', false);
                 if (data && data.products && data.products.length > 0) {
@@ -6232,8 +6381,8 @@ async function saveNovaMovimentacao(tipo) {
     // ==========================================
     if (!selectedProductForMov) {
         console.log('[MOV] ERRO: produto NAO encontrado');
-        console.log('[MOV] razao: selectedProductForMov é null');
-        showToast("Produto não encontrado. Selecione da lista ou digite ID correto.");
+        console.log('[MOV] razao: selectedProductForMov ÃƒÆ’Ã‚Â© null');
+        showToast("Produto nÃƒÆ’Ã‚Â£o encontrado. Selecione da lista ou digite ID correto.");
         isFinalizing = false;
         console.log('=========================================');
         return;
@@ -6250,7 +6399,7 @@ async function saveNovaMovimentacao(tipo) {
     
     if (!qtyInput) {
         console.log('[MOV] ERRO: campo quantidade NAO encontrado no DOM');
-        showToast("Erro: campo de quantidade não encontrado.");
+        showToast("Erro: campo de quantidade nÃƒÆ’Ã‚Â£o encontrado.");
         isFinalizing = false;
         console.log('=========================================');
         return;
@@ -6262,7 +6411,7 @@ async function saveNovaMovimentacao(tipo) {
     if (isNaN(qty) || qty <= 0) {
         console.log('[MOV] ERRO: quantidade invalida');
         console.log('[MOV] razao: qty <= 0 ou isNaN');
-        showToast("Quantidade inválida. Digite um número maior que 0.");
+        showToast("Quantidade invÃƒÆ’Ã‚Â¡lida. Digite um nÃƒÆ’Ã‚Âºmero maior que 0.");
         isFinalizing = false;
         console.log('=========================================');
         return;
@@ -6358,9 +6507,9 @@ async function saveNovaMovimentacao(tipo) {
             if (tipo === 'SAIDA') {
                 await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
             }
-            console.log('[MOV] fluxo concluído com sucesso');
+            console.log('[MOV] fluxo concluÃƒÆ’Ã‚Â­do com sucesso');
             console.log('[MOV] resposta de sucesso');
-            showToast("Movimentação registrada com sucesso!");
+            showToast("MovimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o registrada com sucesso!");
             
             if (!appData.movimentacoes) appData.movimentacoes = [];
             appData.movimentacoes.unshift({
@@ -6370,18 +6519,18 @@ async function saveNovaMovimentacao(tipo) {
 
             DataClient.invalidateCache('produtos');
             
-            console.log('[MOV] modal fechado após sucesso');
+            console.log('[MOV] modal fechado apÃƒÆ’Ã‚Â³s sucesso');
             closeNovaMovimentacaoModal();
             
-            // Pequeno delay para garantir que toast apareça antes de renderizar nova tela
+            // Pequeno delay para garantir que toast apareÃƒÆ’Ã‚Â§a antes de renderizar nova tela
             setTimeout(() => {
                 renderMovimentacoes();
                 console.log('[MOV] mensagem exibida - tela atualizada');
             }, 300);
         } else {
-            console.log('[MOV] ERRO: movimento salvo mas estoque não atualizado');
+            console.log('[MOV] ERRO: movimento salvo mas estoque nÃƒÆ’Ã‚Â£o atualizado');
             console.log('[MOV] resposta de erro');
-            showToast("Erro: Movimento salvo, mas estoque não atualizado.");
+            showToast("Erro: Movimento salvo, mas estoque nÃƒÆ’Ã‚Â£o atualizado.");
             console.log('[MOV] mensagem exibida');
         }
     } catch (e) {
@@ -6394,14 +6543,14 @@ async function saveNovaMovimentacao(tipo) {
 
 function renderTransferenciaForm() {
     const currentUser = localStorage.getItem('currentUser');
-    const locals = ['TERREO', '1ºANDAR', 'MOSTRUARIO', 'DEFEITO'];
+    const locals = ['TERREO', '1Ãƒâ€šÃ‚ÂºANDAR', 'MOSTRUARIO', 'DEFEITO'];
 
     app.innerHTML = `
                 <div class="dashboard-screen fade-in internal">
                     ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
                     <main class="container">
                         <div class="sub-menu-header">
-                            <h2 style="font-size: 1.2rem; font-weight: 700;">TRANSFERÊNCIA</h2>
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">TRANSFERÃƒÆ’Ã…Â NCIA</h2>
                         </div>
                         <div class="form-grid" style="background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05);">
                             <div class="input-group full-width">
@@ -6430,13 +6579,13 @@ function renderTransferenciaForm() {
                                 <input type="number" id="mov-qty" class="input-field" placeholder="0">
                             </div>
                             <div class="input-group">
-                                <label>Observação</label>
+                                <label>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</label>
                                 <input type="text" id="mov-obs" class="input-field" placeholder="Opcional">
                             </div>
                             
                             <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
                                 <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
-                                <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveMovimentacao('TRANSFERÊNCIA')">Confirmar</button>
+                                <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveMovimentacao('TRANSFERÃƒÆ’Ã…Â NCIA')">Confirmar</button>
                             </div>
                         </div>
                     </main>
@@ -6478,7 +6627,7 @@ function renderDefeitoForm() {
                                 <input type="number" id="mov-qty" class="input-field" placeholder="0">
                             </div>
                             <div class="input-group full-width">
-                                <label>Motivo / Observação</label>
+                                <label>Motivo / ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</label>
                                 <input type="text" id="mov-obs" class="input-field" placeholder="Descreva o defeito...">
                             </div>
                             
@@ -6493,7 +6642,7 @@ function renderDefeitoForm() {
 }
 
 
-// Função searchProductForMov
+// FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o searchProductForMov
 
 function searchProductForMov() {
     const searchInput = document.getElementById('mov-search');
@@ -6551,7 +6700,7 @@ async function saveMovimentacao(tipo) {
     const destinoInput = document.getElementById('mov-destino');
 
     if (!qtyInput || !origemInput) {
-        showToast("Erro: Campos de movimentação não encontrados.");
+        showToast("Erro: Campos de movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o encontrados.");
         return;
     }
 
@@ -6566,7 +6715,7 @@ async function saveMovimentacao(tipo) {
     }
 
     const movData = {
-        tipo: tipo === 'TRANSFERÊNCIA' ? 'TRANSFERENCIA' : tipo,
+        tipo: tipo === 'TRANSFERÃƒÆ’Ã…Â NCIA' ? 'TRANSFERENCIA' : tipo,
         id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
         local_origem: localOrigem,
         local_destino: localDestino,
@@ -6589,13 +6738,13 @@ async function saveMovimentacao(tipo) {
 
         console.log("[Supabase] Movimento id: " + savedMov.movimento_id + " gravado.");
 
-        // 2. Atualizar estoque de forma atômica conforme o tipo
+        // 2. Atualizar estoque de forma atÃƒÆ’Ã‚Â´mica conforme o tipo
         let stockSuccess = false;
         const idInterno = movData.id_interno;
 
         if (movData.tipo === 'ENTRADA') {
             stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
-        } else if (movData.tipo === 'SAÍDA' || movData.tipo === 'SAIDA') {
+        } else if (movData.tipo === 'SAÃƒÆ’Ã‚ÂDA' || movData.tipo === 'SAIDA') {
             stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
         } else if (movData.tipo === 'AJUSTE') {
             stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'ajuste', movData.quantidade);
@@ -6606,25 +6755,25 @@ async function saveMovimentacao(tipo) {
         }
 
         if (stockSuccess) {
-            if (movData.tipo === 'SAÍDA' || movData.tipo === 'SAIDA') {
+            if (movData.tipo === 'SAÃƒÆ’Ã‚ÂDA' || movData.tipo === 'SAIDA') {
                 await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
             }
             showToast("Movimento e estoque atualizados!");
             
-            // Atualização local para o histórico de tela
+            // AtualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o local para o histÃƒÆ’Ã‚Â³rico de tela
             if (!appData.movimentacoes) appData.movimentacoes = [];
             appData.movimentacoes.unshift({
                 ...savedMov,
                 data: formatDateTimeBR(savedMov.data_hora)
             });
 
-            // Forçar invalidação do cache de produtos/estoque para refletir na tela
+            // ForÃƒÆ’Ã‚Â§ar invalidaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do cache de produtos/estoque para refletir na tela
             DataClient.invalidateCache('inventory'); 
             
             setTimeout(() => renderMovimentacoesSubMenu(), 1500);
         } else {
-            console.error("[Supabase] Falha Crítica: Movimento gravado, mas estoque NÃO atualizado.");
-            showToast("Erro: Movimento gravado, mas o saldo não pôde ser atualizado.");
+            console.error("[Supabase] Falha CrÃƒÆ’Ã‚Â­tica: Movimento gravado, mas estoque NÃƒÆ’Ã†â€™O atualizado.");
+            showToast("Erro: Movimento gravado, mas o saldo nÃƒÆ’Ã‚Â£o pÃƒÆ’Ã‚Â´de ser atualizado.");
         }
     } catch (e) {
         console.error("[Supabase] Erro inesperado:", e);
@@ -6642,19 +6791,19 @@ async function renderMovimentacoesHistory() {
     try {
         console.log('[MOVIMENTOS DEBUG] iniciando busca de movimentos...');
         await loadMovHistoryOperations();
-        console.log('[MOVIMENTOS DEBUG] operações agrupadas:', movementHistoryState.operations?.length || 0);
+        console.log('[MOVIMENTOS DEBUG] operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes agrupadas:', movementHistoryState.operations?.length || 0);
         app.innerHTML = renderMovHistoryShell(false);
     } catch (err) {
-        console.error('[MOVIMENTOS DEBUG] erro crítico ao processar movimentos:', err);
+        console.error('[MOVIMENTOS DEBUG] erro crÃƒÆ’Ã‚Â­tico ao processar movimentos:', err);
         movementHistoryState.operations = [];
         movementHistoryState.filtered = [];
         app.innerHTML = renderMovHistoryShell(false);
-        showToast('Erro ao carregar histórico de movimentos.', 'error');
+        showToast('Erro ao carregar histÃƒÆ’Ã‚Â³rico de movimentos.', 'error');
     }
 }
 
 /* ===================================================
-   TELA DE TRANSFERÊNCIA DE ESTOQUE (MODO CIRÓGGICO)
+   TELA DE TRANSFERÃƒÆ’Ã…Â NCIA DE ESTOQUE (MODO CIRÃƒÆ’Ã¢â‚¬Å“GGICO)
    =================================================== */
 
 function normalizeLocal(local) {
@@ -6664,10 +6813,10 @@ function normalizeLocal(local) {
         .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase()
         .replace(/\s+/g, '_')
-        .replace('1º_ANDAR', 'PRIMEIRO_ANDAR')
-        .replace('1º_ANDAR', 'PRIMEIRO_ANDAR')
+        .replace('1Ãƒâ€šÃ‚Âº_ANDAR', 'PRIMEIRO_ANDAR')
+        .replace('1Ãƒâ€šÃ‚Âº_ANDAR', 'PRIMEIRO_ANDAR')
         .replace('1_ANDAR', 'PRIMEIRO_ANDAR');
-    // Normalizar variações de FULL ML
+    // Normalizar variaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de FULL ML
     if (norm === 'FULL_ML' || norm === 'FULLML' || norm === 'FULL_M_L') return 'FULL_ML';
     return norm;
 }
@@ -6675,9 +6824,9 @@ function normalizeLocal(local) {
 function prettyLocal(local) {
     const norm = normalizeLocal(local);
     const map = {
-        'TERREO': 'TÉRREO',
-        'MOSTRUARIO': 'MOSTRUÁRIO',
-        'PRIMEIRO_ANDAR': '1º ANDAR',
+        'TERREO': 'TÃƒÆ’Ã¢â‚¬Â°RREO',
+        'MOSTRUARIO': 'MOSTRUÃƒÆ’Ã‚ÂRIO',
+        'PRIMEIRO_ANDAR': '1Ãƒâ€šÃ‚Âº ANDAR',
         'DEFEITO': 'DEFEITO',
         'EM_GARANTIA': 'EM GARANTIA',
         'EM_TRANSPORTE': 'EM TRANSPORTE',
@@ -6691,7 +6840,7 @@ async function renderTransferenciaScreen() {
     if (!appData.transferItems) appData.transferItems = [];
 
     // TAREFA 1 & 2: Garantir produtos carregados (Sempre aguardar para garantir)
-    console.log('[INV-DIAG] Garantindo produtos carregados na Transferência...');
+    console.log('[INV-DIAG] Garantindo produtos carregados na TransferÃƒÆ’Ã‚Âªncia...');
     
     const needsLoadingUI = !appData.products || appData.products.length === 0;
     
@@ -6707,7 +6856,7 @@ async function renderTransferenciaScreen() {
     
     await ensureProdutosLoaded(true); // TAREFA 1: Garantir carregamento real
 
-    const locals = ['TÉRREO', 'MOSTRUÁRIO', '1º ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE', 'FULL ML'];
+    const locals = ['TÃƒÆ’Ã¢â‚¬Â°RREO', 'MOSTRUÃƒÆ’Ã‚ÂRIO', '1Ãƒâ€šÃ‚Âº ANDAR', 'DEFEITO', 'EM GARANTIA', 'EM TRANSPORTE', 'FULL ML'];
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in no-top-bar transfer-ops-screen">
@@ -6721,8 +6870,8 @@ async function renderTransferenciaScreen() {
                         <span class="material-symbols-rounded">sync_alt</span>
                     </div>
                     <div>
-                        <h1>TRANSFERÊNCIA</h1>
-                        <p>Movimentação de produtos entre locais do estoque.</p>
+                        <h1>TRANSFERÃƒÆ’Ã…Â NCIA</h1>
+                        <p>MovimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de produtos entre locais do estoque.</p>
                     </div>
                 </header>
 
@@ -6757,10 +6906,10 @@ async function renderTransferenciaScreen() {
                         <label for="trans-ean-input">Scanner / Bipagem</label>
                         <div class="transfer-scanner-input">
                             <span class="material-symbols-rounded">barcode_scanner</span>
-                            <input type="text" id="trans-ean-input" placeholder="BIPAR EAN OU CÓDIGO..." onkeypress="if(event.key === 'Enter') addTransferItem()">
+                            <input type="text" id="trans-ean-input" placeholder="BIPAR EAN OU CÃƒÆ’Ã¢â‚¬Å“DIGO..." onkeypress="if(event.key === 'Enter') addTransferItem()">
                             <span class="material-symbols-rounded transfer-scan-mark">barcode</span>
                         </div>
-                        <small>Use o leitor de código de barras para adicionar produtos.</small>
+                        <small>Use o leitor de cÃƒÆ’Ã‚Â³digo de barras para adicionar produtos.</small>
                     </article>
                 </section>
 
@@ -6768,7 +6917,7 @@ async function renderTransferenciaScreen() {
                     <article class="transfer-products-panel">
                         <div class="transfer-panel-head">
                             <div>
-                                <h2>PRODUTOS NA TRANSFERÊNCIA</h2>
+                                <h2>PRODUTOS NA TRANSFERÃƒÆ’Ã…Â NCIA</h2>
                                 <span id="transfer-items-badge">0 itens</span>
                             </div>
                             <button type="button" class="transfer-clear-btn" onclick="clearTransferItems()">
@@ -6779,9 +6928,9 @@ async function renderTransferenciaScreen() {
 
                         <div class="transfer-table-head">
                             <span>Produto</span>
-                            <span>Identificação</span>
+                            <span>IdentificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                             <span>Qtd.</span>
-                            <span>Ações</span>
+                            <span>AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                         </div>
 
                         <div id="transfer-items-list" class="transfer-items-list">
@@ -6792,7 +6941,7 @@ async function renderTransferenciaScreen() {
                     <aside class="transfer-summary-panel">
                         <div class="transfer-summary-title">
                             <span class="material-symbols-rounded">assignment</span>
-                            <h2>RESUMO DA TRANSFERÊNCIA</h2>
+                            <h2>RESUMO DA TRANSFERÃƒÆ’Ã…Â NCIA</h2>
                         </div>
 
                         <div class="transfer-route-summary">
@@ -6820,7 +6969,7 @@ async function renderTransferenciaScreen() {
                             </div>
                             <div>
                                 <span class="material-symbols-rounded">tag</span>
-                                <small>Códigos diferentes</small>
+                                <small>CÃƒÆ’Ã‚Â³digos diferentes</small>
                                 <strong id="transfer-summary-codes">0</strong>
                             </div>
                         </div>
@@ -6839,7 +6988,7 @@ async function renderTransferenciaScreen() {
                     </button>
                     <button type="button" id="btn-confirm-transfer" class="transfer-confirm-btn" onclick="confirmTransferencia()">
                         <span class="material-symbols-rounded">check_circle</span>
-                        Confirmar Transferência
+                        Confirmar TransferÃƒÆ’Ã‚Âªncia
                     </button>
                 </footer>
             </main>
@@ -6922,7 +7071,7 @@ async function addTransferItem() {
 
     const transferScanType = classifyProductInput(ean);
     if (transferScanType.type === 'invalid' || transferScanType.type === 'empty' || transferScanType.type === 'text') {
-        showScanFeedback('error', 'Código inválido');
+        showScanFeedback('error', 'CÃƒÆ’Ã‚Â³digo invÃƒÆ’Ã‚Â¡lido');
         eanInput.value = '';
         return;
     }
@@ -6939,9 +7088,9 @@ async function addTransferItem() {
     // TAREFA A: Buscar primeiro em appData.products
     let product = appData.products.find(p => p.ean == ean || p.id_interno == ean);
     
-    // TAREFA 3: Se não encontrar e cache estiver suspeito, tentar carregar uma vez
+    // TAREFA 3: Se nÃƒÆ’Ã‚Â£o encontrar e cache estiver suspeito, tentar carregar uma vez
     if (!product) {
-        console.log('[INV-DIAG] produto não no cache, tentando recarga forçada...');
+        console.log('[INV-DIAG] produto nÃƒÆ’Ã‚Â£o no cache, tentando recarga forÃƒÆ’Ã‚Â§ada...');
         await ensureProdutosLoaded(true);
         product = appData.products.find(p => p.ean == ean || p.id_interno == ean);
     }
@@ -6950,8 +7099,8 @@ async function addTransferItem() {
     console.log('[INV-DIAG] produto encontrado:', product);
 
     if (!product) {
-        showScanFeedback('warning', 'Produto não cadastrado');
-        showToast("Produto não encontrado!", "error");
+        showScanFeedback('warning', 'Produto nÃƒÆ’Ã‚Â£o cadastrado');
+        showToast("Produto nÃƒÆ’Ã‚Â£o encontrado!", "error");
         eanInput.value = '';
         return;
     }
@@ -6982,7 +7131,7 @@ async function addTransferItem() {
 
     const existing = appData.transferItems.find(i => i.id_interno === idInterno);
 
-    // LOGS OBRIGATÓRIOS
+    // LOGS OBRIGATÃƒÆ’Ã¢â‚¬Å“RIOS
     console.log('[TRANSF-DIAG] produto id_interno:', idInterno);
     console.log('[TRANSF-DIAG] origem selecionada:', origem);
     console.log('[TRANSF-DIAG] origem normalizada:', origemNorm);
@@ -7027,7 +7176,7 @@ function updateTransferenciaListUI() {
             <div class="transfer-empty-state">
                 <span class="material-symbols-rounded">barcode_scanner</span>
                 <strong>AGUARDANDO LEITURA</strong>
-                <small>Bipe produtos para adicioná-los à transferência.</small>
+                <small>Bipe produtos para adicionÃƒÆ’Ã‚Â¡-los ÃƒÆ’Ã‚Â  transferÃƒÆ’Ã‚Âªncia.</small>
             </div>
         `;
         updateTransferenciaSummaryUI();
@@ -7046,7 +7195,7 @@ function updateTransferenciaListUI() {
                 <div>
                     <strong>${escapeKitAttribute(details.name)}</strong>
                     <small>${escapeKitAttribute(details.brand)}</small>
-                    <em>ID: ${escapeKitAttribute(details.id)} <b>•</b> EAN: ${escapeKitAttribute(details.ean)}</em>
+                    <em>ID: ${escapeKitAttribute(details.id)} <b>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢</b> EAN: ${escapeKitAttribute(details.ean)}</em>
                 </div>
             </div>
 
@@ -7056,7 +7205,7 @@ function updateTransferenciaListUI() {
             </div>
 
             <div class="transfer-qty-control">
-                <button type="button" onclick="adjustTransferItemQty(${index}, -1)" aria-label="Reduzir quantidade">−</button>
+                <button type="button" onclick="adjustTransferItemQty(${index}, -1)" aria-label="Reduzir quantidade">ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢</button>
                 <span>${item.quantidade}</span>
                 <button type="button" onclick="adjustTransferItemQty(${index}, 1)" aria-label="Aumentar quantidade">+</button>
             </div>
@@ -7136,7 +7285,7 @@ async function confirmTransferencia() {
     confirmBtn.disabled = true;
     confirmBtn.innerText = "PROCESSANDO...";
     
-    showToast("Iniciando transferência...");
+    showToast("Iniciando transferÃƒÆ’Ã‚Âªncia...");
 
     try {
         const origemNorm = normalizeLocal(origem);
@@ -7149,34 +7298,34 @@ async function confirmTransferencia() {
             executionId: generateExecutionId()
         });
 
-        console.log('[TRANSF-DIAG] transferência RPC result:', result);
+        console.log('[TRANSF-DIAG] transferÃƒÆ’Ã‚Âªncia RPC result:', result);
 
-        showToast("Transferência realizada com sucesso!");
+        showToast("TransferÃƒÆ’Ã‚Âªncia realizada com sucesso!");
         appData.transferItems = [];
         await DataClient.loadModule('produtos', true);
         renderTransferenciaScreen();
 
     } catch (err) {
-        console.error('[TRANSF-DIAG] Erro fatal na transferência:', err);
+        console.error('[TRANSF-DIAG] Erro fatal na transferÃƒÆ’Ã‚Âªncia:', err);
         showToast("ERRO: " + (err.message || "Falha no servidor"), "error");
         
         await showAppAlert({
-            title: 'Falha na transferência',
+            title: 'Falha na transferÃƒÆ’Ã‚Âªncia',
             message: err.message || 'Falha no servidor',
-            detail: 'A operação foi enviada como transação única ao Supabase. Se falhou, nenhum débito/crédito parcial deve ter sido confirmado.',
+            detail: 'A operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o foi enviada como transaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Âºnica ao Supabase. Se falhou, nenhum dÃƒÆ’Ã‚Â©bito/crÃƒÆ’Ã‚Â©dito parcial deve ter sido confirmado.',
             buttonLabel: 'OK',
             danger: true,
             icon: 'error'
         });
     } finally {
         confirmBtn.disabled = false;
-        confirmBtn.innerText = "CONFIRMAR TRANSFERÊNCIA";
+        confirmBtn.innerText = "CONFIRMAR TRANSFERÃƒÆ’Ã…Â NCIA";
     }
 }
 
 
 /* ===================================================
-   LÓGICA DE INVENTÁRIO (SESSÃO E SCANNING)
+   LÃƒÆ’Ã¢â‚¬Å“GICA DE INVENTÃƒÆ’Ã‚ÂRIO (SESSÃƒÆ’Ã†â€™O E SCANNING)
    =================================================== */
 
 let isStartingInventory = false;
@@ -7193,9 +7342,9 @@ function renderInventarioParcialForm() {
     renderInventorySetup('parcial');
 }
 
-// ==== AJUSTE DE ESTOQUE (Módulo Movimentações) ====
-// Correção manual de saldo por produto e local.
-// NÃO cria inventário. Gera movimento tipo 'ajuste_estoque' e atualiza estoque_atual.
+// ==== AJUSTE DE ESTOQUE (MÃƒÆ’Ã‚Â³dulo MovimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes) ====
+// CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o manual de saldo por produto e local.
+// NÃƒÆ’Ã†â€™O cria inventÃƒÆ’Ã‚Â¡rio. Gera movimento tipo 'ajuste_estoque' e atualiza estoque_atual.
 let ajusteSelectedProduct = null;
 
 function renderAjusteEstoqueScreen() {
@@ -7220,7 +7369,7 @@ function renderAjusteEstoqueScreen() {
                     </div>
                     <div>
                         <h1>AJUSTE DE ESTOQUE</h1>
-                        <p>Correções manuais e sincronização de inventário.</p>
+                        <p>CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes manuais e sincronizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de inventÃƒÆ’Ã‚Â¡rio.</p>
                     </div>
                 </header>
 
@@ -7236,7 +7385,7 @@ function renderAjusteEstoqueScreen() {
                                 <input type="text" id="ajuste-search" placeholder="BIPAR EAN, SKU OU PRODUTO..." oninput="searchProductForAjuste()" autocomplete="off">
                                 <span class="material-symbols-rounded ajuste-keyboard-icon">keyboard</span>
                             </div>
-                            <small class="ajuste-scan-tip"><span class="material-symbols-rounded">info</span>Bipe ou digite o código do produto para iniciar.</small>
+                            <small class="ajuste-scan-tip"><span class="material-symbols-rounded">info</span>Bipe ou digite o cÃƒÆ’Ã‚Â³digo do produto para iniciar.</small>
                             <div id="ajuste-search-results" class="ajuste-search-results"></div>
 
                             <div class="ajuste-selected-label">Produto selecionado</div>
@@ -7246,7 +7395,7 @@ function renderAjusteEstoqueScreen() {
                                 </div>
                                 <div class="ajuste-product-main">
                                     <strong id="ajuste-selected-name">Nenhum produto selecionado</strong>
-                                    <small id="ajuste-selected-id">ID: - • EAN: - • SKU: -</small>
+                                    <small id="ajuste-selected-id">ID: - ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: - ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ SKU: -</small>
                                     <em id="ajuste-selected-stock">Selecione um produto para consultar saldo.</em>
                                     <span>Em estoque</span>
                                 </div>
@@ -7257,7 +7406,7 @@ function renderAjusteEstoqueScreen() {
                                     </div>
                                     <div>
                                         <span>Local</span>
-                                        <strong id="ajuste-selected-local">TÉRREO</strong>
+                                        <strong id="ajuste-selected-local">TÃƒÆ’Ã¢â‚¬Â°RREO</strong>
                                     </div>
                                 </div>
                             </article>
@@ -7274,9 +7423,9 @@ function renderAjusteEstoqueScreen() {
                                     <div class="ajuste-select-shell is-local">
                                         <span class="material-symbols-rounded">warehouse</span>
                                         <select id="ajuste-local" onchange="handleAjusteFieldChange(true)">
-                                            <option value="TÉRREO">TÉRREO</option>
-                                            <option value="MOSTRUÁRIO">MOSTRUÁRIO</option>
-                                            <option value="1º ANDAR">1º ANDAR</option>
+                                            <option value="TÃƒÆ’Ã¢â‚¬Â°RREO">TÃƒÆ’Ã¢â‚¬Â°RREO</option>
+                                            <option value="MOSTRUÃƒÆ’Ã‚ÂRIO">MOSTRUÃƒÆ’Ã‚ÂRIO</option>
+                                            <option value="1Ãƒâ€šÃ‚Âº ANDAR">1Ãƒâ€šÃ‚Âº ANDAR</option>
                                             <option value="DEFEITO">DEFEITO</option>
                                             <option value="EM_GARANTIA">EM GARANTIA</option>
                                             <option value="EM_TRANSPORTE">EM TRANSPORTE</option>
@@ -7299,7 +7448,7 @@ function renderAjusteEstoqueScreen() {
                                 <div class="ajuste-field">
                                     <label>Quantidade</label>
                                     <div class="ajuste-qty-control">
-                                        <button type="button" onclick="adjustAjusteQty(-1)">−</button>
+                                        <button type="button" onclick="adjustAjusteQty(-1)">ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢</button>
                                         <span id="ajuste-qty-display">0</span>
                                         <button type="button" onclick="adjustAjusteQty(1)">+</button>
                                     </div>
@@ -7311,12 +7460,12 @@ function renderAjusteEstoqueScreen() {
                                     <div class="ajuste-select-shell is-reason">
                                         <span class="material-symbols-rounded">chat</span>
                                         <select id="ajuste-motivo" onchange="updateAjusteSummaryUI()">
-                                            <option value="correcao_contagem">Correção de contagem</option>
+                                            <option value="correcao_contagem">CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de contagem</option>
                                             <option value="avaria">Avaria</option>
                                             <option value="perda">Perda</option>
-                                            <option value="devolucao">Devolução</option>
+                                            <option value="devolucao">DevoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</option>
                                             <option value="garantia">Garantia</option>
-                                            <option value="erro_lancamento">Erro de lançamento</option>
+                                            <option value="erro_lancamento">Erro de lanÃƒÆ’Ã‚Â§amento</option>
                                             <option value="outro">Outro</option>
                                         </select>
                                     </div>
@@ -7327,9 +7476,9 @@ function renderAjusteEstoqueScreen() {
                         <article class="ajuste-card">
                             <div class="ajuste-card-title is-note">
                                 <span>3</span>
-                                <h2>OBSERVAÇÃO <small>(OPCIONAL)</small></h2>
+                                <h2>OBSERVAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O <small>(OPCIONAL)</small></h2>
                             </div>
-                            <textarea id="ajuste-obs" class="ajuste-note" placeholder="Detalhes do ajuste, observações adicionais, motivo da correção..." autocomplete="off" oninput="updateAjusteSummaryUI()"></textarea>
+                            <textarea id="ajuste-obs" class="ajuste-note" placeholder="Detalhes do ajuste, observaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes adicionais, motivo da correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o..." autocomplete="off" oninput="updateAjusteSummaryUI()"></textarea>
                         </article>
                     </section>
 
@@ -7341,23 +7490,23 @@ function renderAjusteEstoqueScreen() {
                         <div class="ajuste-summary-product">
                             <div class="ajuste-summary-image"><span class="material-symbols-rounded">inventory_2</span></div>
                             <div>
-                                <strong id="ajuste-summary-product">Produto não selecionado</strong>
-                                <small id="ajuste-summary-id">ID: - • EAN: -</small>
+                                <strong id="ajuste-summary-product">Produto nÃƒÆ’Ã‚Â£o selecionado</strong>
+                                <small id="ajuste-summary-id">ID: - ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: -</small>
                             </div>
                         </div>
                         <div class="ajuste-summary-list">
-                            <div class="is-local"><span class="material-symbols-rounded">warehouse</span><small>Local do estoque</small><strong id="ajuste-summary-local">TÉRREO</strong></div>
+                            <div class="is-local"><span class="material-symbols-rounded">warehouse</span><small>Local do estoque</small><strong id="ajuste-summary-local">TÃƒÆ’Ã¢â‚¬Â°RREO</strong></div>
                             <div class="is-type"><span class="material-symbols-rounded">swap_vert</span><small>Tipo de ajuste</small><strong id="ajuste-summary-type">Definir quantidade</strong></div>
                             <div class="is-qty"><span class="material-symbols-rounded">calculate</span><small>Quantidade</small><strong id="ajuste-summary-qty">0 un</strong></div>
-                            <div class="is-reason"><span class="material-symbols-rounded">chat</span><small>Motivo</small><strong id="ajuste-summary-reason">Correção de contagem</strong></div>
+                            <div class="is-reason"><span class="material-symbols-rounded">chat</span><small>Motivo</small><strong id="ajuste-summary-reason">CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de contagem</strong></div>
                             <div><span class="material-symbols-rounded">schedule</span><small>Data e hora</small><strong id="ajuste-summary-date">${formatDateTimeBR(getDataHoraBrasil())}</strong></div>
-                            <div><span class="material-symbols-rounded">person</span><small>Usuário</small><strong>${escapeKitAttribute(currentUser || '-')}</strong></div>
+                            <div><span class="material-symbols-rounded">person</span><small>UsuÃƒÆ’Ã‚Â¡rio</small><strong>${escapeKitAttribute(currentUser || '-')}</strong></div>
                         </div>
                         <div class="ajuste-impact-card">
                             <span class="material-symbols-rounded">error</span>
                             <div>
                                 <strong>IMPACTO DO AJUSTE</strong>
-                                <p>A quantidade será definida exatamente para o valor informado acima.</p>
+                                <p>A quantidade serÃƒÆ’Ã‚Â¡ definida exatamente para o valor informado acima.</p>
                             </div>
                         </div>
                     </aside>
@@ -7393,9 +7542,9 @@ function updateAjusteSummaryUI() {
     const localSelect = document.getElementById('ajuste-local');
     const tipoSelect = document.getElementById('ajuste-tipo');
     const motivoSelect = document.getElementById('ajuste-motivo');
-    const localText = localSelect?.selectedOptions?.[0]?.textContent || localSelect?.value || 'TÉRREO';
+    const localText = localSelect?.selectedOptions?.[0]?.textContent || localSelect?.value || 'TÃƒÆ’Ã¢â‚¬Â°RREO';
     const tipoText = tipoSelect?.selectedOptions?.[0]?.textContent || 'Definir quantidade correta';
-    const motivoText = motivoSelect?.selectedOptions?.[0]?.textContent || 'Correção de contagem';
+    const motivoText = motivoSelect?.selectedOptions?.[0]?.textContent || 'CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de contagem';
     const setText = (id, value) => {
         const el = document.getElementById(id);
         if (el) el.textContent = value;
@@ -7410,7 +7559,7 @@ function updateAjusteSummaryUI() {
 
     if (ajusteSelectedProduct) {
         setText('ajuste-summary-product', getAjusteProductName(ajusteSelectedProduct));
-        setText('ajuste-summary-id', `ID: ${ajusteSelectedProduct.id_interno || '-'} • EAN: ${ajusteSelectedProduct.ean || '-'}`);
+        setText('ajuste-summary-id', `ID: ${ajusteSelectedProduct.id_interno || '-'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: ${ajusteSelectedProduct.ean || '-'}`);
     }
 }
 
@@ -7451,7 +7600,7 @@ function searchProductForAjuste() {
             <span class="ajuste-search-fallback material-symbols-rounded" style="${getAjusteProductImage(p) ? 'display:none' : ''}">inventory_2</span>
             <div>
                 <strong>${escapeKitAttribute(getAjusteProductName(p))}</strong>
-                <small>ID: ${escapeKitAttribute(p.id_interno || '-')} • EAN: ${escapeKitAttribute(p.ean || 'N/A')} • SKU: ${escapeKitAttribute(p.sku_fornecedor || p.sku || '-')}</small>
+                <small>ID: ${escapeKitAttribute(p.id_interno || '-')} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: ${escapeKitAttribute(p.ean || 'N/A')} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ SKU: ${escapeKitAttribute(p.sku_fornecedor || p.sku || '-')}</small>
             </div>
         </div>
     `).join('');
@@ -7471,7 +7620,7 @@ async function selectProductForAjuste(id) {
     if (infoDiv) {
         infoDiv.classList.add('selected');
         document.getElementById('ajuste-selected-name').textContent = getAjusteProductName(ajusteSelectedProduct);
-        document.getElementById('ajuste-selected-id').textContent = `ID: ${ajusteSelectedProduct.id_interno || '-'} • EAN: ${ajusteSelectedProduct.ean || 'N/A'} • SKU: ${ajusteSelectedProduct.sku_fornecedor || ajusteSelectedProduct.sku || '-'}`;
+        document.getElementById('ajuste-selected-id').textContent = `ID: ${ajusteSelectedProduct.id_interno || '-'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: ${ajusteSelectedProduct.ean || 'N/A'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ SKU: ${ajusteSelectedProduct.sku_fornecedor || ajusteSelectedProduct.sku || '-'}`;
         const imageBox = infoDiv.querySelector('.ajuste-product-image');
         const imageUrl = getAjusteProductImage(ajusteSelectedProduct);
         if (imageBox) {
@@ -7494,7 +7643,7 @@ async function selectProductForAjuste(id) {
 async function updateAjusteStockInfo() {
     if (!ajusteSelectedProduct) return;
 
-    const localRaw = document.getElementById('ajuste-local')?.value || 'TÉRREO';
+    const localRaw = document.getElementById('ajuste-local')?.value || 'TÃƒÆ’Ã¢â‚¬Â°RREO';
     const stockDiv = document.getElementById('ajuste-selected-stock');
     if (!stockDiv) return;
 
@@ -7525,7 +7674,7 @@ async function saveAjusteEstoque() {
             return;
         }
 
-        const localRaw = document.getElementById('ajuste-local')?.value || 'TÉRREO';
+        const localRaw = document.getElementById('ajuste-local')?.value || 'TÃƒÆ’Ã¢â‚¬Â°RREO';
         const tipoAjuste = document.getElementById('ajuste-tipo')?.value || 'definir';
         const qtyRaw = document.getElementById('ajuste-qty')?.value;
         const motivo = document.getElementById('ajuste-motivo')?.value || 'outro';
@@ -7533,7 +7682,7 @@ async function saveAjusteEstoque() {
 
         const qty = parseFloat(qtyRaw);
         if (isNaN(qty) || qty < 0) {
-            showToast('Quantidade inválida. Digite um número >= 0.', 'error');
+            showToast('Quantidade invÃƒÆ’Ã‚Â¡lida. Digite um nÃƒÆ’Ã‚Âºmero >= 0.', 'error');
             isFinalizing = false;
             return;
         }
@@ -7564,20 +7713,20 @@ async function saveAjusteEstoque() {
         if (novoSaldo < 0) {
             const config = typeof getAppConfig === 'function' ? getAppConfig() : {};
             if (!config.permitir_saida_estoque_zero) {
-                showToast('Estoque ficaria negativo. Habilite "Permitir saída com estoque zerado" nas Configurações.', 'error');
+                showToast('Estoque ficaria negativo. Habilite "Permitir saÃƒÆ’Ã‚Â­da com estoque zerado" nas ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes.', 'error');
                 isFinalizing = false;
                 return;
             }
         }
 
-        // Montar descrição do motivo
+        // Montar descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do motivo
         const motivoLabels = {
-            'correcao_contagem': 'Correção de contagem',
+            'correcao_contagem': 'CorreÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de contagem',
             'avaria': 'Avaria',
             'perda': 'Perda',
-            'devolucao': 'Devolução',
+            'devolucao': 'DevoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
             'garantia': 'Garantia',
-            'erro_lancamento': 'Erro de lançamento',
+            'erro_lancamento': 'Erro de lanÃƒÆ’Ã‚Â§amento',
             'outro': 'Outro'
         };
         const motivoLabel = motivoLabels[motivo] || motivo;
@@ -7643,7 +7792,7 @@ async function saveAjusteEstoque() {
 
             setTimeout(() => renderMovimentacoesSubMenu(), 1200);
         } else {
-            showToast('Movimento salvo, mas estoque NÃO foi atualizado.', 'error');
+            showToast('Movimento salvo, mas estoque NÃƒÆ’Ã†â€™O foi atualizado.', 'error');
         }
     } catch (e) {
         console.error('[AJUSTE] Erro fatal:', e);
@@ -7662,25 +7811,25 @@ async function renderInventorySetup(type) {
             ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
             <div id="inventory-setup-content" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 80px);">
                 <div class="loading-spinner"></div>
-                <p style="color: #aaa; margin-top: 15px;">Validando sessões no servidor...</p>
+                <p style="color: #aaa; margin-top: 15px;">Validando sessÃƒÆ’Ã‚Âµes no servidor...</p>
             </div>
         </div>
     `;
 
     try {
-        // TAREFA 1 - Logs de diagnóstico
+        // TAREFA 1 - Logs de diagnÃƒÆ’Ã‚Â³stico
         console.log('[INV-DIAG] Entrando em setup para:', type);
         console.log('[INV-DIAG] Produtos em cache:', appData.products?.length || 0);
-        console.log('[INV-DIAG] Inventários no histórico local:', appData.inventario?.length || 0);
+        console.log('[INV-DIAG] InventÃƒÆ’Ã‚Â¡rios no histÃƒÆ’Ã‚Â³rico local:', appData.inventario?.length || 0);
 
-        // 1. Validar/Limpar sessões fantasmas locais
+        // 1. Validar/Limpar sessÃƒÆ’Ã‚Âµes fantasmas locais
         checkGhostInventorySession();
 
-        // 2. Carregar inventários frescos do servidor
+        // 2. Carregar inventÃƒÆ’Ã‚Â¡rios frescos do servidor
         const data = await DataClient.loadModule('inventarios', true);
         if (data && data.inventario) {
             appData.inventario = data.inventario;
-            console.log('[INV-DIAG] Inventários carregados do Supabase:', appData.inventario.length);
+            console.log('[INV-DIAG] InventÃƒÆ’Ã‚Â¡rios carregados do Supabase:', appData.inventario.length);
         }
 
         const openSameType = getOpenInventorySessions(type);
@@ -7692,7 +7841,7 @@ async function renderInventorySetup(type) {
         content.innerHTML = renderInventoryStartCard(type);
     } catch (e) {
         console.error(e);
-        showToast("Erro de conexão", 'error');
+        showToast("Erro de conexÃƒÆ’Ã‚Â£o", 'error');
         renderInventarioSubMenu();
     }
 }
@@ -7718,7 +7867,7 @@ function buildInventoryItemFromRow(row) {
         valor_diferenca: diferenca * costInfo.value,
         sem_preco_custo: !costInfo.hasCost,
         ean: product?.ean || row.ean || row.id_interno,
-        name: product?.descricao_completa || product?.nome || row.name || `PRODUTO ID: ${row.id_interno} (NÃO CARREGADO)`,
+        name: product?.descricao_completa || product?.nome || row.name || `PRODUTO ID: ${row.id_interno} (NÃƒÆ’Ã†â€™O CARREGADO)`,
         brand: product?.marca || row.brand || '',
         local: row.local || '',
         db_ids: row.id ? [row.id] : (Array.isArray(row.db_ids) ? row.db_ids : [])
@@ -8064,8 +8213,8 @@ function renderInventoryStartCard(type) {
     const typeLabel = getInventoryTypeLabel(type);
     const copy = getInventorySetupCopy(typeLabel);
     const locais = [
-        { value: 'TÉRREO', label: 'TERREO', icon: 'apartment' },
-        { value: 'MOSTRUÁRIO', label: 'MOSTRUARIO', icon: 'storefront' },
+        { value: 'TÃƒÆ’Ã¢â‚¬Â°RREO', label: 'TERREO', icon: 'apartment' },
+        { value: 'MOSTRUÃƒÆ’Ã‚ÂRIO', label: 'MOSTRUARIO', icon: 'storefront' },
         { value: '1 ANDAR', label: '1 ANDAR', icon: 'layers' },
         { value: 'FULL_ML', label: 'FULL ML', icon: 'warehouse' },
         { value: 'EM_TRANSPORTE', label: 'EM TRANSPORTE', icon: 'local_shipping' }
@@ -8115,7 +8264,7 @@ function renderInventoryStartCard(type) {
 }
 async function createNewInventorySession(type) {
     if (isStartingInventory) return;
-    const localRaw = document.getElementById('setup-local')?.value || 'TÉRREO';
+    const localRaw = document.getElementById('setup-local')?.value || 'TÃƒÆ’Ã¢â‚¬Â°RREO';
     const local = normalizeLocal(localRaw);
     const currentUser = localStorage.getItem('currentUser');
     isStartingInventory = true;
@@ -8139,7 +8288,7 @@ async function createNewInventorySession(type) {
         const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
         const prefix = type === 'inicial' ? 'INI' : (type === 'geral' ? 'GER' : 'PAR');
         
-        // TAREFA 4 - Numeração inteligente baseada no maior ID do dia
+        // TAREFA 4 - NumeraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o inteligente baseada no maior ID do dia
         const sameDayPrefix = `INV-${prefix}-${dateStr}-`;
         const sameDayInventories = (appData.inventario || []).filter(inv => {
             const id = (inv.inventario_id || inv.col_a || '').toString();
@@ -8159,7 +8308,7 @@ async function createNewInventorySession(type) {
         const seq = String(nextSeq).padStart(3, '0');
         const sessionId = `INV-${prefix}-${dateStr}-${seq}`;
         
-        console.log('[INV-DIAG] Criando nova sessão:', sessionId);
+        console.log('[INV-DIAG] Criando nova sessÃƒÆ’Ã‚Â£o:', sessionId);
         console.log('[INV-DIAG] Maior seq encontrado hoje:', nextSeq - 1);
 
         appData.currentInventory = {
@@ -8177,7 +8326,7 @@ async function createNewInventorySession(type) {
         if (!client) {
             await showAppAlert({
                 title: 'Erro',
-                message: 'Supabase não conectado',
+                message: 'Supabase nÃƒÆ’Ã‚Â£o conectado',
                 buttonLabel: 'OK',
                 danger: true,
                 icon: 'error'
@@ -8191,7 +8340,7 @@ async function createNewInventorySession(type) {
         await renderInventarioInicialScreen(sessionId);
     } catch (e) {
         console.error("Erro no catch createNewInventorySession:", e);
-        showToast("Erro ao iniciar sessão", 'error');
+        showToast("Erro ao iniciar sessÃƒÆ’Ã‚Â£o", 'error');
     } finally {
         isStartingInventory = false;
     }
@@ -8204,7 +8353,7 @@ async function resumeInventorySession(sessionId, type, mode = 'edit') {
         const client = window.supabaseClient;
         if (!client) { showToast("Supabase nao disponivel", 'error'); return; }
 
-        // TAREFA 3 - Buscar cabeçalho (Header)
+        // TAREFA 3 - Buscar cabeÃƒÆ’Ã‚Â§alho (Header)
         const { data: invData, error: headerErr } = await client
             .from('inventarios')
             .select('*')
@@ -8213,13 +8362,13 @@ async function resumeInventorySession(sessionId, type, mode = 'edit') {
 
         if (headerErr) {
             console.error('[INV-DIAG] erro header:', headerErr);
-            showToast('Erro ao carregar cabeçalho');
+            showToast('Erro ao carregar cabeÃƒÆ’Ã‚Â§alho');
             return;
         }
 
         if (!invData) {
-            console.error('[INV-DIAG] inventário não encontrado no banco:', sessionId);
-            showToast('Sessao não encontrada no servidor');
+            console.error('[INV-DIAG] inventÃƒÆ’Ã‚Â¡rio nÃƒÆ’Ã‚Â£o encontrado no banco:', sessionId);
+            showToast('Sessao nÃƒÆ’Ã‚Â£o encontrada no servidor');
             return;
         }
 
@@ -8251,7 +8400,7 @@ async function resumeInventorySession(sessionId, type, mode = 'edit') {
             user: startedBy,
             date: invData.data_inicio || getDataHoraBrasil(),
             data_fim: invData.data_fim || invData.finalizado_em || null,
-            local: invData.local || 'TÉRREO',
+            local: invData.local || 'TÃƒÆ’Ã¢â‚¬Â°RREO',
             type: invData.tipo || type,
             status: invData.status || 'ABERTO',
             mode: renderMode,
@@ -8262,12 +8411,12 @@ async function resumeInventorySession(sessionId, type, mode = 'edit') {
 
         appData.currentInventory.items = groupInventoryItemsByProduct(itens || []);
 
-        console.log('[INV-DIAG] currentInventory.items após map:', appData.currentInventory.items.length);
+        console.log('[INV-DIAG] currentInventory.items apÃƒÆ’Ã‚Â³s map:', appData.currentInventory.items.length);
 
         await renderInventarioInicialScreen(sessionId, renderMode);
     } catch (e) {
-        console.error('[INV-DIAG] Erro crítico ao retomar:', e);
-        showToast("Erro técnico ao retomar", 'error');
+        console.error('[INV-DIAG] Erro crÃƒÆ’Ã‚Â­tico ao retomar:', e);
+        showToast("Erro tÃƒÆ’Ã‚Â©cnico ao retomar", 'error');
     }
 }
 async function confirmCancelInventory(sessionId) {
@@ -8323,19 +8472,19 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
     const isInitialType = isInitialInventoryType(inv.tipo || inv.type);
 
     // TAREFA 3 - Corrigir loading "Sincronizando Produtos"
-    // Só mostrar tela de sincronização se appData.products estiver realmente vazio
+    // SÃƒÆ’Ã‚Â³ mostrar tela de sincronizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o se appData.products estiver realmente vazio
     if (!appData.products || appData.products.length === 0) {
         console.log('[INV-DIAG] Cache de produtos vazio, carregando antes de renderizar...');
         app.innerHTML = `
             <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;">
                 <div style="font-size: 3rem; margin-bottom: 20px; animation: pulse 1.5s infinite;">...</div>
                 <div style="font-weight: 800; font-size: 1.2rem;">Sincronizando Produtos...</div>
-                <div style="color: #777; font-size: 0.9rem; margin-top: 8px;">Isso levará apenas alguns segundos.</div>
+                <div style="color: #777; font-size: 0.9rem; margin-top: 8px;">Isso levarÃƒÆ’Ã‚Â¡ apenas alguns segundos.</div>
             </div>
         `;
         await ensureProdutosLoaded(true);
     } else {
-        // Se já existem produtos, garante carregamento em background se for necessário, sem bloquear ou piscar tela
+        // Se jÃƒÆ’Ã‚Â¡ existem produtos, garante carregamento em background se for necessÃƒÆ’Ã‚Â¡rio, sem bloquear ou piscar tela
         ensureProdutosLoaded(); 
     }
 
@@ -8388,7 +8537,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
                             style="width: 100%; padding: 18px 60px; border-radius: 14px; border: 2px solid #333; background: #111; color: white; font-size: 1.1rem; text-align: left; transition: all 0.2s;"
                             onkeypress="if(event.key === 'Enter') addInventoryItem()"
                         >
-                        <button class="inv-cam-btn" ${isView ? 'disabled' : ''} onclick="${isView ? '' : `startScanner(false, false, true)`}" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; cursor: ${isView ? 'not-allowed' : 'pointer'}; transition: all 0.2s; opacity: ${isView ? '0.45' : '1'};" title="Abrir leitor de código">
+                        <button class="inv-cam-btn" ${isView ? 'disabled' : ''} onclick="${isView ? '' : `startScanner(false, false, true)`}" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; cursor: ${isView ? 'not-allowed' : 'pointer'}; transition: all 0.2s; opacity: ${isView ? '0.45' : '1'};" title="Abrir leitor de cÃƒÆ’Ã‚Â³digo">
                             <span class="material-symbols-rounded">qr_code_scanner</span>
                         </button>
                     </div>
@@ -8421,7 +8570,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
                                     ${inv.status === 'FECHADO' ? `
                                         <button onclick="cancelClosedInventory('${inv.id}')" class="inv-btn-cancel">ANULAR</button>
                                     ` : `
-                                        <button disabled class="inv-btn-status">SESSÃO ${inv.status}</button>
+                                        <button disabled class="inv-btn-status">SESSÃƒÆ’Ã†â€™O ${inv.status}</button>
                                     `}
                                 </div>
                             </div>
@@ -8458,7 +8607,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
 async function gerarPdfPreInventario() {
     const inv = appData.currentInventory;
     if (!inv || !inv.items || inv.items.length === 0) {
-        showToast("Nenhum item bipado para gerar o relatório.", "warning");
+        showToast("Nenhum item bipado para gerar o relatÃƒÆ’Ã‚Â³rio.", "warning");
         return;
     }
 
@@ -8471,8 +8620,8 @@ async function gerarPdfPreInventario() {
         const fileNameDate = getDataBrasilISO(now) + '_' + now.getHours().toString().padStart(2, '0') + '-' + now.getMinutes().toString().padStart(2, '0');
         const status = String(inv.status || 'ABERTO').toUpperCase();
         const isClosed = ['FECHADO', 'FINALIZADO', 'FINALIZADA'].includes(status);
-        const title = isClosed ? 'Relatório Final de Inventário' : 'Relatório Parcial de Inventário';
-        const currentUser = inv.user || localStorage.getItem('currentUser') || 'Não identificado';
+        const title = isClosed ? 'RelatÃƒÆ’Ã‚Â³rio Final de InventÃƒÆ’Ã‚Â¡rio' : 'RelatÃƒÆ’Ã‚Â³rio Parcial de InventÃƒÆ’Ã‚Â¡rio';
+        const currentUser = inv.user || localStorage.getItem('currentUser') || 'NÃƒÆ’Ã‚Â£o identificado';
         const formatPdfDate = (value) => formatDateTimeBR(value);
         const groupedItems = groupInventoryItemsByProduct(inv.items);
 
@@ -8500,11 +8649,11 @@ async function gerarPdfPreInventario() {
         doc.text(title, 105, 15, { align: 'center' });
         
         doc.setFontSize(10);
-        doc.text(`ID Inventário: ${inv.id}`, 14, 25);
+        doc.text(`ID InventÃƒÆ’Ã‚Â¡rio: ${inv.id}`, 14, 25);
         doc.text(`Status: ${status}`, 14, 30);
         doc.text(`Data de abertura: ${formatPdfDate(inv.date || inv.data_inicio)}`, 14, 35);
         doc.text(`Data de fechamento: ${formatPdfDate(inv.data_fim || inv.finalizado_em)}`, 14, 40);
-        doc.text(`Responsável: ${currentUser}`, 14, 45);
+        doc.text(`ResponsÃƒÆ’Ã‚Â¡vel: ${currentUser}`, 14, 45);
         doc.text(`Local: ${inv.local || '-'}`, 14, 50);
         doc.text(`Gerado em: ${timestamp}`, 14, 55);
         doc.text(`Ajuste positivo: ${formatCurrency(inv.valor_ajuste_positivo)}`, 14, 60);
@@ -8537,7 +8686,7 @@ async function gerarPdfPreInventario() {
             body: tableData,
             theme: 'grid',
             styles: { fontSize: 6.6, cellPadding: 1.2, overflow: 'linebreak' },
-            headStyles: { fillColor: [227, 6, 19], fontSize: 7, cellPadding: 1.4 }, // Cor primária do app #E30613
+            headStyles: { fillColor: [227, 6, 19], fontSize: 7, cellPadding: 1.4 }, // Cor primÃƒÆ’Ã‚Â¡ria do app #E30613
             columnStyles: {
                 0: { cellWidth: 26 },
                 1: { cellWidth: 76 },
@@ -8576,7 +8725,7 @@ async function updateInventoryItemsList() {
 
     const items = appData.currentInventory?.items || [];
 
-    // Atualizar contador de itens bipados no rodapé
+    // Atualizar contador de itens bipados no rodapÃƒÆ’Ã‚Â©
     const totalCountEl = document.getElementById('inv-total-count');
     if (totalCountEl) totalCountEl.textContent = items.length;
 
@@ -8610,7 +8759,7 @@ async function updateInventoryItemsList() {
         item.valor_diferenca = Number(item.diferenca || 0) * costInfo.value;
         item.sem_preco_custo = !costInfo.hasCost;
         const costWarning = item.sem_preco_custo
-            ? `<span class="inv-cost-warning"><span class="material-symbols-rounded">info</span>Produto sem preço de custo cadastrado</span>`
+            ? `<span class="inv-cost-warning"><span class="material-symbols-rounded">info</span>Produto sem preÃƒÆ’Ã‚Â§o de custo cadastrado</span>`
             : `<span class="inv-cost-readonly"><span class="material-symbols-rounded">lock</span>Custo ${formatPrice(item.valor_unitario)}</span>`;
 
         return `
@@ -8619,7 +8768,7 @@ async function updateInventoryItemsList() {
             <div class="inv-item-thumb">
                 ${productImg ? `<img src="${productImg}" alt="">` : `<span class="material-symbols-rounded">inventory_2</span>`}
             </div>
-            <!-- ESQUERDA: Informações -->
+            <!-- ESQUERDA: InformaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes -->
             <div class="inv-col-info">
                 <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">tag</span><span class="inv-info-label">ID</span><span class="inv-info-val">${item.id_interno}</span></div>
                 <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">inventory_2</span><span class="inv-info-label">SKU</span><span class="inv-info-val">${sku}</span></div>
@@ -8687,12 +8836,12 @@ if (typeof window !== 'undefined') {
 
 async function handleInventoryCamera(input) {
     if (!input.files || !input.files[0]) return;
-    showToast("Captura de câmera detectada. Processando...", "info");
+    showToast("Captura de cÃƒÆ’Ã‚Â¢mera detectada. Processando...", "info");
     
-    // Simulação de processamento de imagem/barcode
+    // SimulaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de processamento de imagem/barcode
     // No futuro, aqui integraria com uma lib de OCR ou Barcode reader
     setTimeout(() => {
-        showToast("Leitura via câmera em fase de implementação técnica.", "warning");
+        showToast("Leitura via cÃƒÆ’Ã‚Â¢mera em fase de implementaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o tÃƒÆ’Ã‚Â©cnica.", "warning");
         input.value = ""; // Limpa input de arquivo
     }, 1500);
 }
@@ -8709,7 +8858,7 @@ async function addInventoryItem(scannedEan = null) {
 
     const inventoryScanType = classifyProductInput(ean);
     if (inventoryScanType.type === 'invalid' || inventoryScanType.type === 'empty' || inventoryScanType.type === 'text') {
-        showScanFeedback('error', 'Código inválido');
+        showScanFeedback('error', 'CÃƒÆ’Ã‚Â³digo invÃƒÆ’Ã‚Â¡lido');
         if(eanInput) eanInput.value = '';
         if(eanInput) eanInput.focus();
         return;
@@ -8728,22 +8877,22 @@ async function addInventoryItem(scannedEan = null) {
 
     let product = appData.products.find(p => (p.ean?.toString() === ean) || (p.id_interno?.toString() === ean) || (p.sku_fornecedor?.toString() === ean));
 
-    console.log('[INV-DIAG] produto encontrado:', product ? `${product.id_interno} - ${product.descricao_completa}` : 'NÃO');
+    console.log('[INV-DIAG] produto encontrado:', product ? `${product.id_interno} - ${product.descricao_completa}` : 'NÃƒÆ’Ã†â€™O');
 
     if (!product) {
-        console.log(`[INV-DIAG] Produto ${ean} não encontrado no cache. Tentando recarregar banco...`);
+        console.log(`[INV-DIAG] Produto ${ean} nÃƒÆ’Ã‚Â£o encontrado no cache. Tentando recarregar banco...`);
         await ensureProdutosLoaded(true);
         product = appData.products.find(p => (p.ean?.toString() === ean) || (p.id_interno?.toString() === ean) || (p.sku_fornecedor?.toString() === ean));
     }
 
     if (!product) { 
-        console.warn('[INV-DIAG] Produto não encontrado em definitivo:', ean);
+        console.warn('[INV-DIAG] Produto nÃƒÆ’Ã‚Â£o encontrado em definitivo:', ean);
         showScanFeedback('warning', 'Produto sem cadastro');
-        showToast("PRODUTO NÃO ENCONTRADO!", "error");
+        showToast("PRODUTO NÃƒÆ’Ã†â€™O ENCONTRADO!", "error");
         await showAppAlert({
-            title: 'Produto não encontrado',
-            message: 'Este código não está cadastrado no banco de produtos.',
-            detail: `Código lido: ${ean}`,
+            title: 'Produto nÃƒÆ’Ã‚Â£o encontrado',
+            message: 'Este cÃƒÆ’Ã‚Â³digo nÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ cadastrado no banco de produtos.',
+            detail: `CÃƒÆ’Ã‚Â³digo lido: ${ean}`,
             buttonLabel: 'Entendi',
             danger: true,
             icon: 'barcode_off'
@@ -8817,8 +8966,8 @@ async function addInventoryItem(scannedEan = null) {
         updateInventoryItemsList();
         await showAppAlert({
             title: 'Erro ao incluir produto',
-            message: 'O item foi lido, mas não foi confirmado no inventário.',
-            detail: 'Verifique sua conexão e tente bipar novamente.',
+            message: 'O item foi lido, mas nÃƒÆ’Ã‚Â£o foi confirmado no inventÃƒÆ’Ã‚Â¡rio.',
+            detail: 'Verifique sua conexÃƒÆ’Ã‚Â£o e tente bipar novamente.',
             buttonLabel: 'OK',
             danger: true,
             icon: 'error'
@@ -8835,20 +8984,20 @@ async function saveInventoryItemToServer(item) {
 
     const client = window.supabaseClient;
     if (!client) {
-        console.error('[INV-DIAG] Supabase client não encontrado');
-        showToast('Supabase não disponível. Item não incluído.', 'error');
+        console.error('[INV-DIAG] Supabase client nÃƒÆ’Ã‚Â£o encontrado');
+        showToast('Supabase nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel. Item nÃƒÆ’Ã‚Â£o incluÃƒÆ’Ã‚Â­do.', 'error');
         return false;
     }
     const inv = appData.currentInventory;
     if (!inv || !inv.id) {
-        console.error('[INV-DIAG] Sessao de inventário inválida');
-        showToast('Sessão de inventário inválida. Item não incluído.', 'error');
+        console.error('[INV-DIAG] Sessao de inventÃƒÆ’Ã‚Â¡rio invÃƒÆ’Ã‚Â¡lida');
+        showToast('SessÃƒÆ’Ã‚Â£o de inventÃƒÆ’Ã‚Â¡rio invÃƒÆ’Ã‚Â¡lida. Item nÃƒÆ’Ã‚Â£o incluÃƒÆ’Ã‚Â­do.', 'error');
         return false;
     }
     const auditUser = getInventoryAuditUser();
 
     if (inv.isNewSession) {
-        console.log('[INVENTARIO DEBUG] primeiro item bipado, criando inventário');
+        console.log('[INVENTARIO DEBUG] primeiro item bipado, criando inventÃƒÆ’Ã‚Â¡rio');
         const payload = {
             inventario_id: inv.id,
             tipo: inv.type,
@@ -8860,8 +9009,8 @@ async function saveInventoryItemToServer(item) {
         };
         const { error } = await client.from('inventarios').insert([payload]);
         if (error) {
-            console.error('[INVENTARIO DEBUG] Erro ao criar inventário no Supabase:', error);
-            showToast('Erro ao criar sessão de inventário.', 'error');
+            console.error('[INVENTARIO DEBUG] Erro ao criar inventÃƒÆ’Ã‚Â¡rio no Supabase:', error);
+            showToast('Erro ao criar sessÃƒÆ’Ã‚Â£o de inventÃƒÆ’Ã‚Â¡rio.', 'error');
             return false;
         }
         inv.isNewSession = false;
@@ -8883,7 +9032,7 @@ async function saveInventoryItemToServer(item) {
     item.valor_diferenca = diferenca * valor_unitario;
     item.sem_preco_custo = !costInfo.hasCost;
     if (!costInfo.hasCost) {
-        showToast('Produto sem preço de custo cadastrado', 'warning');
+        showToast('Produto sem preÃƒÆ’Ã‚Â§o de custo cadastrado', 'warning');
     }
 
     const payload = {
@@ -8903,7 +9052,7 @@ async function saveInventoryItemToServer(item) {
     console.log('[INV-DIAG] payload inventarios_itens:', payload);
 
     try {
-        // Lógica segura por inventario_id + id_interno.
+        // LÃƒÆ’Ã‚Â³gica segura por inventario_id + id_interno.
         // SELECT em lista evita que duplicados antigos quebrem a consulta.
         const { data: existingRows, error: selectErr } = await client
             .from('inventarios_itens')
@@ -8911,11 +9060,11 @@ async function saveInventoryItemToServer(item) {
             .eq('inventario_id', inv.id)
             .eq('id_interno', item.id_interno);
 
-        if (selectErr) console.error('[INV-DIAG] erro ao verificar existência:', selectErr);
+        if (selectErr) console.error('[INV-DIAG] erro ao verificar existÃƒÆ’Ã‚Âªncia:', selectErr);
 
         let result;
         if ((existingRows || []).length > 0) {
-            console.log('[INV-DIAG] item já existe, executando UPDATE por chave inventario_id + id_interno...');
+            console.log('[INV-DIAG] item jÃƒÆ’Ã‚Â¡ existe, executando UPDATE por chave inventario_id + id_interno...');
             result = await client
                 .from('inventarios_itens')
                 .update(payload)
@@ -8944,22 +9093,22 @@ async function saveInventoryItemToServer(item) {
             showToast("Erro ao salvar: " + result.error.message, "error");
             return false;
         } else {
-            console.log('[INV-DIAG] Persistência OK. Iniciando confirmação imediata...');
+            console.log('[INV-DIAG] PersistÃƒÆ’Ã‚Âªncia OK. Iniciando confirmaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o imediata...');
             
-            // TAREFA 1 e 2 - Query de confirmação imediata
+            // TAREFA 1 e 2 - Query de confirmaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o imediata
             const { data: check, error: checkError } = await client
                 .from('inventarios_itens')
                 .select('*')
                 .eq('inventario_id', inv.id)
                 .eq('id_interno', item.id_interno);
 
-            console.log('[INV-DIAG] confirmação inventarios_itens:', check, checkError);
+            console.log('[INV-DIAG] confirmaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o inventarios_itens:', check, checkError);
 
             if (!check || check.length === 0) {
-                console.error('[INV-DIAG] FALHA CRÁGICA: Item não encontrado após salvamento!');
-                showToast("Item NÃO foi salvo no banco!", "error");
-                // TAREFA 5 - Bloqueio se não salvar
-                throw new Error("Persistência falhou");
+                console.error('[INV-DIAG] FALHA CRÃƒÆ’Ã‚ÂGICA: Item nÃƒÆ’Ã‚Â£o encontrado apÃƒÆ’Ã‚Â³s salvamento!');
+                showToast("Item NÃƒÆ’Ã†â€™O foi salvo no banco!", "error");
+                // TAREFA 5 - Bloqueio se nÃƒÆ’Ã‚Â£o salvar
+                throw new Error("PersistÃƒÆ’Ã‚Âªncia falhou");
             } else {
                 item.db_ids = (check || []).map(row => row.id).filter(Boolean);
                 const savedRow = check?.[0] || payload;
@@ -8967,13 +9116,13 @@ async function saveInventoryItemToServer(item) {
                 item.valor_diferenca = parseInventoryMoney(savedRow.valor_diferenca);
                 item.diferenca = Number(savedRow.diferenca ?? item.diferenca ?? 0);
                 item.sem_preco_custo = item.valor_unitario <= 0;
-                console.log('[INV-DIAG] Confirmação FINALIZADA COM SUCESSO.');
+                console.log('[INV-DIAG] ConfirmaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o FINALIZADA COM SUCESSO.');
                 return true;
             }
         }
     } catch (e) {
         console.error('[INV-DIAG] Erro inesperado ao salvar item:', e);
-        showToast('Erro ao incluir produto no inventário.', 'error');
+        showToast('Erro ao incluir produto no inventÃƒÆ’Ã‚Â¡rio.', 'error');
         return false;
     }
 }
@@ -9058,16 +9207,16 @@ async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoF
 window.finishInventorySession = async function () {
     if (isFinalizing) return;
     if (!isCurrentInventoryEditable()) { showToast("Apenas quem iniciou a sessao pode finalizar.", "error"); return; }
-    if (!appData.currentInventory?.items?.length) { showToast("Não é possível fechar um inventário vazio!", "error"); return; }
+    if (!appData.currentInventory?.items?.length) { showToast("NÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© possÃƒÆ’Ã‚Â­vel fechar um inventÃƒÆ’Ã‚Â¡rio vazio!", "error"); return; }
 
     const totalProdutos = appData.currentInventory.items.length;
     const totalUnidades = appData.currentInventory.items.reduce((acc, item) => acc + Number(item.qty || item.saldo_fisico || 0), 0);
     const confirmed = await showAppConfirm({
-        title: 'Confirmar finalização do inventário',
-        message: 'Deseja realmente finalizar este inventário?',
-        detail: 'Depois de finalizado, ele será fechado e o estoque será ajustado.',
+        title: 'Confirmar finalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do inventÃƒÆ’Ã‚Â¡rio',
+        message: 'Deseja realmente finalizar este inventÃƒÆ’Ã‚Â¡rio?',
+        detail: 'Depois de finalizado, ele serÃƒÆ’Ã‚Â¡ fechado e o estoque serÃƒÆ’Ã‚Â¡ ajustado.',
         summary: `Produtos diferentes: ${totalProdutos}\nQuantidade total contada: ${formatStockNumber(totalUnidades)} UN`,
-        confirmLabel: 'Finalizar inventário',
+        confirmLabel: 'Finalizar inventÃƒÆ’Ã‚Â¡rio',
         cancelLabel: 'Cancelar'
     });
     if (!confirmed) return;
@@ -9075,7 +9224,7 @@ window.finishInventorySession = async function () {
     isFinalizing = true;
 
     const client = window.supabaseClient;
-    if (!client) { showToast("Supabase não disponível", 'error'); isFinalizing = false; return; }
+    if (!client) { showToast("Supabase nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel", 'error'); isFinalizing = false; return; }
 
     const btn = document.getElementById('btn-finish-inv');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.innerHTML = 'PROCESSANDO...'; }
@@ -9094,9 +9243,9 @@ window.finishInventorySession = async function () {
 
         if (fetchErr || !dbItems || dbItems.length === 0) {
             console.error('[INV-DIAG] erro ou nenhum item encontrado:', fetchErr);
-            showToast("Nenhum item salvo no banco para este inventário!", "error");
+            showToast("Nenhum item salvo no banco para este inventÃƒÆ’Ã‚Â¡rio!", "error");
             isFinalizing = false;
-            if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'FINALIZAR INVENTÁRIO'; }
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'FINALIZAR INVENTÃƒÆ’Ã‚ÂRIO'; }
             return;
         }
 
@@ -9158,7 +9307,7 @@ window.finishInventorySession = async function () {
             console.log('[INV-DIAG] estoque/movimento inventario confirmado:', movResult);
         }
 
-        // 3. Só agora marcamos como FECHADO
+        // 3. SÃƒÆ’Ã‚Â³ agora marcamos como FECHADO
         console.log('[INV-DIAG] executando fechamento final...');
         const { error: finalErr } = await client.from('inventarios').update({
             status: 'FECHADO',
@@ -9176,12 +9325,12 @@ window.finishInventorySession = async function () {
 
         if (finalErr) throw finalErr;
 
-        showToast("Inventário finalizado com sucesso!");
+        showToast("InventÃƒÆ’Ã‚Â¡rio finalizado com sucesso!");
         appData.currentInventory = null;
         renderInventorySuccessScreen();
 
     } catch (err) {
-        console.error('[INV-DIAG] ERRO CRÁGICO na finalização:', err);
+        console.error('[INV-DIAG] ERRO CRÃƒÆ’Ã‚ÂGICO na finalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:', err);
         showToast('Erro ao finalizar: ' + err.message, 'error');
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = '&#10003; Finalizar Inventario'; }
     } finally {
@@ -9206,8 +9355,8 @@ async function adjustInventoryQty(index, delta) {
         updateInventoryItemsList();
         await showAppAlert({
             title: 'Erro ao incluir produto',
-            message: 'A quantidade não foi confirmada no inventário.',
-            detail: 'Verifique sua conexão e tente novamente.',
+            message: 'A quantidade nÃƒÆ’Ã‚Â£o foi confirmada no inventÃƒÆ’Ã‚Â¡rio.',
+            detail: 'Verifique sua conexÃƒÆ’Ã‚Â£o e tente novamente.',
             buttonLabel: 'OK',
             danger: true,
             icon: 'error'
@@ -9222,13 +9371,13 @@ async function setInventoryQty(index, value) {
 
     const normalized = Math.floor(Number(String(value).replace(',', '.')));
     if (!Number.isFinite(normalized) || normalized < 1) {
-        showToast('Informe uma quantidade válida.', 'warning');
+        showToast('Informe uma quantidade vÃƒÆ’Ã‚Â¡lida.', 'warning');
         updateInventoryItemsList();
         return;
     }
     const confirmed = await showAppConfirm({
-        title: 'Confirmar alteração',
-        message: `Confirmar alteração para ${normalized} unidades?`,
+        title: 'Confirmar alteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+        message: `Confirmar alteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para ${normalized} unidades?`,
         confirmLabel: 'Confirmar',
         cancelLabel: 'Cancelar'
     });
@@ -9253,8 +9402,8 @@ async function setInventoryQty(index, value) {
         updateInventoryItemsList();
         await showAppAlert({
             title: 'Erro ao incluir produto',
-            message: 'A quantidade não foi confirmada no inventário.',
-            detail: 'Verifique sua conexão e tente novamente.',
+            message: 'A quantidade nÃƒÆ’Ã‚Â£o foi confirmada no inventÃƒÆ’Ã‚Â¡rio.',
+            detail: 'Verifique sua conexÃƒÆ’Ã‚Â£o e tente novamente.',
             buttonLabel: 'OK',
             danger: true,
             icon: 'error'
@@ -9347,19 +9496,19 @@ async function removeInventoryItem(index) {
 
 function renderInventorySuccessScreen() {
     const currentUser = localStorage.getItem('currentUser');
-    appData.currentInventory = null; // Limpa o inventário atual
+    appData.currentInventory = null; // Limpa o inventÃƒÆ’Ã‚Â¡rio atual
 
     app.innerHTML = `
                 <div class="dashboard-screen fade-in" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 20px;">
                     <div style="background: var(--surface); padding: 40px; border-radius: 24px; border: 1px solid var(--primary); box-shadow: 0 20px 40px rgba(0,0,0,0.4); max-width: 400px; width: 100%;">
                         <span class="material-symbols-rounded" style="font-size: 80px; color: #22c55e; margin-bottom: 20px;">check_circle</span>
-                        <h2 style="font-size: 1.8rem; margin-bottom: 10px; color: white;">INVENTÁRIO SALVO!</h2>
+                        <h2 style="font-size: 1.8rem; margin-bottom: 10px; color: white;">INVENTÃƒÆ’Ã‚ÂRIO SALVO!</h2>
                         <p style="color: var(--muted); margin-bottom: 30px;">Dados processados e salvos com sucesso no Supabase.</p>
                         
                         <div style="background: rgba(34, 197, 94, 0.1); padding: 16px; border-radius: 16px; margin-bottom: 30px; text-align: left; border: 1px solid rgba(34, 197, 94, 0.2);">
                             <div style="display: flex; align-items: center; gap: 10px; color: #4ade80; font-size: 0.8rem; font-weight: 700; margin-bottom: 8px;">
                                 <span class="material-symbols-rounded" style="font-size: 18px;">check_circle</span>
-                                FLUXO CONCLUÍDO
+                                FLUXO CONCLUÃƒÆ’Ã‚ÂDO
                             </div>
                             <p style="font-size: 0.75rem; color: var(--muted); line-height: 1.4;">
                                 O estoque foi atualizado e os movimentos de ajuste foram registrados no servidor.
@@ -9368,7 +9517,7 @@ function renderInventorySuccessScreen() {
 
                         <button class="btn-action" style="width: 100%; justify-content: center; padding: 16px; background: var(--primary) !important;" onclick="renderInventarioSubMenu()">
                             <span class="material-symbols-rounded">inventory_2</span>
-                            VOLTAR AO INVENTÁRIO
+                            VOLTAR AO INVENTÃƒÆ’Ã‚ÂRIO
                         </button>
                     </div>
                 </div>
@@ -9381,16 +9530,16 @@ function renderInventarioSubMenu() {
     stopScanner();
     
     if (appData.currentInventory && appData.currentInventory.isNewSession) {
-        console.log('[INVENTARIO DEBUG] usuário saiu sem itens, nada salvo');
+        console.log('[INVENTARIO DEBUG] usuÃƒÆ’Ã‚Â¡rio saiu sem itens, nada salvo');
         appData.currentInventory = null;
     }
     
     const currentUser = localStorage.getItem('currentUser');
     const subItems = [
         { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
-        { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergências de estoque.' },
-        { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventorySetup('parcial')", description: 'Contar uma seleção específica de produtos, marcas ou locais.' },
-        { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventários abertos, fechados e anulados.' }
+        { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergÃƒÆ’Ã‚Âªncias de estoque.' },
+        { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventorySetup('parcial')", description: 'Contar uma seleÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o especÃƒÆ’Ã‚Â­fica de produtos, marcas ou locais.' },
+        { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventÃƒÆ’Ã‚Â¡rios abertos, fechados e anulados.' }
     ];
 
     app.innerHTML = `
@@ -9450,11 +9599,11 @@ function renderInventoryHistoryFilters() {
         { id: 'todos', label: 'Todos' },
         { id: 'abertos', label: 'Abertos' },
         { id: 'fechados', label: 'Fechados' },
-        { id: 'meus', label: 'Meus inventários' }
+        { id: 'meus', label: 'Meus inventÃƒÆ’Ã‚Â¡rios' }
     ];
 
     return `
-        <div class="inventory-history-filters" aria-label="Filtros do histórico de inventário">
+        <div class="inventory-history-filters" aria-label="Filtros do histÃƒÆ’Ã‚Â³rico de inventÃƒÆ’Ã‚Â¡rio">
             ${filters.map(filter => `
                 <button
                     type="button"
@@ -9485,13 +9634,13 @@ function renderInventoryHistorySummary(history) {
         { label: 'Todos', value: summary.todos, icon: 'inventory_2', tone: 'all' },
         { label: 'Abertos', value: summary.abertos, icon: 'pending_actions', tone: 'open' },
         { label: 'Fechados', value: summary.fechados, icon: 'task_alt', tone: 'closed' },
-        { label: 'Meus inventários', value: summary.meus, icon: 'person_check', tone: 'mine' },
+        { label: 'Meus inventÃƒÆ’Ã‚Â¡rios', value: summary.meus, icon: 'person_check', tone: 'mine' },
         { label: 'Ajuste positivo', value: formatCurrency(summary.ajustePositivo), icon: 'trending_up', tone: 'money-positive', money: true },
         { label: 'Ajuste negativo', value: formatCurrency(summary.ajusteNegativo), icon: 'trending_down', tone: 'money-negative', money: true }
     ];
 
     return `
-        <section class="inventory-history-summary-grid" aria-label="Resumo do histórico de inventário">
+        <section class="inventory-history-summary-grid" aria-label="Resumo do histÃƒÆ’Ã‚Â³rico de inventÃƒÆ’Ã‚Â¡rio">
             ${cards.map(card => `
                 <article class="inventory-history-summary-card tone-${card.tone} ${card.money ? 'inventory-history-summary-money' : ''}">
                     <span class="material-symbols-rounded">${card.icon}</span>
@@ -9538,7 +9687,7 @@ function renderInventoryHistoryCard(inv, options = {}) {
                 <div><span>Tipo</span><strong>${getInventoryTypeLabel(getInventoryTypeRaw(inv))}</strong></div>
                 <div><span>Local</span><strong>${getInventoryLocalRaw(inv) || 'N/A'}</strong></div>
                 <div><span>Iniciado por</span><strong>${getInventoryStartedBy(inv)}${ownerSuffix}</strong></div>
-                <div><span>Data e horário</span><strong>${formatDateTimeBR(inv.data_inicio)}</strong></div>
+                <div><span>Data e horÃƒÆ’Ã‚Â¡rio</span><strong>${formatDateTimeBR(inv.data_inicio)}</strong></div>
                 ${renderInventoryFinancialMeta(inv)}
             </div>
             <footer class="inventory-history-card-footer">
@@ -9558,7 +9707,7 @@ async function renderInventarioHistory() {
             <main class="inventory-history-shell">
                 <div class="inventory-history-loading">
                     <div class="loading-spinner"></div>
-                    Carregando histórico...
+                    Carregando histÃƒÆ’Ã‚Â³rico...
                 </div>
             </main>
         </div>
@@ -9576,7 +9725,7 @@ async function renderInventarioHistory() {
         if (error) throw error;
 
         appData.inventario = data || [];
-        console.log('[INV-DIAG] histórico inventarios encontrados:', appData.inventario.length);
+        console.log('[INV-DIAG] histÃƒÆ’Ã‚Â³rico inventarios encontrados:', appData.inventario.length);
 
         const history = appData.inventario;
         const filteredHistory = getFilteredInventoryHistory(history);
@@ -9588,8 +9737,8 @@ async function renderInventarioHistory() {
                 ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
                 <main class="inventory-history-shell">
                     <header class="inventory-history-header">
-                        <h1>HISTÓRICO DE INVENTÁRIO</h1>
-                        <p>Consulte, continue ou visualize inventários já iniciados.</p>
+                        <h1>HISTÃƒÆ’Ã¢â‚¬Å“RICO DE INVENTÃƒÆ’Ã‚ÂRIO</h1>
+                        <p>Consulte, continue ou visualize inventÃƒÆ’Ã‚Â¡rios jÃƒÆ’Ã‚Â¡ iniciados.</p>
                     </header>
 
                     ${renderInventoryHistoryFilters()}
@@ -9610,12 +9759,12 @@ async function renderInventarioHistory() {
                     <section class="inventory-history-section">
                         <div class="inventory-history-section-title">
                             <span class="material-symbols-rounded">history</span>
-                            <h2>OUTROS INVENTÁRIOS</h2>
+                            <h2>OUTROS INVENTÃƒÆ’Ã‚ÂRIOS</h2>
                         </div>
                         <div class="inventory-history-list">
-                        ${filteredHistory.length === 0 ? '<div class="inventory-history-empty">Nenhum inventário encontrado.</div>' :
+                        ${filteredHistory.length === 0 ? '<div class="inventory-history-empty">Nenhum inventÃƒÆ’Ã‚Â¡rio encontrado.</div>' :
                             otherInventories.length === 0
-                                ? '<div class="inventory-history-empty">Nenhum outro inventário encontrado.</div>'
+                                ? '<div class="inventory-history-empty">Nenhum outro inventÃƒÆ’Ã‚Â¡rio encontrado.</div>'
                                 : otherInventories.map(inv => renderInventoryHistoryCard(inv)).join('')
                         }
                         </div>
@@ -9624,16 +9773,16 @@ async function renderInventarioHistory() {
             </div>
         `;
     } catch (e) {
-        console.error('[INV-DIAG] Erro ao carregar histórico:', e);
-        showToast("Erro ao carregar histórico", "error");
+        console.error('[INV-DIAG] Erro ao carregar histÃƒÆ’Ã‚Â³rico:', e);
+        showToast("Erro ao carregar histÃƒÆ’Ã‚Â³rico", "error");
     }
 }
 
 async function deleteTestInventory(sessionId) {
     const confirmed = await showAppConfirm({
         title: 'Excluir teste',
-        message: `Deseja apagar permanentemente todos os dados do inventário ${sessionId}?`,
-        detail: 'Isso apagará itens, movimentos e o registro da sessão.',
+        message: `Deseja apagar permanentemente todos os dados do inventÃƒÆ’Ã‚Â¡rio ${sessionId}?`,
+        detail: 'Isso apagarÃƒÆ’Ã‚Â¡ itens, movimentos e o registro da sessÃƒÆ’Ã‚Â£o.',
         confirmLabel: 'Excluir',
         cancelLabel: 'Cancelar',
         danger: true
@@ -9649,12 +9798,12 @@ async function deleteTestInventory(sessionId) {
         await client.from('inventarios_itens').delete().eq('inventario_id', sessionId);
         
         // 2. Deletar movimentos relacionados
-        await client.from('movimentos').delete().or(`observacao.ilike.%${sessionId}%,observacao.ilike.%Inventário ${sessionId}%`);
+        await client.from('movimentos').delete().or(`observacao.ilike.%${sessionId}%,observacao.ilike.%InventÃƒÆ’Ã‚Â¡rio ${sessionId}%`);
 
-        // 3. Deletar cabeçalho
+        // 3. Deletar cabeÃƒÆ’Ã‚Â§alho
         await client.from('inventarios').delete().eq('inventario_id', sessionId);
 
-        showToast("Dados de teste excluídos!", "success");
+        showToast("Dados de teste excluÃƒÆ’Ã‚Â­dos!", "success");
         renderInventarioHistory(); // Recarregar
     } catch (e) {
         console.error('[INV-DIAG] Erro ao excluir teste:', e);
@@ -9665,11 +9814,11 @@ async function deleteTestInventory(sessionId) {
 async function viewClosedInventory(sessionId) {
     try {
         console.log('[INV-DIAG] viewClosedInventory id:', sessionId);
-        showToast("Carregando inventário fechado...");
+        showToast("Carregando inventÃƒÆ’Ã‚Â¡rio fechado...");
         
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[INV-DIAG] Supabase Client não disponível');
+            console.error('[INV-DIAG] Supabase Client nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel');
             return;
         }
 
@@ -9681,7 +9830,7 @@ async function viewClosedInventory(sessionId) {
             .eq('inventario_id', sessionId)
             .maybeSingle();
 
-        console.log('[INV-DIAG] header encontrado:', invData ? 'SIM' : 'NÃO');
+        console.log('[INV-DIAG] header encontrado:', invData ? 'SIM' : 'NÃƒÆ’Ã†â€™O');
         if (headerErr) console.error('[INV-DIAG] erro header:', headerErr);
 
         const { data: itensData, error: itensErr } = await client
@@ -9698,7 +9847,7 @@ async function viewClosedInventory(sessionId) {
             user: invData?.usuario_responsavel || invData?.criado_por || 'N/A',
             date: invData?.data_inicio || invData?.criado_em,
             data_fim: invData?.data_fim || invData?.finalizado_em || null,
-            local: invData?.local || invData?.filtro_aplicado || 'TÉRREO',
+            local: invData?.local || invData?.filtro_aplicado || 'TÃƒÆ’Ã¢â‚¬Â°RREO',
             type: invData?.tipo || 'geral',
             status: invData?.status || 'FECHADO',
             valor_ajuste_positivo: invData?.valor_ajuste_positivo,
@@ -9707,12 +9856,12 @@ async function viewClosedInventory(sessionId) {
             items: groupInventoryItemsByProduct(serverItems)
         };
 
-        console.log('[INV-DIAG] currentInventory.items após map (view):', appData.currentInventory.items.length);
+        console.log('[INV-DIAG] currentInventory.items apÃƒÆ’Ã‚Â³s map (view):', appData.currentInventory.items.length);
 
         await renderInventarioInicialScreen(sessionId, 'view');
     } catch (e) {
-        console.error('[INV-DIAG] Erro crítico ao visualizar:', e);
-        showToast("Falha técnica ao abrir visualização", 'error');
+        console.error('[INV-DIAG] Erro crÃƒÆ’Ã‚Â­tico ao visualizar:', e);
+        showToast("Falha tÃƒÆ’Ã‚Â©cnica ao abrir visualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o", 'error');
     }
 }
 
@@ -9720,8 +9869,8 @@ async function startInventoryReview(baseInventoryId) {
     const original = appData.currentInventory;
     if (!original || !original.items || original.items.length === 0) {
         await showAppAlert({
-            title: 'Revisão indisponível',
-            message: 'Não é possível revisar um inventário sem itens contados!',
+            title: 'RevisÃƒÆ’Ã‚Â£o indisponÃƒÆ’Ã‚Â­vel',
+            message: 'NÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© possÃƒÆ’Ã‚Â­vel revisar um inventÃƒÆ’Ã‚Â¡rio sem itens contados!',
             buttonLabel: 'OK',
             icon: 'warning'
         });
@@ -9729,16 +9878,16 @@ async function startInventoryReview(baseInventoryId) {
     }
 
     const confirmed = await showAppConfirm({
-        title: 'Iniciar revisão',
-        message: 'Deseja iniciar uma REVISÃO deste inventário?',
-        detail: 'Será gerada uma nova sessão com os mesmos itens.',
-        confirmLabel: 'Iniciar revisão',
+        title: 'Iniciar revisÃƒÆ’Ã‚Â£o',
+        message: 'Deseja iniciar uma REVISÃƒÆ’Ã†â€™O deste inventÃƒÆ’Ã‚Â¡rio?',
+        detail: 'SerÃƒÆ’Ã‚Â¡ gerada uma nova sessÃƒÆ’Ã‚Â£o com os mesmos itens.',
+        confirmLabel: 'Iniciar revisÃƒÆ’Ã‚Â£o',
         cancelLabel: 'Cancelar'
     });
     if (!confirmed) return;
     
     try {
-        showToast("Iniciando revisão...");
+        showToast("Iniciando revisÃƒÆ’Ã‚Â£o...");
         const client = window.supabaseClient;
         if (!client) return;
 
@@ -9749,7 +9898,7 @@ async function startInventoryReview(baseInventoryId) {
         const date = new Date();
         const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
         
-        // TAREFA 4 - Numeração inteligente para REVISÃO
+        // TAREFA 4 - NumeraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o inteligente para REVISÃƒÆ’Ã†â€™O
         const sameDayPrefix = `REV-${dateStr}-`;
         const sameDayInventories = (appData.inventario || []).filter(inv => {
             const id = (inv.inventario_id || '').toString();
@@ -9769,7 +9918,7 @@ async function startInventoryReview(baseInventoryId) {
         const seq = String(nextSeq).padStart(3, '0');
         const newSessionId = `REV-${dateStr}-${seq}`;
 
-        // 1. Criar cabeçalho da revisão
+        // 1. Criar cabeÃƒÆ’Ã‚Â§alho da revisÃƒÆ’Ã‚Â£o
         const { error: invErr } = await client.from('inventarios').insert([{
             inventario_id: newSessionId,
             tipo: 'revisao',
@@ -9778,7 +9927,7 @@ async function startInventoryReview(baseInventoryId) {
             usuario_responsavel: currentUser,
             data_inicio: getDataHoraBrasil(date),
             local: original.local,
-            filtro_aplicado: `REVISÃO DO ${baseInventoryId}`
+            filtro_aplicado: `REVISÃƒÆ’Ã†â€™O DO ${baseInventoryId}`
         }]);
 
         if (invErr) throw invErr;
@@ -9805,7 +9954,7 @@ async function startInventoryReview(baseInventoryId) {
             }]);
         }
 
-        // 3. Carregar nova sessão como atual
+        // 3. Carregar nova sessÃƒÆ’Ã‚Â£o como atual
         appData.currentInventory = {
             ...original,
             id: newSessionId,
@@ -9815,26 +9964,26 @@ async function startInventoryReview(baseInventoryId) {
         };
 
         await renderInventarioInicialScreen(newSessionId, 'edit');
-        showToast("Revisão iniciada!", "success");
+        showToast("RevisÃƒÆ’Ã‚Â£o iniciada!", "success");
     } catch (e) {
-        console.error('[INV] Erro ao criar revisão:', e);
-        showToast("Erro ao criar revisão", 'error');
+        console.error('[INV] Erro ao criar revisÃƒÆ’Ã‚Â£o:', e);
+        showToast("Erro ao criar revisÃƒÆ’Ã‚Â£o", 'error');
     }
 }
 
 async function cancelClosedInventory(sessionId) {
     const confirmed = await showAppConfirm({
-        title: 'Anular inventário',
-        message: 'Tem certeza que deseja ANULAR este inventário?',
-        detail: 'Essa ação NÃO apaga dados, apenas marca como ANULADO.',
-        confirmLabel: 'Anular inventário',
+        title: 'Anular inventÃƒÆ’Ã‚Â¡rio',
+        message: 'Tem certeza que deseja ANULAR este inventÃƒÆ’Ã‚Â¡rio?',
+        detail: 'Essa aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o NÃƒÆ’Ã†â€™O apaga dados, apenas marca como ANULADO.',
+        confirmLabel: 'Anular inventÃƒÆ’Ã‚Â¡rio',
         cancelLabel: 'Cancelar',
         danger: true
     });
     if (!confirmed) return;
 
     try {
-        showToast("Anulando inventário...");
+        showToast("Anulando inventÃƒÆ’Ã‚Â¡rio...");
         const client = window.supabaseClient;
         if (!client) return;
 
@@ -9848,10 +9997,10 @@ async function cancelClosedInventory(sessionId) {
 
         if (error) throw error;
 
-        showToast("Inventário anulado com sucesso!", "success");
+        showToast("InventÃƒÆ’Ã‚Â¡rio anulado com sucesso!", "success");
         appData.currentInventory = null;
         
-        // Atualizar cache local do histórico se existir
+        // Atualizar cache local do histÃƒÆ’Ã‚Â³rico se existir
         if (appData.inventario) {
             const idx = appData.inventario.findIndex(inv => inv.inventario_id === sessionId);
             if (idx !== -1) appData.inventario[idx].status = 'ANULADO';
@@ -9859,8 +10008,8 @@ async function cancelClosedInventory(sessionId) {
 
         renderInventarioHistory();
     } catch (e) {
-        console.error('[INV] Erro ao anular inventário:', e);
-        showToast("Erro ao anular inventário", "error");
+        console.error('[INV] Erro ao anular inventÃƒÆ’Ã‚Â¡rio:', e);
+        showToast("Erro ao anular inventÃƒÆ’Ã‚Â¡rio", "error");
     }
 }
 
@@ -9879,25 +10028,25 @@ async function renderStockCritical() {
 
                     <main class="container">
                         <div class="sub-menu-header">
-                            <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE CRÁGICO</h2>
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE CRÃƒÆ’Ã‚ÂGICO</h2>
                         </div>
 
                         <div id="critical-results">
                             ${criticalProducts.length === 0 ? `
                                 <div style="text-align: center; padding: 40px; background: var(--surface); border-radius: 20px; color: var(--muted);">
                                     <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px; color: #22c55e;">check_circle</span>
-                                    <p>Nenhum produto com estoque crítico.</p>
+                                    <p>Nenhum produto com estoque crÃƒÆ’Ã‚Â­tico.</p>
                                 </div>
                             ` : `
                                 <div style="display: flex; flex-direction: column; gap: 16px;">
-                                    <p style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase;">Produtos abaixo do mínimo (${criticalProducts.length})</p>
+                                    <p style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase;">Produtos abaixo do mÃƒÆ’Ã‚Â­nimo (${criticalProducts.length})</p>
                                     ${criticalProducts.map(p => `
                                         <div class="menu-card" style="flex-direction: row; justify-content: flex-start; padding: 16px; gap: 20px; min-height: auto; text-align: left; border-left: 4px solid var(--danger);" onclick="showProductDetails('${p.ean}')">
                                             <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
                                                 ${(p.url_imagem || p.image_path) ? `<img src="${formatImageUrl(p.image_path || p.url_imagem)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\' style=\\'color: var(--muted)\\'>image</span>'">` : `<span class="material-symbols-rounded" style="color: var(--muted)">image</span>`}
                                             </div>
                                             <div style="flex: 1;">
-                                                <div style="font-weight: 700; color: white; font-size: 0.9rem; margin-bottom: 4px;">${p.descricao_base || 'Sem Descrição'}</div>
+                                                <div style="font-weight: 700; color: white; font-size: 0.9rem; margin-bottom: 4px;">${p.descricao_base || 'Sem DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o'}</div>
                                                 <div style="font-size: 0.75rem; color: var(--muted);">SKU: ${p.sku_fornecedor || '-'} | EAN: ${p.ean || '-'}</div>
                                                 
                                             </div>
@@ -9918,10 +10067,10 @@ function renderSearchProduct() {
 
 const PRODUCT_STOCK_LOCATION_FILTERS = [
     { key: 'TODOS', label: 'Todos', locals: [] },
-    { key: 'DISPONIVEL', label: 'Disponível', locals: ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'] },
-    { key: 'TERREO', label: 'Térreo', locals: ['TERREO'] },
-    { key: 'MOSTRUARIO', label: 'Mostruário', locals: ['MOSTRUARIO'] },
-    { key: 'PRIMEIRO_ANDAR', label: '1º Andar', locals: ['PRIMEIRO_ANDAR'] },
+    { key: 'DISPONIVEL', label: 'DisponÃƒÆ’Ã‚Â­vel', locals: ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'] },
+    { key: 'TERREO', label: 'TÃƒÆ’Ã‚Â©rreo', locals: ['TERREO'] },
+    { key: 'MOSTRUARIO', label: 'MostruÃƒÆ’Ã‚Â¡rio', locals: ['MOSTRUARIO'] },
+    { key: 'PRIMEIRO_ANDAR', label: '1Ãƒâ€šÃ‚Âº Andar', locals: ['PRIMEIRO_ANDAR'] },
     { key: 'FULL_ML', label: 'Full ML', locals: ['FULL_ML'] },
     { key: 'DEFEITO', label: 'Defeito', locals: ['DEFEITO'] },
     { key: 'EM_GARANTIA', label: 'Garantia', locals: ['EM_GARANTIA'] },
@@ -10005,8 +10154,8 @@ function renderProductStockFilterChips() {
 function getProductSearchStatusText(queryRaw = '') {
     const filter = getProductStockFilter();
     const query = String(queryRaw || '').trim();
-    if (query && filter.key !== 'TODOS') return `Busca: ${query} · Local: ${filter.label}`;
-    if (query) return `Busca: ${query} · Local: Todos`;
+    if (query && filter.key !== 'TODOS') return `Busca: ${query} Ãƒâ€šÃ‚Â· Local: ${filter.label}`;
+    if (query) return `Busca: ${query} Ãƒâ€šÃ‚Â· Local: Todos`;
     return `Mostrando: ${filter.label}`;
 }
 
@@ -10121,7 +10270,7 @@ window.clearProductSearch = clearProductSearch;
 
 async function renderSearchScreen(push = true) {
     if (currentScreen === 'search' && document.getElementById('search-input')) {
-        console.log('[BUSCA MOBILE DEBUG] re-render ignorado (já ativo)');
+        console.log('[BUSCA MOBILE DEBUG] re-render ignorado (jÃƒÆ’Ã‚Â¡ ativo)');
         await ensureProdutosLoaded();
         updateProductSearchStatus(document.getElementById('search-input')?.value || '');
         return;
@@ -10308,7 +10457,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
 
                 const product = await handleProductScan(decodedText, context);
 
-                // Se não for busca, precisa tratar as funções específicas
+                // Se nÃƒÆ’Ã‚Â£o for busca, precisa tratar as funÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes especÃƒÆ’Ã‚Â­ficas
                 if (product) {
                     if (context === 'search') {
                         await stopScanner();
@@ -10331,7 +10480,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
         );
     } catch (err) {
         console.error("Scanner error:", err);
-        showToast("Câmera em uso ou não disponível. Tente novamente.");
+        showToast("CÃƒÆ’Ã‚Â¢mera em uso ou nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel. Tente novamente.");
         scannerContainer.classList.add('hidden');
     } finally {
         isScannerStarting = false;
@@ -10454,7 +10603,7 @@ function showProductDetailsByCode(code) {
         renderProductDetails(product);
     } else {
         playBeep('error');
-        showToast(`PRODUTO NÃO CADASTRADO: ${code}`);
+        showToast(`PRODUTO NÃƒÆ’Ã†â€™O CADASTRADO: ${code}`);
         const searchInput = document.getElementById('search-input');
         if (searchInput) {
             searchInput.value = '';
@@ -10490,6 +10639,46 @@ function productSearchStartsWithTerm(product, query) {
         if (source.startsWith(query)) return true;
         return source.split(/\s+/).some(word => word.startsWith(query));
     });
+}
+
+function getProductSearchTokens(query) {
+    return normalizeProductSearchTerm(query)
+        .split(/\s+/)
+        .map(token => token.trim())
+        .filter(token => token.length >= 2);
+}
+
+function getProductSearchPrimaryText(product) {
+    return normalizeProductSearchTerm([
+        product.descricao_base,
+        product.descricao,
+        product.descricao_completa,
+        product.nome,
+        product.marca,
+        product.categoria,
+        product.subcategoria,
+        product.sku_fornecedor,
+        product.sku,
+        product.ean,
+        product.id_interno,
+        product.id
+    ].filter(Boolean).join(' '));
+}
+
+function productMatchesSmartSearch(product, query) {
+    const tokens = getProductSearchTokens(query);
+    if (!tokens.length) return true;
+    const primaryText = getProductSearchPrimaryText(product);
+    const fullIndex = product._searchIndex || primaryText;
+    const matchedPrimary = tokens.filter(token => primaryText.includes(token)).length;
+    if (matchedPrimary === tokens.length) return true;
+    if (tokens.length > 1) return false;
+    const token = tokens[0];
+    const strongAttributeMatch = (product._brandCatSubNorm || '').includes(token)
+        || String(product.ean || '').includes(token)
+        || normalizeProductSearchTerm(product.sku_fornecedor || product.sku || '').includes(token)
+        || normalizeProductSearchTerm(product.id_interno || product.id || '').includes(token);
+    return strongAttributeMatch && fullIndex.includes(token);
 }
 
 function getProductSearchScore(product, query) {
@@ -10533,10 +10722,10 @@ const doPerformSearch = async () => {
     console.log('[BUSCA DEBUG] termo original:', queryRaw);
     console.log('[BUSCA DEBUG] termo normalizado:', query);
 
-    // 2. Busca Local no ÍNdice
+    // 2. Busca Local no ÃƒÆ’Ã‚ÂNdice
     const productsSource = Array.isArray(appData.products) ? appData.products : [];
     let textResults = query.length >= 2
-        ? productsSource.filter(p => p._searchIndex.includes(query))
+        ? productsSource.filter(p => productMatchesSmartSearch(p, query))
         : productsSource.slice();
     if (isMobileSearchExperience && query.length >= 2) {
         const prefixResults = productsSource.filter(p => productSearchStartsWithTerm(p, query));
@@ -10544,7 +10733,7 @@ const doPerformSearch = async () => {
     }
     const results = applyProductStockLocationFilter(textResults);
 
-    // 3. Score de Relevância e Ordenação
+    // 3. Score de RelevÃƒÆ’Ã‚Â¢ncia e OrdenaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
     const finalResults = results
         .sort((a, b) => {
             // Prioridade 1: Ativos primeiro (opcional, mas recomendado para ERP)
@@ -10578,7 +10767,7 @@ const doPerformSearch = async () => {
                 if (qtyA !== qtyB) return qtyB - qtyA;
             }
 
-            // Prioridade 3: Alfabética
+            // Prioridade 3: AlfabÃƒÆ’Ã‚Â©tica
             return a._dBaseNorm.localeCompare(b._dBaseNorm);
         });
 
@@ -10595,17 +10784,17 @@ const doPerformSearch = async () => {
         showPageSearchSignal('success');
     }
 
-    // Mostrar alerta após falha na busca, diferenciando código bipado/digitado de texto comum
+    // Mostrar alerta apÃƒÆ’Ã‚Â³s falha na busca, diferenciando cÃƒÆ’Ã‚Â³digo bipado/digitado de texto comum
     if (finalResults.length === 0 && queryRaw.length >= 3) {
         console.log('[BUSCA DEBUG] nenhum resultado real encontrado na busca');
         const isPotentialCode = queryRaw.length >= 6 && !queryRaw.includes(' ');
-        showScanFeedback('warning', isPotentialCode ? 'PRODUTO NÃO CADASTRADO' : 'PRODUTO NÃO EXISTE');
+        showScanFeedback('warning', isPotentialCode ? 'PRODUTO NÃƒÆ’Ã†â€™O CADASTRADO' : 'PRODUTO NÃƒÆ’Ã†â€™O EXISTE');
     }
 };
 
 window.performSearch = debounce(doPerformSearch, 300);
 
-// Criar versão debounced da busca para evitar processamento excessivo ao digitar
+// Criar versÃƒÆ’Ã‚Â£o debounced da busca para evitar processamento excessivo ao digitar
 let lastSearchQuery = '';
 const debouncedSearch = debounce(async () => {
     const input = document.getElementById('search-input');
@@ -10639,28 +10828,28 @@ function isSearchProductMetaValue(value) {
 
 function cleanProductSearchText(value) {
     if (value === undefined || value === null) return '';
-    return String(value)
-        .replaceAll('Disponﾃｭvel', 'Disponivel')
-        .replaceAll('DISPONﾃ昂EL', 'DISPONIVEL')
-        .replaceAll('Tﾃｩrreo', 'Terreo')
-        .replaceAll('Tﾃ嘘REO', 'TERREO')
-        .replaceAll('MOSTRUﾃヽIO', 'MOSTRUARIO')
-        .replaceAll('Mostruﾃ｡rio', 'Mostruario')
-        .replaceAll('1ﾂｺ', '1')
-        .replaceAll('Descriﾃｧﾃ｣o', 'Descricao')
-        .replaceAll('descriﾃｧﾃ｣o', 'descricao')
-        .replaceAll('Cﾃｳdigo', 'Codigo')
-        .replaceAll('cﾃｳdigo', 'codigo')
-        .replaceAll('Nﾃ｣o', 'Nao')
-        .replaceAll('nﾃ｣o', 'nao')
-        .replaceAll('ﾃ｡', 'a')
-        .replaceAll('ﾃ｣', 'a')
-        .replaceAll('ﾃｧ', 'c')
-        .replaceAll('ﾃｩ', 'e')
-        .replaceAll('ﾃｭ', 'i')
-        .replaceAll('ﾃｳ', 'o')
-        .replaceAll('ﾃｺ', 'u')
-        .replaceAll('�', '');
+    return repairMojibakeText(value)
+        .replaceAll('DisponÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â­vel', 'Disponivel')
+        .replaceAll('DISPONÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¦Ã‹Å“Ã¢â‚¬Å¡EL', 'DISPONIVEL')
+        .replaceAll('TÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â©rreo', 'Terreo')
+        .replaceAll('TÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¥Ã‹Å“Ã‹Å“REO', 'TERREO')
+        .replaceAll('MOSTRUÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ£Ã†â€™Ã‚Â½IO', 'MOSTRUARIO')
+        .replaceAll('MostruÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â¡rio', 'Mostruario')
+        .replaceAll('1ÃƒÂ¯Ã‚Â¾Ã¢â‚¬Å¡ÃƒÂ¯Ã‚Â½Ã‚Âº', '1')
+        .replaceAll('DescriÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â§ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â£o', 'Descricao')
+        .replaceAll('descriÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â§ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â£o', 'descricao')
+        .replaceAll('CÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â³digo', 'Codigo')
+        .replaceAll('cÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â³digo', 'codigo')
+        .replaceAll('NÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â£o', 'Nao')
+        .replaceAll('nÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â£o', 'nao')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â¡', 'a')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â£', 'a')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â§', 'c')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â©', 'e')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â­', 'i')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Â³', 'o')
+        .replaceAll('ÃƒÂ¯Ã‚Â¾Ã†â€™ÃƒÂ¯Ã‚Â½Ã‚Âº', 'u')
+        .replaceAll('ÃƒÂ¯Ã‚Â¿Ã‚Â½', '');
 }
 
 function renderSearchProductMeta(product) {
@@ -10682,7 +10871,7 @@ function renderSearchProductLocationBadge(product) {
     if (!isFilledValue(location)) return '';
 
     return `
-        <span class="product-location-badge" title="Localização física no estoque">
+        <span class="product-location-badge" title="LocalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o fÃƒÆ’Ã‚Â­sica no estoque">
             <span class="material-symbols-rounded location-icon">location_on</span>
             ${location}
         </span>
@@ -10781,9 +10970,9 @@ function getSearchCardSellableLocationQty(productId, filterKey) {
 function renderSearchProductSellableLocations(product) {
     const productId = product?.id_interno || product?.col_A;
     const locations = [
-        { key: 'TERREO', label: 'TÉRREO' },
-        { key: 'PRIMEIRO_ANDAR', label: '1º ANDAR' },
-        { key: 'MOSTRUARIO', label: 'MOSTRUÁRIO' }
+        { key: 'TERREO', label: 'TÃƒÆ’Ã¢â‚¬Â°RREO' },
+        { key: 'PRIMEIRO_ANDAR', label: '1Ãƒâ€šÃ‚Âº ANDAR' },
+        { key: 'MOSTRUARIO', label: 'MOSTRUÃƒÆ’Ã‚ÂRIO' }
     ]
         .map(location => ({
             ...location,
@@ -10794,7 +10983,7 @@ function renderSearchProductSellableLocations(product) {
     if (!locations.length) return '';
 
     return `
-        <div class="stock-sellable-locations" aria-label="Estoque disponível por local">
+        <div class="stock-sellable-locations" aria-label="Estoque disponÃƒÆ’Ã‚Â­vel por local">
             ${locations.map(location => `
                 <span class="stock-sellable-location">
                     <strong>${location.label}:</strong>
@@ -10975,7 +11164,7 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
 
     const cardsHtml = results.map((p, index) => {
         const idInterno = p.id_interno || p.col_A || '-';
-        const desc = cleanProductSearchText(p.descricao_completa || p.col_C || 'Produto sem descrição');
+        const desc = cleanProductSearchText(p.descricao_completa || p.col_C || 'Produto sem descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
         const marca = cleanProductSearchText(p.marca || p.col_E || '-');
         const imgUrl = getProductImageUrl(p);
         const precoVarejo = p.preco_varejo || p.col_G || 0;
@@ -10983,7 +11172,7 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
         const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
         const isAtivo = status === 'SIM' || status === 'TRUE';
 
-        // Obter estoque principal (Disponível)
+        // Obter estoque principal (DisponÃƒÆ’Ã‚Â­vel)
         const estoque = getSearchCardStockQty(p);
         const pack = getSearchProductPackInfo(p, estoque);
         const showCx = pack && pack.caixas > 0;
@@ -11032,11 +11221,11 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
 
                 <div class="card-price-block">
                     <div class="card-price-tier card-price-tier-retail">
-                        <span class="price-label">PREÇO VAREJO</span>
+                        <span class="price-label">PREÃƒÆ’Ã¢â‚¬Â¡O VAREJO</span>
                         <span class="price-value">R$ ${Number(precoVarejo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div class="card-price-tier card-price-tier-wholesale">
-                        <span class="price-label">PREÇO ATACADO</span>
+                        <span class="price-label">PREÃƒÆ’Ã¢â‚¬Â¡O ATACADO</span>
                         <span class="price-value">R$ ${Number(precoAtacado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
                 </div>
@@ -11183,7 +11372,7 @@ function closeImageModal() {
     }
 }
 
-// ==== LÓGICA DE ESTOQUE E LOCAIS ====
+// ==== LÃƒÆ’Ã¢â‚¬Å“GICA DE ESTOQUE E LOCAIS ====
 const LOCAIS_DISPONIVEIS = ['TERREO', 'MOSTRUARIO', 'PRIMEIRO_ANDAR'];
 const LOCAIS_SAIDA = ['TERREO', 'PRIMEIRO_ANDAR', 'MOSTRUARIO'];
 const LOCAIS_NAO_VENDAVEIS = ['DEFEITO', 'EM_GARANTIA', 'EM_TRANSPORTE'];
@@ -11469,8 +11658,8 @@ function renderCamadasEstoqueHTML(lotes = [], resumo = {}) {
             <div class="product-stock-layers-summary">
                 <div><span>Estoque total</span><strong>${formatStockNumber(resumo.estoqueTotal || 0)}</strong></div>
                 <div><span>Valor total em estoque</span><strong>${formatPrice(resumo.valorTotal || 0)}</strong></div>
-                <div><span>Custo médio atual</span><strong>${formatPrice(resumo.custoMedioAtual || 0)}</strong></div>
-                <div><span>Próximo custo de saída</span><strong>${formatPrice(resumo.proximoCustoSaida || 0)}</strong></div>
+                <div><span>Custo mÃƒÆ’Ã‚Â©dio atual</span><strong>${formatPrice(resumo.custoMedioAtual || 0)}</strong></div>
+                <div><span>PrÃƒÆ’Ã‚Â³ximo custo de saÃƒÆ’Ã‚Â­da</span><strong>${formatPrice(resumo.proximoCustoSaida || 0)}</strong></div>
             </div>
             <div class="product-stock-layers-list">
                 ${rows || '<div class="product-stock-layer-empty">Nenhuma camada de estoque ativa encontrada.</div>'}
@@ -11581,7 +11770,7 @@ function renderInventoryQuantitySummary(product, item, expectedQty) {
         <span class="inv-expected-stock inv-count-comparison">
             <span><strong>Esperado:</strong> ${formatStockNumber(expectedQty)} UN</span>
             <span><strong>Contado:</strong> ${formatStockNumber(countedQty)} UN</span>
-            <span class="${diffQty === 0 ? 'is-ok' : diffQty > 0 ? 'is-positive' : 'is-negative'}"><strong>Diferença:</strong> ${diffQty > 0 ? '+' : ''}${formatStockNumber(diffQty)} UN</span>
+            <span class="${diffQty === 0 ? 'is-ok' : diffQty > 0 ? 'is-positive' : 'is-negative'}"><strong>DiferenÃƒÆ’Ã‚Â§a:</strong> ${diffQty > 0 ? '+' : ''}${formatStockNumber(diffQty)} UN</span>
             ${normalizeQtdPorCaixa(product?.qtd_por_caixa) > 1 ? `<small>${renderVolumeSummary(product, expectedQty)}</small>` : ''}
         </span>
     `;
@@ -11658,7 +11847,7 @@ function getEquivalentProducts(p) {
     const attrs = safeParseAtributos(p.atributos);
     const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // 1. Prioridade 1: Código Equivalente (Regra Principal)
+    // 1. Prioridade 1: CÃƒÆ’Ã‚Â³digo Equivalente (Regra Principal)
     const codEquivalenteAttr = attrs.find(a => norm(a.nome).includes('equivalente'));
     const codEquivalente = (codEquivalenteAttr && norm(codEquivalenteAttr.valor)) ? norm(codEquivalenteAttr.valor) : null;
     
@@ -11671,7 +11860,7 @@ function getEquivalentProducts(p) {
         }).slice(0, 5);
     }
     
-    // 2. Prioridade 2: Fallback Seguro (Combinação Obrigatória)
+    // 2. Prioridade 2: Fallback Seguro (CombinaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ObrigatÃƒÆ’Ã‚Â³ria)
     const ATRIBUTOS_OBRIGATORIOS = ['tipo', 'modelo', 'encaixe', 'tensao', 'potencia', 'polos', 'pinos', 'aplicacao'];
     const ATRIBUTOS_CONDICIONAIS = ['cor', 'lado', 'acabamento'];
     const ATRIBUTOS_CHAVE = [...ATRIBUTOS_OBRIGATORIOS, ...ATRIBUTOS_CONDICIONAIS];
@@ -11684,29 +11873,29 @@ function getEquivalentProducts(p) {
         }
     });
 
-    // Segurança: Se não houver atributos técnicos suficientes para garantir equivalência, NÃO agrupar.
-    // Exigimos pelo menos 1 atributo técnico chave para o fallback.
+    // SeguranÃƒÆ’Ã‚Â§a: Se nÃƒÆ’Ã‚Â£o houver atributos tÃƒÆ’Ã‚Â©cnicos suficientes para garantir equivalÃƒÆ’Ã‚Âªncia, NÃƒÆ’Ã†â€™O agrupar.
+    // Exigimos pelo menos 1 atributo tÃƒÆ’Ã‚Â©cnico chave para o fallback.
     if (Object.keys(pTechAttrs).length === 0) return [];
 
     const pDesc = norm(p.descricao_base);
     const pCat = norm(p.categoria);
     const pSub = norm(p.subcategoria);
     
-    // Regra 3: NÃO permitir agrupamento usando apenas descricao_base (sem categoria/sub ou atributos)
+    // Regra 3: NÃƒÆ’Ã†â€™O permitir agrupamento usando apenas descricao_base (sem categoria/sub ou atributos)
     if (!pDesc || !pCat) return [];
 
     return appData.products.filter(other => {
         if (other.id_interno === p.id_interno) return false;
         
-        // Deve ser de marca diferente (equivalência inter-marcas)
+        // Deve ser de marca diferente (equivalÃƒÆ’Ã‚Âªncia inter-marcas)
         if (norm(other.marca) === norm(p.marca)) return false;
 
-        // Validação de Descrição, Categoria e Subcategoria
+        // ValidaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, Categoria e Subcategoria
         if (norm(other.descricao_base) !== pDesc) return false;
         if (norm(other.categoria) !== pCat) return false;
         if (norm(other.subcategoria) !== pSub) return false;
         
-        // Validação de Atributos Técnicos
+        // ValidaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de Atributos TÃƒÆ’Ã‚Â©cnicos
         const otherAttrs = safeParseAtributos(other.atributos);
         const otherTechAttrs = {};
         otherAttrs.forEach(a => {
@@ -11716,12 +11905,12 @@ function getEquivalentProducts(p) {
             }
         });
         
-        // 1. Validar Atributos Obrigatórios (Devem ser idênticos, inclusive se um estiver vazio e o outro não)
+        // 1. Validar Atributos ObrigatÃƒÆ’Ã‚Â³rios (Devem ser idÃƒÆ’Ã‚Âªnticos, inclusive se um estiver vazio e o outro nÃƒÆ’Ã‚Â£o)
         for (const key of ATRIBUTOS_OBRIGATORIOS) {
             if (pTechAttrs[key] !== otherTechAttrs[key]) return false;
         }
         
-        // 2. Validar Atributos Condicionais (Se P tem valor, OTHER deve ter o mesmo valor. Se P está vazio, ignora)
+        // 2. Validar Atributos Condicionais (Se P tem valor, OTHER deve ter o mesmo valor. Se P estÃƒÆ’Ã‚Â¡ vazio, ignora)
         for (const key of ATRIBUTOS_CONDICIONAIS) {
             if (pTechAttrs[key] && pTechAttrs[key] !== otherTechAttrs[key]) return false;
         }
@@ -11935,17 +12124,17 @@ async function renderProductDetails(p) {
         <div class="product-stock-locations">
             <div class="product-stock-title">ESTOQUE POR LOCAL</div>
             <div class="product-stock-group">
-                <div class="product-stock-group-title">Disponível operacional</div>
+                <div class="product-stock-group-title">DisponÃƒÆ’Ã‚Â­vel operacional</div>
                 <div class="product-stock-grid">
-                    ${renderStockLocationCard('TERREO', 'Térreo', terreoQty, 'operational')}
-                    ${renderStockLocationCard('PRIMEIRO_ANDAR', '1º Andar', primeiroAndarQty, 'operational')}
+                    ${renderStockLocationCard('TERREO', 'TÃƒÆ’Ã‚Â©rreo', terreoQty, 'operational')}
+                    ${renderStockLocationCard('PRIMEIRO_ANDAR', '1Ãƒâ€šÃ‚Âº Andar', primeiroAndarQty, 'operational')}
                 </div>
             </div>
             <div class="product-stock-group">
-                <div class="product-stock-group-title">Estoque secundário / não disponível</div>
-                <p class="product-stock-group-note">Mostruário: venda opcional - verificar estado do produto.</p>
+                <div class="product-stock-group-title">Estoque secundÃƒÆ’Ã‚Â¡rio / nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel</div>
+                <p class="product-stock-group-note">MostruÃƒÆ’Ã‚Â¡rio: venda opcional - verificar estado do produto.</p>
                 <div class="product-stock-grid product-stock-grid-secondary">
-                    ${renderStockLocationCard('MOSTRUARIO', 'Mostruário', mostruarioQty, 'secondary')}
+                    ${renderStockLocationCard('MOSTRUARIO', 'MostruÃƒÆ’Ã‚Â¡rio', mostruarioQty, 'secondary')}
                     ${renderStockLocationCard('DEFEITO', 'Defeito', defeitoQty, 'blocked')}
                     ${renderStockLocationCard('EM_GARANTIA', 'Em Garantia', garantiaQty, 'warranty')}
                     ${renderStockLocationCard('EM_TRANSPORTE', 'Em Transporte', transporteQty, 'transit')}
@@ -11956,7 +12145,7 @@ async function renderProductDetails(p) {
                     <span class="material-symbols-rounded" style="font-size: 16px; color: #f59e0b;">warehouse</span>
                     Estoque externo
                 </div>
-                <p class="product-stock-group-note">Depósito Mercado Livre - não disponível para venda direta.</p>
+                <p class="product-stock-group-note">DepÃƒÆ’Ã‚Â³sito Mercado Livre - nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel para venda direta.</p>
                 <div class="product-stock-grid">
                     ${renderStockLocationCard('FULL_ML', 'FULL ML', fullMlQty, 'external')}
                 </div>
@@ -11971,22 +12160,22 @@ async function renderProductDetails(p) {
         { label: 'Categoria', value: p.categoria },
         { label: 'Subcategoria', value: p.subcategoria }
     ]);
-    const technicalInfoHTML = attrs.length ? renderInfoBlock('Técnico', attrs.map(attr => ({
+    const technicalInfoHTML = attrs.length ? renderInfoBlock('TÃƒÆ’Ã‚Â©cnico', attrs.map(attr => ({
         label: formatAttributeName(attr.nome),
         value: formatAttributeValue(attr.valor)
     }))) : '';
     const operationalInfoHTML = renderInfoBlock('Operacional', [
-        { label: 'Estoque mínimo', value: p.estoque_minimo },
+        { label: 'Estoque mÃƒÆ’Ã‚Â­nimo', value: p.estoque_minimo },
         { label: 'Unidade', value: p.unidade },
         { label: 'Qtd. embalagem', value: p.quantidade_embalagem },
-        { label: 'Mínimo atacado', value: p.quantidade_minima_atacado },
+        { label: 'MÃƒÆ’Ã‚Â­nimo atacado', value: p.quantidade_minima_atacado },
         { label: 'Status', value: p.status }
     ]);
     const adminInfoHTML = renderInfoBlock('Administrativo', [
         { label: 'ID interno', value: idInterno },
-        { label: 'Descrição completa', value: p.descricao_completa },
+        { label: 'DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o completa', value: p.descricao_completa },
         { label: 'Manual PDF', value: pdfUrl },
-        { label: 'Observações', value: p.observacoes }
+        { label: 'ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes', value: p.observacoes }
     ]);
 
     app.innerHTML = `
@@ -12002,7 +12191,7 @@ async function renderProductDetails(p) {
                         </a>
                         ` : ''}
                         
-                        <!-- Botão Editar Produto -->
+                        <!-- BotÃƒÆ’Ã‚Â£o Editar Produto -->
                         <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="product-edit-btn" title="Editar Produto">
                             <span class="material-symbols-rounded">edit</span>
                             <span>Editar</span>
@@ -12012,13 +12201,13 @@ async function renderProductDetails(p) {
                             <span class="status-indicator-dot" style="background-color: ${statusColor};"></span>
                         </div>
                     </div>
-                    <!-- CABEÇALHO PRINCIPAL -->
+                    <!-- CABEÃƒÆ’Ã¢â‚¬Â¡ALHO PRINCIPAL -->
                     <div class="product-detail-header">
                         <div class="product-detail-img">
                             ${(p.url_imagem || p.image_path) ? `<img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="cursor:zoom-in">` : `<span class="material-symbols-rounded" style="font-size: 48px; color: #d1d5db;">inventory_2</span>`}
                         </div>
                         <div class="product-detail-title-block">
-                            <h1 class="product-detail-title">${p.descricao_completa || p.descricao_base || 'Sem descrição'}</h1>
+                            <h1 class="product-detail-title">${p.descricao_completa || p.descricao_base || 'Sem descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o'}</h1>
                             <div class="product-detail-meta-row">
                                 ${renderProductMetaItem('barcode', 'SKU', p.sku_fornecedor || p.sku || idInterno)}
                                 ${renderProductMetaItem('sell', 'Marca', p.marca)}
@@ -12027,24 +12216,24 @@ async function renderProductDetails(p) {
                         </div>
                     </div>
 
-                    <!-- CARDS DE PREÇO E ESTOQUE TOTAL -->
+                    <!-- CARDS DE PREÃƒÆ’Ã¢â‚¬Â¡O E ESTOQUE TOTAL -->
                     <div class="product-detail-prices">
                         <div class="product-price-card product-price-card-varejo">
                             <span class="product-price-icon material-symbols-rounded">sell</span>
                             <span class="product-price-ghost material-symbols-rounded">sell</span>
-                            <div class="product-price-label">PREÇO DE VENDA (VAREJO)</div>
+                            <div class="product-price-label">PREÃƒÆ’Ã¢â‚¬Â¡O DE VENDA (VAREJO)</div>
                             <div class="product-price-value product-price-main">${formatPrice(p.preco_varejo)}</div>
                         </div>
-                        <div class="product-price-card product-stock-main-card ${stockStatusClass}" title="Térreo + 1º Andar">
+                        <div class="product-price-card product-stock-main-card ${stockStatusClass}" title="TÃƒÆ’Ã‚Â©rreo + 1Ãƒâ€šÃ‚Âº Andar">
                             <span class="product-price-icon material-symbols-rounded">inventory_2</span>
                             <span class="product-price-ghost material-symbols-rounded">inventory_2</span>
-                            <div class="product-price-label">ESTOQUE DISPONÍVEL</div>
+                            <div class="product-price-label">ESTOQUE DISPONÃƒÆ’Ã‚ÂVEL</div>
                             <div class="product-price-value product-stock-value ${stockStatusClass}">${disponivel} <span class="product-stock-unit">${unitLabel}</span></div>
                         </div>
                         <div class="product-price-card product-price-card-atacado collapsible-mobile">
                             <span class="product-price-icon material-symbols-rounded">shopping_cart</span>
                             <span class="product-price-ghost material-symbols-rounded">shopping_cart</span>
-                            <div class="product-price-label">PREÇO ATACADO</div>
+                            <div class="product-price-label">PREÃƒÆ’Ã¢â‚¬Â¡O ATACADO</div>
                             <div class="product-price-value product-price-atacado">${formatPrice(p.preco_atacado)}</div>
                         </div>
                     </div>
@@ -12065,8 +12254,8 @@ async function renderProductDetails(p) {
                                     <span class="material-symbols-rounded" style="color: #fbbf24; font-size: 24px;">local_shipping</span>
                                 </div>
                                 <div>
-                                    <div style="color: #fbbf24; font-weight: 800; font-size: 0.85rem;">SEM ESTOQUE NO TÉRREO/MOSTRUÁRIO</div>
-                                    <div style="color: rgba(255,255,255,0.7); font-size: 0.75rem;">Disponível no 1º andar: <b>${p1}</b></div>
+                                    <div style="color: #fbbf24; font-weight: 800; font-size: 0.85rem;">SEM ESTOQUE NO TÃƒÆ’Ã¢â‚¬Â°RREO/MOSTRUÃƒÆ’Ã‚ÂRIO</div>
+                                    <div style="color: rgba(255,255,255,0.7); font-size: 0.75rem;">DisponÃƒÆ’Ã‚Â­vel no 1Ãƒâ€šÃ‚Âº andar: <b>${p1}</b></div>
                                     <div style="color: #fbbf24; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin-top: 2px;">Transferir para venda</div>
                                 </div>
                             </div>
@@ -12081,9 +12270,9 @@ async function renderProductDetails(p) {
                         <div class="product-stock-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             ${(() => {
                                 const localMap = {
-                                    'TERREO': 'Térreo',
-                                    'MOSTRUARIO': 'Mostruário',
-                                    'PRIMEIRO_ANDAR': '1º Andar',
+                                    'TERREO': 'TÃƒÆ’Ã‚Â©rreo',
+                                    'MOSTRUARIO': 'MostruÃƒÆ’Ã‚Â¡rio',
+                                    'PRIMEIRO_ANDAR': '1Ãƒâ€šÃ‚Âº Andar',
                                     'DEFEITO': 'Defeito',
                                     'EM_GARANTIA': 'Em Garantia',
                                     'EM_TRANSPORTE': 'Em Transporte',
@@ -12128,7 +12317,7 @@ async function renderProductDetails(p) {
                                                 </div>
                                                 <div style="font-size: 0.85rem; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0;">${eq.descricao_completa || eq.descricao_base}</div>
                                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                                    <span style="font-size: 0.8rem; color: #4ade80; font-weight: 700;">${formatPrice(eq.preco_varejo)} ç ${eqStock} disp.${eqMostruario > 0 ? ` ç ${eqMostruario} most.` : ''}</span>
+                                                    <span style="font-size: 0.8rem; color: #4ade80; font-weight: 700;">${formatPrice(eq.preco_varejo)} ÃƒÆ’Ã‚Â§ ${eqStock} disp.${eqMostruario > 0 ? ` ÃƒÆ’Ã‚Â§ ${eqMostruario} most.` : ''}</span>
                                                     <span class="related-product-action">VER PRODUTO</span>
                                                     <span class="material-symbols-rounded" style="font-size: 18px; color: var(--muted);">chevron_right</span>
                                                 </div>
@@ -12141,7 +12330,7 @@ async function renderProductDetails(p) {
                         ` : ''}
                     </div>
 
-                    <!-- BLOCO + INFORMACOES (RECOLHÍVEL) -->
+                    <!-- BLOCO + INFORMACOES (RECOLHÃƒÆ’Ã‚ÂVEL) -->
                     <div class="product-more-info-section">
                         <button type="button" onclick="toggleMoreInfo()" class="product-more-info-btn" aria-expanded="false" aria-controls="more-info-content">
                             <span class="material-symbols-rounded">info</span>
@@ -12159,7 +12348,7 @@ async function renderProductDetails(p) {
                             <div style="margin-bottom: 24px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 14px; border: 1px dashed rgba(255,255,255,0.1);">
                                 <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between;">
                                     <div>
-                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÇO DE CUSTO</span>
+                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÃƒÆ’Ã¢â‚¬Â¡O DE CUSTO</span>
                                         <span style="font-size: 1.1rem; color: white; font-weight: 700; letter-spacing: 2px;">------</span>
                                     </div>
                                     <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
@@ -12168,7 +12357,7 @@ async function renderProductDetails(p) {
                                 </div>
                                 <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between;">
                                     <div>
-                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÇO DE CUSTO</span>
+                                        <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PREÃƒÆ’Ã¢â‚¬Â¡O DE CUSTO</span>
                                         <span class="product-custo-amount" style="font-size: 1.2rem; color: #fbbf24; font-weight: 800;">${formatPrice(p.preco_custo)}</span>
                                     </div>
                                     <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
@@ -12187,22 +12376,22 @@ async function renderProductDetails(p) {
                                 ` : ''}
                                 ${p.quantidade_minima_atacado ? `
                                 <div class="product-id-item">
-                                    <span class="product-id-label">Mínimo Atacado</span>
+                                    <span class="product-id-label">MÃƒÆ’Ã‚Â­nimo Atacado</span>
                                     <span class="product-id-value">${p.quantidade_minima_atacado} ${p.unidade || 'UN'}</span>
                                 </div>
                                 ` : ''}
                                 ${p.estoque_minimo ? `
                                 <div class="product-id-item">
-                                    <span class="product-id-label">Estoque Mínimo</span>
+                                    <span class="product-id-label">Estoque MÃƒÆ’Ã‚Â­nimo</span>
                                     <span class="product-id-value">${p.estoque_minimo}</span>
                                 </div>
                                 ` : ''}
                             </div>
 
-                            <!-- ATRIBUTOS TÉCNICOS -->
+                            <!-- ATRIBUTOS TÃƒÆ’Ã¢â‚¬Â°CNICOS -->
                             ${attrs.length > 0 ? `
                             <div class="product-attrs-section" style="margin-bottom: 24px;">
-                                <div class="product-attrs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; font-weight: 800;">Atributos Técnicos</div>
+                                <div class="product-attrs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; font-weight: 800;">Atributos TÃƒÆ’Ã‚Â©cnicos</div>
                                 <div class="product-attrs-grid">
                                     ${attrs.map(attr => `
                                         <div class="product-attr-chip">
@@ -12217,7 +12406,7 @@ async function renderProductDetails(p) {
                             <!-- OBSERVACOES -->
                             ${p.observacoes ? `
                             <div class="product-obs-section" style="margin-bottom: 24px;">
-                                <div class="product-obs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 800;">Observações Internas</div>
+                                <div class="product-obs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 800;">ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes Internas</div>
                                 <div class="product-obs-text" style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.7);">${p.observacoes}</div>
                             </div>
                             ` : ''}
@@ -12227,7 +12416,7 @@ async function renderProductDetails(p) {
                     <div class="product-movement-entry">
                         <button type="button" class="product-movement-entry-btn" onclick="openProductMovementsFromDetail()">
                             <span class="material-symbols-rounded">history</span>
-                            <span>Ver movimentações</span>
+                            <span>Ver movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                         </button>
                     </div>
                 </div>
@@ -12275,25 +12464,25 @@ function renderAddProduct(initialEan = '') {
                 </div>
 
                 <div class="form-grid">
-                    <div class="form-section-title">Identificação</div>
+                    <div class="form-section-title">IdentificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
                     <div class="input-group">
-                        <label>ID Interno (Automático)</label>
+                        <label>ID Interno (AutomÃƒÆ’Ã‚Â¡tico)</label>
                         <input type="text" class="input-field" value="${nextId}" readonly disabled style="background: rgba(255,255,255,0.02); color: var(--primary); font-weight: 800; opacity: 1; cursor: not-allowed;">
                     </div>
                     <div class="input-group">
-                        <label>EAN / Código de Barras</label>
+                        <label>EAN / CÃƒÆ’Ã‚Â³digo de Barras</label>
                         <input type="text" id="add-ean" class="input-field" placeholder="EAN13" value="${initialEan}">
                     </div>
                     <div class="input-group">
                         <label>SKU Fornecedor</label>
-                        <input type="text" id="add-sku" class="input-field" placeholder="Código do Fornecedor">
+                        <input type="text" id="add-sku" class="input-field" placeholder="CÃƒÆ’Ã‚Â³digo do Fornecedor">
                     </div>
                     <div class="input-group full-width">
-                        <label>Descrição Base</label>
+                        <label>DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o Base</label>
                         <input type="text" id="add-desc" class="input-field" placeholder="Nome principal do produto">
                     </div>
 
-                    <div class="form-section-title">Características</div>
+                    <div class="form-section-title">CaracterÃƒÆ’Ã‚Â­sticas</div>
                     <div class="input-group">
                         <label>Marca</label>
                         <input type="text" id="add-marca" class="input-field" placeholder="Ex: Cofap">
@@ -12304,7 +12493,7 @@ function renderAddProduct(initialEan = '') {
                     </div>
                     <div class="input-group">
                         <label>Categoria</label>
-                        <input type="text" id="add-cat" class="input-field" placeholder="Ex: Suspensão">
+                        <input type="text" id="add-cat" class="input-field" placeholder="Ex: SuspensÃƒÆ’Ã‚Â£o">
                     </div>
                     <div class="input-group">
                         <label>Subcategoria</label>
@@ -12314,7 +12503,7 @@ function renderAddProduct(initialEan = '') {
                         <label>Unidade</label>
                         <select id="add-uni" class="input-field">
                             <option value="UN">UN - Unidade</option>
-                            <option value="PC">PC - Peça</option>
+                            <option value="PC">PC - PeÃƒÆ’Ã‚Â§a</option>
                             <option value="KG">KG - Quilograma</option>
                             <option value="LT">LT - Litro</option>
                             <option value="MT">MT - Metro</option>
@@ -12332,35 +12521,35 @@ function renderAddProduct(initialEan = '') {
                         <input type="number" id="add-qtd-caixa" class="input-field" value="1" min="1" step="1" placeholder="Ex: 50">
                     </div>
 
-                    <div class="form-section-title">Atributos Técnicos (JSON)</div>
+                    <div class="form-section-title">Atributos TÃƒÆ’Ã‚Â©cnicos (JSON)</div>
                     <div class="input-group full-width">
                         <label>Atributos (JSON Array)</label>
                         <textarea id="add-atributos" class="input-field" style="min-height: 100px; font-family: monospace; font-size: 0.85rem;" placeholder='[{"nome":"voltagem","valor":"12v","ordem":1}]'></textarea>
                     </div>
 
-                    <div class="form-section-title">Preços e Estoque</div>
+                    <div class="form-section-title">PreÃƒÆ’Ã‚Â§os e Estoque</div>
                     <div class="input-group">
-                        <label>Preço de Custo (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o de Custo (R$)</label>
                         <input type="text" inputmode="decimal" id="add-custo" class="input-field money-input" placeholder="0,00" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Preço Varejo (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o Varejo (R$)</label>
                         <input type="text" inputmode="decimal" id="add-varejo" class="input-field money-input" placeholder="0,00" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Preço Atacado (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o Atacado (R$)</label>
                         <input type="text" inputmode="decimal" id="add-atacado" class="input-field money-input" placeholder="0,00" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Estoque Mínimo</label>
+                        <label>Estoque MÃƒÆ’Ã‚Â­nimo</label>
                         <input type="number" id="add-min" class="input-field" placeholder="0">
                     </div>
                     <div class="input-group">
-                        <label>Qtd Mínima Atacado</label>
+                        <label>Qtd MÃƒÆ’Ã‚Â­nima Atacado</label>
                         <input type="number" id="add-min-at" class="input-field" value="1">
                     </div>
 
-                    <div class="form-section-title">Status e Observações</div>
+                    <div class="form-section-title">Status e ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</div>
                     <div class="input-group">
                         <label>Status</label>
                         <select id="add-status" class="input-field" style="width: 100%; appearance: none;">
@@ -12369,11 +12558,11 @@ function renderAddProduct(initialEan = '') {
                         </select>
                     </div>
                     <div class="input-group full-width">
-                        <label>Observações</label>
+                        <label>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</label>
                         <textarea id="add-obs" class="input-field" style="min-height: 80px; resize: vertical;" placeholder="Detalhes adicionais..."></textarea>
                     </div>
 
-                    <div class="form-section-title">Mídia e Documentação</div>
+                    <div class="form-section-title">MÃƒÆ’Ã‚Â­dia e DocumentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
                     <div class="input-group full-width">
                         <label>Imagem do Produto</label>
                         <input type="file" id="add-img-file" class="input-field" accept="image/*">
@@ -12439,7 +12628,7 @@ async function saveNewProduct() {
                 return;
             }
         } catch (e) {
-            showToast('JSON de atributos inválido');
+            showToast('JSON de atributos invÃƒÆ’Ã‚Â¡lido');
             return;
         }
     }
@@ -12473,7 +12662,7 @@ async function saveNewProduct() {
     };
 
     if (!product.descricao_base) {
-        showToast("A descrição base é obrigatória.");
+        showToast("A descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o base ÃƒÆ’Ã‚Â© obrigatÃƒÆ’Ã‚Â³ria.");
         return;
     }
 
@@ -12526,18 +12715,18 @@ function markRemoveImage() {
     removeImageFlag = true;
     const preview = document.getElementById('edit-img-preview');
     if (preview) {
-        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">Imagem será removida ao salvar</span>';
+        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">Imagem serÃƒÆ’Ã‚Â¡ removida ao salvar</span>';
     }
-    console.log('[REMOVE] Imagem marcada para remoção');
+    console.log('[REMOVE] Imagem marcada para remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
 }
 
 function markRemovePDF() {
     removePDFFlag = true;
     const preview = document.getElementById('edit-pdf-preview');
     if (preview) {
-        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">PDF será removido ao salvar</span>';
+        preview.innerHTML = '<span style="color: #E30613; font-size: 0.8rem;">PDF serÃƒÆ’Ã‚Â¡ removido ao salvar</span>';
     }
-    console.log('[REMOVE] PDF marcado para remoção');
+    console.log('[REMOVE] PDF marcado para remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
 }
 
 async function saveEditProduct(originalId) {
@@ -12598,7 +12787,7 @@ async function saveEditProduct(originalId) {
                 return;
             }
         } catch (e) {
-            showToast('JSON de atributos inválido');
+            showToast('JSON de atributos invÃƒÆ’Ã‚Â¡lido');
             return;
         }
     }
@@ -12714,7 +12903,7 @@ function renderEditProductSearch() {
     setTimeout(() => document.getElementById('edit-search-input')?.focus(), 100);
 }
 
-// Lógica de Busca para Edição
+// LÃƒÆ’Ã‚Â³gica de Busca para EdiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
 let lastEditSearchQuery = '';
 window.debouncedEditSearch = debounce(async () => {
     const input = document.getElementById('edit-search-input');
@@ -12778,8 +12967,8 @@ function renderEditProductFormByEan(code) {
     if (p) {
         renderEditProductForm(p);
     } else {
-        console.warn('[EDIT] Produto não encontrado para edição:', code);
-        showToast('Não foi possível abrir a edição deste produto.', 'warning');
+        console.warn('[EDIT] Produto nÃƒÆ’Ã‚Â£o encontrado para ediÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:', code);
+        showToast('NÃƒÆ’Ã‚Â£o foi possÃƒÆ’Ã‚Â­vel abrir a ediÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o deste produto.', 'warning');
     }
 }
 
@@ -12804,8 +12993,8 @@ function openProductCreate() {
                 
                 <div style="margin-top: 40px; text-align: center; color: var(--muted);">
                     <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px;">construction</span>
-                    <p style="font-size: 1.1rem; font-weight: 600;">Módulo em desenvolvimento</p>
-                    <p style="font-size: 0.85rem; margin-top: 8px;">Aguarde as próximas atualizações.</p>
+                    <p style="font-size: 1.1rem; font-weight: 600;">MÃƒÆ’Ã‚Â³dulo em desenvolvimento</p>
+                    <p style="font-size: 0.85rem; margin-top: 8px;">Aguarde as prÃƒÆ’Ã‚Â³ximas atualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes.</p>
                 </div>
             </main>
         </div>
@@ -12828,13 +13017,13 @@ function renderEditProductForm(p) {
                 </div>
 
                 <div class="form-grid">
-                    <div class="form-section-title">Identificação</div>
+                    <div class="form-section-title">IdentificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
                     <div class="input-group">
                         <label>ID Interno</label>
                         <input type="text" id="edit-id" class="input-field" value="${p.id_interno || p.col_A || ''}">
                     </div>
                     <div class="input-group">
-                        <label>EAN / Código de Barras</label>
+                        <label>EAN / CÃƒÆ’Ã‚Â³digo de Barras</label>
                         <input type="text" id="edit-ean" class="input-field" value="${p.ean || ''}">
                     </div>
                     <div class="input-group">
@@ -12842,11 +13031,11 @@ function renderEditProductForm(p) {
                         <input type="text" id="edit-sku" class="input-field" value="${p.sku_fornecedor || ''}">
                     </div>
                     <div class="input-group full-width">
-                        <label>Descrição Base</label>
+                        <label>DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o Base</label>
                         <input type="text" id="edit-desc" class="input-field" value="${p.descricao_base || ''}">
                     </div>
 
-                    <div class="form-section-title">Características</div>
+                    <div class="form-section-title">CaracterÃƒÆ’Ã‚Â­sticas</div>
                     <div class="input-group">
                         <label>Marca</label>
                         <input type="text" id="edit-marca" class="input-field" value="${p.marca || ''}">
@@ -12867,7 +13056,7 @@ function renderEditProductForm(p) {
                         <label>Unidade</label>
                         <select id="edit-uni" class="input-field">
                             <option value="UN" ${p.unidade === 'UN' ? 'selected' : ''}>UN - Unidade</option>
-                            <option value="PC" ${p.unidade === 'PC' ? 'selected' : ''}>PC - Peça</option>
+                            <option value="PC" ${p.unidade === 'PC' ? 'selected' : ''}>PC - PeÃƒÆ’Ã‚Â§a</option>
                             <option value="KG" ${p.unidade === 'KG' ? 'selected' : ''}>KG - Quilograma</option>
                             <option value="LT" ${p.unidade === 'LT' ? 'selected' : ''}>LT - Litro</option>
                             <option value="MT" ${p.unidade === 'MT' ? 'selected' : ''}>MT - Metro</option>
@@ -12885,35 +13074,35 @@ function renderEditProductForm(p) {
                         <input type="number" id="edit-qtd-caixa" class="input-field" value="${normalizeQtdPorCaixa(p.qtd_por_caixa)}" min="1" step="1" placeholder="Ex: 50">
                     </div>
 
-                    <div class="form-section-title">Atributos Técnicos (JSON)</div>
+                    <div class="form-section-title">Atributos TÃƒÆ’Ã‚Â©cnicos (JSON)</div>
                     <div class="input-group full-width">
                         <label>Atributos (JSON Array)</label>
                         <textarea id="edit-atributos" class="input-field" style="min-height: 100px; font-family: monospace; font-size: 0.85rem;">${attrsString}</textarea>
                     </div>
 
-                    <div class="form-section-title">Preços e Estoque</div>
+                    <div class="form-section-title">PreÃƒÆ’Ã‚Â§os e Estoque</div>
                     <div class="input-group">
-                        <label>Preço de Custo (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o de Custo (R$)</label>
                         <input type="text" inputmode="decimal" id="edit-custo" class="input-field money-input" value="${formatMoneyInputValue(p.preco_custo || 0)}" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Preço Varejo (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o Varejo (R$)</label>
                         <input type="text" inputmode="decimal" id="edit-varejo" class="input-field money-input" value="${formatMoneyInputValue(p.preco_varejo || 0)}" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Preço Atacado (R$)</label>
+                        <label>PreÃƒÆ’Ã‚Â§o Atacado (R$)</label>
                         <input type="text" inputmode="decimal" id="edit-atacado" class="input-field money-input" value="${formatMoneyInputValue(p.preco_atacado || 0)}" onfocus="this.select()" onblur="normalizeMoneyInputElement(this)">
                     </div>
                     <div class="input-group">
-                        <label>Estoque Mínimo</label>
+                        <label>Estoque MÃƒÆ’Ã‚Â­nimo</label>
                         <input type="number" id="edit-min" class="input-field" value="${p.estoque_minimo || ''}">
                     </div>
                     <div class="input-group">
-                        <label>Qtd Mínima Atacado</label>
+                        <label>Qtd MÃƒÆ’Ã‚Â­nima Atacado</label>
                         <input type="number" id="edit-min-at" class="input-field" value="${p.qtd_minima_atacado || 1}">
                     </div>
 
-                    <div class="form-section-title">Status e Observações</div>
+                    <div class="form-section-title">Status e ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</div>
                     <div class="input-group">
                         <label>Status</label>
                         <select id="edit-status" class="input-field" style="width: 100%; appearance: none;">
@@ -12922,11 +13111,11 @@ function renderEditProductForm(p) {
                         </select>
                     </div>
                     <div class="input-group full-width">
-                        <label>Observações</label>
+                        <label>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</label>
                         <textarea id="edit-obs" class="input-field" style="min-height: 80px; resize: vertical;">${p.observacoes || ''}</textarea>
                     </div>
 
-                    <div class="form-section-title">Mídia e Documentação</div>
+                    <div class="form-section-title">MÃƒÆ’Ã‚Â­dia e DocumentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
                     <div class="input-group full-width">
                         <label>URL da Imagem</label>
                         <input type="text" id="edit-img-url" class="input-field" value="${p.url_imagem || ''}" placeholder="https://...">
@@ -12953,7 +13142,7 @@ function renderEditProductForm(p) {
                     </button>
                     <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveEditProduct('${p.id_interno || p.col_A}')">
                         <span class="material-symbols-rounded">save</span>
-                        Salvar Alterações
+                        Salvar AlteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes
                     </button>
                 </div>
             </main>
@@ -12966,7 +13155,7 @@ function handleBackgroundImageUpload(event, deviceType) {
     if (!file) return;
     
     if (!file.type.startsWith('image/')) {
-        showToast('Por favor, selecione uma imagem válida.');
+        showToast('Por favor, selecione uma imagem vÃƒÆ’Ã‚Â¡lida.');
         return;
     }
     
@@ -12991,7 +13180,7 @@ function handleFontUpload(event) {
     const validExtensions = ['.ttf', '.otf', '.woff', '.woff2'];
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!validExtensions.includes(ext)) {
-        showToast('Por favor, selecione um arquivo de fonte válido (TTF, OTF, WOFF, WOFF2).');
+        showToast('Por favor, selecione um arquivo de fonte vÃƒÆ’Ã‚Â¡lido (TTF, OTF, WOFF, WOFF2).');
         return;
     }
     
@@ -13186,11 +13375,11 @@ function resetLoginVisual() {
     
     const request = indexedDB.deleteDatabase('DYAUTO_DB');
     request.onsuccess = function() {
-        showToast('Visual resetado para padrão!');
+        showToast('Visual resetado para padrÃƒÆ’Ã‚Â£o!');
         renderConfigSubMenu();
     };
     request.onerror = function() {
-        showToast('Visual resetado para padrão!');
+        showToast('Visual resetado para padrÃƒÆ’Ã‚Â£o!');
         renderConfigSubMenu();
     };
 }
@@ -13213,7 +13402,7 @@ function adjustColor(color, amount) {
     return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-const FINANCEIRO_EMPTY_MESSAGE = 'Nenhuma parcela financeira encontrada. Ao lançar uma nota fiscal com parcelas, os vencimentos aparecerão aqui.';
+const FINANCEIRO_EMPTY_MESSAGE = 'Nenhuma parcela financeira encontrada. Ao lanÃƒÆ’Ã‚Â§ar uma nota fiscal com parcelas, os vencimentos aparecerÃƒÆ’Ã‚Â£o aqui.';
 const FINANCEIRO_STATUS_ABERTOS = ['pendente', 'parcial'];
 
 function normalizarStatusFinanceiro(status) {
@@ -13325,8 +13514,8 @@ function getFinanceiroFiltroConfig(filtro) {
             calcular: calcularFinanceiroPendentes
         },
         pagas_mes: {
-            titulo: 'PAGAS NO MÊS',
-            descricao: 'Consultar parcelas pagas dentro do mês atual.',
+            titulo: 'PAGAS NO MÃƒÆ’Ã…Â S',
+            descricao: 'Consultar parcelas pagas dentro do mÃƒÆ’Ã‚Âªs atual.',
             icon: 'financeiro_pagas_mes',
             calcular: calcularFinanceiroPagasMes
         }
@@ -13351,7 +13540,7 @@ async function renderFinanceiroSubMenu() {
         { id: 'fin_a_vencer', label: 'A VENCER', icon: 'financeiro_avencer', onclick: "renderFinanceiroLista('a_vencer')", description: 'Consultar parcelas de notas fiscais com vencimento futuro.' },
         { id: 'fin_vencidas', label: 'VENCIDAS', icon: 'financeiro_vencidas', onclick: "renderFinanceiroLista('vencidas')", description: 'Ver parcelas vencidas e valores em atraso.' },
         { id: 'fin_pendentes', label: 'PENDENTES', icon: 'financeiro_pendentes', onclick: "renderFinanceiroLista('pendentes')", description: 'Acompanhar todas as parcelas ainda em aberto.' },
-        { id: 'fin_pagas_mes', label: 'PAGAS NO MÊS', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Consultar parcelas pagas dentro do mês atual.' }
+        { id: 'fin_pagas_mes', label: 'PAGAS NO MÃƒÆ’Ã…Â S', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Consultar parcelas pagas dentro do mÃƒÆ’Ã‚Âªs atual.' }
     ];
 
     app.innerHTML = `
@@ -13403,7 +13592,7 @@ async function renderFinanceiroLista(filtro = 'pendentes') {
                                 <article class="financeiro-row">
                                     <div>
                                         <strong>${item.descricao || `NF ${item.numero_nf || '-'}`}</strong>
-                                        <small>NF ${item.numero_nf || '-'} • Parcela ${item.parcela || '-'}</small>
+                                        <small>NF ${item.numero_nf || '-'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Parcela ${item.parcela || '-'}</small>
                                     </div>
                                     <div>
                                         <strong>${formatFinanceiroMoney(item.valor)}</strong>
@@ -13435,7 +13624,7 @@ function getChannelConfig(label) {
     if (l.includes('CORREIOS')) return { icon: 'mail', color: 'correios', svgIcon: channel3DIcons.correios };
     if (l.includes('ULTRA')) return { icon: 'speed', color: 'ultra', svgIcon: channel3DIcons.ultra };
     if (l.includes('FULL')) return { icon: 'flash_on', color: 'full', svgIcon: channel3DIcons.full };
-    if (l.includes('PDV') || l.includes('BALCÃO')) return { icon: 'store', color: 'pdv', svgIcon: channel3DIcons.pdv };
+    if (l.includes('PDV') || l.includes('BALCÃƒÆ’Ã†â€™O')) return { icon: 'store', color: 'pdv', svgIcon: channel3DIcons.pdv };
     return { icon: 'storefront', color: 'pdv', svgIcon: channel3DIcons.pdv };
 }
 
@@ -13449,7 +13638,7 @@ const PICK_CHANNEL_CARD_BLUEPRINTS = [
     {
         key: 'flex',
         label: 'Flex',
-        description: 'Organize separações rápidas do canal Flex.',
+        description: 'Organize separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas do canal Flex.',
         aliases: ['FLEX']
     },
     {
@@ -13461,26 +13650,26 @@ const PICK_CHANNEL_CARD_BLUEPRINTS = [
     {
         key: 'ml',
         label: 'Mercado Livre Coleta',
-        description: 'Prepare coletas do Mercado Livre com conferência posterior.',
+        description: 'Prepare coletas do Mercado Livre com conferÃƒÆ’Ã‚Âªncia posterior.',
         aliases: ['MERCADO LIVRE COLETA', 'MERCADO LIVRE', 'ML COLETA', 'ML']
     },
     {
         key: 'pdv',
         label: 'PDV / Balcao',
-        description: 'Separe vendas de balcão e retirada direta.',
-        aliases: ['PDV', 'BALCAO', 'BALCÃO']
+        description: 'Separe vendas de balcÃƒÆ’Ã‚Â£o e retirada direta.',
+        aliases: ['PDV', 'BALCAO', 'BALCÃƒÆ’Ã†â€™O']
     },
     {
         key: 'shopee',
         label: 'Shopee Agencia',
-        description: 'Separe remessas destinadas à agência Shopee.',
-        aliases: ['SHOPEE AGENCIA', 'SHOPEE AGÊNCIA', 'SHOPEE']
+        description: 'Separe remessas destinadas ÃƒÆ’Ã‚Â  agÃƒÆ’Ã‚Âªncia Shopee.',
+        aliases: ['SHOPEE AGENCIA', 'SHOPEE AGÃƒÆ’Ã…Â NCIA', 'SHOPEE']
     },
     {
         key: 'ultra',
         label: 'Ultra Rapido / Turbo',
-        description: 'Priorize pedidos urgentes dos fluxos ultra rápido e turbo.',
-        aliases: ['ULTRA RAPIDO', 'ULTRA RÁPIDO', 'TURBO', 'ULTRA']
+        description: 'Priorize pedidos urgentes dos fluxos ultra rÃƒÆ’Ã‚Â¡pido e turbo.',
+        aliases: ['ULTRA RAPIDO', 'ULTRA RÃƒÆ’Ã‚ÂPIDO', 'TURBO', 'ULTRA']
     }
 ];
 
@@ -13726,15 +13915,15 @@ function getPickDraftChannelInfo(session) {
     if (normalized.includes('flex')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'purple' };
     if (normalized.includes('correio')) return { key: 'correios', label: 'Correios', icon: 'local_shipping', tone: 'green' };
     if (normalized.includes('turbo') || normalized.includes('motoboy') || normalized.includes('moto')) return { key: 'turbo', label: 'Turbo / Motoboy', icon: 'two_wheeler', tone: 'orange' };
-    if (normalized.includes('retirada') || normalized.includes('balcao') || normalized.includes('balcão') || normalized.includes('local')) return { key: 'retirada', label: 'Retirada local', icon: 'storefront', tone: 'yellow' };
-    return { key: 'outros', label: raw || 'Canal não informado', icon: 'inventory_2', tone: 'slate' };
+    if (normalized.includes('retirada') || normalized.includes('balcao') || normalized.includes('balcÃƒÆ’Ã‚Â£o') || normalized.includes('local')) return { key: 'retirada', label: 'Retirada local', icon: 'storefront', tone: 'yellow' };
+    return { key: 'outros', label: raw || 'Canal nÃƒÆ’Ã‚Â£o informado', icon: 'inventory_2', tone: 'slate' };
 }
 
 function getPickDraftStatusInfo(session) {
     const raw = String(session?.status || '').trim();
     const normalized = raw.toLowerCase();
     if (normalized.includes('final')) return { label: 'Finalizado', key: 'finalizado' };
-    if (normalized.includes('confer')) return { label: 'Pronto para conferência', key: 'conferencia' };
+    if (normalized.includes('confer')) return { label: 'Pronto para conferÃƒÆ’Ã‚Âªncia', key: 'conferencia' };
     if (normalized.includes('aguard')) return { label: 'Aguardando itens', key: 'aguardando' };
     return { label: 'Em andamento', key: 'andamento' };
 }
@@ -13775,15 +13964,15 @@ function showPickDraftDetails(sessionId) {
     const session = getDraftPickSessionsWithLocalDraft()
         .find(item => String(getPackSeparationSessionId(item) || '') === String(sessionId || ''));
     if (!session) {
-        showToast('Separação não encontrada.', 'warning');
+        showToast('SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o encontrada.', 'warning');
         return;
     }
 
     const item = buildPickDraftViewModel(session);
     const details = [
-        `Separação: ${item.sessionId}`,
+        `SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o: ${item.sessionId}`,
         `Canal: ${item.channel.label}`,
-        `Cliente: ${item.clientName || 'Cliente não informado'}`,
+        `Cliente: ${item.clientName || 'Cliente nÃƒÆ’Ã‚Â£o informado'}`,
         `Produtos diferentes: ${item.products}`,
         `Itens/bipes: ${item.items}`,
         `Volumes: ${item.packages}`,
@@ -13793,7 +13982,7 @@ function showPickDraftDetails(sessionId) {
 
     showAppAlert({
         type: 'info',
-        title: 'Detalhes da separação',
+        title: 'Detalhes da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
         message: details,
         buttonLabel: 'Fechar'
     });
@@ -13815,7 +14004,7 @@ function applyPickDraftFilters() {
         if (visible && item.classList.contains('pick-draft-row')) visibleCount += 1;
     });
 
-    document.getElementById('pick-drafts-visible-count')?.replaceChildren(document.createTextNode(`${visibleCount} separações`));
+    document.getElementById('pick-drafts-visible-count')?.replaceChildren(document.createTextNode(`${visibleCount} separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes`));
     document.querySelector('.pick-drafts-empty-filter')?.classList.toggle('hidden', visibleCount > 0);
 }
 
@@ -13857,23 +14046,23 @@ async function renderSeparacoesAndamentoScreen() {
             <main class="container pick-drafts-shell">
                 <header class="pick-drafts-header">
                     <div>
-                        <h1>SEPARAÇÕES EM ANDAMENTO</h1>
-                        <p>Visualize e gerencie todas as separações que ainda não foram finalizadas.</p>
+                        <h1>SEPARAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã¢â‚¬Â¢ES EM ANDAMENTO</h1>
+                        <p>Visualize e gerencie todas as separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes que ainda nÃƒÆ’Ã‚Â£o foram finalizadas.</p>
                     </div>
                     <aside class="pick-drafts-header-actions">
                         <button type="button" class="pick-drafts-refresh" onclick="renderSeparacoesAndamentoScreen()">
                             <span class="material-symbols-rounded">refresh</span>
                             Atualizar
                         </button>
-                        <span id="pick-drafts-visible-count" class="pick-drafts-counter">${viewModels.length} separações</span>
+                        <span id="pick-drafts-visible-count" class="pick-drafts-counter">${viewModels.length} separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                     </aside>
                 </header>
 
                 ${sessions.length === 0 ? `
                     <section class="pick-drafts-empty-state">
                         <span class="material-symbols-rounded">folder_open</span>
-                        <strong>Nenhuma separação em andamento</strong>
-                        <p>Quando uma separação for iniciada, ela aparecerá aqui.</p>
+                        <strong>Nenhuma separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em andamento</strong>
+                        <p>Quando uma separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o for iniciada, ela aparecerÃƒÆ’Ã‚Â¡ aqui.</p>
                         <button type="button" onclick="renderSeparacoesAndamentoScreen()">Atualizar</button>
                     </section>
                 ` : `
@@ -13912,7 +14101,7 @@ async function renderSeparacoesAndamentoScreen() {
 
                     <section class="pick-drafts-empty-filter hidden">
                         <span class="material-symbols-rounded">search_off</span>
-                        <strong>Nenhuma separação encontrada</strong>
+                        <strong>Nenhuma separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o encontrada</strong>
                         <p>Ajuste os filtros ou a busca para ver mais resultados.</p>
                     </section>
 
@@ -13920,14 +14109,14 @@ async function renderSeparacoesAndamentoScreen() {
                         <table class="pick-drafts-table">
                             <thead>
                                 <tr>
-                                    <th>Separação</th>
+                                    <th>SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</th>
                                     <th>Canal</th>
                                     <th>Produtos</th>
                                     <th>Itens</th>
                                     <th>Volumes</th>
                                     <th>Data / Hora</th>
                                     <th>Status</th>
-                                    <th>Ações</th>
+                                    <th>AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -13947,7 +14136,7 @@ async function renderSeparacoesAndamentoScreen() {
                                             <div class="pick-drafts-actions">
                                                 <button type="button" class="secondary" onclick="showPickDraftDetails(${quotePackInlineArg(item.sessionId)})">Ver detalhes</button>
                                                 <button type="button" class="primary" onclick="resumePickingDraftFromServer(${quotePackInlineArg(item.sessionId)})">Continuar</button>
-                                                <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separação">
+                                                <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">
                                                     <span class="material-symbols-rounded">delete</span>
                                                 </button>
                                             </div>
@@ -13976,7 +14165,7 @@ async function renderSeparacoesAndamentoScreen() {
                                 <div class="pick-drafts-actions">
                                     <button type="button" class="secondary" onclick="showPickDraftDetails(${quotePackInlineArg(item.sessionId)})">Ver detalhes</button>
                                     <button type="button" class="primary" onclick="resumePickingDraftFromServer(${quotePackInlineArg(item.sessionId)})">Continuar</button>
-                                    <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separação">
+                                    <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">
                                         <span class="material-symbols-rounded">delete</span>
                                     </button>
                                 </div>
@@ -14021,7 +14210,7 @@ async function renderPickMenu() {
     });
 
 
-    // FULL é depósito externo, NÃO canal operacional de separação
+    // FULL ÃƒÆ’Ã‚Â© depÃƒÆ’Ã‚Â³sito externo, NÃƒÆ’Ã†â€™O canal operacional de separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
     channels = channels.filter(c => !String(c.label).toUpperCase().includes('FULL'));
 
     const channelCards = buildPickChannelCards(channels);
@@ -14060,13 +14249,13 @@ function renderPickHistory() {
 
                     <main class="container">
                         <div class="sub-menu-header">
-                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÓRICO DE SEPARACAO</h2>
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÃƒÆ’Ã¢â‚¬Å“RICO DE SEPARACAO</h2>
                         </div>
 
                         ${history.length === 0 ? `
                             <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
                                 <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">history</span>
-                                <p style="color: var(--muted);">Nenhuma separação encontrada.</p>
+                                <p style="color: var(--muted);">Nenhuma separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o encontrada.</p>
                             </div>
                         ` : `
                             <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
@@ -14077,7 +14266,7 @@ function renderPickHistory() {
                                                 <div style="font-weight: 800; color: white; font-size: 0.9rem;">${item.rom_id || '-'}</div>
                                                 <div style="font-size: 0.65rem; color: var(--muted);">${formatDateTimeBR(item.criado_em)}</div>
                                             </div>
-                                            <div style="background: ${item.status === 'CONCLUÍDO' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)'}; color: ${item.status === 'CONCLUÍDO' ? '#22c55e' : '#eab308'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
+                                            <div style="background: ${item.status === 'CONCLUÃƒÆ’Ã‚ÂDO' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)'}; color: ${item.status === 'CONCLUÃƒÆ’Ã‚ÂDO' ? '#22c55e' : '#eab308'}; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">
                                                 ${item.status || 'PENDENTE'}
                                             </div>
                                         </div>
@@ -14092,7 +14281,7 @@ function renderPickHistory() {
             `;
 }
 
-// Variável global para armazenar o contexto da sessão antes de ser persistida
+// VariÃƒÆ’Ã‚Â¡vel global para armazenar o contexto da sessÃƒÆ’Ã‚Â£o antes de ser persistida
 let currentPickingContext = null;
 let lastScannedPickItemKey = null;
 let expandedPickItemKey = null;
@@ -14604,7 +14793,7 @@ async function confirmDiscardPickingDraft(sessionId, channelId, channelLabel, ch
     const itemLabel = hasItems ? 'Todos os produtos bipados nesse rascunho serao removidos.' : 'Nenhum produto foi bipado ainda.';
 
     const confirmed = await showAppConfirm({
-        title: 'Cancelar rascunho de separação',
+        title: 'Cancelar rascunho de separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
         message: `Cancelar o rascunho da separacao ${targetSessionId}?`,
         detail: `${itemLabel}\nUse isso quando iniciou a separacao no canal errado.`,
         confirmLabel: 'Cancelar rascunho',
@@ -14845,7 +15034,7 @@ function showPickScanCenterToast(item = null, quantity = 1) {
                 <span>Quantidade atual</span>
                 <strong>${currentQty}<small> un</small></strong>
             </div>
-            <em><span class="material-symbols-rounded">check_circle</span>Adicionado à separação</em>
+            <em><span class="material-symbols-rounded">check_circle</span>Adicionado ÃƒÆ’Ã‚Â  separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</em>
         </div>
     `;
     document.body.appendChild(toastEl);
@@ -14893,7 +15082,7 @@ function showPickRemovalFeedbackToast(item = null, quantity = 1) {
                 <span>Quantidade removida</span>
                 <strong>${Number(quantity || 1)}<small> un</small></strong>
             </div>
-            <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'} da separação</em>
+            <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'} da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</em>
         </div>
     `;
     document.body.appendChild(toastEl);
@@ -15145,7 +15334,7 @@ function getPickChannelSubtitle(channelLabel) {
     const label = String(channelLabel || '').toUpperCase();
     if (label.includes('FLEX')) return 'Flex Atacado';
     if (label.includes('MERCADO') || label.includes('ML')) return 'Marketplace';
-    if (label.includes('SHOPEE') || label.includes('AGENCIA') || label.includes('AGÊNCIA')) return 'Agencia';
+    if (label.includes('SHOPEE') || label.includes('AGENCIA') || label.includes('AGÃƒÆ’Ã…Â NCIA')) return 'Agencia';
     if (label.includes('MAGALU') || label.includes('AMAZON')) return 'Marketplace';
     if (label.includes('PDV') || label.includes('BALC')) return 'Venda direta';
     return 'Canal operacional';
@@ -15270,12 +15459,12 @@ function openHighQtyModal({ item, currentQty, flow = 'pick', reason = 'quantidad
                 const input = document.getElementById('high-qty-input');
                 const nextQty = Math.floor(Number(String(input?.value || '').replace(',', '.')));
                 if (!Number.isFinite(nextQty) || nextQty < 1) {
-                    renderInputStep('Informe uma quantidade válida.');
+                    renderInputStep('Informe uma quantidade vÃƒÆ’Ã‚Â¡lida.');
                     return;
                 }
                 const confirmedQty = await showAppConfirm({
-                    title: isRemove ? 'Confirmar remoção' : 'Confirmar alteração',
-                    message: isRemove ? `Confirmar remoção de ${nextQty} unidades?` : `Confirmar alteração para ${nextQty} unidades?`,
+                    title: isRemove ? 'Confirmar remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o' : 'Confirmar alteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+                    message: isRemove ? `Confirmar remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de ${nextQty} unidades?` : `Confirmar alteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o para ${nextQty} unidades?`,
                     confirmLabel: 'Confirmar',
                     cancelLabel: 'Cancelar'
                 });
@@ -15301,7 +15490,7 @@ function openHighQtyModal({ item, currentQty, flow = 'pick', reason = 'quantidad
                 <button class="high-qty-close" type="button" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
                 <div class="high-qty-icon"><span class="material-symbols-rounded">priority_high</span></div>
                 <h2>QUANTIDADE ALTA DETECTADA</h2>
-                <p>${isRemove ? `Você já bipou ${getHighQtyThreshold()} unidades para remover deste produto.` : `Você já bipou ${getHighQtyThreshold()} unidades deste produto.`}</p>
+                <p>${isRemove ? `VocÃƒÆ’Ã‚Âª jÃƒÆ’Ã‚Â¡ bipou ${getHighQtyThreshold()} unidades para remover deste produto.` : `VocÃƒÆ’Ã‚Âª jÃƒÆ’Ã‚Â¡ bipou ${getHighQtyThreshold()} unidades deste produto.`}</p>
                 ${renderHighQtyProductSummary(info, currentQty, summaryLabel)}
                 <div class="high-qty-actions">
                     <button type="button" class="high-qty-secondary" data-action="continue">${isRemove ? 'Continuar removendo' : 'Continuar bipando'}</button>
@@ -15423,11 +15612,12 @@ function preparePickScannerInput({ focus = false } = {}) {
     const input = document.getElementById('pick-ean-input');
     if (!input) return;
     input.setAttribute('inputmode', 'none');
+    input.removeAttribute('readonly');
     input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocapitalize', 'off');
     input.setAttribute('spellcheck', 'false');
-    if (focus && !isPickMobileViewport()) {
+    if (focus) {
         input.focus({ preventScroll: true });
     }
 }
@@ -15437,8 +15627,7 @@ function settlePickScannerInput(delay = 60) {
         const input = document.getElementById('pick-ean-input');
         if (!input) return;
         input.value = '';
-        preparePickScannerInput({ focus: !isPickMobileViewport() });
-        if (isPickMobileViewport()) input.blur();
+        preparePickScannerInput({ focus: true });
     }, delay);
 }
 
@@ -15483,7 +15672,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     <div class="pick-workflow-title">
                         <span class="pick-title-icon">${channelIcon}</span>
                         <div>
-                            <h1>SEPARAÇÃO (PICK)</h1>
+                            <h1>SEPARAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O (PICK)</h1>
                         </div>
                     </div>
 
@@ -15494,7 +15683,8 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                         <div class="pick-scan-field">
                             <span class="material-symbols-rounded">search</span>
                             <input type="text" id="pick-ean-input" class="product-search-input" 
-                                   placeholder="Bipe o produto (EAN, SKU ou código interno)"
+                                   placeholder="Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)"
+                                   onfocus="preparePickScannerInput({ focus: false })"
                                    oninput="handlePickSearchInput(event)"
                                    onkeydown="handlePickSearchKeyDown(event)"
                                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
@@ -15507,7 +15697,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                     </div>
                     <div id="pick-removal-badge" class="pick-removal-badge hidden">
                         <span class="material-symbols-rounded">warning</span>
-                        MODO REMOÇÃO ATIVO
+                        MODO REMOÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O ATIVO
                     </div>
                 </section>
 
@@ -15559,26 +15749,29 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                             <div><span>Itens / bips</span><strong id="pick-summary-qty">${getPickTotalQuantity()}</strong></div>
                             <div class="pick-package-count-field">
                                 <span>Pacotes</span>
-                                <input id="pick-summary-packages" class="pick-package-count-input" type="number" inputmode="numeric" min="0" step="1" value="${packageCount}" aria-label="Pacotes" oninput="setPickPackageCount(this.value, false)" onchange="setPickPackageCount(this.value, true)" onblur="setPickPackageCount(this.value, true)" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); setPickPackageCount(this.value, true, true); this.blur(); }">
+                                <div class="pick-package-inline-control">
+                                    <button class="pick-package-btn pick-package-minus" type="button" onclick="adjustPickPackageCount(-1)" aria-label="Diminuir pacote montado">
+                                        <span class="material-symbols-rounded">keyboard_arrow_down</span>
+                                    </button>
+                                    <input id="pick-summary-packages" class="pick-package-count-input" type="number" inputmode="numeric" min="0" step="1" value="${packageCount}" aria-label="Pacotes" onfocus="this.select()" oninput="setPickPackageCount(this.value, false)" onchange="setPickPackageCount(this.value, true)" onblur="setPickPackageCount(this.value, true)" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); setPickPackageCount(this.value, true, true); this.blur(); }">
+                                    <button class="pick-package-btn pick-package-plus" type="button" onclick="adjustPickPackageCount(1)" aria-label="Adicionar pacote montado">
+                                        <span class="material-symbols-rounded">keyboard_arrow_up</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="pick-summary-actions">
-                            <button class="pick-package-btn pick-package-minus" type="button" onclick="adjustPickPackageCount(-1)" aria-label="Diminuir pacote montado">
-                                <span class="material-symbols-rounded">remove</span>
-                            </button>
-                            <button class="pick-package-btn pick-package-plus" type="button" onclick="adjustPickPackageCount(1)">
-                                <span class="material-symbols-rounded">add</span>
-                                <span>Pacote</span>
-                            </button>
                             <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
                                 <span class="material-symbols-rounded">remove_circle</span>
                                 <span id="pick-remove-scan-label">REMOVER</span>
                             </button>
                             <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                                FINALIZAR
+                                <span class="material-symbols-rounded">check_circle</span>
+                                <span>FINALIZAR</span>
                             </button>
                             <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
-                                PAUSAR
+                                <span class="material-symbols-rounded">pause_circle</span>
+                                <span>PAUSAR</span>
                             </button>
                         </div>
                     </aside>
@@ -15621,7 +15814,6 @@ function showInputFeedback(inputId, type) {
         if (input) {
             if (inputId === 'pick-ean-input') {
                 preparePickScannerInput({ focus: true });
-                if (isPickMobileViewport()) input.blur();
             } else {
                 input.focus();
             }
@@ -15637,7 +15829,7 @@ function normalizePickCode(rawValue) {
 function getPickScanInputPlaceholder() {
     return pickRemovalModeActive
         ? 'Bipe o produto para remover 1 unidade'
-        : 'Bipe o produto (EAN, SKU ou código interno)';
+        : 'Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)';
 }
 
 function updatePickRemovalModeUI() {
@@ -15949,8 +16141,8 @@ async function removePickItemByScan(cleanCode, input) {
 
     if (existingIndex < 0) {
         playBeep('error');
-        showScanFeedback('warning', 'Produto não está nesta separação');
-        showToast('Produto não está nesta separação', 'warning');
+        showScanFeedback('warning', 'Produto nÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ nesta separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
+        showToast('Produto nÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ nesta separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', 'warning');
         if (input) input.value = '';
         updatePickRemovalModeUI();
         showInputFeedback('pick-ean-input', 'error');
@@ -16008,7 +16200,7 @@ async function removePickItemByScan(cleanCode, input) {
                 if (currentIndex >= 0) currentSessionItems.splice(currentIndex, 1);
                 if (finalQty > 0) currentSessionItems.unshift(item);
                 updatePickItemsList();
-                showToast(finalQty > 0 ? 'Quantidade removida atualizada.' : 'Produto removido da separação', 'success');
+                showToast(finalQty > 0 ? 'Quantidade removida atualizada.' : 'Produto removido da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', 'success');
             }
         });
         removedAll = !currentSessionItems.includes(item) || Number(item.qty || 0) <= 0;
@@ -16025,14 +16217,14 @@ async function removePickItemByScan(cleanCode, input) {
 
     try {
         const result = await persistPickingItemRemoval(draft, item, removedAll);
-        if (result?.queued) showToast('Remoção salva localmente para sincronizar.');
-        else showToast(removedAll ? 'Produto removido da separação' : `${removedFeedbackQty} ${removedFeedbackQty === 1 ? 'unidade removida' : 'unidades removidas'}`);
+        if (result?.queued) showToast('RemoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o salva localmente para sincronizar.');
+        else showToast(removedAll ? 'Produto removido da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o' : `${removedFeedbackQty} ${removedFeedbackQty === 1 ? 'unidade removida' : 'unidades removidas'}`);
         showPickRemovalFeedbackToast(item, removedFeedbackQty);
     } catch (error) {
         markDraftPickSaveStatus('failed', error);
         console.error('[SEP] erro ao remover item por bipagem', error);
-        showScanFeedback('error', 'Erro ao salvar remoção');
-        showToast(`Erro ao salvar remoção: ${error?.message || error}`, 'error');
+        showScanFeedback('error', 'Erro ao salvar remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o');
+        showToast(`Erro ao salvar remoÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o: ${error?.message || error}`, 'error');
     }
 
     setPickRemovalMode(false);
@@ -16042,11 +16234,11 @@ async function removePickItemByScan(cleanCode, input) {
 async function addPickItem(scannedEan = null) {
     const activeContext = await ensureActivePickingContext();
     if (!activeContext?.sessionId || !activeContext?.channelLabel || isTemporaryPickSessionId(activeContext.sessionId)) {
-        showScanFeedback('error', 'Canal da separação inválido');
+        showScanFeedback('error', 'Canal da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o invÃƒÆ’Ã‚Â¡lido');
         await showAppModal({
             type: 'error',
-            title: 'Canal da separação não identificado',
-            message: 'Volte para o menu de Separação e escolha o canal novamente antes de bipar.',
+            title: 'Canal da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o identificado',
+            message: 'Volte para o menu de SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o e escolha o canal novamente antes de bipar.',
             confirmText: 'Entendi'
         });
         return;
@@ -16058,7 +16250,7 @@ async function addPickItem(scannedEan = null) {
     console.log('[SEP] codigo bruto', rawCode);
     console.log('[SEP] codigo normalizado', ean);
     if (!ean) {
-        showScanFeedback('error', 'Código inválido');
+        showScanFeedback('error', 'CÃƒÆ’Ã‚Â³digo invÃƒÆ’Ã‚Â¡lido');
         return;
     }
 
@@ -16100,8 +16292,8 @@ async function addPickItem(scannedEan = null) {
                 await showAppModal({
                     type: 'error',
                     title: 'Estoque insuficiente',
-                    message: 'Estoque insuficiente para finalizar a separação. Ative “Permitir estoque negativo” em Configurações ou ajuste a quantidade.',
-                    detail: `${getPickItemTitle(product)}: disponível ${stock}, solicitado ${currentDraftQty + 1}.`,
+                    message: 'Estoque insuficiente para finalizar a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Ative ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œPermitir estoque negativoÃƒÂ¢Ã¢â€šÂ¬Ã‚Â em ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes ou ajuste a quantidade.',
+                    detail: `${getPickItemTitle(product)}: disponÃƒÆ’Ã‚Â­vel ${stock}, solicitado ${currentDraftQty + 1}.`,
                     confirmText: 'Entendi'
                 });
                 input.value = '';
@@ -16249,11 +16441,11 @@ async function addPickItem(scannedEan = null) {
             localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
         }
     } else {
-        showScanFeedback('warning', 'Produto não cadastrado');
+        showScanFeedback('warning', 'Produto nÃƒÆ’Ã‚Â£o cadastrado');
         await showAppModal({
             type: 'warning',
-            title: 'Produto não encontrado',
-            message: `Produto não cadastrado para o código ${ean}.`,
+            title: 'Produto nÃƒÆ’Ã‚Â£o encontrado',
+            message: `Produto nÃƒÆ’Ã‚Â£o cadastrado para o cÃƒÆ’Ã‚Â³digo ${ean}.`,
             confirmText: 'OK'
         });
     }
@@ -16389,7 +16581,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
         if (currentSessionItems.length === 0) {
             await showAppModal({
                 type: 'warning',
-                title: 'Separação vazia',
+                title: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o vazia',
                 message: 'Adicione pelo menos um item para finalizar.',
                 confirmText: 'OK'
             });
@@ -16468,8 +16660,8 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
         console.error('[SEPARACAO] erro ao finalizar', error);
         await showAppModal({
             type: 'error',
-            title: 'Erro ao processar separação',
-            message: error?.message || 'Erro ao processar separação.',
+            title: 'Erro ao processar separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+            message: error?.message || 'Erro ao processar separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.',
             confirmText: 'Entendi'
         });
     } finally {
@@ -16850,13 +17042,13 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
 async function savePickResultFinal(sessionId, channelId, channelLabel, channelColor) {
     if (isFinalizing) return;
     isFinalizing = true;
-    showToast("Finalizando separação...");
+    showToast("Finalizando separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o...");
 
     try {
         if (!currentPickSession?.items || currentPickSession.items.length === 0) {
             await showAppModal({
                 type: 'warning',
-                title: 'Separação vazia',
+                title: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o vazia',
                 message: 'Adicione pelo menos um item para finalizar.',
                 confirmText: 'OK'
             });
@@ -16868,7 +17060,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             const confirmed = await showAppModal({
                 type: 'warning',
                 title: 'Nenhum pacote marcado',
-                message: 'Separação sem pacotes informados. Deseja finalizar mesmo assim?',
+                message: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o sem pacotes informados. Deseja finalizar mesmo assim?',
                 confirmText: 'Finalizar mesmo assim',
                 cancelText: 'Voltar'
             });
@@ -16980,10 +17172,10 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
         });
         await showAppModal({
             type: 'success',
-            title: 'Separação finalizada',
+            title: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o finalizada',
             message: finalResult?.queued
-                ? `Separação ${sessionId} salva localmente para sincronizar.`
-                : `Separação ${sessionId} enviada para conferência.`,
+                ? `SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ${sessionId} salva localmente para sincronizar.`
+                : `SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ${sessionId} enviada para conferÃƒÆ’Ã‚Âªncia.`,
             detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
             confirmText: 'OK'
         });
@@ -17000,7 +17192,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
         });
         await showAppModal({
             type: 'error',
-            title: 'Erro ao finalizar separação',
+            title: 'Erro ao finalizar separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
             message: e?.message || String(e),
             confirmText: 'Entendi'
         });
@@ -17011,7 +17203,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
 
 async function renderPackMenu() {
     const currentUser = localStorage.getItem('currentUser');
-    // Filtrar separações abertas vindas do Supabase/cache local.
+    // Filtrar separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes abertas vindas do Supabase/cache local.
     try {
         const data = await DataClient.loadModule('conferencia', true);
         if (data) {
@@ -17095,13 +17287,13 @@ function renderPackHistory() {
 
                     <main class="container">
                         <div class="sub-menu-header">
-                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÓRICO de CONFERÊNCIA</h2>
+                            <h2 style="font-size: 1.2rem; font-weight: 700;">HISTÃƒÆ’Ã¢â‚¬Å“RICO de CONFERÃƒÆ’Ã…Â NCIA</h2>
                         </section>
 
                         ${history.length === 0 ? `
                             <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
                                 <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">history</span>
-                                <p style="color: var(--muted);">Nenhuma conferência encontrada.</p>
+                                <p style="color: var(--muted);">Nenhuma conferÃƒÆ’Ã‚Âªncia encontrada.</p>
                             </div>
                         ` : `
                             <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
@@ -17147,7 +17339,7 @@ function getPackSeparationDisplayId(session) {
 }
 
 function formatPackSeparationDate(value) {
-    return formatDateTimeBR(value, { fallback: 'Data não informada' });
+    return formatDateTimeBR(value, { fallback: 'Data nÃƒÆ’Ã‚Â£o informada' });
 }
 
 async function renderPackSessionsList(channelName) {
@@ -17207,7 +17399,7 @@ async function renderPackSessionsList(channelName) {
                             <div class="pack-sessions-title">
                                 <div class="pack-sessions-icon">${channelIcon}</div>
                                 <div>
-                                    <span>Conferência / Pack</span>
+                                    <span>ConferÃƒÆ’Ã‚Âªncia / Pack</span>
                                     <h1>${channelName}</h1>
                                 </div>
                             </div>
@@ -17226,7 +17418,7 @@ async function renderPackSessionsList(channelName) {
                         ${activeSessions.length === 0 ? `
                             <div class="pack-sessions-empty">
                                 <span class="material-symbols-rounded">fact_check</span>
-                                <strong>Nenhuma separação aberta para este canal.</strong>
+                                <strong>Nenhuma separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o aberta para este canal.</strong>
                             </div>
                         ` : `
                         <div class="pack-sessions-list">
@@ -17246,7 +17438,7 @@ async function renderPackSessionsList(channelName) {
                                             <span class="material-symbols-rounded">assignment_turned_in</span>
                                         </div>
                                         <div class="pack-session-card-text">
-                                            <span class="pack-session-card-kicker">Separação</span>
+                                            <span class="pack-session-card-kicker">SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                                             <strong>${displayId}</strong>
                                             <small>${createdAt}</small>
                                             <small>${productsCount} produto(s) | ${itemCount} item(ns) | ${packagesCount} pacote(s)</small>
@@ -17271,9 +17463,9 @@ async function renderPackSessionsList(channelName) {
 
 async function deletePickingSession(sessionId, channelName) {
     const confirmed = await showAppConfirm({
-        title: 'Excluir separação',
-        message: `Tem certeza que deseja excluir a separação ${sessionId}?`,
-        detail: 'Esta ação não pode ser desfeita.',
+        title: 'Excluir separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+        message: `Tem certeza que deseja excluir a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ${sessionId}?`,
+        detail: 'Esta aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o pode ser desfeita.',
         confirmLabel: 'Excluir',
         cancelLabel: 'Cancelar',
         danger: true
@@ -17286,7 +17478,7 @@ async function deletePickingSession(sessionId, channelName) {
     activeSessions = activeSessions.filter(s => s.id !== sessionId);
     setActivePickSessions(activeSessions);
 
-    showToast(`Separação ${sessionId} excluída.`);
+    showToast(`SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ${sessionId} excluÃƒÆ’Ã‚Â­da.`);
 
     // Re-render the list or the menu
     if (channelName) {
@@ -17328,7 +17520,7 @@ async function renderPackSessionDetails(sessionId) {
     const activeSessions = getActivePickSessions();
     const requestedId = String(sessionId || '');
     
-    // Verificar se o mesmo usuário que fez a Separação está tentando fazer a Conferência
+    // Verificar se o mesmo usuÃƒÆ’Ã‚Â¡rio que fez a SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o estÃƒÆ’Ã‚Â¡ tentando fazer a ConferÃƒÆ’Ã‚Âªncia
     const separacaoSession = (appData.separacao || []).find(s => 
         String(getPackSeparationUniqueId(s)) === requestedId || String(getPackSeparationSessionId(s)) === requestedId
     );
@@ -17352,18 +17544,18 @@ async function renderPackSessionDetails(sessionId) {
         const usuarioAtual = (currentUser || '').trim().toLowerCase();
         
         if (criadoPor && criadoPor === usuarioAtual) {
-            showToast("Esta conferência deve ser realizada por outro usuário. O mesmo usuário que fez a separação não pode conferir esta sessão.", "error");
+            showToast("Esta conferÃƒÆ’Ã‚Âªncia deve ser realizada por outro usuÃƒÆ’Ã‚Â¡rio. O mesmo usuÃƒÆ’Ã‚Â¡rio que fez a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o pode conferir esta sessÃƒÆ’Ã‚Â£o.", "error");
             playBeep('error');
             return;
         }
     }
     
-    // Extrair o canal para manter a cor na conferência
+    // Extrair o canal para manter a cor na conferÃƒÆ’Ã‚Âªncia
     const channelName = separacaoSession ? (separacaoSession.canal_nome || separacaoSession.col_d || '') : '';
     const channelConfig = getChannelConfig(channelName);
     const channelColorClass = channelConfig.color || '';
 
-    // INICIALIZAR SESSÃO IMEDIATAMENTE para permitir bipagem sem depender de sync
+    // INICIALIZAR SESSÃƒÆ’Ã†â€™O IMEDIATAMENTE para permitir bipagem sem depender de sync
     currentPackSession = session || {
         id: packSessionId,
         separacaoRowId,
@@ -17379,10 +17571,10 @@ async function renderPackSessionDetails(sessionId) {
         conferenceRows: []
     };
     
-    // 0. Renderizar a Moldura Imediatamente com sessão inicializada
+    // 0. Renderizar a Moldura Imediatamente com sessÃƒÆ’Ã‚Â£o inicializada
     renderPackSessionFrame(packSessionId, currentUser, channelColorClass, channelName);
 
-    // 1. Buscar itens da planilha em BACKGROUND (não bloqueante)
+    // 1. Buscar itens da planilha em BACKGROUND (nÃƒÆ’Ã‚Â£o bloqueante)
     try {
         let expectedItems = (appData.separacao_itens || []).filter(item => String(item.separacao_id) === String(packSessionId));
         if (expectedItems.length === 0) {
@@ -17402,7 +17594,7 @@ async function renderPackSessionDetails(sessionId) {
             expectedItems = session.items;
         }
         
-        // Reconstruir conferenceRows baseando-se no que está na planilha
+        // Reconstruir conferenceRows baseando-se no que estÃƒÆ’Ã‚Â¡ na planilha
         const groupedExpected = expectedItems.reduce((acc, item) => {
             const key = getPickingProductId(item);
             if (!key) return acc;
@@ -17419,7 +17611,7 @@ async function renderPackSessionDetails(sessionId) {
             return acc;
         }, {});
 
-        // Se já existia cache local com conferência em andamento, mesclar quantidades
+        // Se jÃƒÆ’Ã‚Â¡ existia cache local com conferÃƒÆ’Ã‚Âªncia em andamento, mesclar quantidades
         if (session && session.conferenceRows) {
             session.conferenceRows.forEach(row => {
                 const key = row.ean || row.id_interno;
@@ -17448,7 +17640,7 @@ async function renderPackSessionDetails(sessionId) {
             conferenceRows
         };
 
-        // Salvar no local para persistência de sessão ativa
+        // Salvar no local para persistÃƒÆ’Ã‚Âªncia de sessÃƒÆ’Ã‚Â£o ativa
         if (!session) {
             activeSessions.push(currentPackSession);
         } else {
@@ -17461,24 +17653,24 @@ async function renderPackSessionDetails(sessionId) {
         }
         setActivePickSessions(activeSessions);
 
-        // Atualizar lista após carregar dados
+        // Atualizar lista apÃƒÆ’Ã‚Â³s carregar dados
         const packList = document.getElementById('pack-items-list');
         if (packList) packList.innerHTML = renderPackItemsListHTML();
         const packPackagesEl = document.getElementById('pack-summary-packages');
         if (packPackagesEl) packPackagesEl.textContent = String(getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {}));
         
     } catch (err) {
-        console.error("Erro ao carregar sessão:", err);
+        console.error("Erro ao carregar sessÃƒÆ’Ã‚Â£o:", err);
         showToast("Erro ao carregar dados da planilha.", "error");
     }
 }
 
 /**
- * Renderiza apenas a moldura da tela de conferência para resposta imediata
+ * Renderiza apenas a moldura da tela de conferÃƒÆ’Ã‚Âªncia para resposta imediata
  */
 function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
     const icon = getChannelConfig(channelName).svgIcon || menu3DIcons?.conferencia || '<span class="material-symbols-rounded">fact_check</span>';
-    const title = channelName ? channelName.toUpperCase() : 'CONFERÊNCIA';
+    const title = channelName ? channelName.toUpperCase() : 'CONFERÃƒÆ’Ã…Â NCIA';
     const packageCount = getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {});
 
     app.innerHTML = `
@@ -17494,13 +17686,13 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                     <div class="pack-blind-title">
                         <span class="pack-blind-title-icon">${icon}</span>
                         <div>
-                            <h1>CONFERÊNCIA (PACK)</h1>
+                            <h1>CONFERÃƒÆ’Ã…Â NCIA (PACK)</h1>
                         </div>
                     </div>
 
                     <button class="pack-blind-manual-btn" type="button" onclick="focusPackManualInput()">
                         <span class="material-symbols-rounded">barcode</span>
-                        Informar Código
+                        Informar CÃƒÆ’Ã‚Â³digo
                     </button>
                 </header>
 
@@ -17508,7 +17700,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                     <div class="pack-blind-scan-field">
                         <span class="material-symbols-rounded">search</span>
                         <input type="text" id="pack-ean-input" class="product-search-input"
-                               placeholder="Bipe o produto (EAN, SKU ou código interno)"
+                               placeholder="Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)"
                                onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPackScan(); }"
                                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                inputmode="none" enterkeyhint="done" autofocus>
@@ -17531,7 +17723,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                         <strong>${escapeKitAttribute(title)}</strong>
                     </article>
                     <article class="pack-blind-info-card">
-                        <small>ID DA SEPARAÇÃO</small>
+                        <small>ID DA SEPARAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O</small>
                         <strong>${escapeKitAttribute(sessionId)}</strong>
                     </article>
                     <article class="pack-blind-info-card">
@@ -17549,7 +17741,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                         <div class="pack-blind-table-head">
                             <span>Produto</span>
                             <span>Quantidade bipada</span>
-                            <span>Ações</span>
+                            <span>AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                         </div>
                         <div id="pack-divergence-alert" class="pack-divergence-alert hidden"></div>
                         <div id="pack-items-list" class="pack-blind-items-list"></div>
@@ -17563,11 +17755,11 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
                         </div>
                         <button class="pack-blind-finish-btn" id="btn-finish-pack" disabled>
                             <span class="material-symbols-rounded">check_circle</span>
-                            Finalizar Conferência
+                            Finalizar ConferÃƒÆ’Ã‚Âªncia
                         </button>
                         <button class="pack-blind-pause-btn" type="button" onclick="pauseConferenceSession()">
                             <span class="material-symbols-rounded">pause</span>
-                            Pausar Conferência
+                            Pausar ConferÃƒÆ’Ã‚Âªncia
                         </button>
                     </aside>
                 </section>
@@ -17596,7 +17788,7 @@ function pauseConferenceSession() {
         else sessions.unshift(currentPackSession);
         setActivePickSessions(sessions);
     }
-    showToast("Conferência pausada.");
+    showToast("ConferÃƒÆ’Ã‚Âªncia pausada.");
     renderPackMenu();
 }
 
@@ -17657,7 +17849,7 @@ function updatePackChrome() {
 function renderPackItemsListHTML() {
     if (!currentPackSession || !currentPackSession.conferenceRows) return '';
     
-    // Atualizar estado do botão de finalizar se já carregou
+    // Atualizar estado do botÃƒÆ’Ã‚Â£o de finalizar se jÃƒÆ’Ã‚Â¡ carregou
     const btnFinish = document.getElementById('btn-finish-pack');
     if (btnFinish) {
         btnFinish.disabled = false;
@@ -17674,7 +17866,7 @@ function renderPackItemsListHTML() {
             <div class="pack-blind-empty-state">
                 <span class="material-symbols-rounded">barcode_scanner</span>
                 <strong>Nenhum produto bipado ainda.</strong>
-                <small>Bipe os produtos para iniciar a conferência.</small>
+                <small>Bipe os produtos para iniciar a conferÃƒÆ’Ã‚Âªncia.</small>
             </div>
         `;
     }
@@ -17759,7 +17951,7 @@ async function openManualAddProduct(callback) {
     const term = await showAppPrompt({
         title: 'Adicionar produto',
         message: 'Digite o EAN ou C?digo do produto para adicionar:',
-        label: 'EAN ou Código',
+        label: 'EAN ou CÃƒÆ’Ã‚Â³digo',
         confirmLabel: 'Adicionar',
         cancelLabel: 'Cancelar'
     });
@@ -17840,7 +18032,7 @@ function manualAddItemToConference(product) {
     const packList = document.getElementById('pack-items-list');
     if (packList) packList.innerHTML = renderPackItemsListHTML();
     
-    // Atualizar botão de finalizar
+    // Atualizar botÃƒÆ’Ã‚Â£o de finalizar
     const btnFinish = document.getElementById('btn-finish-pack');
     if (btnFinish) {
         btnFinish.style.opacity = '1';
@@ -17865,7 +18057,7 @@ async function addPackScan(scannedEan = null) {
     if (row) {
         playBeep('success');
         triggerScanFeedback('success');
-        console.log(`[BIP CONTINUO DEBUG] produto adicionado (conferência): ${row.id_interno || ean}`);
+        console.log(`[BIP CONTINUO DEBUG] produto adicionado (conferÃƒÆ’Ã‚Âªncia): ${row.id_interno || ean}`);
         row.qtd_conferida++;
 
         updateConferenceRowDivergence(row);
@@ -17880,14 +18072,14 @@ async function addPackScan(scannedEan = null) {
             (p.col_a && p.col_a.toString() === ean) ||
             (p.col_A && p.col_A.toString() === ean)
         );
-        showScanFeedback(product ? 'error' : 'warning', product ? 'Item fora da separação' : 'Produto não cadastrado');
-        showToast("Item não encontrado nesta separação. Registrado para validação ao finalizar.");
+        showScanFeedback(product ? 'error' : 'warning', product ? 'Item fora da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o' : 'Produto nÃƒÆ’Ã‚Â£o cadastrado');
+        showToast("Item nÃƒÆ’Ã‚Â£o encontrado nesta separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Registrado para validaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ao finalizar.");
 
         row = {
             rom_id: currentPackSession.id,
             id_interno: product ? (product.id_interno || product.col_a || product.col_A || '') : '',
             ean: ean,
-            descricao: product ? (product.descricao_base || product.col_aa || 'PRODUTO NÃO IDENTIFICADO') : 'PRODUTO NÃO IDENTIFICADO',
+            descricao: product ? (product.descricao_base || product.col_aa || 'PRODUTO NÃƒÆ’Ã†â€™O IDENTIFICADO') : 'PRODUTO NÃƒÆ’Ã†â€™O IDENTIFICADO',
             qtd_separada: 0,
             qtd_conferida: 1,
             divergencia: 'SOBRA',
@@ -17927,7 +18119,7 @@ async function addPackScan(scannedEan = null) {
 }
 
 /**
- * TELA DE CORRECAO DE DIVERGÊNCIA (Obrigatória se houver erro)
+ * TELA DE CORRECAO DE DIVERGÃƒÆ’Ã…Â NCIA (ObrigatÃƒÆ’Ã‚Â³ria se houver erro)
  */
 function renderConferenceCorrection() {
     const currentUser = localStorage.getItem('currentUser');
@@ -17936,12 +18128,12 @@ function renderConferenceCorrection() {
     
     // [BLOQUEIO DE DIVERG?NCIA] - Somente permitimos finalizar se hasDivergence for false
     
-    let conferenceStatus = 'EM CONFERÊNCIA';
+    let conferenceStatus = 'EM CONFERÃƒÆ’Ã…Â NCIA';
     if (hasDivergence && isStarted) conferenceStatus = 'COM DIVERG?NCIA';
     if (!hasDivergence) conferenceStatus = 'CONFERIDO';
 
 
-    // Rolar para o primeiro erro se houver divergência
+    // Rolar para o primeiro erro se houver divergÃƒÆ’Ã‚Âªncia
     if (hasDivergence) {
         setTimeout(() => {
             const firstError = document.querySelector('.conference-item-error');
@@ -17959,7 +18151,7 @@ function renderConferenceCorrection() {
 
                     <main class="container">
                         <div class="sub-menu-header" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-                            <div style="font-size: 0.7rem; color: var(--primary); font-weight: 800; letter-spacing: 0.1em;">RESULTADO DA CONFERÊNCIA</div>
+                            <div style="font-size: 0.7rem; color: var(--primary); font-weight: 800; letter-spacing: 0.1em;">RESULTADO DA CONFERÃƒÆ’Ã…Â NCIA</div>
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <h2 style="font-size: 1.2rem; font-weight: 700;">${currentPackSession.id}</h2>
                                 <span class="status-pill" style="background: ${hasDivergence ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)'}; color: ${hasDivergence ? '#ef4444' : '#22c55e'}; font-size: 0.6rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; border: 1px solid ${hasDivergence ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)'};">
@@ -17973,10 +18165,10 @@ function renderConferenceCorrection() {
                                 ${hasDivergence ? 'report' : 'task_alt'}
                             </span>
                             <h3 style="font-size: 1.1rem; font-weight: 700; color: white;">
-                                ${hasDivergence ? 'Atenção: Divergência Detectada' : 'Fluxo Validado com Sucesso'}
+                                ${hasDivergence ? 'AtenÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o: DivergÃƒÆ’Ã‚Âªncia Detectada' : 'Fluxo Validado com Sucesso'}
                             </h3>
                             <p style="font-size: 0.8rem; color: var(--muted); margin-top: 4px;">
-                                ${hasDivergence ? 'Há uma diferença entre o separado e o conferido. Ajuste obrigatório para liberar.' : 'Tudo em ordem. O status final será gravado como CONFERIDO.'}
+                                ${hasDivergence ? 'HÃƒÆ’Ã‚Â¡ uma diferenÃƒÆ’Ã‚Â§a entre o separado e o conferido. Ajuste obrigatÃƒÆ’Ã‚Â³rio para liberar.' : 'Tudo em ordem. O status final serÃƒÆ’Ã‚Â¡ gravado como CONFERIDO.'}
                             </p>
                         </div>
 
@@ -18028,7 +18220,7 @@ function renderConferenceCorrection() {
                         
                         ${hasDivergence ? `
                         <div style="margin: 20px 0; padding: 16px; background: rgba(234, 179, 8, 0.1); border-radius: 12px; border: 1px solid rgba(234, 179, 8, 0.3); text-align: center;">
-                            <p style="color: #facc15; font-weight: 600; margin-bottom: 16px;">Deseja corrigir as divergências?</p>
+                            <p style="color: #facc15; font-weight: 600; margin-bottom: 16px;">Deseja corrigir as divergÃƒÆ’Ã‚Âªncias?</p>
                             <button onclick="confirmConferenceCorrectionFlow()" class="btn-action" style="width: 100%; background: #f59e0b;">
                                 <span class="material-symbols-rounded">edit</span>
                                 CORRIGIR E CONTINUAR
@@ -18036,7 +18228,7 @@ function renderConferenceCorrection() {
                         </div>
                         ` : ''}
                         
-                        <!-- Botão Adicionar Produto Extra -->
+                        <!-- BotÃƒÆ’Ã‚Â£o Adicionar Produto Extra -->
                         <button onclick="openManualAddProductToSession('${currentPackSession.id}', 'PACK')" class="btn-action" style="width: 100%; border: 1px dashed var(--primary); background: transparent; margin-bottom: 20px;">
                             <span class="material-symbols-rounded">add_circle</span>
                             Adicionar Produto
@@ -18050,7 +18242,7 @@ function renderConferenceCorrection() {
                             
                             <button class="btn-action" id="btn-finish-atomic"
                                     style="width: 100%; justify-content: center; background: #22c55e; ${hasDivergence ? 'opacity: 0.5; cursor: not-allowed;' : ''}" 
-                                    ${hasDivergence ? 'disabled onclick="showToast(\'Corrija as divergências para finalizar\', \'warning\')"' : 'onclick="confirmFinishConference()"'}>
+                                    ${hasDivergence ? 'disabled onclick="showToast(\'Corrija as divergÃƒÆ’Ã‚Âªncias para finalizar\', \'warning\')"' : 'onclick="confirmFinishConference()"'}>
                                 <span class="material-symbols-rounded">check_circle</span>
                                 FINALIZAR E DAR BAIXA
                             </button>
@@ -18082,7 +18274,7 @@ function adjustConferenceRow(index, delta) {
         row.divergencia = 'FALTA';
     }
 
-    // Registrar log interno caso tenha corrigido uma divergência
+    // Registrar log interno caso tenha corrigido uma divergÃƒÆ’Ã‚Âªncia
     if (prevDivergence !== 'OK' && row.divergencia === 'OK') {
         const logEntry = {
             timestamp: getDataHoraBrasil(),
@@ -18098,10 +18290,10 @@ function adjustConferenceRow(index, delta) {
         const logs = JSON.parse(localStorage.getItem('conference_correction_logs') || '[]');
         logs.push(logEntry);
         localStorage.setItem('conference_correction_logs', JSON.stringify(logs));
-        console.log('Divergência corrigida logada:', logEntry);
+        console.log('DivergÃƒÆ’Ã‚Âªncia corrigida logada:', logEntry);
     }
 
-    // Persistência imediata no localStorage para evitar perda em F5
+    // PersistÃƒÆ’Ã‚Âªncia imediata no localStorage para evitar perda em F5
     let activeSessions = getActivePickSessions();
     const sIndex = activeSessions.findIndex(s => s.id === currentPackSession.id);
     if (sIndex !== -1) {
@@ -18113,20 +18305,20 @@ function adjustConferenceRow(index, delta) {
 }
 
 async function finishConferenceSession() {
-    // 1. Validar se há divergência (Comparação de Ouro)
+    // 1. Validar se hÃƒÆ’Ã‚Â¡ divergÃƒÆ’Ã‚Âªncia (ComparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de Ouro)
     const hasDivergence = currentPackSession.conferenceRows.some(row => 
         parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
     );
 
     if (hasDivergence) {
-        showToast("Divergência detectada! Abrindo tela de correção.", "warning");
+        showToast("DivergÃƒÆ’Ã‚Âªncia detectada! Abrindo tela de correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.", "warning");
         playBeep('error');
         renderConferenceCorrection();
     } else {
-        // Se bater 100%, já oferece finalizar
+        // Se bater 100%, jÃƒÆ’Ã‚Â¡ oferece finalizar
         const confirmed = await showAppModal({
             type: 'confirm',
-            title: 'Conferência perfeita',
+            title: 'ConferÃƒÆ’Ã‚Âªncia perfeita',
             message: 'Deseja finalizar e dar baixa no estoque agora?',
             confirmText: 'Finalizar',
             cancelText: 'Revisar'
@@ -18170,7 +18362,7 @@ function startFastPackSession(channelLabel, channelColor) {
             criado_por: currentUser,
             criado_em: getDataHoraBrasil(now),
             finalizado_em: getDataHoraBrasil(now), data_hora: getDataHoraBrasil(now),
-            observacao: 'MODO CONFERÊNCIA DIRETA'
+            observacao: 'MODO CONFERÃƒÆ’Ã…Â NCIA DIRETA'
         },
         conferenceRows: [],
         isFastMode: true
@@ -18197,7 +18389,7 @@ async function submitConferenceFinalization(payload) {
         const stockValidation = validatePickingStockForExit(mapConferenceRowsToPickItems(payload.rows), 'finalizar_conferencia');
         if (stockValidation.issues.length) {
             const confirmed = await confirmPickingNegativeStockIfNeeded(stockValidation, 'finalizar_conferencia');
-            if (!confirmed) throw new Error('Finalização cancelada para revisar estoque insuficiente.');
+            if (!confirmed) throw new Error('FinalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o cancelada para revisar estoque insuficiente.');
             if (stockValidation.allowNegative) {
                 return {
                     synced: true,
@@ -18475,23 +18667,23 @@ async function confirmFinishConference() {
 
         await showAppModal({
             type: 'success',
-            title: 'Conferência finalizada',
+            title: 'ConferÃƒÆ’Ã‚Âªncia finalizada',
             message: finalizationResult.queued
-                ? 'Conferência salva localmente para sincronizar.'
+                ? 'ConferÃƒÆ’Ã‚Âªncia salva localmente para sincronizar.'
                 : (finalizationResult.negativeStockAllowed
-                    ? 'Conferência finalizada e estoque baixado. Um ou mais produtos ficaram com saldo negativo conforme configuração.'
-                    : 'Conferência finalizada e estoque baixado.'),
+                    ? 'ConferÃƒÆ’Ã‚Âªncia finalizada e estoque baixado. Um ou mais produtos ficaram com saldo negativo conforme configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.'
+                    : 'ConferÃƒÆ’Ã‚Âªncia finalizada e estoque baixado.'),
             confirmText: 'OK'
         });
         playBeep('success');
 
-        // Limpar sessões locais e cache
+        // Limpar sessÃƒÆ’Ã‚Âµes locais e cache
         localStorage.removeItem('draft_pack_session');
         let activeSessions = getActivePickSessions();
         activeSessions = activeSessions.filter(s => s.id !== sessionId);
         setActivePickSessions(activeSessions);
 
-        // Atualizar appData local com status final para não aparecer mais como pendente
+        // Atualizar appData local com status final para nÃƒÆ’Ã‚Â£o aparecer mais como pendente
         const sIdx = (appData.separacao || []).findIndex(s => (s.separacao_id || s.col_a) === sessionId);
         if (sIdx !== -1) {
             appData.separacao[sIdx].status = finalizationResult.queued ? 'pendente_sync' : 'finalizada';
@@ -18502,7 +18694,7 @@ async function confirmFinishConference() {
         console.error("Erro na finalizacao:", err);
         await showAppModal({
             type: 'error',
-            title: 'Erro ao finalizar conferência',
+            title: 'Erro ao finalizar conferÃƒÆ’Ã‚Âªncia',
             message: formatConferenceFinalizationError(err),
             confirmText: 'Entendi'
         });
@@ -18541,8 +18733,8 @@ function toggleQuickActions() {
 
 async function confirmConferenceCorrectionFlow() {
     const confirmed = await showAppConfirm({
-        title: 'Confirmar correção',
-        message: 'Clique OK para confirmar a correção e prosseguir',
+        title: 'Confirmar correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+        message: 'Clique OK para confirmar a correÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o e prosseguir',
         confirmLabel: 'OK',
         cancelLabel: 'Cancelar'
     });
@@ -18777,7 +18969,7 @@ function renderRomaneioForm(metrics) {
                 <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
                 <div><small>Itens</small><strong>${metrics.itens}</strong><em>bipes/unidades</em><span class="material-symbols-rounded">inventory_2</span></div>
                 <div><small>Pacotes</small><strong>${metrics.pacotes}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
-                <div><small>Separações</small><strong>${metrics.separacoes}</strong><em>separações</em><span class="material-symbols-rounded">assignment</span></div>
+                <div><small>SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</small><strong>${metrics.separacoes}</strong><em>separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</em><span class="material-symbols-rounded">assignment</span></div>
                 <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
             </div>
             ${renderRomaneioSeparationBreakdown(metrics)}
@@ -18786,11 +18978,11 @@ function renderRomaneioForm(metrics) {
                 ${isOther ? `
                     <label class="romaneio-field-full">
                         <span>Nome do Canal *</span>
-                        <input name="canal_personalizado" type="text" autocomplete="organization" required placeholder="Turbo Motoboy, Transportadora, Retirada Balcão">
+                        <input name="canal_personalizado" type="text" autocomplete="organization" required placeholder="Turbo Motoboy, Transportadora, Retirada BalcÃƒÆ’Ã‚Â£o">
                     </label>
                 ` : ''}
                 <label>
-                    <span>Nome do Responsável *</span>
+                    <span>Nome do ResponsÃƒÆ’Ã‚Â¡vel *</span>
                     <input name="responsavel" type="text" autocomplete="name" required>
                 </label>
                 <label>
@@ -18798,8 +18990,8 @@ function renderRomaneioForm(metrics) {
                     <input name="documento" type="text" autocomplete="off">
                 </label>
                 <label class="romaneio-field-full">
-                    <span>Observação (opcional)</span>
-                    <input name="observacao" type="text" autocomplete="off" placeholder="Retirado às 16:40, coleta agência central...">
+                    <span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o (opcional)</span>
+                    <input name="observacao" type="text" autocomplete="off" placeholder="Retirado ÃƒÆ’Ã‚Â s 16:40, coleta agÃƒÆ’Ã‚Âªncia central...">
                 </label>
 
                 <div class="romaneio-photo-box">
@@ -18866,7 +19058,7 @@ function renderRomaneioHistory(romaneios) {
     return `
         <section class="romaneio-history">
             <div class="romaneio-section-title">
-                <h2>Histórico de Romaneios</h2>
+                <h2>HistÃƒÆ’Ã‚Â³rico de Romaneios</h2>
                 <span>${romaneios.length}</span>
             </div>
             ${romaneios.length === 0 ? `
@@ -18885,8 +19077,8 @@ function renderRomaneioHistory(romaneios) {
                                 <span>Produtos diferentes: ${Number(item.produtos || 0)}</span>
                                 <span>Itens/bipes: ${Number(item.itens || 0)}</span>
                                 <span>Pacotes: ${Number(item.pacotes || 0)}</span>
-                                <span>Separações: ${Number(item.separacoes || 0)}</span>
-                                <em>Responsável: ${escapeKitAttribute(item.responsavel || '-')}</em>
+                                <span>SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes: ${Number(item.separacoes || 0)}</span>
+                                <em>ResponsÃƒÆ’Ã‚Â¡vel: ${escapeKitAttribute(item.responsavel || '-')}</em>
                             </div>
                             <button type="button" onclick="renderRomaneioScreen('', '${escapeKitAttribute(item.id)}')">
                                 <span class="material-symbols-rounded">visibility</span>
@@ -18913,12 +19105,12 @@ function renderRomaneioDetail(item) {
                 <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
                 <div><small>Itens/bipes</small><strong>${Number(item.itens || 0)}</strong></div>
                 <div><small>Pacotes</small><strong>${Number(item.pacotes || 0)}</strong></div>
-                <div><small>Separações</small><strong>${Number(item.separacoes || 0)}</strong></div>
-                <div><small>Responsável</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
+                <div><small>SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</small><strong>${Number(item.separacoes || 0)}</strong></div>
+                <div><small>ResponsÃƒÆ’Ã‚Â¡vel</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
                 <div><small>Documento</small><strong>${escapeKitAttribute(item.documento || '-')}</strong></div>
-                <div><small>Observação</small><strong>${escapeKitAttribute(item.observacao || '-')}</strong></div>
-                <div><small>Usuário</small><strong>${escapeKitAttribute(item.usuario || '-')}</strong></div>
-                <div><small>PDF</small><strong>${item.pdfDataUrl ? 'Disponível' : 'Ainda não gerado'}</strong></div>
+                <div><small>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</small><strong>${escapeKitAttribute(item.observacao || '-')}</strong></div>
+                <div><small>UsuÃƒÆ’Ã‚Â¡rio</small><strong>${escapeKitAttribute(item.usuario || '-')}</strong></div>
+                <div><small>PDF</small><strong>${item.pdfDataUrl ? 'DisponÃƒÆ’Ã‚Â­vel' : 'Ainda nÃƒÆ’Ã‚Â£o gerado'}</strong></div>
             </div>
             ${renderRomaneioSeparationBreakdown({
                 ...item,
@@ -18926,7 +19118,7 @@ function renderRomaneioDetail(item) {
                 separacoes: item.separacoes || 0,
                 pacotes: item.pacotes || 0
             })}
-            ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura do responsável">` : ''}
+            ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura do responsÃƒÆ’Ã‚Â¡vel">` : ''}
             ${item.foto_pacote ? `<img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto do pacote">` : ''}
             ${item.pdfDataUrl ? `<button class="romaneio-pdf-open-btn" type="button" onclick="openRomaneioPDF('${escapeKitAttribute(item.id)}')">Visualizar PDF</button>` : ''}
             ${renderRomaneioPostSaveActions(item)}
@@ -19098,7 +19290,7 @@ function saveRomaneioFromForm(withdrawalType) {
         return;
     }
     if (!responsavel) {
-        showToast('Informe o nome do responsável.', 'warning');
+        showToast('Informe o nome do responsÃƒÆ’Ã‚Â¡vel.', 'warning');
         return;
     }
     if (!romaneioSignatureState.dataUrl) {
@@ -19154,14 +19346,14 @@ function generateRomaneioPDF(id) {
     const html = `<html><body><pre>${getRomaneioText(item)}</pre><img style="max-width:420px" src="${item.assinatura || ''}">${item.foto_pacote ? `<img style="display:block;max-width:420px;margin-top:16px" src="${item.foto_pacote}">` : ''}</body></html>`;
     item.pdfDataUrl = `data:text/html;base64,${btoa(unescape(encodeURIComponent(html)))}`;
     updateRomaneio(item);
-    showToast('PDF preparado para geração futura.');
+    showToast('PDF preparado para geraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o futura.');
     renderRomaneioScreen('', item.id);
 }
 
 function openRomaneioPDF(id) {
     const item = findRomaneioById(id);
     if (!item?.pdfDataUrl) {
-        showToast('PDF ainda não gerado.', 'warning');
+        showToast('PDF ainda nÃƒÆ’Ã‚Â£o gerado.', 'warning');
         return;
     }
     window.open(item.pdfDataUrl, '_blank');
@@ -19248,7 +19440,7 @@ async function quickActionGerarEtiquetas() {
     renderLabelGeneratorScreen();
 }
 
-const QUOTE_STATUSES = ['Rascunho', 'Aguardando aprovação', 'Aprovado', 'Cancelado', 'Expirado'];
+const QUOTE_STATUSES = ['Rascunho', 'Aguardando aprovaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', 'Aprovado', 'Cancelado', 'Expirado'];
 const CLIENT_QUOTES_STORAGE_KEY = 'clientQuotes';
 const CLIENT_QUOTES_COMPANY_STORAGE_KEY = 'clientQuotesCompany';
 
@@ -19277,7 +19469,7 @@ function quickActionOrcamentoCliente() {
 
 const COMMISSIONS_STORAGE_KEY = 'dyComissoesVendas';
 const COMMISSION_STATUSES = ['Pendente', 'Pago', 'Cancelado'];
-const COMMISSION_PAYMENT_METHODS = ['PIX', 'Dinheiro', 'Cartão/Maquininha', 'Boleto', 'Transferência', 'Outro'];
+const COMMISSION_PAYMENT_METHODS = ['PIX', 'Dinheiro', 'CartÃƒÆ’Ã‚Â£o/Maquininha', 'Boleto', 'TransferÃƒÆ’Ã‚Âªncia', 'Outro'];
 
 let commissionsState = {
     loaded: false,
@@ -19416,8 +19608,8 @@ async function saveComissaoVenda(row) {
             if (error) throw error;
         }
     } catch (error) {
-        console.warn('[COMISSOES] Comissão salva localmente. Falha Supabase:', error?.message || error);
-        showToast('Comissão salva localmente. Supabase indisponível.', 'warning');
+        console.warn('[COMISSOES] ComissÃƒÆ’Ã‚Â£o salva localmente. Falha Supabase:', error?.message || error);
+        showToast('ComissÃƒÆ’Ã‚Â£o salva localmente. Supabase indisponÃƒÆ’Ã‚Â­vel.', 'warning');
     }
 
     return normalized;
@@ -19500,12 +19692,12 @@ async function renderComissoesScreen(activeId = null, push = true) {
             <main class="commission-shell">
                 <header class="commission-hero">
                     <div>
-                        <span>Modo Rápido</span>
-                        <h1>Comissões</h1>
+                        <span>Modo RÃƒÆ’Ã‚Â¡pido</span>
+                        <h1>ComissÃƒÆ’Ã‚Âµes</h1>
                     </div>
                     <button type="button" onclick="renderComissoesScreen(null, false)">
                         <span class="material-symbols-rounded">add</span>
-                        Nova comissão
+                        Nova comissÃƒÆ’Ã‚Â£o
                     </button>
                 </header>
 
@@ -19513,8 +19705,8 @@ async function renderComissoesScreen(activeId = null, push = true) {
                     <article><small>Total vendido</small><strong>${comissaoMoney(summary.totalVendido)}</strong></article>
                     <article><small>Total descontos</small><strong>${comissaoMoney(summary.totalDescontos)}</strong></article>
                     <article><small>Total taxas</small><strong>${comissaoMoney(summary.totalTaxas)}</strong></article>
-                    <article><small>Base comissão</small><strong>${comissaoMoney(summary.baseComissao)}</strong></article>
-                    <article><small>Comissão prevista</small><strong>${comissaoMoney(summary.comissaoPrevista)}</strong></article>
+                    <article><small>Base comissÃƒÆ’Ã‚Â£o</small><strong>${comissaoMoney(summary.baseComissao)}</strong></article>
+                    <article><small>ComissÃƒÆ’Ã‚Â£o prevista</small><strong>${comissaoMoney(summary.comissaoPrevista)}</strong></article>
                     <article><small>Quantidade de vendas</small><strong>${summary.quantidade}</strong></article>
                 </section>
 
@@ -19534,7 +19726,7 @@ function renderComissaoForm(item) {
         <section class="commission-panel commission-form-panel">
             <div class="commission-panel-title">
                 <span class="material-symbols-rounded">percent</span>
-                <h2>${item?.id_interno && getComissaoById(item.id_interno) ? 'Editar comissão' : 'Lançar venda'}</h2>
+                <h2>${item?.id_interno && getComissaoById(item.id_interno) ? 'Editar comissÃƒÆ’Ã‚Â£o' : 'LanÃƒÆ’Ã‚Â§ar venda'}</h2>
             </div>
             <form id="commission-form" class="commission-form" onsubmit="submitComissaoVenda(event)">
                 <input type="hidden" name="id_interno" value="${quoteEscape(item.id_interno)}">
@@ -19559,18 +19751,18 @@ function renderComissaoForm(item) {
                 <label><span>Taxa %</span><input type="number" step="0.01" min="0" name="taxa_percentual" value="${comissaoNumberInput(item.taxa_percentual)}" oninput="comissaoUpdateCalculations('tax')"></label>
                 <label><span>Valor da taxa</span><input type="number" step="0.01" name="valor_taxa" value="${comissaoNumberInput(item.valor_taxa)}" readonly></label>
 
-                <label><span>Base da comissão</span><input type="number" step="0.01" name="base_comissao" value="${comissaoNumberInput(item.base_comissao)}" readonly></label>
-                <label><span>Comissão %</span><input type="number" step="0.01" min="0" name="percentual_comissao" value="${comissaoNumberInput(item.percentual_comissao || 10)}" oninput="comissaoUpdateCalculations('commission')"></label>
-                <label><span>Valor da comissão</span><input type="number" step="0.01" name="valor_comissao" value="${comissaoNumberInput(item.valor_comissao)}" readonly></label>
+                <label><span>Base da comissÃƒÆ’Ã‚Â£o</span><input type="number" step="0.01" name="base_comissao" value="${comissaoNumberInput(item.base_comissao)}" readonly></label>
+                <label><span>ComissÃƒÆ’Ã‚Â£o %</span><input type="number" step="0.01" min="0" name="percentual_comissao" value="${comissaoNumberInput(item.percentual_comissao || 10)}" oninput="comissaoUpdateCalculations('commission')"></label>
+                <label><span>Valor da comissÃƒÆ’Ã‚Â£o</span><input type="number" step="0.01" name="valor_comissao" value="${comissaoNumberInput(item.valor_comissao)}" readonly></label>
                 <label><span>Status</span><select name="status">
                     ${COMMISSION_STATUSES.map(status => `<option value="${quoteEscape(status)}" ${status === item.status ? 'selected' : ''}>${quoteEscape(status)}</option>`).join('')}
                 </select></label>
 
-                <label class="wide"><span>Observação</span><textarea name="observacao" rows="3" placeholder="Observações internas">${quoteEscape(item.observacao)}</textarea></label>
+                <label class="wide"><span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span><textarea name="observacao" rows="3" placeholder="ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes internas">${quoteEscape(item.observacao)}</textarea></label>
 
                 <div class="commission-form-actions">
                     <button type="button" class="ghost" onclick="renderComissoesScreen(null, false)">Limpar</button>
-                    <button type="submit">Salvar comissão</button>
+                    <button type="submit">Salvar comissÃƒÆ’Ã‚Â£o</button>
                 </div>
             </form>
         </section>
@@ -19586,7 +19778,7 @@ function renderComissoesHistory() {
             <span><small>Valor final</small><strong>${comissaoMoney(item.valor_final)}</strong></span>
             <span><small>Pagamento</small><strong>${quoteEscape(item.forma_pagamento || '-')} ${Number(item.parcelas) > 1 ? `${item.parcelas}x` : ''}</strong></span>
             <span><small>Taxa</small><strong>${comissaoMoney(item.valor_taxa)}</strong></span>
-            <span><small>Comissão</small><strong>${comissaoMoney(item.valor_comissao)}</strong></span>
+            <span><small>ComissÃƒÆ’Ã‚Â£o</small><strong>${comissaoMoney(item.valor_comissao)}</strong></span>
             <span>${renderComissaoStatusBadge(item.status)}</span>
         </button>
     `).join('');
@@ -19595,17 +19787,17 @@ function renderComissoesHistory() {
         <section class="commission-panel commission-history-panel">
             <div class="commission-panel-title">
                 <span class="material-symbols-rounded">receipt_long</span>
-                <h2>Histórico de comissões</h2>
+                <h2>HistÃƒÆ’Ã‚Â³rico de comissÃƒÆ’Ã‚Âµes</h2>
             </div>
             <div class="commission-history-head">
-                <span>Data</span><span>Produto</span><span>Cliente</span><span>Valor final</span><span>Pagamento</span><span>Taxa</span><span>Comissão</span><span>Status</span>
+                <span>Data</span><span>Produto</span><span>Cliente</span><span>Valor final</span><span>Pagamento</span><span>Taxa</span><span>ComissÃƒÆ’Ã‚Â£o</span><span>Status</span>
             </div>
             <div class="commission-history-list">
                 ${rows || `
                     <div class="commission-empty">
                         <span class="material-symbols-rounded">percent</span>
-                        <strong>Nenhuma comissão lançada</strong>
-                        <small>Use o formulário para registrar uma venda manual sem movimentar estoque.</small>
+                        <strong>Nenhuma comissÃƒÆ’Ã‚Â£o lanÃƒÆ’Ã‚Â§ada</strong>
+                        <small>Use o formulÃƒÆ’Ã‚Â¡rio para registrar uma venda manual sem movimentar estoque.</small>
                     </div>
                 `}
             </div>
@@ -19683,7 +19875,7 @@ async function submitComissaoVenda(event) {
     }
 
     await saveComissaoVenda(normalized);
-    showToast('Comissão salva sem movimentar estoque.');
+    showToast('ComissÃƒÆ’Ã‚Â£o salva sem movimentar estoque.');
     await renderComissoesScreen(null, false);
 }
 
@@ -19825,7 +20017,7 @@ function parseReposicaoMoney(value) {
 function getReposicaoAddressText(reposicao) {
     const parts = [
         reposicao.rua,
-        reposicao.numero ? `nº ${reposicao.numero}` : '',
+        reposicao.numero ? `nÃƒâ€šÃ‚Âº ${reposicao.numero}` : '',
         reposicao.complemento,
         reposicao.bairro,
         [reposicao.cidade, reposicao.estado].filter(Boolean).join(' - '),
@@ -19907,7 +20099,7 @@ function saveReposicaoFromForm({ silent = false } = {}) {
     saveReposicoes(reposicoes);
     clearReposicaoDraft();
     reposicaoState.activeId = reposicao.id;
-    if (!silent) showToast('Rascunho de reposição salvo.');
+    if (!silent) showToast('Rascunho de reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o salvo.');
     return reposicao;
 }
 
@@ -19936,13 +20128,13 @@ function renderReposicaoList() {
             <main class="reposicao-shell">
                 <header class="reposicao-hero">
                     <div>
-                        <span class="reposicao-kicker">Modo Rápido</span>
-                        <h1>Reposição</h1>
-                        <p>Controle rápido para envio, declaração de conteúdo e etiqueta</p>
+                        <span class="reposicao-kicker">Modo RÃƒÆ’Ã‚Â¡pido</span>
+                        <h1>ReposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</h1>
+                        <p>Controle rÃƒÆ’Ã‚Â¡pido para envio, declaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de conteÃƒÆ’Ã‚Âºdo e etiqueta</p>
                     </div>
                     <button class="reposicao-primary-btn" type="button" onclick="openReposicaoForm()">
                         <span class="material-symbols-rounded">add</span>
-                        Nova reposição
+                        Nova reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
                     </button>
                 </header>
                 ${draft ? `
@@ -19950,7 +20142,7 @@ function renderReposicaoList() {
                         <span class="material-symbols-rounded">edit_note</span>
                         <div>
                             <strong>Rascunho local encontrado</strong>
-                            <small>${reposicaoEscape(draft.cliente_nome || draft.id_reposicao || 'Reposição em edição')}</small>
+                            <small>${reposicaoEscape(draft.cliente_nome || draft.id_reposicao || 'ReposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em ediÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o')}</small>
                         </div>
                         <button type="button" onclick="openReposicaoForm('__draft__')">Continuar</button>
                         <button type="button" class="ghost" onclick="clearReposicaoDraft(); renderReposicaoList();">Descartar</button>
@@ -19977,8 +20169,8 @@ function renderReposicaoList() {
                     ${reposicoes.length ? reposicoes.map(renderReposicaoCard).join('') : `
                         <div class="reposicao-empty">
                             <span class="material-symbols-rounded">package_2</span>
-                            <strong>Nenhuma reposição encontrada</strong>
-                            <p>Crie uma nova reposição ou ajuste os filtros.</p>
+                            <strong>Nenhuma reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o encontrada</strong>
+                            <p>Crie uma nova reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ou ajuste os filtros.</p>
                         </div>
                     `}
                 </section>
@@ -19993,8 +20185,8 @@ function renderReposicaoCard(reposicao) {
         <article class="reposicao-card" onclick="openReposicaoForm('${reposicaoInlineArg(reposicao.id)}')">
             <div class="reposicao-card-main">
                 <span class="reposicao-id">${reposicaoEscape(reposicao.id_reposicao)}</span>
-                <strong>${reposicaoEscape(reposicao.cliente_nome || 'Cliente não informado')}</strong>
-                <small>${reposicaoEscape(reposicao.canal || 'Canal não informado')} ${reposicao.pedido ? `• Pedido ${reposicaoEscape(reposicao.pedido)}` : ''}</small>
+                <strong>${reposicaoEscape(reposicao.cliente_nome || 'Cliente nÃƒÆ’Ã‚Â£o informado')}</strong>
+                <small>${reposicaoEscape(reposicao.canal || 'Canal nÃƒÆ’Ã‚Â£o informado')} ${reposicao.pedido ? `ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Pedido ${reposicaoEscape(reposicao.pedido)}` : ''}</small>
             </div>
             <div class="reposicao-card-meta">
                 <span>${itemCount} item(ns)</span>
@@ -20025,8 +20217,8 @@ function renderReposicaoForm(reposicao) {
                 <header class="reposicao-hero compact">
                     <div>
                         <span class="reposicao-kicker">${reposicaoEscape(reposicao.id_reposicao)}</span>
-                        <h1>Nova reposição</h1>
-                        <p>Preencha os dados para salvar rascunho, gerar declaração ou preparar etiqueta.</p>
+                        <h1>Nova reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</h1>
+                        <p>Preencha os dados para salvar rascunho, gerar declaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ou preparar etiqueta.</p>
                     </div>
                     <span class="reposicao-status ${String(reposicao.status_geral || 'Rascunho').toLowerCase().replace(/\s+/g, '-')}">${reposicaoEscape(reposicao.status_geral || 'Rascunho')}</span>
                 </header>
@@ -20041,11 +20233,11 @@ function renderReposicaoForm(reposicao) {
                     ${renderReposicaoShippingFields(reposicao)}
                     <footer class="reposicao-actions">
                         <button type="button" class="secondary" onclick="saveReposicaoFromForm(); renderReposicaoList();">Salvar rascunho</button>
-                        <button type="button" onclick="generateReposicaoDeclaration()">Gerar declaração de conteúdo</button>
+                        <button type="button" onclick="generateReposicaoDeclaration()">Gerar declaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de conteÃƒÆ’Ã‚Âºdo</button>
                         <button type="button" onclick="sendReposicaoToBling()">Enviar para Bling</button>
                         <button type="button" onclick="updateReposicaoStatus('Postado')">Marcar como postado</button>
                         <button type="button" onclick="updateReposicaoStatus('Enviado ao cliente')">Enviado ao cliente</button>
-                        <button type="button" class="danger" onclick="updateReposicaoStatus('Cancelado')">Cancelar reposição</button>
+                        <button type="button" class="danger" onclick="updateReposicaoStatus('Cancelado')">Cancelar reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</button>
                     </footer>
                 </form>
             </main>
@@ -20059,7 +20251,7 @@ function renderReposicaoMainFields(reposicao) {
         <section class="reposicao-section">
             <h2>Dados principais</h2>
             <div class="reposicao-grid">
-                ${reposicaoField('Data inclusão', 'data_inclusao', reposicao.data_inclusao, 'date')}
+                ${reposicaoField('Data inclusÃƒÆ’Ã‚Â£o', 'data_inclusao', reposicao.data_inclusao, 'date')}
                 ${reposicaoField('Canal', 'canal', reposicao.canal)}
                 ${reposicaoField('Motivo', 'motivo', reposicao.motivo)}
                 ${reposicaoField('Nome do cliente', 'cliente_nome', reposicao.cliente_nome)}
@@ -20076,17 +20268,17 @@ function renderReposicaoMainFields(reposicao) {
 function renderReposicaoAddressFields(reposicao, enderecoCompleto) {
     return `
         <section class="reposicao-section">
-            <h2>Endereço</h2>
+            <h2>EndereÃƒÆ’Ã‚Â§o</h2>
             <div class="reposicao-grid">
                 ${reposicaoField('CEP', 'cep', reposicao.cep)}
                 ${reposicaoField('Rua', 'rua', reposicao.rua)}
-                ${reposicaoField('Número', 'numero', reposicao.numero)}
+                ${reposicaoField('NÃƒÆ’Ã‚Âºmero', 'numero', reposicao.numero)}
                 ${reposicaoField('Complemento', 'complemento', reposicao.complemento)}
                 ${reposicaoField('Bairro', 'bairro', reposicao.bairro)}
                 ${reposicaoField('Cidade', 'cidade', reposicao.cidade)}
                 ${reposicaoField('Estado', 'estado', reposicao.estado)}
-                ${reposicaoField('Referência', 'referencia', reposicao.referencia)}
-                <label class="wide"><span>Endereço completo</span><textarea id="reposicao-endereco-completo" name="endereco_completo" readonly>${reposicaoEscape(enderecoCompleto)}</textarea></label>
+                ${reposicaoField('ReferÃƒÆ’Ã‚Âªncia', 'referencia', reposicao.referencia)}
+                <label class="wide"><span>EndereÃƒÆ’Ã‚Â§o completo</span><textarea id="reposicao-endereco-completo" name="endereco_completo" readonly>${reposicaoEscape(enderecoCompleto)}</textarea></label>
             </div>
         </section>
     `;
@@ -20096,7 +20288,7 @@ function renderReposicaoItemsSection(items) {
     return `
         <section class="reposicao-section">
             <div class="reposicao-section-title">
-                <h2>Itens da reposição</h2>
+                <h2>Itens da reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</h2>
                 <button type="button" onclick="addReposicaoItem()">+ Adicionar item</button>
             </div>
             <div id="reposicao-items" class="reposicao-items">
@@ -20111,9 +20303,9 @@ function renderReposicaoItemRow(item) {
         <div class="reposicao-item-row" data-item-id="${reposicaoEscape(item.id || createEmptyReposicaoItem().id)}">
             <label><span>Qtd</span><input name="item_quantidade" type="number" min="1" step="1" value="${reposicaoEscape(item.quantidade || 1)}"></label>
             <label><span>Produto/item</span><input name="item_nome" value="${reposicaoEscape(item.item || '')}"></label>
-            <label><span>Modelo/variação</span><input name="item_modelo" value="${reposicaoEscape(item.modelo || '')}"></label>
+            <label><span>Modelo/variaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span><input name="item_modelo" value="${reposicaoEscape(item.modelo || '')}"></label>
             <label><span>Valor declarado</span><input name="item_valor" inputmode="decimal" value="${reposicaoEscape(normalizeReposicaoMoney(item.valor_declarado || '0'))}" onblur="this.value=normalizeReposicaoMoney(this.value); persistReposicaoFormDraft();"></label>
-            <label><span>Observação</span><input name="item_observacao" value="${reposicaoEscape(item.observacao || '')}"></label>
+            <label><span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span><input name="item_observacao" value="${reposicaoEscape(item.observacao || '')}"></label>
             <button type="button" class="reposicao-item-remove" onclick="removeReposicaoItem(this)" aria-label="Remover item">
                 <span class="material-symbols-rounded">delete</span>
             </button>
@@ -20128,15 +20320,15 @@ function renderReposicaoShippingFields(reposicao) {
             <div class="reposicao-grid">
                 ${reposicaoField('Tipo de envio', 'tipo_envio', reposicao.tipo_envio)}
                 ${reposicaoField('Transportadora', 'transportadora', reposicao.transportadora)}
-                ${reposicaoField('Código de rastreio', 'codigo_rastreio', reposicao.codigo_rastreio)}
-                ${reposicaoField('Data execução', 'data_execucao', reposicao.data_execucao, 'date')}
+                ${reposicaoField('CÃƒÆ’Ã‚Â³digo de rastreio', 'codigo_rastreio', reposicao.codigo_rastreio)}
+                ${reposicaoField('Data execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', 'data_execucao', reposicao.data_execucao, 'date')}
                 ${reposicaoField('Data postagem', 'data_postagem', reposicao.data_postagem, 'date')}
                 ${reposicaoField('Data envio ao cliente', 'data_envio_cliente', reposicao.data_envio_cliente, 'date')}
                 ${reposicaoSelect('Status postagem', 'status_postagem', reposicao.status_postagem || 'Aguardando postagem', ['Aguardando postagem', 'Postado', 'Cancelado'])}
                 ${reposicaoSelect('Status envio cliente', 'status_envio_cliente', reposicao.status_envio_cliente || 'Pendente', ['Pendente', 'Enviado ao cliente', 'Cancelado'])}
                 ${reposicaoField('Bling ID', 'bling_id', reposicao.bling_id)}
                 ${reposicaoField('Bling status', 'bling_status', reposicao.bling_status)}
-                <label class="wide"><span>Observação geral</span><textarea name="observacao_geral">${reposicaoEscape(reposicao.observacao_geral || '')}</textarea></label>
+                <label class="wide"><span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o geral</span><textarea name="observacao_geral">${reposicaoEscape(reposicao.observacao_geral || '')}</textarea></label>
             </div>
         </section>
     `;
@@ -20190,7 +20382,7 @@ function updateReposicaoStatus(status) {
     if (index >= 0) reposicoes[index] = reposicao;
     saveReposicoes(reposicoes);
     clearReposicaoDraft();
-    showToast(`Reposição marcada como ${status}.`);
+    showToast(`ReposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o marcada como ${status}.`);
     renderReposicaoList();
 }
 
@@ -20208,35 +20400,35 @@ function generateReposicaoDeclaration() {
         </tr>
     `).join('');
     const html = `
-        <html><head><title>Declaração ${reposicaoEscape(reposicao.id_reposicao)}</title>
+        <html><head><title>DeclaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ${reposicaoEscape(reposicao.id_reposicao)}</title>
         <style>
             body{font-family:Arial,sans-serif;color:#111827;padding:32px;line-height:1.35}
             h1{font-size:22px;text-transform:uppercase} h2{font-size:15px;margin-top:24px}
             table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #d1d5db;padding:8px;font-size:12px;text-align:left}
             .box{border:1px solid #d1d5db;border-radius:12px;padding:14px;margin-top:10px}.total{text-align:right;font-weight:700;margin-top:14px}
         </style></head><body>
-            <h1>Declaração de Conteúdo</h1>
+            <h1>DeclaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de ConteÃƒÆ’Ã‚Âºdo</h1>
             <p><strong>ID:</strong> ${reposicaoEscape(reposicao.id_reposicao)}</p>
-            <div class="box"><h2>Remetente</h2><p><strong>DY Auto Parts</strong><br>Remetente padrão da empresa</p></div>
-            <div class="box"><h2>Destinatário</h2><p><strong>${reposicaoEscape(reposicao.cliente_nome)}</strong><br>${reposicaoEscape(reposicao.cpf_cnpj)}<br>${reposicaoEscape(reposicao.endereco_completo || getReposicaoAddressText(reposicao))}</p></div>
-            <h2>Itens</h2><table><thead><tr><th>Qtd</th><th>Item</th><th>Modelo</th><th>Valor declarado</th><th>Observação</th></tr></thead><tbody>${rows}</tbody></table>
+            <div class="box"><h2>Remetente</h2><p><strong>DY Auto Parts</strong><br>Remetente padrÃƒÆ’Ã‚Â£o da empresa</p></div>
+            <div class="box"><h2>DestinatÃƒÆ’Ã‚Â¡rio</h2><p><strong>${reposicaoEscape(reposicao.cliente_nome)}</strong><br>${reposicaoEscape(reposicao.cpf_cnpj)}<br>${reposicaoEscape(reposicao.endereco_completo || getReposicaoAddressText(reposicao))}</p></div>
+            <h2>Itens</h2><table><thead><tr><th>Qtd</th><th>Item</th><th>Modelo</th><th>Valor declarado</th><th>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</th></tr></thead><tbody>${rows}</tbody></table>
             <p class="total">Valor total declarado: R$ ${reposicaoEscape(normalizeReposicaoMoney(total))}</p>
-            <div class="box"><h2>Observações</h2><p>${reposicaoEscape(reposicao.observacao_geral || '-')}</p></div>
+            <div class="box"><h2>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</h2><p>${reposicaoEscape(reposicao.observacao_geral || '-')}</p></div>
         </body></html>
     `;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-        showToast('Permita pop-ups para gerar a declaração.');
+        showToast('Permita pop-ups para gerar a declaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.');
         return;
     }
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.focus();
-    showToast('Declaração de conteúdo gerada.');
+    showToast('DeclaraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de conteÃƒÆ’Ã‚Âºdo gerada.');
 }
 
 async function criarReposicaoNoBling(reposicao) {
-    // Integração real deve passar por backend/serverless para proteger tokens do Bling.
+    // IntegraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o real deve passar por backend/serverless para proteger tokens do Bling.
     console.log('[Reposicao][Bling mock]', reposicao);
     return {
         success: true,
@@ -20257,7 +20449,7 @@ async function sendReposicaoToBling() {
         if (index >= 0) reposicoes[index] = reposicao;
         saveReposicoes(reposicoes);
         clearReposicaoDraft();
-        showToast('Reposição preparada para Bling.');
+        showToast('ReposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o preparada para Bling.');
         renderReposicaoForm(reposicao);
     }
 }
@@ -20297,7 +20489,7 @@ function getClientQuotesLocal() {
     try {
         return JSON.parse(localStorage.getItem(CLIENT_QUOTES_STORAGE_KEY) || '[]');
     } catch (error) {
-        console.warn('[ORCAMENTO CLIENTE] Cache local inválido:', error);
+        console.warn('[ORCAMENTO CLIENTE] Cache local invÃƒÆ’Ã‚Â¡lido:', error);
         return [];
     }
 }
@@ -20387,7 +20579,7 @@ async function ensureClientQuotesLoaded(force = false) {
             }
         }
     } catch (error) {
-        console.warn('[ORCAMENTO CLIENTE] Supabase indisponível, usando localStorage:', error?.message || error);
+        console.warn('[ORCAMENTO CLIENTE] Supabase indisponÃƒÆ’Ã‚Â­vel, usando localStorage:', error?.message || error);
     }
 
     clientQuotesState = { ...clientQuotesState, loaded: true, quotes, company };
@@ -20434,7 +20626,7 @@ async function saveClientQuote(quote) {
 function getQuoteStatusClass(status) {
     if (status === 'Aprovado') return 'approved';
     if (status === 'Cancelado' || status === 'Expirado') return 'danger';
-    if (status === 'Aguardando aprovação') return 'pending';
+    if (status === 'Aguardando aprovaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o') return 'pending';
     return 'draft';
 }
 
@@ -20457,11 +20649,11 @@ async function renderClientQuotesList(push = true) {
                 <header class="client-quotes-head">
                     <div>
                         <p>CLIENTES</p>
-                        <h1>Orçamento cliente</h1>
+                        <h1>OrÃƒÆ’Ã‚Â§amento cliente</h1>
                     </div>
                     <button class="client-quote-primary" type="button" onclick="renderClientQuoteForm()">
                         <span class="material-symbols-rounded">add</span>
-                        Novo orçamento
+                        Novo orÃƒÆ’Ã‚Â§amento
                     </button>
                 </header>
 
@@ -20469,7 +20661,7 @@ async function renderClientQuotesList(push = true) {
                     ${quotes.length ? `
                         <div class="client-quotes-table">
                             <div class="client-quotes-row head">
-                                <span>Número</span>
+                                <span>NÃƒÆ’Ã‚Âºmero</span>
                                 <span>Cliente</span>
                                 <span>Data</span>
                                 <span>Total</span>
@@ -20488,9 +20680,9 @@ async function renderClientQuotesList(push = true) {
                     ` : `
                         <div class="client-quotes-empty">
                             <span class="material-symbols-rounded">request_quote</span>
-                            <strong>Nenhum orçamento cliente criado</strong>
-                            <p>Use este módulo para orçamento em papel timbrado. A cotação de fornecedores continua em Compras.</p>
-                            <button class="client-quote-primary" type="button" onclick="renderClientQuoteForm()">Criar primeiro orçamento</button>
+                            <strong>Nenhum orÃƒÆ’Ã‚Â§amento cliente criado</strong>
+                            <p>Use este mÃƒÆ’Ã‚Â³dulo para orÃƒÆ’Ã‚Â§amento em papel timbrado. A cotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de fornecedores continua em Compras.</p>
+                            <button class="client-quote-primary" type="button" onclick="renderClientQuoteForm()">Criar primeiro orÃƒÆ’Ã‚Â§amento</button>
                         </div>
                     `}
                 </section>
@@ -20510,7 +20702,7 @@ function createBlankQuote() {
         company_id: clientQuotesState.company?.id || DEFAULT_QUOTE_COMPANY.id,
         user_name: localStorage.getItem('currentUser') || '',
         payment_method: 'PIX',
-        notes: 'Frete por conta do cliente. Cotação válida por 7 dias.',
+        notes: 'Frete por conta do cliente. CotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o vÃƒÆ’Ã‚Â¡lida por 7 dias.',
         availability_notes: '',
         items: [normalizeQuoteItem({ requested_qty: 1 })]
     });
@@ -20551,8 +20743,8 @@ async function renderClientQuoteForm(id = null) {
                         <div class="client-quote-grid four">
                             ${renderClientQuoteField('client_name', 'Nome do cliente', quote.client_name, 'text', true)}
                             ${renderClientQuoteField('client_cep', 'CEP', quote.client_cep)}
-                            ${renderClientQuoteField('client_address', 'Endereço', quote.client_address, 'text', true)}
-                            ${renderClientQuoteField('client_number', 'Número', quote.client_number)}
+                            ${renderClientQuoteField('client_address', 'EndereÃƒÆ’Ã‚Â§o', quote.client_address, 'text', true)}
+                            ${renderClientQuoteField('client_number', 'NÃƒÆ’Ã‚Âºmero', quote.client_number)}
                             ${renderClientQuoteField('client_complement', 'Complemento', quote.client_complement)}
                             ${renderClientQuoteField('client_neighborhood', 'Bairro', quote.client_neighborhood)}
                             ${renderClientQuoteField('client_city', 'Cidade', quote.client_city)}
@@ -20561,7 +20753,7 @@ async function renderClientQuoteForm(id = null) {
                     </section>
 
                     <section class="client-quote-section">
-                        <div class="client-quote-section-title">Condições</div>
+                        <div class="client-quote-section-title">CondiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</div>
                         <div class="client-quote-grid four">
                             ${renderClientQuoteField('user_name', 'Preparado por', quote.user_name)}
                             ${renderClientQuoteField('expires_at', 'Validade', String(quote.expires_at).slice(0, 10), 'date')}
@@ -20574,7 +20766,7 @@ async function renderClientQuoteForm(id = null) {
                             <label class="client-quote-field">
                                 <span>Pagamento</span>
                                 <select name="payment_method">
-                                    ${['PIX', 'Cartão', 'Boleto', 'Dinheiro', 'Transferência'].map(method => `<option value="${method}" ${quote.payment_method === method ? 'selected' : ''}>${method}</option>`).join('')}
+                                    ${['PIX', 'CartÃƒÆ’Ã‚Â£o', 'Boleto', 'Dinheiro', 'TransferÃƒÆ’Ã‚Âªncia'].map(method => `<option value="${method}" ${quote.payment_method === method ? 'selected' : ''}>${method}</option>`).join('')}
                                 </select>
                             </label>
                         </div>
@@ -20595,13 +20787,13 @@ async function renderClientQuoteForm(id = null) {
 
                     <section class="client-quote-bottom-grid">
                         <div class="client-quote-section">
-                            <div class="client-quote-section-title">Anotações</div>
+                            <div class="client-quote-section-title">AnotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</div>
                             <label class="client-quote-field">
-                                <span>Disponibilidade / reposição</span>
+                                <span>Disponibilidade / reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                                 <textarea name="availability_notes" rows="4">${quoteEscape(quote.availability_notes)}</textarea>
                             </label>
                             <label class="client-quote-field">
-                                <span>Condições padrão</span>
+                                <span>CondiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes padrÃƒÆ’Ã‚Â£o</span>
                                 <textarea name="notes" rows="5">${quoteEscape(quote.notes)}</textarea>
                             </label>
                         </div>
@@ -20640,8 +20832,8 @@ function renderClientQuoteField(name, label, value = '', type = 'text', wide = f
 function renderClientQuoteItemRow(item, index) {
     return `
         <div class="client-quote-item-row" data-index="${index}">
-            <input name="item_code_${index}" value="${quoteEscape(item.item_code)}" placeholder="Código" onchange="applyClientQuoteProduct(${index}, this.value)">
-            <input name="description_${index}" value="${quoteEscape(item.description)}" placeholder="Descrição do produto">
+            <input name="item_code_${index}" value="${quoteEscape(item.item_code)}" placeholder="CÃƒÆ’Ã‚Â³digo" onchange="applyClientQuoteProduct(${index}, this.value)">
+            <input name="description_${index}" value="${quoteEscape(item.description)}" placeholder="DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do produto">
             <input name="requested_qty_${index}" type="number" min="0" step="1" value="${Number(item.requested_qty) || 0}" oninput="updateClientQuoteTotals()">
             <input name="unit_price_${index}" type="number" min="0" step="0.01" value="${Number(item.unit_price || 0).toFixed(2)}" oninput="updateClientQuoteTotals()">
             <input name="total_price_${index}" type="text" value="${quoteMoney(item.total_price)}" readonly>
@@ -20713,7 +20905,7 @@ async function applyClientQuoteProduct(index, code) {
             if (product && typeof upsertProductIntoLocalCache === 'function') upsertProductIntoLocalCache(product);
         }
     } catch (error) {
-        console.warn('[ORCAMENTO CLIENTE] Produto não encontrado:', error?.message || error);
+        console.warn('[ORCAMENTO CLIENTE] Produto nÃƒÆ’Ã‚Â£o encontrado:', error?.message || error);
     }
     if (!product) return;
     const row = document.querySelector(`.client-quote-item-row[data-index="${index}"]`);
@@ -20775,7 +20967,7 @@ async function submitClientQuoteForm() {
         return;
     }
     await saveClientQuote(quote);
-    showToast('Orçamento salvo.');
+    showToast('OrÃƒÆ’Ã‚Â§amento salvo.');
     renderClientQuoteDetail(quote.id_interno);
 }
 
@@ -20784,7 +20976,7 @@ async function renderClientQuoteDetail(id) {
     const currentUser = localStorage.getItem('currentUser');
     const quote = getQuoteById(id);
     if (!quote) {
-        showToast('Orçamento não encontrado.');
+        showToast('OrÃƒÆ’Ã‚Â§amento nÃƒÆ’Ã‚Â£o encontrado.');
         renderClientQuotesList();
         return;
     }
@@ -20823,11 +21015,11 @@ async function renderClientQuoteDetail(id) {
                         <div>
                             ${renderQuoteStatusBadge(quote.status)}
                             <strong>${quoteMoney(quote.total)}</strong>
-                            <p>Emissão ${quoteDateDisplay(quote.created_at)} | Validade ${quoteDateDisplay(quote.expires_at)}</p>
+                            <p>EmissÃƒÆ’Ã‚Â£o ${quoteDateDisplay(quote.created_at)} | Validade ${quoteDateDisplay(quote.expires_at)}</p>
                         </div>
                     </div>
                     <div class="client-quote-detail-items">
-                        <div class="client-quote-detail-row head"><span>Item</span><span>Descrição</span><span>Qtd</span><span>Unit.</span><span>Total</span></div>
+                        <div class="client-quote-detail-row head"><span>Item</span><span>DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span><span>Qtd</span><span>Unit.</span><span>Total</span></div>
                         ${quote.items.map(item => `
                             <div class="client-quote-detail-row">
                                 <span>${quoteEscape(item.item_code || item.id_interno)}</span>
@@ -20840,10 +21032,10 @@ async function renderClientQuoteDetail(id) {
                     </div>
                     <div class="client-quote-detail-footer">
                         <div>
-                            <span>Disponibilidade / reposição</span>
-                            <p>${quoteEscape(quote.availability_notes || 'Sem observações.')}</p>
-                            <span>Condições</span>
-                            <p>${quoteEscape(quote.notes || 'Sem condições adicionais.')}</p>
+                            <span>Disponibilidade / reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
+                            <p>${quoteEscape(quote.availability_notes || 'Sem observaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes.')}</p>
+                            <span>CondiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
+                            <p>${quoteEscape(quote.notes || 'Sem condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes adicionais.')}</p>
                         </div>
                         <div class="client-quote-summary">
                             <span>Subtotal <strong>${quoteMoney(quote.subtotal)}</strong></span>
@@ -20869,14 +21061,14 @@ async function updateClientQuoteStatus(id, status) {
 async function generateQuotePDFById(id) {
     await ensureClientQuotesLoaded();
     const quote = getQuoteById(id);
-    if (!quote) return showToast('Orçamento não encontrado.');
+    if (!quote) return showToast('OrÃƒÆ’Ã‚Â§amento nÃƒÆ’Ã‚Â£o encontrado.');
     await generateQuotePDF({ ...quote, company: clientQuotesState.company || DEFAULT_QUOTE_COMPANY });
 }
 
 async function generateQuotePDF(quote) {
     try {
         const { jsPDF } = window.jspdf || {};
-        if (!jsPDF) throw new Error('jsPDF não carregado');
+        if (!jsPDF) throw new Error('jsPDF nÃƒÆ’Ã‚Â£o carregado');
         const doc = new jsPDF();
         const company = { ...DEFAULT_QUOTE_COMPANY, ...(quote.company || clientQuotesState.company || {}) };
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -20907,10 +21099,10 @@ async function generateQuotePDF(quote) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...dark);
         doc.setFontSize(18);
-        doc.text('ORÇAMENTO', pageWidth - 15, 22, { align: 'right' });
+        doc.text('ORÃƒÆ’Ã¢â‚¬Â¡AMENTO', pageWidth - 15, 22, { align: 'right' });
         doc.setTextColor(...primary);
         doc.setFontSize(11);
-        doc.text(`Nº ${quote.quote_number}`, pageWidth - 15, 30, { align: 'right' });
+        doc.text(`NÃƒâ€šÃ‚Âº ${quote.quote_number}`, pageWidth - 15, 30, { align: 'right' });
         doc.setDrawColor(225, 225, 230);
         doc.line(15, 45, pageWidth - 15, 45);
 
@@ -20935,7 +21127,7 @@ async function generateQuotePDF(quote) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(90, 90, 98);
         doc.setFontSize(8);
-        doc.text('EMISSÃO', pageWidth - 68, 64);
+        doc.text('EMISSÃƒÆ’Ã†â€™O', pageWidth - 68, 64);
         doc.text('VALIDADE', pageWidth - 68, 78);
         doc.setTextColor(...dark);
         doc.setFontSize(10);
@@ -20944,7 +21136,7 @@ async function generateQuotePDF(quote) {
 
         doc.autoTable({
             startY: 100,
-            head: [['Item', 'Descrição', 'Qtd', 'V. Unit', 'Total']],
+            head: [['Item', 'DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', 'Qtd', 'V. Unit', 'Total']],
             body: quote.items.map(item => [
                 item.item_code || item.id_interno || '-',
                 item.description || '-',
@@ -20973,7 +21165,7 @@ async function generateQuotePDF(quote) {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(9);
             doc.setTextColor(...primary);
-            doc.text('DISPONIBILIDADE / REPOSIÇÃO', 15, leftY);
+            doc.text('DISPONIBILIDADE / REPOSIÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O', 15, leftY);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(80, 80, 88);
             doc.text(split(quote.availability_notes, 105), 15, leftY + 6);
@@ -20981,7 +21173,7 @@ async function generateQuotePDF(quote) {
         }
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...dark);
-        doc.text('CONDIÇÕES', 15, leftY);
+        doc.text('CONDIÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã¢â‚¬Â¢ES', 15, leftY);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(90, 90, 98);
         const pixNote = String(quote.payment_method || '').toUpperCase() === 'PIX'
@@ -21019,17 +21211,17 @@ async function generateQuotePDF(quote) {
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(8);
                 doc.setTextColor(255, 255, 255);
-                doc.text(`${company.name || 'DY Auto Parts'} | Orçamento ${quote.quote_number}`, 18, 15.5);
+                doc.text(`${company.name || 'DY Auto Parts'} | OrÃƒÆ’Ã‚Â§amento ${quote.quote_number}`, 18, 15.5);
             }
             doc.setDrawColor(...primary);
             doc.line(15, pageHeight - 16, pageWidth - 15, pageHeight - 16);
             doc.setFontSize(7.5);
             doc.setTextColor(90, 90, 98);
-            doc.text('Frete por conta do cliente - Envio Sedex | Cotação válida por 7 dias', 15, pageHeight - 10);
+            doc.text('Frete por conta do cliente - Envio Sedex | CotaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o vÃƒÆ’Ã‚Â¡lida por 7 dias', 15, pageHeight - 10);
             doc.setFont('helvetica', 'bold');
             doc.text(company.legal_name || company.name || '', pageWidth / 2, pageHeight - 10, { align: 'center' });
             doc.setFont('helvetica', 'normal');
-            doc.text(`Página ${page} de ${pageCount}`, pageWidth - 15, pageHeight - 10, { align: 'right' });
+            doc.text(`PÃƒÆ’Ã‚Â¡gina ${page} de ${pageCount}`, pageWidth - 15, pageHeight - 10, { align: 'right' });
         }
 
         doc.save(`${quote.quote_number || 'orcamento-cliente'}.pdf`);
@@ -21693,7 +21885,7 @@ function renderLabelGeneratorScreen() {
     const loteStatus = labelGeneratorState.status || 'rascunho';
     const savedLabel = labelGeneratorState.activeLoteId
         ? `${loteStatus.toUpperCase()} | salvo ${formatLabelDateTime(labelGeneratorState.lastSavedAt)}`
-        : 'Novo lote ainda não salvo no Supabase';
+        : 'Novo lote ainda nÃƒÆ’Ã‚Â£o salvo no Supabase';
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in label-generator-screen">
@@ -21749,7 +21941,7 @@ function renderLabelGeneratorScreen() {
                             <div class="label-preview-options">
                                 <label class="label-repeat-option">
                                     <input type="checkbox" ${labelGeneratorState.repeatToFill ? 'checked' : ''} onchange="toggleLabelRepeatToFill(this.checked)">
-                                    <span>Repetir até preencher</span>
+                                    <span>Repetir atÃƒÆ’Ã‚Â© preencher</span>
                                 </label>
                                 <label class="label-repeat-option">
                                     <input type="checkbox" ${labelGeneratorState.showGuides ? 'checked' : ''} onchange="toggleLabelGuides(this.checked)">
@@ -21772,7 +21964,7 @@ function renderLabelGeneratorScreen() {
                                         <input type="text" value="${escapeKitAttribute(currentLoteName)}" placeholder="${escapeKitAttribute(getLabelLoteDefaultName())}" oninput="updateLabelLoteMeta('nomeLote', this.value)">
                                     </label>
                                     <label>
-                                        <span>Observações</span>
+                                        <span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
                                         <input type="text" value="${escapeKitAttribute(labelGeneratorState.observacoes || '')}" placeholder="Opcional" oninput="updateLabelLoteMeta('observacoes', this.value)">
                                     </label>
                                 </div>
@@ -21790,7 +21982,7 @@ function renderLabelGeneratorScreen() {
                                         </select>
                                     </label>
                                     <label>
-                                        <span>Código Pimaco</span>
+                                        <span>CÃƒÆ’Ã‚Â³digo Pimaco</span>
                                         <select onchange="setLabelTemplatePreset(this.value)" ${paperTemplates.length ? '' : 'disabled'}>
                                             ${paperTemplates.map(template => `<option value="${template.key}" ${labelGeneratorState.template === template.key ? 'selected' : ''}>${escapeKitAttribute(template.codigo)} - ${escapeKitAttribute(template.descricao || '')} (${template.totalLabels || (template.cols * template.rows)})</option>`).join('')}
                                         </select>
@@ -21811,7 +22003,7 @@ function renderLabelGeneratorScreen() {
 
                         <section class="label-generator-card label-list-panel no-print">
                             <div class="label-list-title-row">
-                                <div class="label-section-title">Lista de impressão</div>
+                                <div class="label-section-title">Lista de impressÃƒÆ’Ã‚Â£o</div>
                                 <button type="button" class="label-import-btn" onclick="openLabelImportIdsModal()">
                                     <span class="material-symbols-rounded">upload_file</span>
                                     Importar IDs
@@ -21856,7 +22048,7 @@ function renderLabelItemRow(item, index) {
             <input data-label-field="name" list="label-product-names" value="${escapeKitAttribute(item.name || '')}" placeholder="Produto" oninput="updateLabelItem(${index}, 'name', this.value)" onchange="applyLabelProductByName(${index}, this.value)" onkeydown="handleLabelRowKeydown(event, ${index})">
             <input data-label-field="quantity" type="number" min="0" step="1" value="${Number(item.quantity) || 0}" oninput="updateLabelItem(${index}, 'quantity', this.value)" onkeydown="handleLabelRowKeydown(event, ${index})">
             ${isLastRow ? `
-                <button type="button" class="label-row-add-btn" onclick="addLabelGeneratorRow()" title="Adicionar próxima linha">
+                <button type="button" class="label-row-add-btn" onclick="addLabelGeneratorRow()" title="Adicionar prÃƒÆ’Ã‚Â³xima linha">
                     <span class="material-symbols-rounded">add</span>
                 </button>
             ` : canRemove ? `
@@ -21881,7 +22073,7 @@ function renderLabelProductOption(product) {
         <div class="label-product-option ${selectedIndex >= 0 && quantity > 0 ? 'selected' : ''}">
             <button type="button" onclick="addProductToLabels('${escapeKitAttribute(encodedId)}')">
                 <strong>${escapeKitAttribute(name)}</strong>
-                <small>ID: ${escapeKitAttribute(productId || '-')} | Código: ${escapeKitAttribute(code || '-')}</small>
+                <small>ID: ${escapeKitAttribute(productId || '-')} | CÃƒÆ’Ã‚Â³digo: ${escapeKitAttribute(code || '-')}</small>
             </button>
             <input type="number" min="0" step="1" value="${quantity}" title="Quantidade" oninput="setProductLabelQuantity('${escapeKitAttribute(encodedId)}', this.value)">
         </div>
@@ -22061,7 +22253,7 @@ function getEtiquetaTituloWidthScore(text) {
         if (char === 'I' || char === '1') return score + 0.52;
         if (char === 'M' || char === 'W') return score + 1.28;
         if (/[0-9]/.test(char)) return score + 0.88;
-        if (/[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ]/.test(char)) return score + 1;
+        if (/[A-ZÃƒÆ’Ã‚ÂÃƒÆ’Ã¢â€šÂ¬ÃƒÆ’Ã¢â‚¬Å¡ÃƒÆ’Ã†â€™ÃƒÆ’Ã¢â‚¬Â°ÃƒÆ’Ã…Â ÃƒÆ’Ã‚ÂÃƒÆ’Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬ÂÃƒÆ’Ã¢â‚¬Â¢ÃƒÆ’Ã…Â¡ÃƒÆ’Ã¢â‚¬Â¡]/.test(char)) return score + 1;
         return score + 0.8;
     }, 0);
 }
@@ -22365,7 +22557,7 @@ function saveLabelProductForReuse(index) {
     const products = getSavedLabelProducts().filter(product => String(product.idInterno || product.code || '').trim().toLowerCase() !== idInterno.toLowerCase());
     products.unshift({ name, idInterno });
     setSavedLabelProducts(products);
-    showToast('Produto salvo para reutilização.');
+    showToast('Produto salvo para reutilizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.');
     renderLabelGeneratorScreenKeepingPosition({
         focusRowIndex: index,
         focusField: 'idInterno'
@@ -22448,7 +22640,7 @@ async function saveCurrentEtiquetaLote({ silent = false } = {}) {
             await showAppAlert({
                 title: 'Lote salvo',
                 message: `${labelGeneratorState.nomeLote || 'Lote de etiquetas'} foi salvo no Supabase.`,
-                detail: 'Outro usuário autorizado já pode abrir pelo histórico e reimprimir.',
+                detail: 'Outro usuÃƒÆ’Ã‚Â¡rio autorizado jÃƒÆ’Ã‚Â¡ pode abrir pelo histÃƒÆ’Ã‚Â³rico e reimprimir.',
                 icon: 'check_circle'
             });
     renderLabelGeneratorScreenKeepingPosition({
@@ -22519,7 +22711,7 @@ async function openEtiquetaLoteFromHistory(loteId, options = {}) {
         await ensureLabelTemplatesLoaded();
         const lote = await DataClient.buscarEtiquetaLotePorId(loteId);
         if (!lote) {
-            showToast('Lote não encontrado.', 'error');
+            showToast('Lote nÃƒÆ’Ã‚Â£o encontrado.', 'error');
             return;
         }
 
@@ -22544,7 +22736,7 @@ async function duplicateEtiquetaLoteFromHistory(loteId) {
         renderLabelGeneratorScreen();
         showToast('Lote duplicado.');
     } catch (error) {
-        console.error('[ETIQUETAS] erro ao duplicar lote do histórico:', error);
+        console.error('[ETIQUETAS] erro ao duplicar lote do histÃƒÆ’Ã‚Â³rico:', error);
         showToast('Erro ao duplicar lote: ' + (error.message || error), 'error');
     }
 }
@@ -22592,10 +22784,10 @@ async function renderLabelHistoryScreen() {
             <div class="label-empty-products">Nenhum lote de etiquetas salvo ainda.</div>
         `;
     } catch (error) {
-        console.error('[ETIQUETAS] erro ao listar histórico:', error);
+        console.error('[ETIQUETAS] erro ao listar histÃƒÆ’Ã‚Â³rico:', error);
         const panel = document.querySelector('.label-history-panel');
         if (panel) {
-            panel.innerHTML = `<div class="label-empty-products">Erro ao carregar histórico: ${escapeKitAttribute(error.message || error)}</div>`;
+            panel.innerHTML = `<div class="label-empty-products">Erro ao carregar histÃƒÆ’Ã‚Â³rico: ${escapeKitAttribute(error.message || error)}</div>`;
         }
     }
 }
@@ -22609,7 +22801,7 @@ function renderEtiquetaLoteHistoryCard(lote) {
             <div class="label-history-card-main">
                 <span class="label-history-status ${status === 'impresso' ? 'printed' : ''}">${escapeKitAttribute(status)}</span>
                 <h2>${escapeKitAttribute(lote.nome_lote || 'Lote sem nome')}</h2>
-                <p>${escapeKitAttribute(formatLabelDateTime(lote.atualizado_em || lote.criado_em))} | ${escapeKitAttribute(lote.usuario_nome || 'Usuário não informado')}</p>
+                <p>${escapeKitAttribute(formatLabelDateTime(lote.atualizado_em || lote.criado_em))} | ${escapeKitAttribute(lote.usuario_nome || 'UsuÃƒÆ’Ã‚Â¡rio nÃƒÆ’Ã‚Â£o informado')}</p>
             </div>
             <div class="label-history-metrics">
                 <span><strong>${totalProdutos}</strong> produtos</span>
@@ -23300,7 +23492,7 @@ async function printLabelSheet() {
             saveLabelDraft();
         } catch (error) {
             console.warn('[ETIQUETAS] nao foi possivel marcar lote como impresso:', error);
-            showToast('Etiqueta vai imprimir, mas não consegui marcar como impresso.', 'warning');
+            showToast('Etiqueta vai imprimir, mas nÃƒÆ’Ã‚Â£o consegui marcar como impresso.', 'warning');
         }
     }
     setTimeout(() => window.print(), 120);
@@ -23962,14 +24154,14 @@ function quickActionNovoProduto() {
     renderAddProduct();
 }
 
-// renderSearchScreen (versão operacional unificada no topo do arquivo)
+// renderSearchScreen (versÃƒÆ’Ã‚Â£o operacional unificada no topo do arquivo)
 
 
 
 
 
 /**
- * KIT LAMPADA - Módulo de consulta de veículos (Supabase)
+ * KIT LAMPADA - MÃƒÆ’Ã‚Â³dulo de consulta de veÃƒÆ’Ã‚Â­culos (Supabase)
  */
 
 function safeText(value) {
@@ -23983,7 +24175,7 @@ function safeText(value) {
 
 async function ensureKitLampadaLoaded(force = false) {
     if (!force && Array.isArray(window.kitLampadaCache) && window.kitLampadaCache.length > 0) {
-        console.log('[KIT] cache já existe:', window.kitLampadaCache.length);
+        console.log('[KIT] cache jÃƒÆ’Ã‚Â¡ existe:', window.kitLampadaCache.length);
         return window.kitLampadaCache;
     }
 
@@ -23992,7 +24184,7 @@ async function ensureKitLampadaLoaded(force = false) {
 
     const client = window.supabaseClient;
     if (!client) {
-        console.error('[KIT] Supabase client não inicializado');
+        console.error('[KIT] Supabase client nÃƒÆ’Ã‚Â£o inicializado');
         return [];
     }
     
@@ -24565,7 +24757,7 @@ window.renderKitDetailsCard = function(item) {
 
     document.body.appendChild(modal);
     
-    // Pequeno delay para disparar a transição CSS
+    // Pequeno delay para disparar a transiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o CSS
     setTimeout(() => {
         const innerModal = modal.querySelector('.kit-detail-modal');
         if (innerModal) innerModal.classList.add('open');
@@ -24576,12 +24768,12 @@ function renderProductSubMenu() {
   const container = document.getElementById("app");
 
   if (!container) {
-    console.error("Container principal não encontrado para renderProductSubMenu");
+    console.error("Container principal nÃƒÆ’Ã‚Â£o encontrado para renderProductSubMenu");
     return;
   }
 
   const subItems = [
-    { id: 'prod_buscar', label: 'BUSCAR', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, ID, EAN, SKU e conferir estoque disponível.' },
+    { id: 'prod_buscar', label: 'BUSCAR', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, ID, EAN, SKU e conferir estoque disponÃƒÆ’Ã‚Â­vel.' },
     { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", description: 'Criar um novo cadastro de produto com dados comerciais, imagens e atributos.' }
   ];
 
@@ -25100,12 +25292,12 @@ function renderConfigSubMenu() {
                         <section class="config-theme-card" aria-label="Tema do App">
                             <div class="config-theme-copy">
                                 <div class="config-theme-title">TEMA DO APP</div>
-                                <div class="config-theme-subtitle">Escolha a aparência das telas operacionais.</div>
+                                <div class="config-theme-subtitle">Escolha a aparÃƒÆ’Ã‚Âªncia das telas operacionais.</div>
                             </div>
                             <div class="theme-segmented-control" role="group" aria-label="Tema do App">
                                 <button type="button" data-theme-option="auto" onclick="setAppTheme('auto')" aria-pressed="false">
                                     <span class="material-symbols-rounded">routine</span>
-                                    Automático
+                                    AutomÃƒÆ’Ã‚Â¡tico
                                 </button>
                                 <button type="button" data-theme-option="light" onclick="setAppTheme('light')" aria-pressed="false">
                                     <span class="material-symbols-rounded">light_mode</span>
@@ -25121,8 +25313,8 @@ function renderConfigSubMenu() {
                         <!-- OPCAO 1 -->
                         <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
                             <div style="flex: 1;">
-                                <div style="color: var(--text-main); font-weight: 700; font-size: 1rem;">SAÍDA COM ESTOQUE ZERO</div>
-                                <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">Permitir finalizar saídas mesmo sem saldo em estoque.</div>
+                                <div style="color: var(--text-main); font-weight: 700; font-size: 1rem;">SAÃƒÆ’Ã‚ÂDA COM ESTOQUE ZERO</div>
+                                <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">Permitir finalizar saÃƒÆ’Ã‚Â­das mesmo sem saldo em estoque.</div>
                             </div>
                             <div class="toggle-switch">
                                 <input type="checkbox" id="toggle-estoque-zero" ${config.permitir_saida_estoque_zero ? 'checked' : ''} onchange="toggleConfig('permitir_saida_estoque_zero', this.checked)">
@@ -25133,7 +25325,7 @@ function renderConfigSubMenu() {
                         <button type="button" class="config-security-entry" onclick="openSecuritySettings()">
                             <span class="material-symbols-rounded">security</span>
                             <span>
-                                <strong>SEGURANÇA</strong>
+                                <strong>SEGURANÃƒÆ’Ã¢â‚¬Â¡A</strong>
                                 <small>PIN mestre e dispositivos autorizados.</small>
                             </span>
                             <em class="material-symbols-rounded">chevron_right</em>
@@ -25172,15 +25364,15 @@ async function toggleConfig(key, value) {
         console.log('[SEPARACAO_ESTOQUE_NEGATIVO] configuracao alterada', { permitir_estoque_negativo: value });
     }
     setAppConfig(config);
-    showToast(`Configuração atualizada`, 'success');
+    showToast(`ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o atualizada`, 'success');
 }
 
 async function openSecuritySettings() {
     const deviceStatus = await ensureCurrentDeviceRegistered({ silent: false, source: 'abrir_seguranca', logUpdate: true });
     if (deviceStatus.allowed === false) return;
-    const allowed = await requireMasterPin('acessar Configurações > Segurança');
+    const allowed = await requireMasterPin('acessar ConfiguraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes > SeguranÃƒÆ’Ã‚Â§a');
     if (!allowed) return;
-    await logSecurityEvent('acesso_configuracoes_seguranca', 'Acesso às configurações de segurança.');
+    await logSecurityEvent('acesso_configuracoes_seguranca', 'Acesso ÃƒÆ’Ã‚Â s configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de seguranÃƒÆ’Ã‚Â§a.');
     renderSecuritySettings();
 }
 
@@ -25191,7 +25383,7 @@ function formatSecurityDate(value) {
 
 function getSecurityOnlineWindowMinutes() {
     const config = getAppConfig?.() || {};
-    const minutes = Number(config.security_online_window_minutes || config['seguranca_online_minutos'] || config['segurança_online_minutos'] || 5);
+    const minutes = Number(config.security_online_window_minutes || config['seguranca_online_minutos'] || config['seguranÃƒÆ’Ã‚Â§a_online_minutos'] || 5);
     return Number.isFinite(minutes) && minutes > 0 ? minutes : 5;
 }
 
@@ -25201,11 +25393,11 @@ function getSecurityDeviceBrowser(device = {}) {
     if (source.includes('chrome')) return 'Chrome';
     if (source.includes('firefox')) return 'Firefox';
     if (source.includes('safari')) return 'Safari';
-    return device.navegador || device.browser || 'Não informado';
+    return device.navegador || device.browser || 'NÃƒÆ’Ã‚Â£o informado';
 }
 
 function getSecurityDeviceLocation(device = {}) {
-    return device.local_aproximado || device.localizacao || device.location || device.cidade || device.ip_cidade || 'Não informado';
+    return device.local_aproximado || device.localizacao || device.location || device.cidade || device.ip_cidade || 'NÃƒÆ’Ã‚Â£o informado';
 }
 
 function getSecurityDeviceRequestDate(device = {}) {
@@ -25219,7 +25411,7 @@ function getSecurityLastActivityLabel(value) {
     const diffMs = Date.now() - date.getTime();
     if (diffMs < 60000) return 'Agora';
     const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
-    if (diffMinutes < 60) return `${diffMinutes} min atrás`;
+    if (diffMinutes < 60) return `${diffMinutes} min atrÃƒÆ’Ã‚Â¡s`;
     return formatSecurityDate(value);
 }
 
@@ -25241,9 +25433,9 @@ function isSecurityDeviceOnline(device = {}, onlineWindowMinutes = getSecurityOn
 
 async function loadAuthorizedDevices() {
     const client = getSecurityClient();
-    if (!client) throw new Error('Supabase indisponível.');
+    if (!client) throw new Error('Supabase indisponÃƒÆ’Ã‚Â­vel.');
     const securityStatus = await verifySecurityInstalled();
-    if (!securityStatus.installed) throw securityStatus.error || new Error('Segurança não instalada.');
+    if (!securityStatus.installed) throw securityStatus.error || new Error('SeguranÃƒÆ’Ã‚Â§a nÃƒÆ’Ã‚Â£o instalada.');
     const { data, error } = await client
         .from('dispositivos_autorizados')
         .select('*')
@@ -25257,12 +25449,12 @@ async function loadAuthorizedDevices() {
 
 function renderSecurityDeviceMeta(device, { includeUser = true, includeRequestDate = false } = {}) {
     const rows = [];
-    if (includeUser) rows.push(['Usuário', device.nome_usuario || device.usuario_id || 'Usuário não informado']);
+    if (includeUser) rows.push(['UsuÃƒÆ’Ã‚Â¡rio', device.nome_usuario || device.usuario_id || 'UsuÃƒÆ’Ã‚Â¡rio nÃƒÆ’Ã‚Â£o informado']);
     rows.push(['Local', getSecurityDeviceLocation(device)]);
     rows.push(['Navegador', getSecurityDeviceBrowser(device)]);
     rows.push(includeRequestDate
         ? ['Solicitado em', formatSecurityDate(getSecurityDeviceRequestDate(device))]
-        : ['Última atividade', getSecurityLastActivityLabel(device.ultimo_acesso)]);
+        : ['ÃƒÆ’Ã…Â¡ltima atividade', getSecurityLastActivityLabel(device.ultimo_acesso)]);
 
     return rows.map(([label, value]) => `
         <span>
@@ -25291,7 +25483,7 @@ function renderSecurityOnlineDeviceCard(device, currentDeviceId) {
             <div class="security-device-actions">
                 <em class="online"><i></i>Online</em>
                 <button type="button" class="security-outline-danger" onclick="endSecuritySession('${escapeKitAttribute(device.device_id || '')}')">
-                    Encerrar sessão
+                    Encerrar sessÃƒÆ’Ã‚Â£o
                 </button>
             </div>
         </article>
@@ -25306,8 +25498,8 @@ function renderSecurityPendingRequestCard(device) {
             </div>
             <div class="security-device-main">
                 <div class="security-device-heading">
-                    <strong>${escapeKitAttribute(device.nome_usuario || device.usuario_id || 'Pessoa não informada')}</strong>
-                    <small>${escapeKitAttribute(device.nome_dispositivo || 'Dispositivo não informado')}</small>
+                    <strong>${escapeKitAttribute(device.nome_usuario || device.usuario_id || 'Pessoa nÃƒÆ’Ã‚Â£o informada')}</strong>
+                    <small>${escapeKitAttribute(device.nome_dispositivo || 'Dispositivo nÃƒÆ’Ã‚Â£o informado')}</small>
                 </div>
                 <div class="security-device-meta">
                     ${renderSecurityDeviceMeta(device, { includeUser: false, includeRequestDate: true })}
@@ -25340,8 +25532,8 @@ async function renderSecuritySettings() {
                 <header class="security-settings-header">
                     <span class="material-symbols-rounded">security</span>
                     <div>
-                        <h1>SEGURANÇA</h1>
-                        <p>Gerencie suas configurações de segurança e monitore os acessos à sua conta.</p>
+                        <h1>SEGURANÃƒÆ’Ã¢â‚¬Â¡A</h1>
+                        <p>Gerencie suas configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de seguranÃƒÆ’Ã‚Â§a e monitore os acessos ÃƒÆ’Ã‚Â  sua conta.</p>
                     </div>
                 </header>
                 <section class="security-panel security-pin-panel">
@@ -25349,7 +25541,7 @@ async function renderSecuritySettings() {
                         <span class="material-symbols-rounded">lock</span>
                         <div>
                             <strong>PIN Mestre</strong>
-                            <p>Protege configurações sensíveis e ações de segurança.</p>
+                            <p>Protege configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes sensÃƒÆ’Ã‚Â­veis e aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes de seguranÃƒÆ’Ã‚Â§a.</p>
                         </div>
                     </div>
                     <button type="button" class="security-primary-btn" onclick="changeMasterPin()">
@@ -25361,7 +25553,7 @@ async function renderSecuritySettings() {
                     <div class="security-panel-title">
                         <div>
                             <strong>Dispositivos Online</strong>
-                            <p>Veja quais dispositivos estão com acesso ativo à sua conta neste momento.</p>
+                            <p>Veja quais dispositivos estÃƒÆ’Ã‚Â£o com acesso ativo ÃƒÆ’Ã‚Â  sua conta neste momento.</p>
                         </div>
                         <button type="button" class="security-refresh-btn" onclick="renderSecuritySettings()" aria-label="Atualizar dispositivos online">
                             <span class="material-symbols-rounded">refresh</span>
@@ -25376,29 +25568,29 @@ async function renderSecuritySettings() {
                     <div class="security-panel-title">
                         <div>
                             <div class="security-title-row">
-                                <strong>Solicitações Pendentes</strong>
+                                <strong>SolicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes Pendentes</strong>
                                 <span id="security-pending-count" class="security-count-badge">0</span>
                             </div>
-                            <p>Pessoas que solicitaram acesso à sua conta e aguardam aprovação.</p>
+                            <p>Pessoas que solicitaram acesso ÃƒÆ’Ã‚Â  sua conta e aguardam aprovaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.</p>
                         </div>
-                        <button type="button" class="security-history-link" onclick="showToast('Histórico de segurança fica separado para não carregar acessos antigos automaticamente.', 'info')">
-                            Ver histórico
+                        <button type="button" class="security-history-link" onclick="showToast('HistÃƒÆ’Ã‚Â³rico de seguranÃƒÆ’Ã‚Â§a fica separado para nÃƒÆ’Ã‚Â£o carregar acessos antigos automaticamente.', 'info')">
+                            Ver histÃƒÆ’Ã‚Â³rico
                         </button>
                     </div>
                     <div id="security-pending-requests-list" class="security-devices-list">
-                        <div class="security-empty">Carregando solicitações...</div>
+                        <div class="security-empty">Carregando solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes...</div>
                     </div>
                 </section>
                 <section class="security-panel security-tips-panel">
                     <div class="security-panel-title compact">
                         <div>
-                            <strong>Dicas de Segurança</strong>
+                            <strong>Dicas de SeguranÃƒÆ’Ã‚Â§a</strong>
                         </div>
                     </div>
                     <div class="security-tips-grid">
-                        <span>Encerre sessões em dispositivos que você não reconhece.</span>
+                        <span>Encerre sessÃƒÆ’Ã‚Âµes em dispositivos que vocÃƒÆ’Ã‚Âª nÃƒÆ’Ã‚Â£o reconhece.</span>
                         <span>Mantenha seu PIN Mestre seguro.</span>
-                        <span>Aprove ou negue solicitações com atenção.</span>
+                        <span>Aprove ou negue solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes com atenÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.</span>
                     </div>
                 </section>
             </main>
@@ -25424,14 +25616,14 @@ async function renderSecuritySettings() {
         if (pendingList) {
             pendingList.innerHTML = pendingRequests.length
                 ? pendingRequests.map(renderSecurityPendingRequestCard).join('')
-                : '<div class="security-empty">Nenhuma solicitação pendente.</div>';
+                : '<div class="security-empty">Nenhuma solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o pendente.</div>';
         }
     } catch (error) {
         const safeMessage = escapeKitAttribute(error.message || '');
         const onlineList = document.getElementById('security-online-devices-list');
         const pendingList = document.getElementById('security-pending-requests-list');
-        if (onlineList) onlineList.innerHTML = `<div class="security-empty">Não foi possível carregar os dispositivos. ${safeMessage}</div>`;
-        if (pendingList) pendingList.innerHTML = '<div class="security-empty">Nenhuma solicitação pendente.</div>';
+        if (onlineList) onlineList.innerHTML = `<div class="security-empty">NÃƒÆ’Ã‚Â£o foi possÃƒÆ’Ã‚Â­vel carregar os dispositivos. ${safeMessage}</div>`;
+        if (pendingList) pendingList.innerHTML = '<div class="security-empty">Nenhuma solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o pendente.</div>';
     }
 }
 
@@ -25444,7 +25636,7 @@ async function changeMasterPin() {
 async function updateSecurityDeviceAccess(deviceId, payload, successMessage, logAction, logDetails) {
     const client = getSecurityClient();
     if (!client) {
-        showToast('Supabase indisponível.', 'error');
+        showToast('Supabase indisponÃƒÆ’Ã‚Â­vel.', 'error');
         return false;
     }
 
@@ -25462,7 +25654,7 @@ async function updateSecurityDeviceAccess(deviceId, payload, successMessage, log
         return true;
     } catch (error) {
         await showAppAlert({
-            title: 'Erro de segurança',
+            title: 'Erro de seguranÃƒÆ’Ã‚Â§a',
             message: error.message || String(error),
             danger: true,
             icon: 'error'
@@ -25472,12 +25664,12 @@ async function updateSecurityDeviceAccess(deviceId, payload, successMessage, log
 }
 
 async function endSecuritySession(deviceId) {
-    const allowed = await requireMasterPin('encerrar sessão de dispositivo');
+    const allowed = await requireMasterPin('encerrar sessÃƒÆ’Ã‚Â£o de dispositivo');
     if (!allowed) return;
     const confirmed = await showAppConfirm({
-        title: 'Encerrar sessão',
-        message: 'Este dispositivo será desconectado e bloqueado por segurança. Deseja continuar?',
-        confirmLabel: 'Encerrar sessão',
+        title: 'Encerrar sessÃƒÆ’Ã‚Â£o',
+        message: 'Este dispositivo serÃƒÆ’Ã‚Â¡ desconectado e bloqueado por seguranÃƒÆ’Ã‚Â§a. Deseja continuar?',
+        confirmLabel: 'Encerrar sessÃƒÆ’Ã‚Â£o',
         cancelLabel: 'Cancelar',
         danger: true
     });
@@ -25486,9 +25678,9 @@ async function endSecuritySession(deviceId) {
     const updated = await updateSecurityDeviceAccess(
         deviceId,
         { ativo: false, bloqueado_em: getSecurityTimestamp() },
-        'Sessão encerrada.',
+        'SessÃƒÆ’Ã‚Â£o encerrada.',
         'sessao_encerrada',
-        'Sessão encerrada pela tela de Segurança.'
+        'SessÃƒÆ’Ã‚Â£o encerrada pela tela de SeguranÃƒÆ’Ã‚Â§a.'
     );
     if (!updated) return;
     if (String(deviceId) === String(getOrCreateDeviceId())) {
@@ -25499,24 +25691,24 @@ async function endSecuritySession(deviceId) {
 }
 
 async function approveSecurityRequest(deviceId) {
-    const allowed = await requireMasterPin('aprovar solicitação de acesso');
+    const allowed = await requireMasterPin('aprovar solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de acesso');
     if (!allowed) return;
     const updated = await updateSecurityDeviceAccess(
         deviceId,
         { ativo: true, ultimo_acesso: getSecurityTimestamp(), bloqueado_em: null },
-        'Solicitação aprovada.',
+        'SolicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o aprovada.',
         'solicitacao_acesso_aprovada',
-        'Solicitação de acesso aprovada pela tela de Segurança.'
+        'SolicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de acesso aprovada pela tela de SeguranÃƒÆ’Ã‚Â§a.'
     );
     if (updated) renderSecuritySettings();
 }
 
 async function denySecurityRequest(deviceId) {
-    const allowed = await requireMasterPin('negar solicitação de acesso');
+    const allowed = await requireMasterPin('negar solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de acesso');
     if (!allowed) return;
     const confirmed = await showAppConfirm({
-        title: 'Negar solicitação',
-        message: 'A solicitação será recusada e o dispositivo ficará sem acesso.',
+        title: 'Negar solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
+        message: 'A solicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o serÃƒÆ’Ã‚Â¡ recusada e o dispositivo ficarÃƒÆ’Ã‚Â¡ sem acesso.',
         confirmLabel: 'Negar',
         cancelLabel: 'Cancelar',
         danger: true
@@ -25525,9 +25717,9 @@ async function denySecurityRequest(deviceId) {
     const updated = await updateSecurityDeviceAccess(
         deviceId,
         { ativo: false, bloqueado_em: getSecurityTimestamp() },
-        'Solicitação negada.',
+        'SolicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o negada.',
         'solicitacao_acesso_negada',
-        'Solicitação de acesso negada pela tela de Segurança.'
+        'SolicitaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de acesso negada pela tela de SeguranÃƒÆ’Ã‚Â§a.'
     );
     if (updated) renderSecuritySettings();
 }
@@ -25564,7 +25756,7 @@ async function renderGarantiaEnvioForm() {
             if (el) el.textContent = value;
         };
 
-        setText('garantia-summary-product', selectedProduct?.descricao || 'Produto não selecionado');
+        setText('garantia-summary-product', selectedProduct?.descricao || 'Produto nÃƒÆ’Ã‚Â£o selecionado');
         setText('garantia-summary-id', selectedProduct?.id_interno ? `ID: ${selectedProduct.id_interno}` : 'ID: -');
         setText('garantia-summary-sku', selectedProduct?.sku_fornecedor ? `SKU: ${selectedProduct.sku_fornecedor}` : 'SKU: -');
         setText('garantia-summary-type', tipo);
@@ -25593,7 +25785,7 @@ async function renderGarantiaEnvioForm() {
         const sourceStock = productEstoque.find(e => e.local === selectedSource)?.saldo_disponivel || 0;
         const garantiaStock = productEstoque.find(e => e.local === 'EM_GARANTIA')?.saldo_disponivel || 0;
 
-        // Preencher campos automáticos
+        // Preencher campos automÃƒÆ’Ã‚Â¡ticos
         const fornecedorInput = document.getElementById('garantia-fornecedor');
         if (fornecedorInput) fornecedorInput.value = selectedProduct.marca || selectedProduct.fornecedor || '';
 
@@ -25610,7 +25802,7 @@ async function renderGarantiaEnvioForm() {
                 <div class="garantia-product-main">
                     <strong>${escapeKitAttribute(selectedProduct.descricao || 'Produto')}</strong>
                     <small>${escapeKitAttribute(selectedProduct.marca || 'SEM MARCA')}</small>
-                    <em>ID: ${escapeKitAttribute(selectedProduct.id_interno || '-')} <b>•</b> EAN: ${escapeKitAttribute(selectedProduct.ean || 'SEM EAN')} <b>•</b> SKU: ${escapeKitAttribute(selectedProduct.sku_fornecedor || selectedProduct.sku || '-')}</em>
+                    <em>ID: ${escapeKitAttribute(selectedProduct.id_interno || '-')} <b>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢</b> EAN: ${escapeKitAttribute(selectedProduct.ean || 'SEM EAN')} <b>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢</b> SKU: ${escapeKitAttribute(selectedProduct.sku_fornecedor || selectedProduct.sku || '-')}</em>
                     <span class="${sourceStock > 0 ? 'is-ok' : 'is-alert'}">${sourceStock > 0 ? 'Em estoque' : 'Sem saldo na origem'}</span>
                 </div>
                 <div class="garantia-product-metrics">
@@ -25653,7 +25845,7 @@ async function renderGarantiaEnvioForm() {
                     </div>
                     <div>
                         <h1>ENVIAR PARA GARANTIA</h1>
-                        <p>Controle de devoluções e análise técnica.</p>
+                        <p>Controle de devoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes e anÃƒÆ’Ã‚Â¡lise tÃƒÆ’Ã‚Â©cnica.</p>
                     </div>
                 </header>
 
@@ -25668,7 +25860,7 @@ async function renderGarantiaEnvioForm() {
                                     <span class="material-symbols-rounded">keyboard</span>
                                 </button>
                             </div>
-                            <small><span class="material-symbols-rounded">help</span>Dica: bipe ou digite o código do produto para iniciar.</small>
+                            <small><span class="material-symbols-rounded">help</span>Dica: bipe ou digite o cÃƒÆ’Ã‚Â³digo do produto para iniciar.</small>
                             <div id="garantia-search-dropdown" class="garantia-search-dropdown"></div>
 
                             <div id="scanner-container-garantia" class="hidden garantia-scanner-container">
@@ -25685,15 +25877,15 @@ async function renderGarantiaEnvioForm() {
                         <article class="garantia-card">
                             <div class="garantia-card-title">
                                 <span class="material-symbols-rounded">assignment</span>
-                                <h2>INFORMAÇÕES DA GARANTIA</h2>
+                                <h2>INFORMAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã¢â‚¬Â¢ES DA GARANTIA</h2>
                             </div>
                             <div class="garantia-form-grid">
                                 <div class="garantia-field">
-                                    <label for="garantia-tipo-operacao">Tipo da operação</label>
+                                    <label for="garantia-tipo-operacao">Tipo da operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</label>
                                     <select id="garantia-tipo-operacao">
-                                        <option value="GARANTIA_TECNICA">Garantia Técnica</option>
+                                        <option value="GARANTIA_TECNICA">Garantia TÃƒÆ’Ã‚Â©cnica</option>
                                         <option value="TROCA_COMERCIAL">Troca Comercial</option>
-                                        <option value="DEVOLUCAO_FORNECEDOR">Devolução Fornecedor</option>
+                                        <option value="DEVOLUCAO_FORNECEDOR">DevoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o Fornecedor</option>
                                         <option value="RETORNO_CLIENTE">Retorno Cliente</option>
                                         <option value="ERRO_OPERACIONAL">Erro Operacional</option>
                                     </select>
@@ -25718,7 +25910,7 @@ async function renderGarantiaEnvioForm() {
                                 <div class="garantia-field">
                                     <label>Quantidade</label>
                                     <div class="garantia-qty-control">
-                                        <button type="button" id="garantia-qty-minus">−</button>
+                                        <button type="button" id="garantia-qty-minus">ÃƒÂ¢Ã‹â€ Ã¢â‚¬â„¢</button>
                                         <span id="garantia-qty-display">1</span>
                                         <button type="button" id="garantia-qty-plus">+</button>
                                     </div>
@@ -25726,7 +25918,7 @@ async function renderGarantiaEnvioForm() {
                                 </div>
 
                                 <div class="garantia-cost-card">
-                                    <span>Custo unitário</span>
+                                    <span>Custo unitÃƒÆ’Ã‚Â¡rio</span>
                                     <strong id="garantia-unit-display">R$ 0,00</strong>
                                     <input type="number" id="garantia-custo-unitario" value="0" readonly hidden>
                                 </div>
@@ -25742,13 +25934,13 @@ async function renderGarantiaEnvioForm() {
                         <article class="garantia-card">
                             <div class="garantia-card-title">
                                 <span class="material-symbols-rounded">description</span>
-                                <h2>OBSERVAÇÃO TÉCNICA</h2>
+                                <h2>OBSERVAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O TÃƒÆ’Ã¢â‚¬Â°CNICA</h2>
                             </div>
                             <div class="garantia-note-grid">
                                 <div class="garantia-field">
                                     <label for="garantia-motivo">Motivo</label>
                                     <select id="garantia-motivo">
-                                        <option>Defeito de fábrica</option>
+                                        <option>Defeito de fÃƒÆ’Ã‚Â¡brica</option>
                                         <option>Queimado</option>
                                         <option>Avaria</option>
                                         <option>Troca autorizada</option>
@@ -25758,8 +25950,8 @@ async function renderGarantiaEnvioForm() {
                                     </select>
                                 </div>
                                 <div class="garantia-field">
-                                    <label for="garantia-observacao">Detalhes técnicos</label>
-                                    <textarea id="garantia-observacao" placeholder="Descreva o problema, condição do produto e evidências técnicas..."></textarea>
+                                    <label for="garantia-observacao">Detalhes tÃƒÆ’Ã‚Â©cnicos</label>
+                                    <textarea id="garantia-observacao" placeholder="Descreva o problema, condiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do produto e evidÃƒÆ’Ã‚Âªncias tÃƒÆ’Ã‚Â©cnicas..."></textarea>
                                 </div>
                             </div>
                         </article>
@@ -25773,18 +25965,18 @@ async function renderGarantiaEnvioForm() {
                         <div class="garantia-summary-product">
                             <img id="garantia-summary-image" src="/imagens/placeholder-item.png" alt="Produto" onerror="this.src='/imagens/placeholder-item.png'">
                             <div>
-                                <strong id="garantia-summary-product">Produto não selecionado</strong>
+                                <strong id="garantia-summary-product">Produto nÃƒÆ’Ã‚Â£o selecionado</strong>
                                 <small id="garantia-summary-id">ID: -</small>
                                 <small id="garantia-summary-sku">SKU: -</small>
                             </div>
                         </div>
 
                         <div class="garantia-summary-list">
-                            <div><span class="material-symbols-rounded">fact_check</span><small>Tipo da operação</small><strong id="garantia-summary-type">Garantia Técnica</strong></div>
+                            <div><span class="material-symbols-rounded">fact_check</span><small>Tipo da operaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</small><strong id="garantia-summary-type">Garantia TÃƒÆ’Ã‚Â©cnica</strong></div>
                             <div><span class="material-symbols-rounded">sync_alt</span><small>Origem do estoque</small><strong id="garantia-summary-origin">DEFEITO</strong></div>
                             <div><span class="material-symbols-rounded">local_shipping</span><small>Fornecedor / destino</small><strong id="garantia-summary-provider">-</strong></div>
                             <div><span class="material-symbols-rounded">bar_chart</span><small>Quantidade</small><strong id="garantia-summary-qty">1 unidade</strong></div>
-                            <div><span class="material-symbols-rounded">payments</span><small>Custo unitário</small><strong id="garantia-summary-unit">R$ 0,00</strong></div>
+                            <div><span class="material-symbols-rounded">payments</span><small>Custo unitÃƒÆ’Ã‚Â¡rio</small><strong id="garantia-summary-unit">R$ 0,00</strong></div>
                             <div class="is-total"><span class="material-symbols-rounded">receipt_long</span><small>Custo total</small><strong id="garantia-summary-total">R$ 0,00</strong></div>
                         </div>
 
@@ -25795,7 +25987,7 @@ async function renderGarantiaEnvioForm() {
 
                         <p class="garantia-summary-tip">
                             <span class="material-symbols-rounded">info</span>
-                            Após enviar, o produto será registrado e disponível para acompanhamento.
+                            ApÃƒÆ’Ã‚Â³s enviar, o produto serÃƒÆ’Ã‚Â¡ registrado e disponÃƒÆ’Ã‚Â­vel para acompanhamento.
                         </p>
                     </aside>
                 </section>
@@ -25824,7 +26016,7 @@ async function renderGarantiaEnvioForm() {
     const qtyMinus = document.getElementById('garantia-qty-minus');
     const qtyPlus = document.getElementById('garantia-qty-plus');
 
-    // Lógica de Seleção Global (acessível pelo handleProductScan)
+    // LÃƒÆ’Ã‚Â³gica de SeleÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o Global (acessÃƒÆ’Ã‚Â­vel pelo handleProductScan)
     window.selectGarantiaProduct = function(product) {
         console.log(`[GARANTIA BUSCA DEBUG] produto selecionado:`, product);
         selectedProduct = product;
@@ -25832,7 +26024,7 @@ async function renderGarantiaEnvioForm() {
         updateProductCard();
     };
 
-    // Lógica de Busca Inteligente
+    // LÃƒÆ’Ã‚Â³gica de Busca Inteligente
     searchInput.addEventListener('input', async (e) => {
         const rawValue = e.target.value;
         console.log(`[GARANTIA BUSCA DEBUG] termo digitado: "${rawValue}"`);
@@ -25849,7 +26041,7 @@ async function renderGarantiaEnvioForm() {
 
         // 1. Classificar Input (ID Interno, EAN, SKU)
         const classification = classifyProductInput(rawValue);
-        console.log(`[GARANTIA BUSCA DEBUG] classificação:`, classification);
+        console.log(`[GARANTIA BUSCA DEBUG] classificaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o:`, classification);
 
         let matches = [];
 
@@ -25874,7 +26066,7 @@ async function renderGarantiaEnvioForm() {
             });
         }
 
-        // 2. Se não houver matches exatos ou for texto, busca por campos de texto
+        // 2. Se nÃƒÆ’Ã‚Â£o houver matches exatos ou for texto, busca por campos de texto
         if (matches.length === 0) {
             matches = appData.products.filter(p => {
                 const searchFields = [
@@ -25949,7 +26141,7 @@ async function renderGarantiaEnvioForm() {
         updateProductCard();
     });
 
-    // Lógica de Salvar
+    // LÃƒÆ’Ã‚Â³gica de Salvar
     btnSave.addEventListener('click', async () => {
         if (!selectedProduct) {
             showToast('Selecione um produto primeiro', 'warning');
@@ -25958,7 +26150,7 @@ async function renderGarantiaEnvioForm() {
 
         const qty = parseFloat(qtyInput.value);
         if (qty <= 0) {
-            showToast('Quantidade inválida', 'warning');
+            showToast('Quantidade invÃƒÆ’Ã‚Â¡lida', 'warning');
             return;
         }
 
@@ -25967,7 +26159,7 @@ async function renderGarantiaEnvioForm() {
         const sourceStock = productEstoque.find(e => e.local === selectedSource)?.saldo_disponivel || 0;
 
         if (qty > sourceStock) {
-            showToast(`Estoque insuficiente em ${selectedSource} (Disponível: ${sourceStock})`, 'warning');
+            showToast(`Estoque insuficiente em ${selectedSource} (DisponÃƒÆ’Ã‚Â­vel: ${sourceStock})`, 'warning');
             return;
         }
 
@@ -25991,6 +26183,12 @@ async function renderGarantiaEnvioForm() {
             // 1. Salvar na tabela garantias
             const result = await DataClient.saveGarantiaSupabase(garantiaData);
             if (!result) throw new Error('Erro ao salvar registro de garantia');
+            if (result?.ok) {
+                showToast('Garantia registrada e estoque movido!', 'success');
+                await DataClient.loadModule('produtos', true);
+                renderMovimentacoesSubMenu();
+                return;
+            }
 
             const movPayload = {
                 tipo: 'TRANSFERENCIA',
@@ -26042,8 +26240,8 @@ function renderNFSubMenu() {
     document.body.classList.remove('menu-active');
     const subItems = [
         { id: 'nf_xml', label: 'RECEBER POR XML', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML da NF-e, validar fornecedor e preparar os itens da entrada.' },
-        { id: 'nf_abertas', label: 'NOTAS EM ABERTO', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Continuar notas com fornecedor, vínculo ou estoque pendente.' },
-        { id: 'nf_historico', label: 'HIST\u00d3RICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas concluídas, financeiras ou canceladas.' }
+        { id: 'nf_abertas', label: 'NOTAS EM ABERTO', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Continuar notas com fornecedor, vÃƒÆ’Ã‚Â­nculo ou estoque pendente.' },
+        { id: 'nf_historico', label: 'HIST\u00d3RICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas concluÃƒÆ’Ã‚Â­das, financeiras ou canceladas.' }
     ];
     
     app.innerHTML = `
@@ -26067,7 +26265,7 @@ const NF_XML_WIZARD_STEPS = [
     { id: 'fornecedor', label: 'Fornecedor' },
     { id: 'financeiro', label: 'Financeiro' },
     { id: 'produtos', label: 'Produtos' },
-    { id: 'revisao', label: 'Revisão' }
+    { id: 'revisao', label: 'RevisÃƒÆ’Ã‚Â£o' }
 ];
 
 function getNFXmlWizardStepIndex(stepId) {
@@ -26192,7 +26390,7 @@ function getEntradaNFXMLDraftStatusLabel(draft) {
     if (!draft?.chave_acesso) return 'Sem rascunho';
     if (draft.savedEntradaId) return 'Salvo';
     const step = NF_XML_WIZARD_STEPS.find(item => item.id === draft.currentStep)?.label;
-    return step ? `Em edição - ${step}` : 'Em edição';
+    return step ? `Em ediÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o - ${step}` : 'Em ediÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o';
 }
 
 function getEntradaNFXMLDraftTypeLabel(draft) {
@@ -26224,7 +26422,7 @@ function hideEntradaNFXMLDraftBanner(chaveAcesso = '') {
 function renderEntradaNFXMLDraftBanner(draft) {
     if (!draft?.chave_acesso || draft.savedEntradaId || isEntradaNFXMLDraftBannerHidden(draft)) return '';
     const progress = getEntradaNFXMLDraftProgress(draft);
-    const fornecedor = draft.fornecedor?.razao_social || draft.fornecedor?.nome_fantasia || draft.fornecedor?.cnpj || 'Fornecedor não informado';
+    const fornecedor = draft.fornecedor?.razao_social || draft.fornecedor?.nome_fantasia || draft.fornecedor?.cnpj || 'Fornecedor nÃƒÆ’Ã‚Â£o informado';
     const statusLabel = getEntradaNFXMLDraftStatusLabel(draft);
     const tipoLabel = getEntradaNFXMLDraftTypeLabel(draft);
     console.log('[ENTRADA_NF_RASCUNHO_XML] banner exibido', {
@@ -26235,14 +26433,14 @@ function renderEntradaNFXMLDraftBanner(draft) {
         tipo: tipoLabel
     });
     return `
-        <section id="nfxml-draft-banner" class="nfxml-draft-banner" aria-label="Rascunho disponível para entrada NF XML">
+        <section id="nfxml-draft-banner" class="nfxml-draft-banner" aria-label="Rascunho disponÃƒÆ’Ã‚Â­vel para entrada NF XML">
             <div class="nfxml-draft-banner-icon">
                 <span class="material-symbols-rounded">description</span>
             </div>
             <div class="nfxml-draft-banner-main">
-                <strong>RASCUNHO DISPONÍVEL</strong>
-                <h2>NF ${escapeKitAttribute(draft.numero_nf || '-')} • ${escapeKitAttribute(fornecedor)}</h2>
-                <p>Última alteração: ${escapeKitAttribute(getEntradaNFXMLDraftUpdatedLabel(draft))} • ${escapeKitAttribute(statusLabel)}</p>
+                <strong>RASCUNHO DISPONÃƒÆ’Ã‚ÂVEL</strong>
+                <h2>NF ${escapeKitAttribute(draft.numero_nf || '-')} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${escapeKitAttribute(fornecedor)}</h2>
+                <p>ÃƒÆ’Ã…Â¡ltima alteraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o: ${escapeKitAttribute(getEntradaNFXMLDraftUpdatedLabel(draft))} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${escapeKitAttribute(statusLabel)}</p>
             </div>
             <div class="nfxml-draft-banner-meta">
                 <span><b>Progresso</b>${progress.vinculados} de ${progress.total} itens vinculados</span>
@@ -26287,7 +26485,7 @@ function closeAppCenterModal() {
 
 function showAppConfirmModal({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', onConfirm } = {}) {
     showAppConfirm({
-        title: title || 'Confirmar ação',
+        title: title || 'Confirmar aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o',
         message: message || '',
         confirmLabel,
         cancelLabel
@@ -26505,7 +26703,7 @@ function createNFXmlParcelasFromDuplicatas(duplicatas = [], valorTotal = 0) {
 
 function getNFXmlFinanceModeLabel(mode) {
     const labels = {
-        avista: 'Pagamento à vista',
+        avista: 'Pagamento ÃƒÆ’Ã‚Â  vista',
         xml: 'Parcelas da nota',
         editar: 'Editar pagamentos'
     };
@@ -26518,18 +26716,18 @@ function getNFXmlTipoConfig(tipo) {
         entrada_normal: {
             label: 'Entrada normal',
             badge: 'ESTOQUE + FINANCEIRO',
-            description: 'Usar para notas novas. Lança fornecedor, itens, financeiro e permite finalizar entrada no estoque.',
+            description: 'Usar para notas novas. LanÃƒÆ’Ã‚Â§a fornecedor, itens, financeiro e permite finalizar entrada no estoque.',
             afetaEstoque: true,
             afetaFinanceiro: true,
-            saveLabel: 'Confirmar importação'
+            saveLabel: 'Confirmar importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o'
         },
         somente_financeiro: {
             label: 'Somente financeiro',
-            badge: 'NÃO ALTERA ESTOQUE',
-            description: 'Usar para notas antigas já recebidas. Não altera estoque. Apenas cria contas a pagar.',
+            badge: 'NÃƒÆ’Ã†â€™O ALTERA ESTOQUE',
+            description: 'Usar para notas antigas jÃƒÆ’Ã‚Â¡ recebidas. NÃƒÆ’Ã‚Â£o altera estoque. Apenas cria contas a pagar.',
             afetaEstoque: false,
             afetaFinanceiro: true,
-            saveLabel: 'Lançar financeiro'
+            saveLabel: 'LanÃƒÆ’Ã‚Â§ar financeiro'
         }
     };
     return configs[normalizedTipo];
@@ -26538,7 +26736,7 @@ function getNFXmlTipoConfig(tipo) {
 function normalizeNFXmlTipoLancamento(tipo) {
     const normalized = String(tipo || 'entrada_normal').trim().toLowerCase();
     if (normalized === 'entrada_normal' || normalized === 'somente_financeiro') return normalized;
-    console.log('[ENTRADA_NF_REMOVER_HISTORICO] tipo de lançamento removido/ignorado', normalized);
+    console.log('[ENTRADA_NF_REMOVER_HISTORICO] tipo de lanÃƒÆ’Ã‚Â§amento removido/ignorado', normalized);
     return 'entrada_normal';
 }
 
@@ -26547,7 +26745,7 @@ function parseNFeXml(xmlText) {
     const parser = new DOMParser();
     const xml = parser.parseFromString(xmlText, 'text/xml');
     const parserError = xml.getElementsByTagName('parsererror')[0];
-    if (parserError) throw new Error('XML inválido ou mal formatado.');
+    if (parserError) throw new Error('XML invÃƒÆ’Ã‚Â¡lido ou mal formatado.');
 
     const infNFe = xml.getElementsByTagName('infNFe')[0];
     const ide = xml.getElementsByTagName('ide')[0];
@@ -26557,7 +26755,7 @@ function parseNFeXml(xmlText) {
     const infProt = xml.getElementsByTagName('infProt')[0];
     const chave = nfXmlText(infProt, 'chNFe') || String(infNFe?.getAttribute('Id') || '').replace(/^NFe/, '');
 
-    if (!ide || !emit || !chave) throw new Error('XML de NF-e incompleto. Não encontrei ide, emitente ou chave.');
+    if (!ide || !emit || !chave) throw new Error('XML de NF-e incompleto. NÃƒÆ’Ã‚Â£o encontrei ide, emitente ou chave.');
 
     const dets = Array.from(xml.getElementsByTagName('det'));
     const itens = dets.map((det, index) => {
@@ -26763,17 +26961,17 @@ function renderNFXmlStepXml() {
                 <div class="nfxml-card-head">
                     <div>
                         <h2 class="nfxml-title">RECEBER POR XML</h2>
-                        <p class="nfxml-text">Importe o XML da NF-e, confira os vínculos e salve a entrada.</p>
+                        <p class="nfxml-text">Importe o XML da NF-e, confira os vÃƒÆ’Ã‚Â­nculos e salve a entrada.</p>
                     </div>
                     <div class="nfxml-upload-head-actions">
                         <span class="nfxml-status-pill positive">
                             <span class="material-symbols-rounded">verified</span>
-                            Pré-cadastro sem atualizar estoque
+                            PrÃƒÆ’Ã‚Â©-cadastro sem atualizar estoque
                         </span>
                         ${entradaNfXmlState ? `
                             <button type="button" class="nfxml-reset-flow-btn" onclick="resetEntradaNFXMLLocalFlow()">
                                 <span class="material-symbols-rounded">restart_alt</span>
-                                Nova importação
+                                Nova importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o
                             </button>
                         ` : ''}
                     </div>
@@ -26781,7 +26979,7 @@ function renderNFXmlStepXml() {
                 <label for="nf-xml-file" class="nfxml-file-drop">
                     <span class="material-symbols-rounded">upload_file</span>
                     <strong>${entradaNfXmlState ? `NF ${escapeKitAttribute(entradaNfXmlState.numero_nf)} importada` : 'Selecionar arquivo XML da NF-e'}</strong>
-                    <small>${entradaNfXmlState ? 'XML validado. Você pode trocar o arquivo se precisar.' : 'O arquivo será lido localmente no navegador.'}</small>
+                    <small>${entradaNfXmlState ? 'XML validado. VocÃƒÆ’Ã‚Âª pode trocar o arquivo se precisar.' : 'O arquivo serÃƒÆ’Ã‚Â¡ lido localmente no navegador.'}</small>
                     <input id="nf-xml-file" type="file" accept=".xml,text/xml,application/xml" style="display:none;" onchange="handleNFXmlFileSelected(this)">
                 </label>
             </div>
@@ -26796,13 +26994,13 @@ function renderNFXmlStepFornecedor() {
     const state = entradaNfXmlState;
     const f = { ...(state.fornecedorRecord || {}), ...state.fornecedor };
     const fields = [
-        ['razao_social', 'Razão social'],
+        ['razao_social', 'RazÃƒÆ’Ã‚Â£o social'],
         ['nome_fantasia', 'Nome fantasia'],
         ['cnpj', 'CNPJ'],
-        ['inscricao_estadual', 'Inscrição estadual'],
+        ['inscricao_estadual', 'InscriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o estadual'],
         ['cep', 'CEP'],
-        ['endereco', 'Endereço'],
-        ['numero', 'Número'],
+        ['endereco', 'EndereÃƒÆ’Ã‚Â§o'],
+        ['numero', 'NÃƒÆ’Ã‚Âºmero'],
         ['complemento', 'Complemento'],
         ['bairro', 'Bairro'],
         ['cidade', 'Cidade'],
@@ -26811,7 +27009,7 @@ function renderNFXmlStepFornecedor() {
         ['whatsapp', 'WhatsApp'],
         ['email', 'Email'],
         ['contato_comercial', 'Contato comercial'],
-        ['observacoes', 'Observações']
+        ['observacoes', 'ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes']
     ];
     return `
         <section class="nfxml-card">
@@ -26862,8 +27060,8 @@ function renderNFXmlStepProdutos() {
                 <div>
                     <h3 class="nfxml-title small">PRODUTOS DA NOTA</h3>
                     <p class="nfxml-text">${isSomenteFinanceiro
-                        ? 'Confira os itens apenas como referência da NF. Não será exigido vínculo e não haverá movimentação de estoque.'
-                        : 'Confira vínculos, custo NF, impostos, despesas e custo real. Lotes de estoque serão preparados a partir destes itens.'}</p>
+                        ? 'Confira os itens apenas como referÃƒÆ’Ã‚Âªncia da NF. NÃƒÆ’Ã‚Â£o serÃƒÆ’Ã‚Â¡ exigido vÃƒÆ’Ã‚Â­nculo e nÃƒÆ’Ã‚Â£o haverÃƒÆ’Ã‚Â¡ movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de estoque.'
+                        : 'Confira vÃƒÆ’Ã‚Â­nculos, custo NF, impostos, despesas e custo real. Lotes de estoque serÃƒÆ’Ã‚Â£o preparados a partir destes itens.'}</p>
                 </div>
                 <span class="nfxml-status-pill ${isSomenteFinanceiro || !missingLinks ? 'positive' : 'warning'}">${isSomenteFinanceiro ? 'Sem estoque' : (missingLinks ? `${missingLinks} pendente(s)` : 'Produtos vinculados')}</span>
             </div>
@@ -26879,26 +27077,26 @@ function renderNFXmlStepRevisao() {
     const missingLinks = state.itens.filter(item => !item.id_interno).length;
     const totals = getNFXmlFinanceTotals();
     const alerts = [];
-    if (!state.fornecedorRecord) alerts.push('Fornecedor ainda não cadastrado/vinculado.');
-    if (Math.abs(totals.diferencaParcelas) > 0.01) alerts.push(`Diferença nas parcelas da nota de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`);
-    if (state.tipo_lancamento === 'entrada_normal' && missingLinks) alerts.push(`${missingLinks} produto(s) sem vínculo interno.`);
+    if (!state.fornecedorRecord) alerts.push('Fornecedor ainda nÃƒÆ’Ã‚Â£o cadastrado/vinculado.');
+    if (Math.abs(totals.diferencaParcelas) > 0.01) alerts.push(`DiferenÃƒÆ’Ã‚Â§a nas parcelas da nota de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`);
+    if (state.tipo_lancamento === 'entrada_normal' && missingLinks) alerts.push(`${missingLinks} produto(s) sem vÃƒÆ’Ã‚Â­nculo interno.`);
     return `
         <section class="nfxml-card nfxml-review-card">
             <div class="nfxml-section-head">
                 <div>
-                    <h3 class="nfxml-title small">REVISÃO FINAL</h3>
-                    <p class="nfxml-text">Confira tudo antes de confirmar a importação.</p>
+                    <h3 class="nfxml-title small">REVISÃƒÆ’Ã†â€™O FINAL</h3>
+                    <p class="nfxml-text">Confira tudo antes de confirmar a importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o.</p>
                 </div>
-                <span class="nfxml-status-pill ${alerts.length ? 'warning' : 'positive'}">${alerts.length ? 'Pendências' : 'Pronto para importar'}</span>
+                <span class="nfxml-status-pill ${alerts.length ? 'warning' : 'positive'}">${alerts.length ? 'PendÃƒÆ’Ã‚Âªncias' : 'Pronto para importar'}</span>
             </div>
             <div class="nfxml-review-grid">
-                <div><span>NF</span><strong>${escapeKitAttribute(state.numero_nf)} / Série ${escapeKitAttribute(state.serie)}</strong><small>${escapeKitAttribute(state.chave_acesso)}</small></div>
+                <div><span>NF</span><strong>${escapeKitAttribute(state.numero_nf)} / SÃƒÆ’Ã‚Â©rie ${escapeKitAttribute(state.serie)}</strong><small>${escapeKitAttribute(state.chave_acesso)}</small></div>
                 <div><span>Fornecedor</span><strong>${escapeKitAttribute(state.fornecedor.razao_social || '-')}</strong><small>${escapeKitAttribute(state.fornecedor.cnpj || '-')}</small></div>
-                <div><span>Total oficial NF</span><strong>${nfXmlFormatMoney(totals.totalNf)}</strong><small>Não altera estoque nem custo real</small></div>
-                <div><span>Parcelas da nota</span><strong>${nfXmlFormatMoney(totals.totalParcelasNota)}</strong><small>Diferença: ${nfXmlFormatMoney(totals.diferencaParcelas)}</small></div>
-                <div><span>Complementares</span><strong>${nfXmlFormatMoney(totals.totalComplementares)}</strong><small>Vinculados à NF no financeiro</small></div>
+                <div><span>Total oficial NF</span><strong>${nfXmlFormatMoney(totals.totalNf)}</strong><small>NÃƒÆ’Ã‚Â£o altera estoque nem custo real</small></div>
+                <div><span>Parcelas da nota</span><strong>${nfXmlFormatMoney(totals.totalParcelasNota)}</strong><small>DiferenÃƒÆ’Ã‚Â§a: ${nfXmlFormatMoney(totals.diferencaParcelas)}</small></div>
+                <div><span>Complementares</span><strong>${nfXmlFormatMoney(totals.totalComplementares)}</strong><small>Vinculados ÃƒÆ’Ã‚Â  NF no financeiro</small></div>
                 <div><span>Total financeiro previsto</span><strong>${nfXmlFormatMoney(totals.totalPrevisto)}</strong><small>NF oficial + complementares</small></div>
-                <div><span>Produtos</span><strong>${state.itens.length}</strong><small>${state.tipo_lancamento === 'somente_financeiro' ? 'Vínculo não exigido / sem estoque' : `${state.itens.length - missingLinks} vinculados / ${missingLinks} pendentes`}</small></div>
+                <div><span>Produtos</span><strong>${state.itens.length}</strong><small>${state.tipo_lancamento === 'somente_financeiro' ? 'VÃƒÆ’Ã‚Â­nculo nÃƒÆ’Ã‚Â£o exigido / sem estoque' : `${state.itens.length - missingLinks} vinculados / ${missingLinks} pendentes`}</small></div>
                 <div><span>Total produtos</span><strong>${nfXmlFormatMoney(state.totais.valor_produtos)}</strong></div>
                 <div><span>Total NF</span><strong>${nfXmlFormatMoney(state.totais.valor_total)}</strong></div>
             </div>
@@ -26913,7 +27111,7 @@ function canAdvanceNFXmlStep(stepId = getNFXmlCurrentStep(), showMessage = true)
     const state = entradaNfXmlState;
     if (stepId === 'xml') {
         if (!state) {
-            if (showMessage) showToast('Importe e valide um XML antes de avançar.', 'warning');
+            if (showMessage) showToast('Importe e valide um XML antes de avanÃƒÆ’Ã‚Â§ar.', 'warning');
             return false;
         }
         return true;
@@ -26921,7 +27119,7 @@ function canAdvanceNFXmlStep(stepId = getNFXmlCurrentStep(), showMessage = true)
     if (!state) return false;
     if (stepId === 'fornecedor') {
         if (!state.fornecedorRecord) {
-            if (showMessage) showToast('Salve/vincule o fornecedor antes de avançar.', 'warning');
+            if (showMessage) showToast('Salve/vincule o fornecedor antes de avanÃƒÆ’Ã‚Â§ar.', 'warning');
             return false;
         }
         return true;
@@ -26932,7 +27130,7 @@ function canAdvanceNFXmlStep(stepId = getNFXmlCurrentStep(), showMessage = true)
     if (stepId === 'produtos') {
         const missingLinks = state.itens.filter(item => !item.id_interno).length;
         if (state.tipo_lancamento === 'entrada_normal' && missingLinks) {
-            if (showMessage) showToast(`Ainda existem ${missingLinks} produto(s) sem vínculo.`, 'warning');
+            if (showMessage) showToast(`Ainda existem ${missingLinks} produto(s) sem vÃƒÆ’Ã‚Â­nculo.`, 'warning');
             return false;
         }
         return true;
@@ -26995,11 +27193,11 @@ function renderNFXmlWizardActions() {
             ${isLast ? `
                 <button type="button" onclick="salvarEntradaNFXml()" class="btn-action" ${confirmReady ? '' : 'disabled'} style="opacity:${confirmReady ? '1' : '0.45'}; background:#22c55e !important;">
                     <span class="material-symbols-rounded">check_circle</span>
-                    ${state?.savedEntradaId ? 'Importação salva' : 'Confirmar importação'}
+                    ${state?.savedEntradaId ? 'ImportaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o salva' : 'Confirmar importaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o'}
                 </button>
             ` : `
                 <button type="button" onclick="nextNFXmlWizardStep()" class="btn-action" ${state || isFirst ? '' : 'disabled'}>
-                    Próximo
+                    PrÃƒÆ’Ã‚Â³ximo
                     <span class="material-symbols-rounded">arrow_forward</span>
                 </button>
             `}
@@ -27047,7 +27245,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
     const state = entradaNfXmlState;
     if (!client || !state) return;
 
-    console.log('[ENTRADA_NF_XML] consultando Supabase para chave, fornecedor e vínculos');
+    console.log('[ENTRADA_NF_XML] consultando Supabase para chave, fornecedor e vÃƒÆ’Ã‚Â­nculos');
 
     const { data: nfExistente, error: nfError } = await client
         .from('entradas_nf')
@@ -27065,8 +27263,8 @@ async function hydrateNFXmlPreviewFromSupabase() {
         state.afeta_financeiro = tipoConfig.afetaFinanceiro;
         state.estoque_finalizado = !!state.nfExistente.estoque_finalizado;
         state.financeiro_lancado = !!state.nfExistente.financeiro_lancado;
-        showToast('NF já importada', 'warning');
-        console.warn('[ENTRADA_NF_XML] NF já importada', state.nfExistente);
+        showToast('NF jÃƒÆ’Ã‚Â¡ importada', 'warning');
+        console.warn('[ENTRADA_NF_XML] NF jÃƒÆ’Ã‚Â¡ importada', state.nfExistente);
         console.log('[ENTRADA_NF_TIPO_LANCAMENTO] tipo existente carregado', state.tipo_lancamento);
 
         const { data: contas, error: contasError } = await client
@@ -27076,7 +27274,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
             .order('vencimento', { ascending: true });
         if (contasError) console.warn('[ENTRADA_NF_FINANCEIRO] erro ao carregar financeiro existente', contasError);
         state.financeiro.existentes = contas || [];
-        console.log('[ENTRADA_NF_FINANCEIRO] lançamentos existentes carregados', state.financeiro.existentes);
+        console.log('[ENTRADA_NF_FINANCEIRO] lanÃƒÆ’Ã‚Â§amentos existentes carregados', state.financeiro.existentes);
     }
 
     const { data: fornecedor, error: fornError } = await client
@@ -27084,7 +27282,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
         .select('*')
         .eq('cnpj', state.fornecedor.cnpj)
         .maybeSingle();
-    if (fornError) console.warn('[ENTRADA_NF_XML] fornecedor não localizado ou tabela indisponível', fornError);
+    if (fornError) console.warn('[ENTRADA_NF_XML] fornecedor nÃƒÆ’Ã‚Â£o localizado ou tabela indisponÃƒÆ’Ã‚Â­vel', fornError);
     state.fornecedorRecord = fornecedor || null;
     state.status = state.fornecedorRecord ? 'pendente_vinculo' : 'pendente_fornecedor';
 
@@ -27094,7 +27292,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
             .from('fornecedor_produtos')
             .select('*')
             .eq('fornecedor_cnpj', state.fornecedor.cnpj);
-        if (error) console.warn('[ENTRADA_NF_XML] erro ao buscar vínculos fornecedor_produtos', error);
+        if (error) console.warn('[ENTRADA_NF_XML] erro ao buscar vÃƒÆ’Ã‚Â­nculos fornecedor_produtos', error);
         vinculos = data || [];
     }
 
@@ -27122,7 +27320,7 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
 
     const product = (appData.products || []).find(p => String(p.id_interno || '') === String(idInterno || ''));
     if (!product) {
-        if (!silent) showToast('Produto interno não encontrado.', 'warning');
+        if (!silent) showToast('Produto interno nÃƒÆ’Ã‚Â£o encontrado.', 'warning');
         return false;
     }
 
@@ -27131,7 +27329,7 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
     item.produto_nome = product.descricao_completa || product.descricao_base || product.nome || product.id_interno;
     item.status_vinculo = 'vinculado';
     item.match_source = source;
-    console.log('[ENTRADA_NF_XML] vínculo aplicado', { numeroItem, idInterno, source });
+    console.log('[ENTRADA_NF_XML] vÃƒÆ’Ã‚Â­nculo aplicado', { numeroItem, idInterno, source });
     saveEntradaNFXMLDraft();
     if (!silent) renderNFXmlPreview();
     return true;
@@ -27195,13 +27393,13 @@ function openNFXmlFornecedorModal() {
     closeAppCenterModal();
     const f = { ...(state.fornecedorRecord || {}), ...state.fornecedor };
     const fields = [
-        ['razao_social', 'Razão social'],
+        ['razao_social', 'RazÃƒÆ’Ã‚Â£o social'],
         ['nome_fantasia', 'Nome fantasia'],
         ['cnpj', 'CNPJ'],
-        ['inscricao_estadual', 'Inscrição estadual'],
+        ['inscricao_estadual', 'InscriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o estadual'],
         ['cep', 'CEP'],
-        ['endereco', 'Endereço'],
-        ['numero', 'Número'],
+        ['endereco', 'EndereÃƒÆ’Ã‚Â§o'],
+        ['numero', 'NÃƒÆ’Ã‚Âºmero'],
         ['complemento', 'Complemento'],
         ['bairro', 'Bairro'],
         ['cidade', 'Cidade'],
@@ -27210,7 +27408,7 @@ function openNFXmlFornecedorModal() {
         ['whatsapp', 'WhatsApp'],
         ['email', 'Email'],
         ['contato_comercial', 'Contato comercial'],
-        ['observacoes', 'Observações']
+        ['observacoes', 'ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes']
     ];
     const modal = document.createElement('div');
     modal.id = 'app-center-modal';
@@ -27248,7 +27446,7 @@ async function saveNFXmlFornecedorFromModal() {
     const read = (key) => document.getElementById(`nfxml-forn-${key}`)?.value?.trim() || '';
     const cnpj = nfXmlOnlyDigits(read('cnpj') || state.fornecedor?.cnpj);
     if (!cnpj) {
-        showToast('CNPJ do fornecedor não encontrado no XML.', 'error');
+        showToast('CNPJ do fornecedor nÃƒÆ’Ã‚Â£o encontrado no XML.', 'error');
         return null;
     }
 
@@ -27356,7 +27554,7 @@ function setNFXmlTipoLancamento(tipo) {
     if (state.savedEntradaId && state.tipo_lancamento === 'entrada_normal' && state.estoque_finalizado && tipo !== 'entrada_normal') {
         showAppConfirmModal({
             title: 'Alterar tipo da NF?',
-            message: 'Esta NF já teve estoque finalizado como Entrada normal. Trocar o tipo pode causar divergência. Deseja continuar apenas para visualização desta tela?',
+            message: 'Esta NF jÃƒÆ’Ã‚Â¡ teve estoque finalizado como Entrada normal. Trocar o tipo pode causar divergÃƒÆ’Ã‚Âªncia. Deseja continuar apenas para visualizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o desta tela?',
             confirmLabel: 'Continuar',
             onConfirm: () => setNFXmlTipoLancamento(tipo)
         });
@@ -27382,7 +27580,7 @@ function renderNFXmlTipoLancamentoCards() {
     return `
         <section class="nfxml-card nfxml-launch-card ${disabled ? 'is-disabled' : ''}">
             <div>
-                <h3 class="nfxml-title small">COMO DESEJA LANÇAR ESTA NF?</h3>
+                <h3 class="nfxml-title small">COMO DESEJA LANÃƒÆ’Ã¢â‚¬Â¡AR ESTA NF?</h3>
                 <p class="nfxml-text">Escolha entre nota nova com estoque e financeiro ou nota antiga apenas para contas a pagar.</p>
                 <div class="nfxml-launch-options">
                 ${tipos.map(tipo => {
@@ -27428,11 +27626,11 @@ function getNFXmlFinanceParcelas() {
         return [{
             id: 'avista-1',
             parcela: '001',
-            descricao: `Pagamento à vista NF ${state.numero_nf || ''}`.trim(),
+            descricao: `Pagamento ÃƒÆ’Ã‚Â  vista NF ${state.numero_nf || ''}`.trim(),
             valor: nfXmlMoney(state.totais?.valor_total),
             vencimento: getDataBrasilISO(),
             forma_pagamento: 'pix',
-            observacoes: 'Pagamento à vista',
+            observacoes: 'Pagamento ÃƒÆ’Ã‚Â  vista',
             status: 'pago',
             pago: true,
             origem: 'avista'
@@ -27549,7 +27747,7 @@ function addNFXmlLancamentoComplementar() {
     fin.complementares.push({
         id: `complementar-${Date.now()}-${next}`,
         parcela: `COMP-${String(next).padStart(2, '0')}`,
-        descricao: 'Lançamento complementar',
+        descricao: 'LanÃƒÆ’Ã‚Â§amento complementar',
         valor: 0,
         vencimento: getDataBrasilISO(),
         forma_pagamento: 'boleto',
@@ -27605,13 +27803,13 @@ function validateNFXmlFinanceBeforeSave({ allowPrompt = true, silent = false } =
     }
     for (const item of complementares) {
         if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
-            if (!silent) showToast('Lançamento complementar exige descrição, valor, vencimento e forma de pagamento.', 'warning');
+            if (!silent) showToast('LanÃƒÆ’Ã‚Â§amento complementar exige descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, valor, vencimento e forma de pagamento.', 'warning');
             return false;
         }
     }
     const totals = getNFXmlFinanceTotals();
     if (Math.abs(totals.diferencaParcelas) > 0.01 && !state.financeiro.confirmarDiferenca) {
-        if (!silent) showToast(`Ajuste as parcelas da nota: diferença de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`, 'warning');
+        if (!silent) showToast(`Ajuste as parcelas da nota: diferenÃƒÆ’Ã‚Â§a de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}.`, 'warning');
         return false;
     }
     return true;
@@ -27643,7 +27841,7 @@ function buildNFXmlFinancePayload(entradaId) {
 
     for (const item of parcelas) {
         if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
-            throw new Error('Parcela exige descrição, valor, vencimento e forma de pagamento.');
+            throw new Error('Parcela exige descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, valor, vencimento e forma de pagamento.');
         }
         const pago = !!item.pago || item.status === 'pago';
         payloads.push({
@@ -27664,7 +27862,7 @@ function buildNFXmlFinancePayload(entradaId) {
 
     for (const item of complementares) {
         if (!item.descricao || nfXmlMoney(item.valor) <= 0 || !item.vencimento || !item.forma_pagamento) {
-            throw new Error('Lançamento complementar exige descrição, valor, vencimento e forma de pagamento.');
+            throw new Error('LanÃƒÆ’Ã‚Â§amento complementar exige descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, valor, vencimento e forma de pagamento.');
         }
         const pago = !!item.pago || item.status === 'pago';
         payloads.push({
@@ -27679,7 +27877,7 @@ function buildNFXmlFinancePayload(entradaId) {
             status_vencimento: pago ? 'pago' : 'em_aberto',
             data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
             forma_pagamento: item.forma_pagamento || null,
-            observacoes: item.observacoes || 'Lançamento complementar vinculado à NF'
+            observacoes: item.observacoes || 'LanÃƒÆ’Ã‚Â§amento complementar vinculado ÃƒÆ’Ã‚Â  NF'
         });
     }
 
@@ -27691,7 +27889,7 @@ function renderNFXmlFinanceBlock() {
     const state = entradaNfXmlState;
     const fin = state.financeiro;
     const totals = getNFXmlFinanceTotals();
-    const formas = ['pix', 'dinheiro', 'cartão', 'boleto', 'transferência', 'outro'];
+    const formas = ['pix', 'dinheiro', 'cartÃƒÆ’Ã‚Â£o', 'boleto', 'transferÃƒÆ’Ã‚Âªncia', 'outro'];
     const parcelas = getNFXmlFinanceParcelas();
     const complementares = getNFXmlFinanceComplementares();
     const diffOk = Math.abs(totals.diferencaParcelas) <= 0.01;
@@ -27704,7 +27902,7 @@ function renderNFXmlFinanceBlock() {
                     <h3 class="nfxml-title small">FINANCEIRO DA ENTRADA</h3>
                     <p class="nfxml-text">Confira as parcelas oficiais da NF e adicione complementares sem alterar o valor da nota.</p>
                 </div>
-                ${state.financeiro.existentes?.length ? `<span class="nfxml-status-pill warning">${state.financeiro.existentes.length} lançamento(s) já salvo(s)</span>` : ''}
+                ${state.financeiro.existentes?.length ? `<span class="nfxml-status-pill warning">${state.financeiro.existentes.length} lanÃƒÆ’Ã‚Â§amento(s) jÃƒÆ’Ã‚Â¡ salvo(s)</span>` : ''}
             </div>
 
             <div class="nfxml-finance-summary">
@@ -27723,13 +27921,13 @@ function renderNFXmlFinanceBlock() {
             ${diffOk ? '' : `
                 <div class="nfxml-finance-warning">
                     <span class="material-symbols-rounded">warning</span>
-                    Parcelas da nota com diferença de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}. O complementar não corrige o valor oficial da NF.
+                    Parcelas da nota com diferenÃƒÆ’Ã‚Â§a de ${nfXmlFormatMoney(Math.abs(totals.diferencaParcelas))}. O complementar nÃƒÆ’Ã‚Â£o corrige o valor oficial da NF.
                 </div>
             `}
 
             <div class="nfxml-payment-mode-grid">
                 ${[
-                    ['avista', 'Pagamento à vista', 'Gera uma única parcela paga com data atual.'],
+                    ['avista', 'Pagamento ÃƒÆ’Ã‚Â  vista', 'Gera uma ÃƒÆ’Ã‚Âºnica parcela paga com data atual.'],
                     ['xml', 'Parcelas da nota', state.duplicatas.length ? 'Usa vencimentos e valores do XML.' : 'XML sem parcelas. Use editar pagamentos.'],
                     ['editar', 'Editar pagamentos', 'Ajuste parcelas, datas, valores e formas antes de salvar.']
                 ].map(([mode, label, description]) => `
@@ -27780,7 +27978,7 @@ function renderNFXmlFinanceBlock() {
                             </select>
                         </label>
                         <label class="wide">
-                            <span>Observação</span>
+                            <span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                             <input value="${escapeKitAttribute(item.observacoes || '')}" ${editableParcelas ? `oninput="updateNFXmlFinanceParcelField('${item.id}', 'observacoes', this.value, false)"` : 'readonly'}>
                         </label>
                         <label class="nfxml-paid-check">
@@ -27798,11 +27996,11 @@ function renderNFXmlFinanceBlock() {
 
             <div class="nfxml-complement-section">
                 <div class="nfxml-payment-section-title">
-                    <strong>Lançamentos complementares</strong>
+                    <strong>LanÃƒÆ’Ã‚Â§amentos complementares</strong>
                 </div>
                 <button type="button" class="btn-action nfxml-complement-add" onclick="addNFXmlLancamentoComplementar()">
                     <span class="material-symbols-rounded">add</span>
-                    Adicionar lançamento complementar
+                    Adicionar lanÃƒÆ’Ã‚Â§amento complementar
                 </button>
                 ${complementares.length ? `
                     <div class="nfxml-payment-list">
@@ -27810,7 +28008,7 @@ function renderNFXmlFinanceBlock() {
                             <article class="nfxml-payment-row nfxml-complement-row">
                                 <div class="nfxml-payment-index">C${index + 1}</div>
                                 <label class="wide">
-                                    <span>Descrição</span>
+                                    <span>DescriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                                     <input value="${escapeKitAttribute(item.descricao || '')}" oninput="updateNFXmlComplementarField('${item.id}', 'descricao', this.value, false)">
                                 </label>
                                 <label>
@@ -27828,7 +28026,7 @@ function renderNFXmlFinanceBlock() {
                                     </select>
                                 </label>
                                 <label class="wide">
-                                    <span>Observação</span>
+                                    <span>ObservaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</span>
                                     <input value="${escapeKitAttribute(item.observacoes || '')}" oninput="updateNFXmlComplementarField('${item.id}', 'observacoes', this.value, false)">
                                 </label>
                                 <label class="nfxml-paid-check">
@@ -27842,13 +28040,13 @@ function renderNFXmlFinanceBlock() {
                         `).join('')}
                     </div>
                 ` : `
-                    <div class="nfxml-empty-inline">Nenhum lançamento complementar adicionado.</div>
+                    <div class="nfxml-empty-inline">Nenhum lanÃƒÆ’Ã‚Â§amento complementar adicionado.</div>
                 `}
             </div>
 
             ${state.financeiro.existentes?.length ? `
                 <div class="nfxml-existing-payments">
-                    <strong>Lançamentos já salvos</strong>
+                    <strong>LanÃƒÆ’Ã‚Â§amentos jÃƒÆ’Ã‚Â¡ salvos</strong>
                     ${state.financeiro.existentes.map(item => `
                         <div>
                             <span>${escapeKitAttribute(item.descricao || item.parcela || '-')}</span>
@@ -27881,18 +28079,18 @@ function renderNFXmlPreview() {
     container.innerHTML = `
         ${state.nfExistente ? `
             <div style="background: rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; padding:14px 16px; border-radius:16px; margin-bottom:16px; font-weight:800;">
-                NF já importada: ${escapeKitAttribute(state.nfExistente.numero_nf || state.numero_nf)} (${escapeKitAttribute(state.nfExistente.status || '-')}) - ${escapeKitAttribute(getNFXmlTipoConfig(state.tipo_lancamento).label)}
+                NF jÃƒÆ’Ã‚Â¡ importada: ${escapeKitAttribute(state.nfExistente.numero_nf || state.numero_nf)} (${escapeKitAttribute(state.nfExistente.status || '-')}) - ${escapeKitAttribute(getNFXmlTipoConfig(state.tipo_lancamento).label)}
             </div>
         ` : ''}
 
         <div class="nfxml-summary-grid">
             <section class="nfxml-light-card">
                 <div class="nfxml-kicker">DADOS DA NOTA</div>
-                <h3>NF ${escapeKitAttribute(state.numero_nf)} / Série ${escapeKitAttribute(state.serie)}</h3>
+                <h3>NF ${escapeKitAttribute(state.numero_nf)} / SÃƒÆ’Ã‚Â©rie ${escapeKitAttribute(state.serie)}</h3>
                 <div class="nfxml-data-list">
                     <strong>Chave:</strong> ${escapeKitAttribute(state.chave_acesso)}<br>
                     <strong>Protocolo:</strong> ${escapeKitAttribute(state.protocolo || '-')}<br>
-                    <strong>Emissão:</strong> ${nfXmlFormatDate(state.data_emissao)}<br>
+                    <strong>EmissÃƒÆ’Ã‚Â£o:</strong> ${nfXmlFormatDate(state.data_emissao)}<br>
                     <strong>Status:</strong> ${escapeKitAttribute(status)}
                 </div>
                 <div class="nfxml-note-totals">
@@ -27913,7 +28111,7 @@ function renderNFXmlPreview() {
                     <div style="margin-top:12px; color:#16a34a; font-weight:900; font-size:0.75rem;">Fornecedor cadastrado</div>
                 ` : `
                     <div style="margin-top:12px; background:#fff7ed; color:#9a3412; border-radius:12px; padding:10px; font-size:0.78rem; font-weight:800;">
-                        Fornecedor não cadastrado. Deseja cadastrar com os dados da nota?
+                        Fornecedor nÃƒÆ’Ã‚Â£o cadastrado. Deseja cadastrar com os dados da nota?
                     </div>
                     <button type="button" onclick="openNFXmlFornecedorModal()" class="btn-action" style="width:100%; justify-content:center; margin-top:10px; background:#22c55e !important;">
                         <span class="material-symbols-rounded">add_business</span>
@@ -27929,7 +28127,7 @@ function renderNFXmlPreview() {
         <section class="nfxml-card nfxml-products-card">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
                 <h3 class="nfxml-title small">PRODUTOS DA NOTA</h3>
-                <span style="font-size:0.78rem; color:${missingLinks ? '#fbbf24' : '#4ade80'}; font-weight:900;">${missingLinks ? `${missingLinks} item(ns) sem vínculo` : 'Todos os itens vinculados'}</span>
+                <span style="font-size:0.78rem; color:${missingLinks ? '#fbbf24' : '#4ade80'}; font-weight:900;">${missingLinks ? `${missingLinks} item(ns) sem vÃƒÆ’Ã‚Â­nculo` : 'Todos os itens vinculados'}</span>
             </div>
             <div style="display:flex; flex-direction:column; gap:12px;">
                 ${state.itens.map(item => renderNFXmlItemCard(item, state.tipo_lancamento === 'entrada_normal')).join('')}
@@ -27960,7 +28158,7 @@ function renderNFXmlItemCard(item, allowLink = true) {
     const custo = formatarResumoCustoReal(item);
     return `
         <article class="nfxml-item-card ${linked ? 'is-linked' : 'is-pending'}">
-            <button type="button" class="nfxml-item-more" aria-label="Mais opções">
+            <button type="button" class="nfxml-item-more" aria-label="Mais opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes">
                 <span class="material-symbols-rounded">more_vert</span>
             </button>
             <div class="nfxml-item-grid">
@@ -27979,23 +28177,23 @@ function renderNFXmlItemCard(item, allowLink = true) {
                         <span>CFOP ${escapeKitAttribute(item.cfop || '-')}</span>
                     </div>
                     <div class="nf-cost-summary">
-                        <span>Custo unitário NF: <strong>${custo.custoNota}</strong></span>
+                        <span>Custo unitÃƒÆ’Ã‚Â¡rio NF: <strong>${custo.custoNota}</strong></span>
                         <span>IPI: <strong>${custo.ipi}</strong></span>
                         <span>ICMS ST: <strong>${custo.icmsSt}</strong></span>
                         <span>Frete/Despesas: <strong>${custo.despesasRateadas}</strong></span>
                         <span>Desconto: <strong>${custo.desconto}</strong></span>
                         <span>Complemento rateado: <strong>${custo.complementoRateado}</strong></span>
-                        <span class="nf-cost-real">Custo real unitário: <strong>${custo.custoRealUnitario}</strong></span>
+                        <span class="nf-cost-real">Custo real unitÃƒÆ’Ã‚Â¡rio: <strong>${custo.custoRealUnitario}</strong></span>
                     </div>
                 </div>
                 ${allowLink ? `
                     <div class="nfxml-item-link-panel">
-                        <div class="nfxml-item-link-title">Vínculo com produto interno</div>
+                        <div class="nfxml-item-link-title">VÃƒÆ’Ã‚Â­nculo com produto interno</div>
                         ${linked ? `
                             <div class="nfxml-item-linked-product">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
                             <div class="nfxml-item-origin">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
                         ` : `
-                            <div class="nfxml-item-pending">Pendente de vínculo</div>
+                            <div class="nfxml-item-pending">Pendente de vÃƒÆ’Ã‚Â­nculo</div>
                         `}
                         <div class="nfxml-item-link-input">
                             <input id="nfxml-id-${item.numero_item}" class="input-field" placeholder="Informar id_interno">
@@ -28003,7 +28201,7 @@ function renderNFXmlItemCard(item, allowLink = true) {
                                 <span class="material-symbols-rounded">link</span>
                             </button>
                         </div>
-                        <input class="input-field nfxml-item-search" placeholder="Buscar por descrição, ID, EAN ou SKU" oninput="searchNFXmlProduct(${item.numero_item}, this.value)">
+                        <input class="input-field nfxml-item-search" placeholder="Buscar por descriÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o, ID, EAN ou SKU" oninput="searchNFXmlProduct(${item.numero_item}, this.value)">
                         <div id="nfxml-results-${item.numero_item}"></div>
                         <label class="nfxml-item-ean-check">
                             <input type="checkbox" ${item.ean_divergente ? 'checked' : ''} onchange="toggleNFXmlEanDivergente(${item.numero_item}, this.checked)">
@@ -28012,7 +28210,7 @@ function renderNFXmlItemCard(item, allowLink = true) {
                     </div>
                 ` : `
                     <div class="nfxml-item-link-panel is-readonly">
-                        Produto exibido para conferência dos dados da nota. Não será exigido vínculo e não haverá movimentação de estoque.
+                        Produto exibido para conferÃƒÆ’Ã‚Âªncia dos dados da nota. NÃƒÆ’Ã‚Â£o serÃƒÆ’Ã‚Â¡ exigido vÃƒÆ’Ã‚Â­nculo e nÃƒÆ’Ã‚Â£o haverÃƒÆ’Ã‚Â¡ movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de estoque.
                     </div>
                 `}
             </div>
@@ -28036,7 +28234,7 @@ async function salvarEntradaNFXml() {
     if (state.savedEntradaId) {
         await showAppAlert({
             title: 'Entrada ja salva',
-            message: 'Continue pela finalizacao se ainda precisar lançar o estoque.',
+            message: 'Continue pela finalizacao se ainda precisar lanÃƒÆ’Ã‚Â§ar o estoque.',
             buttonLabel: 'OK',
             icon: 'info'
         });
@@ -28157,7 +28355,7 @@ async function salvarEntradaNFXml() {
 
         if (tipoConfig.afetaFinanceiro) {
             const contasPayload = buildNFXmlFinancePayload(entrada.id);
-            if (!contasPayload.length) throw new Error('Selecione ao menos uma forma de lançamento no Financeiro da Entrada.');
+            if (!contasPayload.length) throw new Error('Selecione ao menos uma forma de lanÃƒÆ’Ã‚Â§amento no Financeiro da Entrada.');
             const { error: contasError } = await client.from('contas_pagar').insert(contasPayload);
             if (contasError) throw contasError;
             state.financeiro.existentes = contasPayload;
@@ -28179,7 +28377,7 @@ async function salvarEntradaNFXml() {
         if (tipoLancamentoSalvo === 'somente_financeiro' || status === 'financeiro_lancado') {
             await showAppAlert({
                 title: 'NF salva no financeiro',
-                message: `Nota ${numeroNotaSalva} salva. Como esta entrada não altera estoque, ela fica no Histórico de entradas.`,
+                message: `Nota ${numeroNotaSalva} salva. Como esta entrada nÃƒÆ’Ã‚Â£o altera estoque, ela fica no HistÃƒÆ’Ã‚Â³rico de entradas.`,
                 buttonLabel: 'Importar outra NF',
                 icon: 'check_circle'
             });
@@ -28189,8 +28387,8 @@ async function salvarEntradaNFXml() {
 
         const importarOutra = await showAppConfirm({
             title: 'NF importada com sucesso',
-            message: `Nota ${numeroNotaSalva} salva. Ela ficará em Notas em aberto até concluir os vínculos e finalizar o estoque.`,
-            detail: 'Você pode importar outra nota agora ou ir para Notas em aberto para continuar esta entrada.',
+            message: `Nota ${numeroNotaSalva} salva. Ela ficarÃƒÆ’Ã‚Â¡ em Notas em aberto atÃƒÆ’Ã‚Â© concluir os vÃƒÆ’Ã‚Â­nculos e finalizar o estoque.`,
+            detail: 'VocÃƒÆ’Ã‚Âª pode importar outra nota agora ou ir para Notas em aberto para continuar esta entrada.',
             confirmLabel: 'Importar outra NF',
             cancelLabel: 'Ver notas em aberto'
         });
@@ -28228,7 +28426,7 @@ async function upsertNFXmlFornecedorProdutos() {
         ultima_quantidade: item.quantidade,
         ultima_compra_em: state.data_emissao,
         ean_divergente: !!item.ean_divergente,
-        observacoes: item.match_source ? `Vínculo via ${item.match_source}` : null,
+        observacoes: item.match_source ? `VÃƒÆ’Ã‚Â­nculo via ${item.match_source}` : null,
         atualizado_em: getDataHoraBrasil()
     }));
 
@@ -28236,7 +28434,7 @@ async function upsertNFXmlFornecedorProdutos() {
     const { error } = await client
         .from('fornecedor_produtos')
         .upsert(vinculados, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
-    if (error) console.warn('[ENTRADA_NF_XML] erro ao salvar vínculos fornecedor_produtos', error);
+    if (error) console.warn('[ENTRADA_NF_XML] erro ao salvar vÃƒÆ’Ã‚Â­nculos fornecedor_produtos', error);
 }
 
 async function atualizarCustoProdutosEntradaNF(itens = []) {
@@ -28275,8 +28473,8 @@ async function finalizarEntradaNFXml() {
     if (!client || !state?.savedEntradaId) return;
 
     if (state.tipo_lancamento !== 'entrada_normal' || !state.afeta_estoque) {
-        showToast('Este tipo de lançamento não altera estoque.', 'warning');
-        console.warn('[ENTRADA_NF_TIPO_LANCAMENTO] finalização de estoque bloqueada', state.tipo_lancamento);
+        showToast('Este tipo de lanÃƒÆ’Ã‚Â§amento nÃƒÆ’Ã‚Â£o altera estoque.', 'warning');
+        console.warn('[ENTRADA_NF_TIPO_LANCAMENTO] finalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de estoque bloqueada', state.tipo_lancamento);
         return;
     }
 
@@ -28299,7 +28497,7 @@ async function finalizarEntradaNFXml() {
 
     showAppConfirmModal({
         title: 'Finalizar entrada?',
-        message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra os movimentos de estoque.',
+        message: 'Deseja lanÃƒÆ’Ã‚Â§ar as quantidades no estoque do TÃƒÆ’Ã¢â‚¬Â°RREO? Esta aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o registra os movimentos de estoque.',
         confirmLabel: 'Finalizar entrada',
         onConfirm: () => finalizarEntradaNFXmlConfirmado()
     });
@@ -28358,7 +28556,7 @@ async function finalizarEntradaNFXmlConfirmado() {
         showToast('Entrada finalizada e estoque atualizado.', 'success');
         await showAppAlert({
             title: 'Recebimento finalizado',
-            message: `NF ${state.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÉRREO.`,
+            message: `NF ${state.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÃƒÆ’Ã¢â‚¬Â°RREO.`,
             buttonLabel: 'OK',
             icon: 'check_circle'
         });
@@ -28411,23 +28609,23 @@ async function finalizarEntradaNFAberta(entradaId) {
 
     try {
         const entrada = await DataClient.getEntradaNFById(entradaId);
-        if (!entrada) throw new Error('Nota não encontrada.');
+        if (!entrada) throw new Error('Nota nÃƒÆ’Ã‚Â£o encontrada.');
         if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
-            showToast('Esta nota já está finalizada.', 'info');
+            showToast('Esta nota jÃƒÆ’Ã‚Â¡ estÃƒÆ’Ã‚Â¡ finalizada.', 'info');
             renderNFAbertasList();
             return;
         }
         if (entrada.tipo_lancamento && entrada.tipo_lancamento !== 'entrada_normal') {
-            throw new Error('Esta nota não é do tipo Entrada normal.');
+            throw new Error('Esta nota nÃƒÆ’Ã‚Â£o ÃƒÆ’Ã‚Â© do tipo Entrada normal.');
         }
         if (entrada.afeta_estoque === false) {
-            throw new Error('Esta nota foi marcada para não alterar estoque.');
+            throw new Error('Esta nota foi marcada para nÃƒÆ’Ã‚Â£o alterar estoque.');
         }
 
         const itens = await fetchEntradaNFItens(entrada.id);
         if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
         const pendentes = itens.filter(item => !item.id_interno || parseDecimal(item.quantidade) <= 0);
-        if (pendentes.length) throw new Error('Existem itens sem vínculo interno ou quantidade válida.');
+        if (pendentes.length) throw new Error('Existem itens sem vÃƒÆ’Ã‚Â­nculo interno ou quantidade vÃƒÆ’Ã‚Â¡lida.');
         console.log('[ENTRADA_NF_CUSTO_REAL]', {
             numero_nf: entrada.numero_nf,
             valor_oficial_nf: entrada.valor_total,
@@ -28488,7 +28686,7 @@ async function finalizarEntradaNFAberta(entradaId) {
         showToast('Entrada finalizada e estoque atualizado.', 'success');
         await showAppAlert({
             title: 'Recebimento finalizado',
-            message: `NF ${entrada.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÉRREO.`,
+            message: `NF ${entrada.numero_nf || ''} recebida com sucesso. O estoque foi atualizado no TÃƒÆ’Ã¢â‚¬Â°RREO.`,
             buttonLabel: 'OK',
             icon: 'check_circle'
         });
@@ -28510,7 +28708,7 @@ async function finalizarEntradaNFAberta(entradaId) {
 function confirmarFinalizarEntradaNFAberta(entradaId) {
     showAppConfirmModal({
         title: 'Finalizar entrada?',
-        message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra movimentos e camadas de custo.',
+        message: 'Deseja lanÃƒÆ’Ã‚Â§ar as quantidades no estoque do TÃƒÆ’Ã¢â‚¬Â°RREO? Esta aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o registra movimentos e camadas de custo.',
         confirmLabel: 'Finalizar entrada',
         onConfirm: () => finalizarEntradaNFAberta(entradaId)
     });
@@ -28523,7 +28721,7 @@ function getEntradaNFOpenStatusInfo(nf) {
         return { label: 'Fornecedor pendente', tone: '#f59e0b', action: 'Conferir fornecedor' };
     }
     if (status === 'pendente_vinculo') {
-        return { label: 'Vínculo pendente', tone: '#f59e0b', action: 'Vincular produtos' };
+        return { label: 'VÃƒÆ’Ã‚Â­nculo pendente', tone: '#f59e0b', action: 'Vincular produtos' };
     }
     if (status === 'pronta_para_finalizar') {
         return { label: 'Pronta para finalizar', tone: '#22c55e', action: 'Finalizar estoque' };
@@ -28532,7 +28730,7 @@ function getEntradaNFOpenStatusInfo(nf) {
         return { label: 'Em andamento', tone: '#3b82f6', action: 'Continuar' };
     }
     if (tipo === 'somente_financeiro' || status === 'financeiro_lancado') {
-        return { label: 'Financeiro lançado', tone: '#64748b', action: 'Ver histórico' };
+        return { label: 'Financeiro lanÃƒÆ’Ã‚Â§ado', tone: '#64748b', action: 'Ver histÃƒÆ’Ã‚Â³rico' };
     }
     return { label: status ? status.replace(/_/g, ' ') : 'Pendente', tone: '#3b82f6', action: 'Abrir' };
 }
@@ -28548,8 +28746,8 @@ async function renderNFAbertasList() {
                 ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
                 <div id="nf-list-container" style="padding: 12px 20px 40px 20px;">
                     <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.05);">
-                        <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">Pendências operacionais</strong>
-                        <span style="font-size:0.78rem;">Aqui aparecem somente notas que ainda precisam de fornecedor, vínculo de produtos ou finalização de estoque. Notas somente financeiro ficam no Histórico de entradas.</span>
+                        <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">PendÃƒÆ’Ã‚Âªncias operacionais</strong>
+                        <span style="font-size:0.78rem;">Aqui aparecem somente notas que ainda precisam de fornecedor, vÃƒÆ’Ã‚Â­nculo de produtos ou finalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de estoque. Notas somente financeiro ficam no HistÃƒÆ’Ã‚Â³rico de entradas.</span>
                     </div>
                     <div id="nf-list-items">
                         <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas...</div>
@@ -28567,7 +28765,7 @@ async function renderNFAbertasList() {
             <div style="text-align: center; padding: 60px 20px; background: #fff; border-radius: 24px; border: 1px dashed rgba(15,23,42,0.16); box-shadow:0 10px 24px rgba(15,23,42,0.04);">
                 <span class="material-symbols-rounded" style="font-size: 48px; color: #94a3b8; margin-bottom: 16px;">task_alt</span>
                 <p style="color: #0f172a; font-weight:800; margin:0 0 6px 0;">Nenhuma nota operacional em aberto.</p>
-                <p style="color: #64748b; margin:0;">Notas já lançadas somente no financeiro aparecem no Histórico de entradas.</p>
+                <p style="color: #64748b; margin:0;">Notas jÃƒÆ’Ã‚Â¡ lanÃƒÆ’Ã‚Â§adas somente no financeiro aparecem no HistÃƒÆ’Ã‚Â³rico de entradas.</p>
             </div>
         `;
         return;
@@ -28793,11 +28991,11 @@ function renderEntradaNFHistorySummaryCards(historico = []) {
     const valorTotal = historico.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
     const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
     const cards = [
-        ['receipt_long', 'Total de entradas', total, 'Últimos registros'],
+        ['receipt_long', 'Total de entradas', total, 'ÃƒÆ’Ã…Â¡ltimos registros'],
         ['task_alt', 'Finalizadas', finalizadas, percent(finalizadas)],
         ['inventory_2', 'Em estoque', emEstoque, percent(emEstoque)],
         ['payments', 'Financeiro', financeiro, percent(financeiro)],
-        ['paid', 'Valor total', getEntradaNFMoney(valorTotal), 'Somatório das NFs']
+        ['paid', 'Valor total', getEntradaNFMoney(valorTotal), 'SomatÃƒÆ’Ã‚Â³rio das NFs']
     ];
     return `
         <section class="entrada-nf-history-summary">
@@ -28823,13 +29021,13 @@ function renderEntradaNFHistoryFilters() {
                 <input type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
             </label>
             <label>
-                <span>Período</span>
+                <span>PerÃƒÆ’Ã‚Â­odo</span>
                 <select onchange="setEntradaNFHistoryFilter('period', this.value)">
                     ${[
-                        ['30', 'Últimos 30 dias'],
-                        ['90', 'Últimos 90 dias'],
-                        ['180', 'Últimos 180 dias'],
-                        ['todos', 'Todo o histórico']
+                        ['30', 'ÃƒÆ’Ã…Â¡ltimos 30 dias'],
+                        ['90', 'ÃƒÆ’Ã…Â¡ltimos 90 dias'],
+                        ['180', 'ÃƒÆ’Ã…Â¡ltimos 180 dias'],
+                        ['todos', 'Todo o histÃƒÆ’Ã‚Â³rico']
                     ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
                 </select>
             </label>
@@ -28847,7 +29045,7 @@ function renderEntradaNFHistoryFilters() {
                     ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
                 </select>
             </label>
-            <button type="button" onclick="showToast('Filtros avançados serão adicionados em breve.', 'info')">
+            <button type="button" onclick="showToast('Filtros avanÃƒÆ’Ã‚Â§ados serÃƒÆ’Ã‚Â£o adicionados em breve.', 'info')">
                 <span class="material-symbols-rounded">tune</span>
                 Mais filtros
             </button>
@@ -28872,13 +29070,13 @@ function renderEntradaNFHistoryBadges(entrada, resumo) {
 
     return indicators.length
         ? indicators.join('')
-        : renderIndicator('neutro', 'radio_button_unchecked', 'Sem indicadores concluídos');
+        : renderIndicator('neutro', 'radio_button_unchecked', 'Sem indicadores concluÃƒÆ’Ã‚Â­dos');
 }
 
 function renderEntradaNFHistoryRows(entries = []) {
     return entries.map(entrada => {
         const resumo = calcularResumoEntradaNF(entrada);
-        const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor não informado';
+        const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor nÃƒÆ’Ã‚Â£o informado';
         return `
             <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
                 <div class="entrada-nf-history-cell nf">
@@ -28892,16 +29090,16 @@ function renderEntradaNFHistoryRows(entries = []) {
                     <strong>${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
                     <small>${escapeKitAttribute(entrada.tipo_lancamento || entrada.chave_acesso || 'Entrada fiscal')}</small>
                 </div>
-                <div class="entrada-nf-history-cell date"><small>Emissão</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
-                <div class="entrada-nf-history-cell date"><small>Lançamento</small><strong>${getEntradaNFDateTime(getEntradaNFLaunchDate(entrada))}</strong></div>
+                <div class="entrada-nf-history-cell date"><small>EmissÃƒÆ’Ã‚Â£o</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
+                <div class="entrada-nf-history-cell date"><small>LanÃƒÆ’Ã‚Â§amento</small><strong>${getEntradaNFDateTime(getEntradaNFLaunchDate(entrada))}</strong></div>
                 <div class="entrada-nf-history-cell count"><small>Itens</small><strong>${resumo.quantidadeItens}</strong></div>
                 <div class="entrada-nf-history-cell total"><small>Total</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
                 <div class="entrada-nf-history-cell status">${renderEntradaNFHistoryBadges(entrada, resumo)}</div>
                 <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
                     <button type="button" title="Visualizar detalhes" aria-label="Visualizar detalhes" onclick="renderDetalheEntradaNF('${entrada.id}')"><span class="material-symbols-rounded">visibility</span></button>
                     <button type="button" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')"><span class="material-symbols-rounded">text_snippet</span></button>
-                    <button type="button" title="Abrir lançamento" aria-label="Abrir lançamento" onclick="editEntradaNFLancamento('${entrada.id}')"><span class="material-symbols-rounded">assignment</span></button>
-                    <button type="button" title="Mais opções" aria-label="Mais opções" onclick="cancelEntradaNFHistoryItem('${entrada.id}')"><span class="material-symbols-rounded">more_horiz</span></button>
+                    <button type="button" title="Abrir lanÃƒÆ’Ã‚Â§amento" aria-label="Abrir lanÃƒÆ’Ã‚Â§amento" onclick="editEntradaNFLancamento('${entrada.id}')"><span class="material-symbols-rounded">assignment</span></button>
+                    <button type="button" title="Mais opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes" aria-label="Mais opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes" onclick="cancelEntradaNFHistoryItem('${entrada.id}')"><span class="material-symbols-rounded">more_horiz</span></button>
                 </div>
             </article>
         `;
@@ -28924,7 +29122,7 @@ function renderEntradaNFHistoryDashboard(historico = []) {
             </button>
             <div>
                 <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
-                <h1>HISTÓRICO DE ENTRADAS</h1>
+                <h1>HISTÃƒÆ’Ã¢â‚¬Å“RICO DE ENTRADAS</h1>
                 <p>Acompanhe todas as notas fiscais importadas</p>
             </div>
         </section>
@@ -28934,12 +29132,12 @@ function renderEntradaNFHistoryDashboard(historico = []) {
             <div class="entrada-nf-history-table-head">
                 <span>NF-e</span>
                 <span>Fornecedor</span>
-                <span>Emissão</span>
-                <span>Lançamento</span>
+                <span>EmissÃƒÆ’Ã‚Â£o</span>
+                <span>LanÃƒÆ’Ã‚Â§amento</span>
                 <span>Itens</span>
                 <span>Total</span>
                 <span>Indicadores</span>
-                <span>Ações</span>
+                <span>AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes</span>
             </div>
             <div class="entrada-nf-history-list">
                 ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
@@ -28985,7 +29183,7 @@ function setEntradaNFHistoryPage(page) {
 function openEntradaNFXML(entradaId) {
     const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
     if (!entrada?.xml_original) {
-        showToast('XML original não disponível para esta entrada.', 'warning');
+        showToast('XML original nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel para esta entrada.', 'warning');
         return;
     }
     const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
@@ -29002,7 +29200,7 @@ function cancelEntradaNFHistoryItem(entradaId) {
     const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
     if (!entrada) return;
     if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
-        showToast('Entrada finalizada não pode ser cancelada por aqui.', 'warning');
+        showToast('Entrada finalizada nÃƒÆ’Ã‚Â£o pode ser cancelada por aqui.', 'warning');
         return;
     }
     showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
@@ -29019,7 +29217,7 @@ async function renderHistoricoEntradasNF() {
                 <div id="entrada-nf-history-content" class="entrada-nf-history-content">
                     <div class="entrada-nf-history-loading">
                         <span class="material-symbols-rounded">sync</span>
-                        <strong>Carregando histórico...</strong>
+                        <strong>Carregando histÃƒÆ’Ã‚Â³rico...</strong>
                     </div>
                 </div>
             </main>
@@ -29048,7 +29246,7 @@ async function renderHistoricoEntradasNF() {
             container.innerHTML = `
                 <div class="entrada-nf-empty-state">
                     <span class="material-symbols-rounded">error</span>
-                    <strong>Não foi possível carregar o histórico agora.</strong>
+                    <strong>NÃƒÆ’Ã‚Â£o foi possÃƒÆ’Ã‚Â­vel carregar o histÃƒÆ’Ã‚Â³rico agora.</strong>
                     <small>Tente novamente em alguns instantes.</small>
                 </div>
             `;
@@ -29062,7 +29260,7 @@ async function renderDetalheEntradaNF(entradaId) {
     const entrada = (historico || []).find(item => String(item.id) === String(entradaId));
 
     if (!entrada) {
-        showToast('Nota não encontrada no histórico.', 'error');
+        showToast('Nota nÃƒÆ’Ã‚Â£o encontrada no histÃƒÆ’Ã‚Â³rico.', 'error');
         renderHistoricoEntradasNF();
         return;
     }
@@ -29081,32 +29279,32 @@ async function renderDetalheEntradaNF(entradaId) {
                 <section class="entrada-nf-detail-card">
                     <header class="entrada-nf-detail-header">
                         <div>
-                            <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')} / Série ${escapeKitAttribute(entrada.serie || '-')}</strong>
-                            <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor não informado')}</small>
+                            <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')} / SÃƒÆ’Ã‚Â©rie ${escapeKitAttribute(entrada.serie || '-')}</strong>
+                            <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nÃƒÆ’Ã‚Â£o informado')}</small>
                         </div>
                         ${renderEntradaNFStatusPill(entrada.status)}
                     </header>
 
                     <div class="entrada-nf-detail-grid">
-                        <div><small>Data de emissão</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
-                        <div><small>Data de lançamento</small><strong>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</strong></div>
+                        <div><small>Data de emissÃƒÆ’Ã‚Â£o</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
+                        <div><small>Data de lanÃƒÆ’Ã‚Â§amento</small><strong>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</strong></div>
                         <div><small>Total oficial da NF</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
                         <div><small>Parcelas da nota</small><strong>${getEntradaNFMoney(resumo.totalParcelasNota)}</strong></div>
-                        <div><small>Lançamentos complementares</small><strong>${getEntradaNFMoney(resumo.totalComplementares)}</strong></div>
+                        <div><small>LanÃƒÆ’Ã‚Â§amentos complementares</small><strong>${getEntradaNFMoney(resumo.totalComplementares)}</strong></div>
                         <div><small>Total financeiro previsto</small><strong>${getEntradaNFMoney(resumo.totalFinanceiroPrevisto)}</strong></div>
-                        <div><small>Usuário</small><strong>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</strong></div>
-                        <div><small>Gerou estoque</small><strong>${resumo.gerouEstoque ? 'Sim' : 'Não'}</strong></div>
-                        <div><small>Gerou financeiro</small><strong>${resumo.gerouFinanceiro ? 'Sim' : 'Não'}</strong></div>
+                        <div><small>UsuÃƒÆ’Ã‚Â¡rio</small><strong>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</strong></div>
+                        <div><small>Gerou estoque</small><strong>${resumo.gerouEstoque ? 'Sim' : 'NÃƒÆ’Ã‚Â£o'}</strong></div>
+                        <div><small>Gerou financeiro</small><strong>${resumo.gerouFinanceiro ? 'Sim' : 'NÃƒÆ’Ã‚Â£o'}</strong></div>
                     </div>
 
-                    <h3>Produtos lançados</h3>
+                    <h3>Produtos lanÃƒÆ’Ã‚Â§ados</h3>
                     ${itens.length ? `
                         <div class="entrada-nf-detail-list">
                             ${itens.map(item => `
                                 <article class="entrada-nf-detail-row">
                                     <div>
                                         <strong>${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</strong>
-                                        <small>ID interno: ${escapeKitAttribute(item.id_interno || item.produto_id_interno || '-')} • EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</small>
+                                        <small>ID interno: ${escapeKitAttribute(item.id_interno || item.produto_id_interno || '-')} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</small>
                                     </div>
                                     <div>
                                         <span><b>Qtd</b>${Number(item.quantidade || 0).toLocaleString('pt-BR')}</span>
@@ -29137,7 +29335,7 @@ async function renderDetalheEntradaNF(entradaId) {
                                 <article class="entrada-nf-detail-row finance">
                                     <div>
                                         <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || '-')}</strong>
-                                        <small>Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} • Status: ${escapeKitAttribute(parcela.status || '-')}</small>
+                                        <small>Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Status: ${escapeKitAttribute(parcela.status || '-')}</small>
                                     </div>
                                     <div>
                                         <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
@@ -29148,14 +29346,14 @@ async function renderDetalheEntradaNF(entradaId) {
                         </div>
                     ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhuma parcela da nota vinculada.</strong></div>`}
 
-                    <h3>Lançamentos complementares</h3>
+                    <h3>LanÃƒÆ’Ã‚Â§amentos complementares</h3>
                     ${parcelasComplementares.length ? `
                         <div class="entrada-nf-detail-list">
                             ${parcelasComplementares.map(parcela => `
                                 <article class="entrada-nf-detail-row finance">
                                     <div>
-                                        <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || 'Lançamento complementar')}</strong>
-                                        <small>Complementar • Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} • Status: ${escapeKitAttribute(parcela.status || '-')}</small>
+                                        <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || 'LanÃƒÆ’Ã‚Â§amento complementar')}</strong>
+                                        <small>Complementar ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Status: ${escapeKitAttribute(parcela.status || '-')}</small>
                                     </div>
                                     <div>
                                         <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
@@ -29165,7 +29363,7 @@ async function renderDetalheEntradaNF(entradaId) {
                                 </article>
                             `).join('')}
                         </div>
-                    ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum lançamento complementar vinculado.</strong></div>`}
+                    ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum lanÃƒÆ’Ã‚Â§amento complementar vinculado.</strong></div>`}
                 </section>
             </main>
         </div>
@@ -29177,7 +29375,7 @@ async function renderNFDetail(id) {
     const nf = await DataClient.getEntradaNFById(id);
     
     if (!nf) {
-        showToast('Nota não encontrada', 'error');
+        showToast('Nota nÃƒÆ’Ã‚Â£o encontrada', 'error');
         renderNFAbertasList();
         return;
     }
@@ -29199,7 +29397,7 @@ async function renderNFDetail(id) {
                     <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px;">
                             <div>
-                                <div style="font-size: 0.6rem; color: #999; text-transform: uppercase; font-weight: 700;">Número / Série</div>
+                                <div style="font-size: 0.6rem; color: #999; text-transform: uppercase; font-weight: 700;">NÃƒÆ’Ã‚Âºmero / SÃƒÆ’Ã‚Â©rie</div>
                                 <div style="font-size: 1.2rem; font-weight: 900; color: #101018;">${nf.numero_nf} / ${nf.serie || '1'}</div>
                             </div>
                             <div style="text-align: right;">
@@ -29264,7 +29462,7 @@ async function renderNFDetail(id) {
 function renderNFPlaceholder(title) {
     const currentUser = localStorage.getItem('currentUser');
     const normalizedTitle = String(title || '').toUpperCase();
-    const iconHTML = normalizedTitle.includes('HISTÓRICO') ? menu3DIcons.historico : menu3DIcons.nf;
+    const iconHTML = normalizedTitle.includes('HISTÃƒÆ’Ã¢â‚¬Å“RICO') ? menu3DIcons.historico : menu3DIcons.nf;
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in nf-placeholder-screen entrada-nf-screen no-top-bar">
             ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
@@ -29273,9 +29471,9 @@ function renderNFPlaceholder(title) {
                 ${getStandardScreenTitleHTML(normalizedTitle, iconHTML)}
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 45vh;">
                 <div style="text-align: center; padding: 40px; background: rgba(255,255,255,0.03); border-radius: 32px; border: 1px dashed rgba(255,255,255,0.1); max-width: 400px; width: 90%;">
-                    <span class="material-symbols-rounded" style="font-size: 64px; color: var(--primary); margin-bottom: 20px;">${normalizedTitle.includes('HISTÓRICO') ? 'history' : 'construction'}</span>
+                    <span class="material-symbols-rounded" style="font-size: 64px; color: var(--primary); margin-bottom: 20px;">${normalizedTitle.includes('HISTÃƒÆ’Ã¢â‚¬Å“RICO') ? 'history' : 'construction'}</span>
                     <p style="color: var(--muted); font-size: 1.1rem; font-weight: 500;">Em desenvolvimento</p>
-                    <p style="color: rgba(255,255,255,0.3); font-size: 0.8rem; margin-top: 10px;">Esta funcionalidade estará disponível em breve.</p>
+                    <p style="color: rgba(255,255,255,0.3); font-size: 0.8rem; margin-top: 10px;">Esta funcionalidade estarÃƒÆ’Ã‚Â¡ disponÃƒÆ’Ã‚Â­vel em breve.</p>
                 </div>
                 </div>
             </main>
@@ -29293,18 +29491,18 @@ function renderNFPlaceholder(title) {
         
         const rect = card.getBoundingClientRect();
         
-        // Posição relativa do mouse/toque
+        // PosiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o relativa do mouse/toque
         const clientX = e.clientX || (e.touches && e.touches[0].clientX);
         const clientY = e.clientY || (e.touches && e.touches[0].clientY);
         
         const x = clientX - rect.left;
         const y = clientY - rect.top;
         
-        // Injetar variáveis CSS para o Spotlight
+        // Injetar variÃƒÆ’Ã‚Â¡veis CSS para o Spotlight
         card.style.setProperty('--mouse-x', `${x}px`);
         card.style.setProperty('--mouse-y', `${y}px`);
         
-        // Cálculo para o Tilt 3D (Desktop apenas para evitar enjoo no mobile)
+        // CÃƒÆ’Ã‚Â¡lculo para o Tilt 3D (Desktop apenas para evitar enjoo no mobile)
         if (window.innerWidth > 768) {
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
@@ -29322,7 +29520,7 @@ function renderNFPlaceholder(title) {
         const card = e.target.closest('.menu-card, .channel-card');
         if (!card) return;
         
-        // Se for um mouseout, verificar se realmente saiu do card (não para um filho)
+        // Se for um mouseout, verificar se realmente saiu do card (nÃƒÆ’Ã‚Â£o para um filho)
         if (e.type === 'mouseout' || e.type === 'mouseleave') {
             if (e.relatedTarget && card.contains(e.relatedTarget)) return;
         }
@@ -29330,7 +29528,7 @@ function renderNFPlaceholder(title) {
         card.style.transform = '';
     }
 
-    // Delegação de eventos para suportar cards criados dinamicamente
+    // DelegaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de eventos para suportar cards criados dinamicamente
     document.addEventListener('mousemove', updateCardTransform, { passive: true });
     document.addEventListener('mouseout', resetCardTransform, { passive: true });
 
