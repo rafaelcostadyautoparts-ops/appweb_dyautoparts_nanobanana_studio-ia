@@ -13,3 +13,5 @@ Thumbs.db
 .env*
 !.env.example
 supabase/.branches/
+.vercel
+.env*
