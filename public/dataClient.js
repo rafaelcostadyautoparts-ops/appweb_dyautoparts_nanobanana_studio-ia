@@ -1379,6 +1379,40 @@ const DataClient = (function () {
             throw sessionError;
         }
 
+        const { data: remainingSessions, error: verifyError } = await client
+            .from('separacao')
+            .select('separacao_id,status')
+            .eq('separacao_id', sessionId)
+            .limit(1);
+
+        if (verifyError) {
+            logSepSupabaseError('erro ao verificar exclusao do rascunho', verifyError, { sessionId });
+            throw verifyError;
+        }
+
+        if (Array.isArray(remainingSessions) && remainingSessions.length > 0) {
+            const { data: softDeleted, error: softDeleteError } = await client
+                .from('separacao')
+                .update({ status: 'cancelada' })
+                .eq('separacao_id', sessionId)
+                .select('separacao_id,status')
+                .limit(1);
+
+            if (softDeleteError) {
+                logSepSupabaseError('erro ao cancelar rascunho apos delete bloqueado', softDeleteError, { sessionId });
+                throw softDeleteError;
+            }
+
+            const softDeletedRow = Array.isArray(softDeleted) ? softDeleted[0] : null;
+            if (!softDeletedRow || String(softDeletedRow.status || '').toLowerCase() !== 'cancelada') {
+                throw new Error('Separacao nao foi excluida nem cancelada no servidor. Verifique permissao no Supabase/RLS.');
+            }
+
+            invalidateCache('separacao');
+            invalidateCache('conferencia');
+            return { deleted: false, softDeleted: true, sessionId };
+        }
+
         invalidateCache('separacao');
         invalidateCache('conferencia');
 

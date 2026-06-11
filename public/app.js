@@ -935,7 +935,6 @@ function criarStatusConexao() {
 const DEFAULT_APP_CONFIG = {
     permitir_saida_estoque_zero: false,
     permitir_estoque_negativo: false,
-    modo_rapido: false,
     quick_qty_after_beeps: 15,
     scan_sound_enabled: true,
     scan_vibration_enabled: true,
@@ -1349,10 +1348,6 @@ function applyDisplayPreferences() {
     document.body.classList.toggle('compact-mode', config.compact_mode === true);
 }
 
-function isModoRapidoAtivo() {
-    return getAppConfig().modo_rapido === true;
-}
-
 function isSaidaEstoqueZeroPermitida() {
     const config = getAppConfig();
     const allowed = config.permitir_saida_estoque_zero === true || config.permitir_estoque_negativo === true;
@@ -1467,7 +1462,6 @@ async function confirmPickingNegativeStockIfNeeded(validation, point = 'separaca
 
 window.getAppConfig = getAppConfig;
 window.setAppConfig = setAppConfig;
-window.isModoRapidoAtivo = isModoRapidoAtivo;
 window.isSaidaEstoqueZeroPermitida = isSaidaEstoqueZeroPermitida;
 window.canAllowStockExit = canAllowStockExit;
 
@@ -2129,7 +2123,7 @@ async function refreshOutboxPendingCount() {
 async function executeQueuedOperation(operation) {
     if (operation.type === 'supabase_rpc' && operation.meta?.rpcName === 'finalizar_conferencia') {
         const payload = operation.payload || {};
-        if (isFastPickingPayload(payload) || (isModoRapidoAtivo() && payload.modo_rapido !== false && payload.isFastMode !== false)) {
+        if (isFastPickingPayload(payload)) {
             throw new Error(`Bloqueado: operacao offline nao pode finalizar conferencia no modo rapido ${payload.sessionId || ''}.`);
         }
         return DataClient.finalizarConferenciaSupabase(operation.payload);
@@ -2141,7 +2135,7 @@ async function executeQueuedOperation(operation) {
 
     if (operation.type === 'supabase_pick_create_conference') {
         const payload = operation.payload || {};
-        if (isFastPickingPayload(payload) || (isModoRapidoAtivo() && payload.modo_rapido !== false && payload.isFastMode !== false)) {
+        if (isFastPickingPayload(payload)) {
             throw new Error(`Bloqueado: operacao offline nao pode criar conferencia para separacao rapida ${payload.sessionId || ''}.`);
         }
         return createPickingConferenceWithoutStock(operation.payload);
@@ -3443,8 +3437,6 @@ const channel3DIcons = {
 
 // Função para obter os itens do menu baseados na configuração centralizada
 function getMenuItemsFromConfig() {
-    const modoRapidoAtivo = isModoRapidoAtivo();
-    
     // Aplicar lógica baseada na configuração (todos os módulos sempre visíveis)
     return menuModulesConfig
         .sort((a, b) => a.order - b.order)
@@ -3452,11 +3444,7 @@ function getMenuItemsFromConfig() {
             let isDisabled = false;
             let badge = null;
             
-            // Lógica especial para PACK (desativado no modo rápido)
-            if (module.id === 'pack' && modoRapidoAtivo) {
-                isDisabled = true;
-                badge = 'Desativado';
-            } else if (module.type === 'em_breve') {
+            if (module.type === 'em_breve') {
                 badge = 'EM BREVE';
             }
             
@@ -3561,7 +3549,6 @@ function renderMenu(push = true) {
     }
     document.body.classList.add('menu-active');
 
-    const modoRapidoAtivo = isModoRapidoAtivo();
     // Usar configuração centralizada
     const finalMenuItems = getMenuItemsFromConfig();
 
@@ -3584,7 +3571,7 @@ ${finalMenuItems.map(item => {
 }).join('')}
                         </div>
                     </main>
-                    ${getQuickActionsHTML(modoRapidoAtivo)}
+                    ${getQuickActionsHTML(false)}
                 </div>
     `;
 }
@@ -5437,6 +5424,7 @@ function showAppModal({
 
         const isConfirm = !!cancelText || !!prompt;
         const normalizedType = ['success', 'error', 'warning', 'confirm', 'info'].includes(type) ? type : 'info';
+        const visualType = normalizedType === 'confirm' ? 'success' : normalizedType;
         const iconMap = {
             success: 'check_circle',
             error: 'error',
@@ -5460,13 +5448,13 @@ function showAppModal({
 
         const overlay = document.createElement('div');
         overlay.id = 'app-confirm-modal';
-        overlay.className = `app-confirm-overlay app-standard-modal modal-${normalizedType}`;
+        overlay.className = `app-confirm-overlay app-standard-modal modal-${visualType}`;
         overlay.innerHTML = `
             <div class="app-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
                 <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
                     <span class="material-symbols-rounded">close</span>
                 </button>
-                <div class="app-confirm-icon ${normalizedType}">
+                <div class="app-confirm-icon ${visualType}">
                     <span class="material-symbols-rounded">${iconMap[normalizedType]}</span>
                 </div>
                 <h3 id="app-confirm-title">${escapeKitAttribute(title)}</h3>
@@ -5476,7 +5464,7 @@ function showAppModal({
                 ${promptHtml}
                 <div class="app-confirm-actions ${isConfirm ? '' : 'app-alert-actions'}">
                     ${isConfirm ? `<button type="button" class="app-confirm-btn cancel" data-action="cancel">${escapeKitAttribute(cancelText)}</button>` : ''}
-                    <button type="button" class="app-confirm-btn confirm ${normalizedType}" data-action="confirm">${escapeKitAttribute(confirmText)}</button>
+                    <button type="button" class="app-confirm-btn confirm ${visualType}" data-action="confirm">${escapeKitAttribute(confirmText)}</button>
                 </div>
             </div>
         `;
@@ -5572,40 +5560,42 @@ function showPickModeChoiceModal() {
         const existing = document.getElementById('app-confirm-modal');
         if (existing) existing.remove();
 
-        const currentFastMode = isModoRapidoAtivo();
         const overlay = document.createElement('div');
         overlay.id = 'app-confirm-modal';
-        overlay.className = 'app-confirm-overlay app-standard-modal app-pick-mode-overlay modal-warning';
+        overlay.className = 'app-confirm-overlay app-standard-modal app-pick-mode-overlay modal-info';
         overlay.innerHTML = `
             <div class="app-confirm-dialog app-pick-mode-dialog" role="dialog" aria-modal="true" aria-labelledby="pick-mode-title">
                 <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
                     <span class="material-symbols-rounded">close</span>
                 </button>
-                <div class="app-confirm-icon warning">
+                <div class="app-confirm-icon info">
                     <span class="material-symbols-rounded">rule_settings</span>
                 </div>
                 <h3 id="pick-mode-title">Como deseja fazer a separação?</h3>
-                <p>Escolha o fluxo antes de criar a separação. Essa escolha evita baixa de estoque no momento errado.</p>
-                <div class="pick-mode-current">
-                    <span>Modo atual</span>
-                    <strong>${currentFastMode ? 'RÁPIDO' : 'NORMAL'}</strong>
-                </div>
+                <p>Escolha o fluxo que será utilizado nesta separação. Essa escolha evita baixa de estoque no momento errado.</p>
                 <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da separação">
-                    <button type="button" class="pick-mode-choice pick-mode-fast" data-pick-mode="fast">
+                    <button type="button" class="pick-mode-choice pick-mode-fast" data-pick-mode="fast" aria-pressed="false">
                         <span class="material-symbols-rounded">bolt</span>
                         <strong>Modo rápido</strong>
                         <small>Para quando tem somente 1 operador. Finaliza a separação e já baixa o estoque, sem conferência.</small>
+                        <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
                     </button>
-                    <button type="button" class="pick-mode-choice pick-mode-normal" data-pick-mode="normal">
+                    <button type="button" class="pick-mode-choice pick-mode-normal" data-pick-mode="normal" aria-pressed="false">
                         <span class="material-symbols-rounded">verified</span>
                         <strong>Modo normal</strong>
                         <small>Para separador + conferente. A baixa do estoque acontece só depois da conferência.</small>
+                        <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
                     </button>
+                </div>
+                <div class="app-confirm-actions">
+                    <button type="button" class="app-confirm-btn cancel" data-action="cancel">Cancelar</button>
+                    <button type="button" class="app-confirm-btn confirm info" data-action="confirm" disabled>Continuar</button>
                 </div>
             </div>
         `;
 
         let settled = false;
+        let selectedMode = null;
         const close = (choice = null) => {
             if (settled) return;
             settled = true;
@@ -5618,10 +5608,19 @@ function showPickModeChoiceModal() {
         overlay.addEventListener('click', event => {
             const actionEl = event.target?.closest?.('[data-action]');
             if (actionEl?.dataset?.action === 'cancel') close(null);
+            if (actionEl?.dataset?.action === 'confirm' && selectedMode) close(selectedMode);
 
             const modeEl = event.target?.closest?.('[data-pick-mode]');
-            if (modeEl?.dataset?.pickMode === 'fast') close('fast');
-            if (modeEl?.dataset?.pickMode === 'normal') close('normal');
+            if (modeEl?.dataset?.pickMode) {
+                selectedMode = modeEl.dataset.pickMode;
+                overlay.querySelectorAll('.pick-mode-choice').forEach(card => {
+                    const selected = card === modeEl;
+                    card.classList.toggle('is-selected', selected);
+                    card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                });
+                const confirmButton = overlay.querySelector('[data-action="confirm"]');
+                if (confirmButton) confirmButton.disabled = false;
+            }
         });
 
         const onKeyDown = event => {
@@ -5630,6 +5629,7 @@ function showPickModeChoiceModal() {
                 return;
             }
             if (event.key === 'Escape') close(null);
+            if (event.key === 'Enter' && selectedMode) close(selectedMode);
         };
         document.addEventListener('keydown', onKeyDown);
 
@@ -5638,13 +5638,12 @@ function showPickModeChoiceModal() {
     });
 }
 
+let pendingPickModeChoice = null;
+
 async function openPickModeChoice() {
     const choice = await showPickModeChoiceModal();
     if (!choice) return;
-
-    const nextFastMode = choice === 'fast';
-    const config = getAppConfig();
-    setAppConfig({ ...config, modo_rapido: nextFastMode });
+    pendingPickModeChoice = choice;
     renderPickMenu();
 }
 
@@ -13656,7 +13655,15 @@ async function confirmDiscardSavedPickingDraft(sessionId) {
     if (!confirmed) {
         return;
     }
-    await discardPickingDraft(sessionId);
+    const removed = await discardPickingDraft(sessionId);
+    if (!removed) {
+        await showAppAlert({
+            title: 'Separacao nao excluida',
+            message: 'Nao foi possivel confirmar a exclusao no servidor. Atualize a tela e tente novamente.',
+            danger: true,
+            buttonLabel: 'Entendi'
+        });
+    }
     renderSeparacoesAndamentoScreen();
 }
 
@@ -14581,9 +14588,9 @@ async function discardPickingDraft(sessionId, options = {}) {
 
     if (!options.silent) {
         if (remoteError) {
-            showToast("Rascunho removido deste aparelho. Nao foi possivel confirmar a exclusao no servidor.", "warning");
+            showToast("Nao foi possivel excluir a separacao no servidor.", "error");
         } else if (remoteRemoved || !navigator.onLine) {
-            showToast("Rascunho de separacao cancelado.");
+            showToast(remoteRemoved ? "Separacao excluida." : "Separacao removida deste aparelho. Sincronizacao pendente.", remoteRemoved ? "success" : "warning");
         }
     }
 
@@ -14801,6 +14808,7 @@ function getPickingProductId(item) {
 }
 
 function showPickScanCenterToast(item = null, quantity = 1) {
+    if (isPickMobileViewport()) return;
     clearTimeout(scanCenterToastTimeout);
     document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
 
@@ -14849,6 +14857,7 @@ function showPickScanCenterToast(item = null, quantity = 1) {
 }
 
 function showPickRemovalFeedbackToast(item = null, quantity = 1) {
+    if (isPickMobileViewport()) return;
     clearTimeout(scanCenterToastTimeout);
     document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
 
@@ -15082,7 +15091,7 @@ async function persistPickingFinal(sessionId) {
     }
 }
 
-async function startPickingSession(channelId, channelLabel, channelColor) {
+async function startPickingSession(channelId, channelLabel, channelColor, selectedMode = null) {
     if (!String(channelLabel || '').trim()) {
         await showAppModal({
             type: 'error',
@@ -15092,6 +15101,12 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
         });
         return;
     }
+
+    const queuedMode = ['fast', 'normal'].includes(pendingPickModeChoice) ? pendingPickModeChoice : null;
+    const pickMode = ['fast', 'normal'].includes(selectedMode) ? selectedMode : (queuedMode || await showPickModeChoiceModal());
+    pendingPickModeChoice = null;
+    if (!pickMode) return;
+    const isFastMode = pickMode === 'fast';
 
     pickRemovalModeActive = false;
     lastPickScanAction = 'add';
@@ -15109,8 +15124,8 @@ async function startPickingSession(channelId, channelLabel, channelColor) {
         sessionId: generatePickSessionId(channelLabel),
         executionId: generateExecutionId(),
         createdAt: getDataHoraBrasil(),
-        isFastMode: isModoRapidoAtivo(),
-        modo_rapido: isModoRapidoAtivo()
+        isFastMode,
+        modo_rapido: isFastMode
     };
     
     currentSessionItems = [];
@@ -15440,6 +15455,8 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
         channelColor,
         executionId: currentPickingContext?.executionId || generateExecutionId(),
         createdAt: currentPickingContext?.createdAt || draft?.createdAt || getDataHoraBrasil(),
+        isFastMode: isPickingFastModeSource(currentPickingContext) || isPickingFastModeSource(draft),
+        modo_rapido: isPickingFastModeSource(currentPickingContext) || isPickingFastModeSource(draft),
         total_pacotes_montados: packageCount,
         totalPacotesMontados: packageCount
     };
@@ -15455,7 +15472,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
              data-channel-color="${escapeKitAttribute(channelColor || '')}"
              data-created-at="${escapeKitAttribute(currentPickingContext.createdAt || '')}">
             ${getModuleSidebarHTML('pick')}
-            ${getQuickActionsHTML(isModoRapidoAtivo())}
+            ${getQuickActionsHTML(getActivePickingFastMode(draft))}
 
             <main class="pick-workflow-shell">
                 <header class="pick-workflow-header">
@@ -16382,7 +16399,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
         const currentUser = localStorage.getItem('currentUser');
         const now = getDataHoraBrasil();
         const activeDraft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
-        const modoRapidoAtivo = isModoRapidoAtivo() || getActivePickingFastMode(activeDraft);
+        const modoRapidoAtivo = getActivePickingFastMode(activeDraft);
         const stats = getPickingOperationalStats(currentSessionItems);
 
         const pickingData = {
@@ -16672,7 +16689,7 @@ async function createPickingConferenceWithoutStock(payload = {}) {
     const channelLabel = payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '';
     if (!sessionId) throw new Error('separacao_id nao informado');
     assertValidPickSessionForPersist(sessionId, channelLabel, 'criar conferencia da separacao');
-    if (isFastPickingPayload(payload) || (isModoRapidoAtivo() && payload.modo_rapido !== false && payload.isFastMode !== false)) {
+    if (isFastPickingPayload(payload)) {
         throw new Error(`Bloqueado: separacao rapida ${sessionId} nao deve criar conferencia.`);
     }
 
@@ -16868,7 +16885,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
             createdAt: currentPickSession?.pickingData?.criado_em || now,
             executionId: generateExecutionId()
         };
-        const modoRapidoAtivo = isModoRapidoAtivo() || getActivePickingFastMode(draft);
+        const modoRapidoAtivo = getActivePickingFastMode(draft);
         console.log('[SEPARACAO] modo selecionado', {
             sessionId,
             modo: modoRapidoAtivo ? 'rapido' : 'normal'
@@ -16994,14 +17011,6 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
 
 async function renderPackMenu() {
     const currentUser = localStorage.getItem('currentUser');
-    const modoRapidoAtivo = isModoRapidoAtivo();
-
-    if (modoRapidoAtivo) {
-        showToast("Acesso negado: Conferência desativada no Modo Rápido.");
-        renderMenu();
-        return;
-    }
-
     // Filtrar separações abertas vindas do Supabase/cache local.
     try {
         const data = await DataClient.loadModule('conferencia', true);
@@ -18131,12 +18140,6 @@ async function finishConferenceSession() {
 }
 
 function startFastPackSession(channelLabel, channelColor) {
-    if (isModoRapidoAtivo()) {
-        showToast('Conferencia direta bloqueada no modo rapido. Use Separacao rapida para baixar estoque.', 'warning');
-        renderMenu();
-        return;
-    }
-
     const currentUser = localStorage.getItem('currentUser');
     const now = new Date();
     const ddmm = now.getDate().toString().padStart(2, '0') + (now.getMonth() + 1).toString().padStart(2, '0');
@@ -18177,7 +18180,7 @@ function startFastPackSession(channelLabel, channelColor) {
 }
 
 async function submitConferenceFinalization(payload) {
-    if (isFastPickingPayload(payload) || (isModoRapidoAtivo() && payload.modo_rapido !== false && payload.isFastMode !== false)) {
+    if (isFastPickingPayload(payload)) {
         throw new Error(`Bloqueado: conferencia nao deve finalizar separacao rapida ${payload.sessionId || ''}.`);
     }
 
@@ -18534,19 +18537,6 @@ function toggleQuickActions() {
             if (overlay) overlay.classList.add('hidden');
         }
     }
-}
-
-function quickActionToggleFastMode() {
-    const config = getAppConfig();
-    const enabled = config.modo_rapido === true;
-    setAppConfig({ ...config, modo_rapido: !enabled });
-    renderMenu(false);
-    setTimeout(() => {
-        const menu = document.getElementById('quick-actions-menu');
-        const overlay = document.getElementById('quick-actions-overlay');
-        if (menu) menu.classList.remove('hidden');
-        if (overlay) overlay.classList.remove('hidden');
-    }, 0);
 }
 
 async function confirmConferenceCorrectionFlow() {
@@ -19193,20 +19183,6 @@ function shareRomaneioEmail(id) {
     if (!item) return;
     const subject = `Romaneio ${item.id}`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(getRomaneioText(item))}`;
-}
-
-function startFastMode() {
-    console.log('[FastMode] Iniciando modo rápido...');
-    const config = getAppConfig();
-    setAppConfig({ ...config, modo_rapido: true });
-    ensureFreshData(() => renderPickMenu());
-}
-
-function stopFastMode() {
-    console.log('[FastMode] Desativando modo rápido...');
-    const config = getAppConfig();
-    setAppConfig({ ...config, modo_rapido: false });
-    renderMenu();
 }
 
 let labelTemplateOptions = [];
@@ -25060,7 +25036,6 @@ function renderConfigSubMenu() {
                     <section class="config-settings-card">
                         <div class="config-card-head"><span class="material-symbols-rounded">tune</span><div><h2>Operacao</h2><p>Preferencias dos fluxos de loja</p></div></div>
                         ${renderConfigToggle('toggle-estoque-zero', 'Permitir estoque negativo', 'Permitir finalizar saidas mesmo sem saldo em estoque.', config.permitir_saida_estoque_zero || config.permitir_estoque_negativo, "toggleConfig('permitir_saida_estoque_zero', this.checked)", true)}
-                        ${renderConfigToggle('toggle-modo-rapido', 'Modo rapido', 'Simplifica fluxos e desabilita Separacao manual.', config.modo_rapido === true, "toggleConfig('modo_rapido', this.checked)")}
                         <div class="config-field-group">
                             <label>Quantidade rapida apos X bipes</label>
                             ${renderConfigOptionButtons('Quantidade rapida apos X bipes', [{ value: 10, label: '10' }, { value: 15, label: '15' }, { value: 20, label: '20' }, { value: 30, label: '30' }, { value: 'never', label: 'Nunca' }], quickBeeps, 'setQuickQtyBeeps')}
@@ -25155,18 +25130,6 @@ function renderConfigSubMenu() {
                             </div>
                         </div>
 
-                        <!-- OPCAO 2 -->
-                        <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
-                            <div style="flex: 1;">
-                                <div style="color: var(--text-main); font-weight: 700; font-size: 1rem;">MODO RÁPIDO</div>
-                                <div style="color: var(--muted); font-size: 0.8rem; margin-top: 4px;">Simplifica fluxos e desabilita Separação manual.</div>
-                            </div>
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="toggle-modo-rapido" ${config.modo_rapido ? 'checked' : ''} onchange="toggleConfig('modo_rapido', this.checked)">
-                                <label for="toggle-modo-rapido"></label>
-                            </div>
-                        </div>
-
                         <button type="button" class="config-security-entry" onclick="openSecuritySettings()">
                             <span class="material-symbols-rounded">security</span>
                             <span>
@@ -25189,7 +25152,7 @@ function renderConfigSubMenu() {
 }
 
 async function toggleConfig(key, value) {
-    if (['permitir_saida_estoque_zero', 'permitir_estoque_negativo', 'modo_rapido'].includes(key)) {
+    if (['permitir_saida_estoque_zero', 'permitir_estoque_negativo'].includes(key)) {
         const config = getAppConfig();
         config[key] = value;
         if (key === 'permitir_saida_estoque_zero' || key === 'permitir_estoque_negativo') {
@@ -25199,9 +25162,6 @@ async function toggleConfig(key, value) {
         }
         setAppConfig(config);
         showToast('Configuracao atualizada', 'success');
-        if (key === 'modo_rapido') {
-            renderMenu(false);
-        }
         return;
     }
     const config = getAppConfig();
@@ -25213,11 +25173,6 @@ async function toggleConfig(key, value) {
     }
     setAppConfig(config);
     showToast(`Configuração atualizada`, 'success');
-    
-    // Se for modo rápido, recarregar menu se necessário para feedback imediato
-    if (key === 'modo_rapido') {
-        renderMenu(false);
-    }
 }
 
 async function openSecuritySettings() {
