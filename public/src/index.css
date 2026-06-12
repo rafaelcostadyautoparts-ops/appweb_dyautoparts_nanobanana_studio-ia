@@ -10037,7 +10037,7 @@ html[data-theme="dark"] .config-settings-card {
             inset: 0;
             pointer-events: none;
             z-index: 99999;
-            border: 4px solid var(--scan-feedback-color);
+            border: clamp(9px, 2.2vw, 16px) solid var(--scan-feedback-color);
             opacity: 0;
             box-shadow: inset 0 0 0 rgba(34, 197, 94, 0);
         }
@@ -10070,15 +10070,15 @@ html[data-theme="dark"] .config-settings-card {
             }
             16% {
                 opacity: 1;
-                box-shadow: inset 0 0 26px rgba(var(--scan-feedback-rgb), .62), 0 0 30px rgba(var(--scan-feedback-rgb), .34);
+                box-shadow: inset 0 0 48px rgba(var(--scan-feedback-rgb), .72), inset 0 0 0 5px rgba(var(--scan-feedback-rgb), .24), 0 0 40px rgba(var(--scan-feedback-rgb), .42);
             }
             58% {
                 opacity: .95;
-                box-shadow: inset 0 0 42px rgba(var(--scan-feedback-rgb), .46), 0 0 42px rgba(var(--scan-feedback-rgb), .26);
+                box-shadow: inset 0 0 70px rgba(var(--scan-feedback-rgb), .52), inset 0 0 0 4px rgba(var(--scan-feedback-rgb), .18), 0 0 52px rgba(var(--scan-feedback-rgb), .32);
             }
             100% {
                 opacity: 0;
-                box-shadow: inset 0 0 58px rgba(var(--scan-feedback-rgb), 0), 0 0 0 rgba(var(--scan-feedback-rgb), 0);
+                box-shadow: inset 0 0 86px rgba(var(--scan-feedback-rgb), 0), 0 0 0 rgba(var(--scan-feedback-rgb), 0);
             }
         }
 
@@ -28859,6 +28859,731 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .menu-card sma
   max-width: 390px;
 }
 
+.devolucoes-workspace {
+  width: 100%;
+  max-width: 1260px;
+  margin: 26px auto 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.devolucoes-info-card {
+  min-height: 154px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+}
+
+.devolucoes-info-card span {
+  color: #0f766e;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.devolucoes-info-card strong {
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.45;
+  font-weight: 900;
+}
+
+/* Lateral padrao: mesma fonte e relevo dos titulos internos. */
+body:not(.login-active) #app .module-sidebar .sidebar-label,
+body:not(.login-active) #app .operational-sidebar .sidebar-label,
+body:not(.login-active) #app .kit-v2-sidebar-right span,
+body:not(.login-active) #app .module-top-bar .top-bar-label,
+body:not(.login-active) #app .operational-top-bar .top-bar-label {
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 2px !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+body:not(.login-active) #app .module-sidebar .sidebar-label,
+body:not(.login-active) #app .operational-sidebar .sidebar-label,
+body:not(.login-active) #app .kit-v2-sidebar-right span {
+  font-size: 16px !important;
+  line-height: 1.08 !important;
+  opacity: 1 !important;
+}
+
+body:not(.login-active) #app .module-top-bar .top-bar-label,
+body:not(.login-active) #app .operational-top-bar .top-bar-label {
+  font-size: 0.96rem !important;
+}
+
+.dashboard-empty-screen > main.dashboard-empty-container {
+  min-height: 100vh;
+}
+
+/* Final override: Produtos topbar test. */
+body:not(.login-active) #app > .product-submenu-screen .module-sidebar {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos {
+  display: flex !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+  box-shadow: 0 12px 26px rgba(153, 27, 27, 0.22) !important;
+  z-index: 9998 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-label {
+  display: block !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.9rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon-wrap,
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group {
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 72px !important;
+  height: 72px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10000 !important;
+  padding: 0 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  overflow: visible !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::before,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::after {
+  content: none !important;
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .app-inline-icon,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg {
+  width: 44px !important;
+  height: 44px !important;
+  color: #ffffff !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.38)) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg path,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg circle {
+  stroke: #ffffff !important;
+  fill: none !important;
+  stroke-width: 3.2 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+/* Padrao global: laterais migradas para topo. */
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-sidebar,
+body:not(.login-active) #app > .dashboard-screen .kit-v2-sidebar-right,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-sidebar,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-sidebar {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 72px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 0 !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.22) !important;
+  transform: none !important;
+  writing-mode: horizontal-tb !important;
+  z-index: 9998 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-produtos,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-dashboard {
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-compras {
+  background: linear-gradient(90deg, #ef2b2d 0%, #b91c1c 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-kit_lampada,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-inventario {
+  background: linear-gradient(90deg, #f59e0b 0%, #b45309 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-movimentos {
+  background: linear-gradient(90deg, #8b5cf6 0%, #6d28d9 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-nf {
+  background: linear-gradient(90deg, #1e3a8a 0%, #1e40af 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-financeiro,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-pack,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar {
+  background: linear-gradient(90deg, #059669 0%, #047857 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-pick,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar {
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-configuracoes {
+  background: linear-gradient(90deg, #475569 0%, #1e293b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-icon,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-icon,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-icon {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-label,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-label,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-label {
+  display: block !important;
+  width: auto !important;
+  max-width: calc(100vw - 160px) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.9rem !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: 2px !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+  transform: none !important;
+  writing-mode: horizontal-tb !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  z-index: 10000 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-icon-btn.fab-voltar {
+  position: static !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  outline: 0 !important;
+  overflow: visible !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar::before,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar::after {
+  content: none !important;
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar .app-back-icon,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > main.container,
+body:not(.login-active) #app > .dashboard-screen.picking-screen > main.container,
+body:not(.login-active) #app > .dashboard-screen.pack-screen > main.container {
+  padding-top: 142px !important;
+  padding-right: 72px !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar,
+  body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group {
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-label,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-label,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-label {
+    max-width: calc(100vw - 136px) !important;
+    font-size: 1.45rem !important;
+    letter-spacing: 1.6px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > main.container,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen > main.container,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen > main.container {
+    padding-top: 92px !important;
+    padding-right: 24px !important;
+  }
+}
+
+/* Entrada NF: telas internas alinhadas pela mesma altura do topo global. */
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+  padding-top: 88px !important;
+  padding-right: 72px !important;
+  padding-bottom: 72px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group {
+  top: 0 !important;
+  left: 0 !important;
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px !important;
+  min-height: 72px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar .app-back-icon {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  filter: brightness(0) drop-shadow(0 2px 3px rgba(255, 255, 255, 0.82)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title {
+  margin: 0 auto 24px !important;
+  min-height: 62px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title .mini-icon {
+  width: 54px !important;
+  height: 54px !important;
+  min-width: 54px !important;
+  min-height: 54px !important;
+  filter: drop-shadow(0 12px 26px rgba(15, 23, 42, 0.18)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+  color: #111827 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: clamp(1.72rem, 2.18vw, 2.22rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 2px !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  text-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.92),
+    0 4px 8px rgba(15, 23, 42, 0.22) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero {
+  margin: 0 auto 24px !important;
+  min-height: 62px !important;
+  grid-template-columns: 1fr !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero > div {
+  grid-column: 1 !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  justify-content: center !important;
+  gap: 18px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero p {
+  flex-basis: 100% !important;
+  margin-left: 72px !important;
+  text-align: center !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-back {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero-icon {
+  width: 54px !important;
+  height: 54px !important;
+  min-width: 54px !important;
+  min-height: 54px !important;
+  font-size: 27px !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .nfxml-stepper,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar #nf-list-container,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-summary,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-filters,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-table-card {
+  margin-top: 0 !important;
+}
+
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar .app-back-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)) !important;
+}
+
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+  color: #ffffff !important;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 4px 10px rgba(0, 0, 0, 0.68) !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+    padding-top: 84px !important;
+    padding-right: 18px !important;
+    padding-left: 18px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group {
+    width: 64px !important;
+    height: 64px !important;
+    min-width: 64px !important;
+    min-height: 64px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title {
+    gap: 12px !important;
+    margin-bottom: 18px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+    max-width: calc(100vw - 112px) !important;
+    font-size: clamp(1.24rem, 6.2vw, 1.58rem) !important;
+    letter-spacing: 1.4px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero > div {
+    gap: 12px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero p {
+    margin-left: 66px !important;
+  }
+}
+
+/* Mobile quick action image: anchored at the bottom, intentionally half-hidden. */
+@media (max-width: 768px) {
+  body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-fab,
+  body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-action-fab {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) - 42px) !important;
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+    height: 112px !important;
+    min-height: 112px !important;
+    max-height: 112px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: translateX(-50%) !important;
+    overflow: visible !important;
+    z-index: 100010 !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-fab-img,
+  body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-action-fab-img,
+  body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-action-mode-img {
+    display: block !important;
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+    height: 112px !important;
+    min-height: 112px !important;
+    max-height: 112px !important;
+    object-fit: contain !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-fab-fallback,
+  body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-action-fab-fallback {
+    display: none !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-actions-menu.quick-actions-sheet,
+  body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-actions-menu.quick-actions-sheet {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+body:not(.login-active) #app > .product-submenu-screen > main.container {
+  padding: 142px 72px 72px !important;
+}
+
+/* Produtos: regra definitiva para o voltar sem fundo. */
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  overflow: visible !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+/* Teste Produtos: lateral migrada para topo, com voltar em icone puro. */
+body:not(.login-active) #app > .product-submenu-screen .module-sidebar {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos {
+  display: flex !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+  box-shadow: 0 12px 26px rgba(153, 27, 27, 0.22) !important;
+  z-index: 9998 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-label {
+  display: block !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.9rem !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon-wrap,
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group {
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 72px !important;
+  height: 72px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10000 !important;
+  padding: 0 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  overflow: visible !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::before,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::after {
+  content: none !important;
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .app-inline-icon,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg {
+  width: 44px !important;
+  height: 44px !important;
+  color: #ffffff !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.38)) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg path,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg circle {
+  stroke: #ffffff !important;
+  fill: none !important;
+  stroke-width: 3.2 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > main.container {
+  padding: 142px 72px 72px !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos {
+    height: 62px !important;
+    min-height: 62px !important;
+  }
+
+  body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-label {
+    font-size: 1.45rem !important;
+  }
+
+  body:not(.login-active) #app > .product-submenu-screen > .top-action-group {
+    width: 62px !important;
+    height: 62px !important;
+  }
+
+  body:not(.login-active) #app > .product-submenu-screen > main.container {
+    padding-top: 86px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .devolucoes-workspace {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .devolucoes-info-card {
+    min-height: 126px;
+    padding: 22px;
+  }
+}
+
 @media (max-width: 900px) {
   .standard-card-menu-screen > main.container {
     padding: 92px 78px 48px 28px !important;
@@ -43604,8 +44329,8 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-act
   inset: 0;
   pointer-events: none;
   z-index: 9998;
-  border: 6px solid rgba(34, 197, 94, 0.86);
-  box-shadow: inset 0 0 28px rgba(34, 197, 94, 0.44), 0 0 28px rgba(34, 197, 94, 0.24);
+  border: clamp(10px, 2.6vw, 18px) solid rgba(34, 197, 94, 0.95);
+  box-shadow: inset 0 0 54px rgba(34, 197, 94, 0.62), inset 0 0 0 5px rgba(34, 197, 94, 0.18), 0 0 42px rgba(34, 197, 94, 0.32);
   animation: scanSuccessGlow 700ms ease-out forwards;
 }
 
@@ -43626,11 +44351,11 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-act
   }
   22% {
     opacity: 1;
-    box-shadow: inset 0 0 34px rgba(34, 197, 94, 0.58), 0 0 32px rgba(34, 197, 94, 0.28);
+    box-shadow: inset 0 0 72px rgba(34, 197, 94, 0.72), inset 0 0 0 6px rgba(34, 197, 94, 0.22), 0 0 48px rgba(34, 197, 94, 0.36);
   }
   100% {
     opacity: 0;
-    box-shadow: inset 0 0 54px rgba(34, 197, 94, 0), 0 0 0 rgba(34, 197, 94, 0);
+    box-shadow: inset 0 0 96px rgba(34, 197, 94, 0), 0 0 0 rgba(34, 197, 94, 0);
   }
 }
 
@@ -61471,5 +62196,539 @@ body:not(.login-active) #app > .dashboard-screen.product-search-screen .card-ima
   .financeiro-row-a-combinar .btn-action {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Canonical sidebar typography override: Fjalla One + raised shadow. */
+body:not(.login-active) #app .module-sidebar .sidebar-label,
+body:not(.login-active) #app .operational-sidebar .sidebar-label,
+body:not(.login-active) #app .kit-v2-sidebar-right span,
+body:not(.login-active) #app .module-top-bar .top-bar-label,
+body:not(.login-active) #app .operational-top-bar .top-bar-label {
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 2px !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+body:not(.login-active) #app .module-sidebar .sidebar-label,
+body:not(.login-active) #app .operational-sidebar .sidebar-label,
+body:not(.login-active) #app .kit-v2-sidebar-right span {
+  font-size: 16px !important;
+  line-height: 1.08 !important;
+  opacity: 1 !important;
+}
+
+body:not(.login-active) #app .module-top-bar .top-bar-label,
+body:not(.login-active) #app .operational-top-bar .top-bar-label {
+  font-size: 0.96rem !important;
+}
+
+.dashboard-empty-screen > main.dashboard-empty-container {
+  min-height: 100vh;
+}
+
+/* Final override: Produtos topbar test. */
+body:not(.login-active) #app > .product-submenu-screen .module-sidebar {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos {
+  display: flex !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+  box-shadow: 0 12px 26px rgba(153, 27, 27, 0.22) !important;
+  z-index: 9998 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-label {
+  display: block !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.9rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon-wrap,
+body:not(.login-active) #app > .product-submenu-screen .module-top-bar.mod-topbar-produtos .top-bar-icon {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group {
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 72px !important;
+  height: 72px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10000 !important;
+  padding: 0 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  min-height: 52px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::before,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar::after {
+  content: none !important;
+  display: none !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .app-inline-icon,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg {
+  width: 44px !important;
+  height: 44px !important;
+  color: #ffffff !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.38)) !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg path,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar svg circle {
+  stroke: #ffffff !important;
+  fill: none !important;
+  stroke-width: 3.2 !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > main.container {
+  padding: 142px 72px 72px !important;
+}
+/* Produtos: regra final absoluta para o voltar sem fundo. */
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  overflow: visible !important;
+}
+
+body:not(.login-active) #app > .product-submenu-screen > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+/* Padrao global: laterais migradas para topo. */
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-sidebar,
+body:not(.login-active) #app > .dashboard-screen .kit-v2-sidebar-right,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-sidebar,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-sidebar {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 72px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 0 !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.22) !important;
+  transform: none !important;
+  writing-mode: horizontal-tb !important;
+  z-index: 9998 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-produtos,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-dashboard {
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-compras {
+  background: linear-gradient(90deg, #ef2b2d 0%, #b91c1c 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-kit_lampada,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-inventario {
+  background: linear-gradient(90deg, #f59e0b 0%, #b45309 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-movimentos {
+  background: linear-gradient(90deg, #8b5cf6 0%, #6d28d9 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-nf {
+  background: linear-gradient(90deg, #1e3a8a 0%, #1e40af 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-financeiro,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-pack,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar {
+  background: linear-gradient(90deg, #059669 0%, #047857 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-pick,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar {
+  background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar.mod-topbar-configuracoes {
+  background: linear-gradient(90deg, #475569 0%, #1e293b 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-icon,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-icon,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-icon-wrap,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-icon {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-label,
+body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-label,
+body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-label {
+  display: block !important;
+  width: auto !important;
+  max-width: calc(100vw - 160px) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.9rem !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: 2px !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+  transform: none !important;
+  writing-mode: horizontal-tb !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  z-index: 10000 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-icon-btn.fab-voltar {
+  position: static !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  outline: 0 !important;
+  overflow: visible !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar::before,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar::after {
+  content: none !important;
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar .app-back-icon,
+body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group .fab-voltar .product-top-back-icon {
+  display: block !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > main.container,
+body:not(.login-active) #app > .dashboard-screen.picking-screen > main.container,
+body:not(.login-active) #app > .dashboard-screen.pack-screen > main.container {
+  padding-top: 142px !important;
+  padding-right: 72px !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar,
+  body:not(.login-active) #app > .dashboard-screen:not(.menu-screen) > .top-action-group {
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) .module-top-bar .top-bar-label,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen .operational-top-bar .top-bar-label,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen .operational-top-bar .top-bar-label {
+    max-width: calc(100vw - 136px) !important;
+    font-size: 1.45rem !important;
+    letter-spacing: 1.6px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > main.container,
+  body:not(.login-active) #app > .dashboard-screen.picking-screen > main.container,
+  body:not(.login-active) #app > .dashboard-screen.pack-screen > main.container {
+    padding-top: 92px !important;
+    padding-right: 24px !important;
+  }
+}
+/* Entrada NF: telas internas alinhadas pela mesma altura do topo global. */
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+  padding-top: 96px !important;
+  padding-right: 72px !important;
+  padding-bottom: 72px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group {
+  top: 0 !important;
+  left: 0 !important;
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px !important;
+  min-height: 72px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-icon-btn.fab-voltar {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar .app-back-icon {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  filter: brightness(0) drop-shadow(0 2px 3px rgba(255, 255, 255, 0.82)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title {
+  margin: 0 auto 24px !important;
+  min-height: 62px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title .mini-icon {
+  width: 54px !important;
+  height: 54px !important;
+  min-width: 54px !important;
+  min-height: 54px !important;
+  filter: drop-shadow(0 12px 26px rgba(15, 23, 42, 0.18)) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+  color: #111827 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: clamp(1.85rem, 2.4vw, 2.35rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 2px !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  text-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.92),
+    0 4px 8px rgba(15, 23, 42, 0.22) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero {
+  margin: 0 auto 24px !important;
+  min-height: 92px !important;
+  grid-template-columns: 1fr !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero > div {
+  grid-column: 1 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-back {
+  display: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero-icon {
+  width: 54px !important;
+  height: 54px !important;
+  min-width: 54px !important;
+  min-height: 54px !important;
+  font-size: 27px !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .nfxml-stepper,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar #nf-list-container,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-summary,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-filters,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-table-card {
+  margin-top: 0 !important;
+}
+
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group .fab-voltar .app-back-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)) !important;
+}
+
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+  color: #ffffff !important;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 4px 10px rgba(0, 0, 0, 0.68) !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+    padding-top: 84px !important;
+    padding-right: 18px !important;
+    padding-left: 18px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > .top-action-group {
+    width: 64px !important;
+    height: 64px !important;
+    min-width: 64px !important;
+    min-height: 64px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title {
+    gap: 12px !important;
+    margin-bottom: 18px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+    max-width: calc(100vw - 112px) !important;
+    font-size: clamp(1.34rem, 7vw, 1.72rem) !important;
+    letter-spacing: 1.4px !important;
+  }
+}
+
+/* Entrada NF: ajuste fino final dos tres titulos internos. */
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+  padding-top: 78px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero {
+  margin-top: -2px !important;
+  margin-bottom: 22px !important;
+  min-height: 54px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero > div {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  justify-content: center !important;
+  gap: 18px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title .mini-icon,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero-icon {
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero-icon {
+  font-size: 24px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+  font-size: clamp(1.47rem, 1.9vw, 1.97rem) !important;
+  white-space: nowrap !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero p {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar > main.container {
+    padding-top: 68px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero > div {
+    gap: 12px !important;
+  }
+
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .screen-mini-title span,
+  body:not(.login-active) #app > .dashboard-screen.entrada-nf-screen.no-top-bar .entrada-nf-history-hero h1 {
+    font-size: clamp(1.08rem, 5.4vw, 1.34rem) !important;
+    max-width: calc(100vw - 112px) !important;
   }
 }

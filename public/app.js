@@ -100,6 +100,100 @@ function repairMojibakeText(value) {
     return output;
 }
 
+const CP1252_BYTE_BY_CHAR = {
+    '\u20ac': 0x80, '\u201a': 0x82, '\u0192': 0x83, '\u201e': 0x84, '\u2026': 0x85,
+    '\u2020': 0x86, '\u2021': 0x87, '\u02c6': 0x88, '\u2030': 0x89, '\u0160': 0x8a,
+    '\u2039': 0x8b, '\u0152': 0x8c, '\u017d': 0x8e, '\u2018': 0x91, '\u2019': 0x92,
+    '\u201c': 0x93, '\u201d': 0x94, '\u2022': 0x95, '\u2013': 0x96, '\u2014': 0x97,
+    '\u02dc': 0x98, '\u2122': 0x99, '\u0161': 0x9a, '\u203a': 0x9b, '\u0153': 0x9c,
+    '\u017e': 0x9e, '\u0178': 0x9f
+};
+
+const MOJIBAKE_HINT_RE = /(?:Ã|Â|â|�|Æ|†|€|š|œ|ž|¢|ƒ|Å|Ãƒ|Ã¢|Ã‚)/;
+const MOJIBAKE_TEXT_FIXES = [
+    ['SEPARAÃ‡ÃƒO', 'SEPARAÇÕES'],
+    ['SEPARAÃ‡Ã•ES', 'SEPARAÇÕES'],
+    ['SEPARAÃ‡ÃƒO (PICK)', 'SEPARAÇÃO (PICK)'],
+    ['CONFERÃŠNCIA (PACK)', 'CONFERÊNCIA (PACK)'],
+    ['TRANSFERÃŠNCIA', 'TRANSFERÊNCIA'],
+    ['HISTÃ“RICO', 'HISTÓRICO'],
+    ['INVENTÃRIO', 'INVENTÁRIO'],
+    ['REPOSIÃ‡ÃƒO', 'REPOSIÇÃO'],
+    ['COMISSÃ•ES', 'COMISSÕES'],
+    ['ORÃ‡AMENTO', 'ORÇAMENTO'],
+    ['TÃ‰RREO', 'TÉRREO'],
+    ['MOSTRUÃRIO', 'MOSTRUÁRIO'],
+    ['NÃƒO', 'NÃO'],
+    ['SÃƒO', 'SÃO']
+];
+
+function getMojibakeScore(text) {
+    const value = String(text || '');
+    const artifactMatches = value.match(/Ãƒ|Ã¢|Ã‚|Ã[^\sA-Z]*|Â[^\s]*|â[^\s]*|�|Æ|†|€|š|œ|ž|¢/g);
+    return (artifactMatches ? artifactMatches.length * 8 : 0)
+        + ((value.match(/\uFFFD/g) || []).length * 20)
+        + ((value.match(/[^\s]{18,}/g) || []).length * 2);
+}
+
+function decodeCp1252AsUtf8(text) {
+    const bytes = [];
+    for (const char of String(text)) {
+        const code = char.charCodeAt(0);
+        if (code <= 0xff) bytes.push(code);
+        else if (Object.prototype.hasOwnProperty.call(CP1252_BYTE_BY_CHAR, char)) bytes.push(CP1252_BYTE_BY_CHAR[char]);
+        else return text;
+    }
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
+    } catch (error) {
+        return text;
+    }
+}
+
+function applyKnownTextFixes(text) {
+    let output = String(text);
+    MOJIBAKE_TEXT_FIXES.forEach(([broken, fixed]) => {
+        output = output.split(broken).join(fixed);
+    });
+    return output
+        .replace(/SEPARA[^\s<>"']*ES/g, 'SEPARAÇÕES')
+        .replace(/REPOSI[^\s<>"']*O/g, 'REPOSIÇÃO')
+        .replace(/COMISS[^\s<>"']*ES/g, 'COMISSÕES')
+        .replace(/OR[^\s<>"']*AMENTO/g, 'ORÇAMENTO')
+        .replace(/TRANSFER[^\s<>"']*NCIA/g, 'TRANSFERÊNCIA')
+        .replace(/CONFER[^\s<>"']*NCIA/g, 'CONFERÊNCIA')
+        .replace(/HIST[^\s<>"']*RICO/g, 'HISTÓRICO')
+        .replace(/INVENT[^\s<>"']*RIO/g, 'INVENTÁRIO')
+        .replace(/T[^\s<>"']*RREO/g, 'TÉRREO')
+        .replace(/MOSTRU[^\s<>"']*RIO/g, 'MOSTRUÁRIO');
+}
+
+function repairMojibakeText(value) {
+    if (value === undefined || value === null) return '';
+    let output = String(value);
+    if (!MOJIBAKE_HINT_RE.test(output)) return output;
+
+    for (let pass = 0; pass < 5; pass++) {
+        const before = output;
+        const beforeScore = getMojibakeScore(before);
+        const decoded = applyKnownTextFixes(decodeCp1252AsUtf8(before))
+            .replace(/\u00c2([\u00ba\u00aa\u00b0\u00b7])/g, '$1')
+            .replace(/\u00e2\u20ac[\u201c\u201d]/g, '-')
+            .replace(/\u00e2\u20ac\u02dc/g, "'")
+            .replace(/\u00e2\u20ac\u2122/g, "'")
+            .replace(/\u00e2\u20ac\u0153/g, '"')
+            .replace(/\u00e2\u20ac\u009d/g, '"')
+            .replace(/\u00e2\u20ac\u00a6/g, '...')
+            .replace(/\u00ef\u00bf\u00bd/g, '');
+        const afterScore = getMojibakeScore(decoded);
+        if (decoded === before || afterScore > beforeScore) break;
+        output = decoded;
+        if (afterScore === 0) break;
+    }
+
+    return applyKnownTextFixes(output);
+}
+
 function restoreScanFieldFocus(inputOrContext = 'search', delay = 50, { clear = true } = {}) {
     const inputIds = {
         search: 'search-input',
@@ -349,24 +443,37 @@ function normalizeDyId(value) {
     return `DY-${digits.slice(0, 3)}.${digits.slice(3)}`;
 }
 
+let sharedScanAudioContext = null;
+
+function getSharedScanAudioContext() {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return null;
+    if (!sharedScanAudioContext || sharedScanAudioContext.state === 'closed') {
+        sharedScanAudioContext = new AudioCtor();
+    }
+    if (sharedScanAudioContext.state === 'suspended') sharedScanAudioContext.resume();
+    return sharedScanAudioContext;
+}
+
 function playFeedbackSound(type) {
     if (typeof getAppConfig === 'function' && getAppConfig().scan_sound_enabled === false) return;
     try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        if (ctx.state === 'suspended') ctx.resume();
+        const ctx = getSharedScanAudioContext();
+        if (!ctx) return;
 
         const patterns = {
             success: [
-                { f: 880, t: 0, d: 0.07, type: 'sine' },
-                { f: 1174.66, t: 0.085, d: 0.08, type: 'sine' }
+                { f: 783.99, t: 0, d: 0.055, type: 'sine', g: 0.075 },
+                { f: 1046.5, t: 0.062, d: 0.07, type: 'sine', g: 0.095 },
+                { f: 1318.51, t: 0.14, d: 0.075, type: 'triangle', g: 0.07 }
             ],
             warning: [
-                { f: 523.25, t: 0, d: 0.11, type: 'triangle' },
-                { f: 392, t: 0.14, d: 0.13, type: 'triangle' }
+                { f: 523.25, t: 0, d: 0.11, type: 'triangle', g: 0.09 },
+                { f: 392, t: 0.14, d: 0.13, type: 'triangle', g: 0.08 }
             ],
             error: [
-                { f: 220, t: 0, d: 0.18, type: 'square' },
-                { f: 196, t: 0.2, d: 0.22, type: 'square' }
+                { f: 220, t: 0, d: 0.18, type: 'square', g: 0.08 },
+                { f: 196, t: 0.2, d: 0.22, type: 'square', g: 0.07 }
             ]
         };
 
@@ -376,7 +483,7 @@ function playFeedbackSound(type) {
             osc.type = note.type;
             osc.frequency.setValueAtTime(note.f, ctx.currentTime + note.t);
             gain.gain.setValueAtTime(0.0001, ctx.currentTime + note.t);
-            gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + note.t + 0.01);
+            gain.gain.exponentialRampToValueAtTime(note.g || 0.1, ctx.currentTime + note.t + 0.008);
             gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + note.t + note.d);
             osc.connect(gain);
             gain.connect(ctx.destination);
@@ -1109,7 +1216,7 @@ const DEFAULT_APP_CONFIG = {
 
 const DY_THEME_STORAGE_KEY = 'dyTheme';
 const DY_THEME_OPTIONS = ['auto', 'light', 'dark'];
-const DY_APP_VERSION = '2.1.0';
+const DY_APP_VERSION = '2.1.12';
 const DY_UPDATE_STATUS_KEY = 'dy_update_status';
 const DY_UPDATE_LAST_CHECK_KEY = 'dy_update_last_check';
 const DY_LOCAL_HISTORY_KEY = 'dy_local_access_history';
@@ -2620,7 +2727,7 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
         <div class="top-action-group">
                 ${!isMenu && backAction ? `
                 <button class="fab-icon-btn fab-voltar" type="button" onclick="${backAction}" aria-label="Voltar">
-                    ${getInlineAppIconHTML('arrow_back')}
+                    <img class="app-back-icon" src="/assets/icons/icons8-voltar-96.png" alt="" aria-hidden="true">
                 </button>
                 ` : ''}
                 ${isMenu ? `
@@ -2638,23 +2745,14 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
 
 function getOperationalIdentityHTML(type = 'PICKING') {
     const isPick = type === 'PICKING';
-    const label = isPick ? 'SEPARACAO (PICK)' : 'CONFERÃƒÆ’Ã…Â NCIA (PACK)';
+    const label = isPick ? 'SEPARAÇÃO (PICK)' : 'CONFERÊNCIA (PACK)';
     const icon = isPick ? 'inventory_2' : 'verified';
     const mobileGradient = isPick
         ? 'linear-gradient(90deg, #EF4444 0%, #B91C1C 100%)'
         : 'linear-gradient(90deg, #22C55E 0%, #15803D 100%)';
     
     return `
-        <!-- Identidade Visual Operacional (Desktop) -->
-        <div class="operational-sidebar">
-            <div class="sidebar-icon" style="background-color: white; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); margin-bottom: 32px;">
-                <span class="material-symbols-rounded" style="color: #1E3A8A; font-size: 20px !important;">${icon}</span>
-            </div>
-            <div class="sidebar-label">${label}</div>
-        </div>
-        
-        <!-- Identidade Visual Operacional (Mobile) -->
-        <div class="operational-top-bar">
+        <div class="operational-top-bar" style="background:${mobileGradient};">
             <div class="top-bar-icon-wrap">
                 <span class="material-symbols-rounded top-bar-icon">${icon}</span>
             </div>
@@ -2666,12 +2764,13 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 // Barra lateral para mÃƒÆ’Ã‚Â³dulos internos (Produtos, InventÃƒÆ’Ã‚Â¡rio, NF, etc.)
 const MODULE_SIDEBAR_CONFIG = {
     produtos:      { label: 'PRODUTOS',      icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
-    kit_lampada:   { label: 'KIT LAMPADAS', icon: 'lightbulb',    colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
+    kit_lampada:   { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb',    colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
     movimentos:    { label: 'MOVIMENTOS',    icon: 'sync_alt',     colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
-    inventario:    { label: 'INVENT\u00c1RIO',    icon: 'fact_check',   colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
+    dashboard:     { label: 'DASHBOARD',     icon: 'dashboard',    colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
+    inventario:    { label: 'INVENTÁRIO',    icon: 'fact_check',   colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
     nf:            { label: 'ENTRADA NF',    icon: 'receipt_long', colorFrom: '#1E3A8A', colorTo: '#1E40AF', shadow: '30,58,138' },
     pick:          { label: 'SEPARA\u00c7\u00c3O (PICK)',    icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
-    pack:          { label: 'CONFER\u00caNCIA (CEGA)',  icon: 'verified',     colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
+    pack:          { label: 'CONFER\u00caNCIA (PACK)',  icon: 'verified',     colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
     compras:       { label: 'COMPRAS',       icon: 'shopping_bag', colorFrom: '#EF2B2D', colorTo: '#B91C1C', shadow: '239,43,45' },
     financeiro:    { label: 'FINANCEIRO',    icon: 'payments',     colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
     configuracoes: { label: 'CONFIG.',       icon: 'settings',     colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
@@ -2680,11 +2779,9 @@ const MODULE_SIDEBAR_CONFIG = {
 function getModuleSidebarHTML(moduleKey) {
     const cfg = MODULE_SIDEBAR_CONFIG[moduleKey];
     if (!cfg) return '';
+    const topBarBg = `linear-gradient(90deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%)`;
     return `
-        <div class="module-sidebar mod-sidebar-${moduleKey}" style="background:linear-gradient(180deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%);box-shadow:-2px 0 15px rgba(${cfg.shadow},0.18);">
-            <div class="sidebar-label">${cfg.label}</div>
-        </div>
-        <div class="module-top-bar mod-topbar-${moduleKey}">
+        <div class="module-top-bar mod-topbar-${moduleKey}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);">
             <div class="top-bar-icon-wrap">
                 <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
             </div>
@@ -3060,38 +3157,9 @@ function showToast(message) {
 }
 
 function playBeep(type) {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        if (type === 'success' || type === true) {
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.12);
-        } else if (type === 'warning') {
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.2);
-        } else if (type === 'error' || type === false) {
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(220, audioCtx.currentTime); 
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.3);
-        }
-    } catch (err) {
-        console.warn('[AUDIO] feedback falhou', err);
-    }
+    if (type === 'success' || type === true) playFeedbackSound('success');
+    else if (type === 'error' || type === false) playFeedbackSound('error');
+    else playFeedbackSound(type || 'warning');
 }
 
 
@@ -3463,69 +3531,11 @@ function getNextInternalId() {
 
 async function renderAlerts() {
     const currentUser = localStorage.getItem('currentUser');
-    
-    await ensureProdutosLoaded();
-    
-    const criticalProducts = (appData.products || []).filter(p => {
-        if (!p.estoque_minimo || parseFloat(p.estoque_minimo) <= 0) return false;
-        const stock = parseFloat((p.estoque_atual || 0).toString().replace(',', '.'));
-        const min = parseFloat(p.estoque_minimo.toString().replace(',', '.'));
-        return stock <= min;
-    });
-    
-    let pendingCount = 0;
-    if (appData.pickSessions && appData.pickSessions.length > 0) {
-        pendingCount = appData.pickSessions.filter(s => s.status === 'pending' || s.status === 'open' || !s.status).length;
-    }
-    
-    const criticalCount = criticalProducts.length;
-    const totalAlerts = criticalCount + pendingCount;
-    
     app.innerHTML = `
-        <div class="dashboard-screen fade-in internal operational-alerts-screen">
+        <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen dashboard-empty-screen">
             ${getTopBarHTML(currentUser, 'renderMenu()')}
-            <main class="container">
-                <div class="sub-menu-header">
-                    <h2 style="font-size: 1.2rem; font-weight: 700;">ALERTAS OPERACIONAIS</h2>
-                    ${totalAlerts > 0 ? `<span class="operational-alerts-total">${totalAlerts}</span>` : ''}
-                </div>
-                
-                <div class="operational-alerts-list">
-                    <div class="menu-card operational-alert-card operational-alert-card-critical" onclick="renderEstoqueAtual()" style="cursor: pointer;">
-                        <span class="material-symbols-rounded icon operational-alert-icon">inventory</span>
-                        <div class="operational-alert-copy">
-                            <span class="label operational-alert-title">Estoque CrÃƒÆ’Ã‚Â­tico</span>
-                            <span class="operational-alert-subtitle">Produtos abaixo do estoque mÃƒÆ’Ã‚Â­nimo</span>
-                        </div>
-                        ${criticalCount > 0 ? `<span class="operational-alert-badge danger">${criticalCount}</span>` : '<span class="material-symbols-rounded operational-alert-ok">check_circle</span>'}
-                    </div>
-                    
-                    <div class="menu-card operational-alert-card operational-alert-card-pending" onclick="openPickModeChoice()" style="cursor: pointer;">
-                        <span class="material-symbols-rounded icon operational-alert-icon">conveyor_belt</span>
-                        <div class="operational-alert-copy">
-                            <span class="label operational-alert-title">SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes Pendentes</span>
-                            <span class="operational-alert-subtitle">Filas de separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o aguardando</span>
-                        </div>
-                        ${pendingCount > 0 ? `<span class="operational-alert-badge warning">${pendingCount}</span>` : '<span class="material-symbols-rounded operational-alert-ok">check_circle</span>'}
-                    </div>
-                    
-                    <div class="menu-card operational-alert-card operational-alert-card-coming">
-                        <span class="material-symbols-rounded icon operational-alert-icon">local_shipping</span>
-                        <div class="operational-alert-copy">
-                            <span class="label operational-alert-title">Compras a Caminho</span>
-                            <span class="operational-alert-subtitle">Pedidos de compra em trÃƒÆ’Ã‚Â¢nsito</span>
-                        </div>
-                        <span class="operational-alert-badge muted">Em breve</span>
-                    </div>
-                </div>
-                
-                ${totalAlerts === 0 ? `
-                <div style="text-align: center; padding: 40px; background: var(--surface); border-radius: 20px; color: var(--muted); margin-top: 24px;">
-                    <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px; color: #22c55e;">check_circle</span>
-                    <p style="font-size: 1rem;">Nenhum alerta operacional.</p>
-                </div>
-                ` : ''}
-            </main>
+            ${getModuleSidebarHTML('dashboard')}
+            <main class="container dashboard-empty-container"></main>
         </div>
     `;
 }
@@ -3541,7 +3551,7 @@ const menuModulesConfig = [
     { id: 'pick', label: 'SEPARA\u00C7\u00C3O (PICK)', icon: 'pick', order: 3, type: 'principal' },
     { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
     { id: 'movimentacoes', label: 'MOVIMENTOS', icon: 'movimentacoes', order: 5, type: 'principal' },
-    { id: 'inventario', label: 'INVENT\u00c1RIO', icon: 'inventario', order: 6, type: 'principal' },
+    { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
     { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
     { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
     { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
@@ -3570,6 +3580,7 @@ const menu3DIcons = {
     transferencia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M22 28 L30 20 L38 28 M30 20 V44" stroke="#fff" stroke-width="3" fill="none"/><path d="M42 36 L34 44 L26 36" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/></svg>',
     ajuste: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 22 L42 42 M22 42 L42 22" stroke="#fff" stroke-width="3"/></svg>',
     historico: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><circle cx="32" cy="32" r="12" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M32 24 V32 L38 36" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>',
+    devolucoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M43 24H24a8 8 0 0 0 0 16h18" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M25 16 17 24l8 8" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 46h20" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.75"/></svg>',
     fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="20" y="20" width="24" height="24" rx="2" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 26 H38 M26 32 H38 M26 38 H32" stroke="#fff" stroke-width="2" opacity="0.8"/></svg>',
     pedido_compra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 24 H44 L40 40 H24 Z" stroke="#fff" stroke-width="3" fill="none"/><circle cx="26" cy="46" r="2.5" fill="#fff"/><circle cx="38" cy="46" r="2.5" fill="#fff"/></svg>',
     transporte: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="26" width="20" height="14" rx="1" fill="#fff" opacity="0.9"/><rect x="38" y="30" width="8" height="10" rx="1" fill="#fff" opacity="0.7"/></svg>',
@@ -3646,6 +3657,9 @@ function getQuickActionsHTML(modoRapidoAtivo) {
         ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes pendentes">${pendingSeparationsCount}</span>`
         : '';
     const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
+    const quickActionImage = modoRapidoAtivo
+        ? 'assets/icons/modo-rapido-on.png'
+        : 'assets/icons/modo-rapido-off.png';
     return `
         <div id="quick-actions-overlay" class="quick-actions-overlay hidden" onclick="toggleQuickActions()" aria-hidden="true"></div>
         <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
@@ -3691,6 +3705,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
         </div>
         
         <button class="quick-action-fab fab-icon-btn fab-funcoes" type="button" onclick="toggleQuickActions()" aria-label="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas" title="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
+            <img class="quick-action-fab-img quick-action-mode-img" src="${quickActionImage}" alt="" aria-hidden="true" onerror="this.style.display='none'">
             <span class="quick-action-fab-fallback material-symbols-rounded notranslate" translate="no" aria-hidden="true">menu</span>
         </button>
     `;
@@ -4275,6 +4290,7 @@ function renderMovimentacoesSubMenu() {
         { id: 'transferencia', label: 'TRANSFERÃƒÆ’Ã…Â NCIA', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
         { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo do ajuste.' },
         { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ao fornecedor.' },
+        { id: 'devolucoes', label: 'DEVOLUÇÕES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devoluções para fornecedores.' },
         { id: 'historico_mov', label: 'HISTÃƒÆ’Ã¢â‚¬Å“RICO MOVIMENTO', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes registradas, ajustes, transferÃƒÆ’Ã‚Âªncias e garantias.' }
     ];
 
@@ -4289,6 +4305,76 @@ function renderMovimentacoesSubMenu() {
     `;
 }
 
+function renderDevolucoesSubMenu() {
+    const currentUser = localStorage.getItem('currentUser');
+    const subItems = [
+        { id: 'devolucao_marketplace', label: 'MARKETPLACE', icon: 'devolucoes', onclick: "renderDevolucaoPlaceholder('marketplace')", description: 'Retornos de Mercado Livre, marketplaces e canais de venda.' },
+        { id: 'devolucao_fornecedor', label: 'FORNECEDOR', icon: 'fornecedores', onclick: "renderDevolucaoPlaceholder('fornecedor')", description: 'Produtos devolvidos ao fornecedor com troca, crédito ou recusa.' },
+        { id: 'historico_devolucao', label: 'HISTÓRICO', icon: 'historico', onclick: "renderDevolucaoPlaceholder('historico')", description: 'Consulta dos processos de devolução e seus destinos.' }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+            ${getModuleSidebarHTML('movimentos')}
+            <main class="container">
+                ${getStandardScreenTitleHTML('DEVOLUÇÕES', menu3DIcons.devolucoes)}
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+function renderDevolucaoPlaceholder(type = 'marketplace') {
+    const currentUser = localStorage.getItem('currentUser');
+    const config = {
+        marketplace: {
+            title: 'DEVOLUÇÃO MARKETPLACE',
+            icon: menu3DIcons.devolucoes,
+            cards: [
+                ['Canal', 'Mercado Livre, Shopee, Amazon ou outro marketplace'],
+                ['Pedido', 'Venda ou etiqueta vinculada ao retorno'],
+                ['Destino', 'Disponível, defeito, garantia ou quarentena']
+            ]
+        },
+        fornecedor: {
+            title: 'DEVOLUÇÃO FORNECEDOR',
+            icon: menu3DIcons.fornecedores,
+            cards: [
+                ['Fornecedor', 'Origem da compra ou destino da devolução'],
+                ['Documento', 'NF, pedido de compra ou acordo comercial'],
+                ['Resultado', 'Troca, crédito, recusa ou baixa definitiva']
+            ]
+        },
+        historico: {
+            title: 'HISTÓRICO DE DEVOLUÇÕES',
+            icon: menu3DIcons.historico,
+            cards: [
+                ['Status', 'Recebida, em análise, resolvida ou cancelada'],
+                ['Produto', 'ID interno, quantidade e condição recebida'],
+                ['Impacto', 'Local de estoque, custo e decisão final']
+            ]
+        }
+    }[type] || {};
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen devolucoes-screen">
+            ${getTopBarHTML(currentUser, 'renderDevolucoesSubMenu()')}
+            ${getModuleSidebarHTML('movimentos')}
+            <main class="container">
+                ${getStandardScreenTitleHTML(config.title || 'DEVOLUÇÕES', config.icon || menu3DIcons.devolucoes)}
+                <section class="devolucoes-workspace">
+                    ${(config.cards || []).map(([label, value]) => `
+                        <article class="devolucoes-info-card">
+                            <span>${label}</span>
+                            <strong>${value}</strong>
+                        </article>
+                    `).join('')}
+                </section>
+            </main>
+        </div>
+    `;
+}
 function renderEnvioDefeitoForm() {
     const currentUser = localStorage.getItem('currentUser');
     app.innerHTML = `
@@ -4438,7 +4524,7 @@ function filterMovimentacoes() {
 const MOV_HISTORY_FILTERS = [
     { id: 'todos', label: 'Todos' },
     { id: 'entrada_nf', label: 'Entrada NF' },
-    { id: 'inventario', label: 'InventÃƒÆ’Ã‚Â¡rio' },
+    { id: 'inventario', label: 'Inventário' },
     { id: 'transferencia', label: 'TransferÃƒÆ’Ã‚Âªncia' },
     { id: 'ajuste', label: 'Ajuste' },
     { id: 'garantia', label: 'Garantia' },
@@ -4460,7 +4546,7 @@ const PRODUCT_MOVEMENT_FILTERS = [
     { id: 'saida', label: 'SaÃƒÆ’Ã‚Â­da' },
     { id: 'transferencia', label: 'TransferÃƒÆ’Ã‚Âªncia' },
     { id: 'ajuste', label: 'Ajuste' },
-    { id: 'inventario', label: 'InventÃƒÆ’Ã‚Â¡rio' },
+    { id: 'inventario', label: 'Inventário' },
     { id: 'garantia', label: 'Garantia' }
 ];
 
@@ -4499,8 +4585,8 @@ function formatMovHistoryMoney(value) {
 
 function getMovHistoryTypeConfig(type) {
     const map = {
-        entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e' },
-        inventario: { label: 'InventÃƒÆ’Ã‚Â¡rio', icon: 'fact_check', color: '#38bdf8' },
+        entrada_nf:            { label: 'ENTRADA NF', icon: 'receipt_long', color: '#22c55e' },
+        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8' },
         transferencia: { label: 'TransferÃƒÆ’Ã‚Âªncia', icon: 'sync_alt', color: '#60a5fa' },
         ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b' },
         garantia: { label: 'Garantia', icon: 'shield', color: '#a78bfa' },
@@ -4545,14 +4631,14 @@ function getProductMovementDisplayType(mov = {}) {
 function getProductMovementConfig(mov = {}) {
     const displayType = getProductMovementDisplayType(mov);
     const map = {
-        entrada_nf: { label: 'Entrada NF', icon: 'receipt_long', color: '#22c55e', sign: '+' },
+        entrada_nf:            { label: 'ENTRADA NF', icon: 'receipt_long', color: '#22c55e', sign: '+' },
         entrada: { label: 'Entrada', icon: 'add_circle', color: '#22c55e', sign: '+' },
         saida: { label: 'SaÃƒÆ’Ã‚Â­da', icon: 'remove_circle', color: '#ef4444', sign: '-' },
         separacao: { label: 'SeparaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o', icon: 'inventory_2', color: '#ef4444', sign: '-' },
         conferencia: { label: 'ConferÃƒÆ’Ã‚Âªncia', icon: 'task_alt', color: '#14b8a6', sign: '-' },
         transferencia: { label: 'TransferÃƒÆ’Ã‚Âªncia', icon: 'sync_alt', color: '#60a5fa', sign: '+' },
         ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b', sign: '' },
-        inventario: { label: 'InventÃƒÆ’Ã‚Â¡rio', icon: 'fact_check', color: '#38bdf8', sign: '' },
+        inventario: { label: 'Inventário', icon: 'fact_check', color: '#38bdf8', sign: '' },
         garantia: { label: 'Garantia/Defeito', icon: 'shield', color: '#a78bfa', sign: '-' },
         cancelamento: { label: 'Cancelamento', icon: 'cancel', color: '#fb7185', sign: '' }
     };
@@ -10394,6 +10480,7 @@ async function renderSearchScreen(push = true) {
 let html5QrCode = null;
 let lastScanTime = 0;
 let isScannerStarting = false;
+let isScannerScanProcessing = false;
 
 async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false) {
     if (isScannerStarting) return;
@@ -10470,7 +10557,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
     ].filter(Boolean);
 
     const config = {
-        fps: 30,
+        fps: window.innerWidth < 768 ? 14 : 18,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
             const isPortrait = viewfinderHeight >= viewfinderWidth;
             const widthRatio = isPortrait ? 0.9 : 0.72;
@@ -10484,6 +10571,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
             };
         },
         aspectRatio: window.innerWidth < 768 ? 1.333334 : 1.777778,
+        rememberLastUsedCamera: true,
         experimentalFeatures: {
             useBarCodeDetectorIfSupported: true
         },
@@ -10497,8 +10585,9 @@ async function startScanner(isPicking = false, isConference = false, isInventory
             config,
             async (decodedText) => {
                 const now = Date.now();
-                if (now - lastScanTime < 1500) return;
+                if (isScannerScanProcessing || now - lastScanTime < 900) return;
                 lastScanTime = now;
+                isScannerScanProcessing = true;
 
                 console.log(`[SCANNER] Decoded: ${decodedText}`);
 
@@ -10509,7 +10598,10 @@ async function startScanner(isPicking = false, isConference = false, isInventory
                 else if (isGarantia) context = 'garantia';
                 else if (isEdit) context = 'edit';
 
-                const product = await handleProductScan(decodedText, context);
+                let product = null;
+                try {
+                    product = await handleProductScan(decodedText, context);
+                
 
                 // Se nÃƒÆ’Ã‚Â£o for busca, precisa tratar as funÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes especÃƒÆ’Ã‚Â­ficas
                 if (product) {
@@ -10525,8 +10617,13 @@ async function startScanner(isPicking = false, isConference = false, isInventory
                     } else if (isInventory) {
                         addInventoryItem(decodedText);
                         restoreScanFieldFocus('inventory', 120);
-                    } else if (isPicking) addPickItem(decodedText);
-                    else if (isConference) addPackScan(decodedText);
+                    } else if (isPicking) await addPickItem(decodedText);
+                    else if (isConference) await addPackScan(decodedText);
+                }
+                } finally {
+                    setTimeout(() => {
+                        isScannerScanProcessing = false;
+                    }, 120);
                 }
             },
 
@@ -15511,6 +15608,48 @@ async function persistPickingDraftSession(draft) {
     }
 }
 
+async function persistPickingDraftItemsBatch(draft, items = []) {
+    if (!draft?.sessionId) return null;
+    const sessionPayload = buildPickingSessionPayload(
+        draft.sessionId,
+        draft.channelId,
+        draft.channelLabel,
+        draft.status || PICK_STATUS_DRAFT,
+        draft.createdAt
+    );
+    const itemPayloads = (items || []).map(buildPickingItemPayload).filter(item => item.id_interno);
+    const payload = {
+        session: sessionPayload,
+        items: itemPayloads,
+        executionId: draft.executionId || draft.sessionId
+    };
+
+    if (!navigator.onLine || !DataClient.savePickingDraftItemsBatchSupabase) {
+        let queued = false;
+        for (const item of items || []) {
+            const result = await persistPickingDraftItem(draft, item);
+            if (result?.queued) queued = true;
+        }
+        return { queued, fallback: true };
+    }
+
+    try {
+        return await withTimeout(
+            DataClient.savePickingDraftItemsBatchSupabase(payload),
+            15000,
+            'salvar itens da separacao em lote'
+        );
+    } catch (error) {
+        console.warn('[SEP] lote falhou, usando salvamento item a item', error);
+        let queued = false;
+        for (const item of items || []) {
+            const result = await persistPickingDraftItem(draft, item);
+            if (result?.queued) queued = true;
+        }
+        return { queued, fallback: true, error };
+    }
+}
+
 async function deletePickingDraftItemSupabaseDirect(payload = {}) {
     const client = window.supabaseClient;
     if (!client) throw new Error('Supabase client nao encontrado');
@@ -17258,16 +17397,19 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     const stats = getPickingOperationalStats(currentPickSession.items);
     let draftPersistenceQueued = false;
 
-    for (const item of currentPickSession.items) {
-        const draftResult = await persistPickingDraftItem({
-            ...draft,
-            sessionId,
-            channelId,
-            channelLabel,
-            channelColor
-        }, item);
-        if (draftResult?.queued) draftPersistenceQueued = true;
-    }
+    const draftResult = await persistPickingDraftItemsBatch({
+        ...draft,
+        sessionId,
+        channelId,
+        channelLabel,
+        channelColor,
+        status: PICK_STATUS_DRAFT,
+        total_produtos_separados: stats.total_produtos_separados,
+        total_itens_separados: stats.total_itens_separados,
+        total_pacotes_montados: stats.total_pacotes_montados,
+        totalPacotesMontados: stats.total_pacotes_montados
+    }, currentPickSession.items);
+    if (draftResult?.queued) draftPersistenceQueued = true;
 
     const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
     if (rows.length === 0) {
@@ -17412,16 +17554,19 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
         console.log("[savePickResultFinal] currentPickSession.items:", currentPickSession.items);
 
         let draftPersistenceQueued = false;
-        for (const item of currentPickSession.items) {
-            const draftResult = await persistPickingDraftItem({
-                ...draft,
-                sessionId,
-                channelId,
-                channelLabel,
-                channelColor
-            }, item);
-            if (draftResult?.queued) draftPersistenceQueued = true;
-        }
+        const draftResult = await persistPickingDraftItemsBatch({
+            ...draft,
+            sessionId,
+            channelId,
+            channelLabel,
+            channelColor,
+            status: PICK_STATUS_DRAFT,
+            total_produtos_separados: stats.total_produtos_separados,
+            total_itens_separados: stats.total_itens_separados,
+            total_pacotes_montados: stats.total_pacotes_montados,
+            totalPacotesMontados: stats.total_pacotes_montados
+        }, currentPickSession.items);
+        if (draftResult?.queued) draftPersistenceQueued = true;
 
         const conferencePayload = {
             sessionId,
@@ -24759,7 +24904,6 @@ async function renderGuiaLampada(push = true) {
         <div class="dashboard-screen fade-in internal product-search-screen kit-lampada-screen kit-v2-screen module-screen">
             ${getTopBarHTML(currentUser, 'renderMenu()')}
             ${getModuleSidebarHTML('kit_lampada')}
-            <div class="kit-v2-sidebar-right" aria-hidden="true"><span>KIT LAMPADAS</span></div>
             <main class="container product-search-center kit-v2-container">
                 <div id="kit-content-area">
                     <div class="kit-premium-state">
@@ -24798,7 +24942,7 @@ async function renderGuiaLampada(push = true) {
         const brandOptions = getKitLampadaBrandOptions(data);
 
         contentArea.innerHTML = `
-            <div class="kit-mobile-title">KIT LAMPADAS</div>
+            <div class="kit-mobile-title">KIT LÂMPADAS</div>
 
             <section class="kit-premium-top">
                 <div class="kit-premium-search">
@@ -25091,7 +25235,11 @@ function renderProductSubMenu() {
 
   container.innerHTML = `
     <div class="dashboard-screen internal fade-in product-submenu-screen module-screen standard-card-menu-screen">
-      ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+      <div class="top-action-group">
+        <button class="fab-icon-btn fab-voltar" type="button" onclick="renderMenu()" aria-label="Voltar">
+          <img class="product-top-back-icon" src="/assets/icons/icons8-voltar-96.png" alt="" aria-hidden="true">
+        </button>
+      </div>
       ${getModuleSidebarHTML('produtos')}
 
       <main class="container">
@@ -29590,8 +29738,7 @@ function renderEntradaNFHistoryDashboard(historico = []) {
             </button>
             <div>
                 <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
-                <h1>HISTÃƒÆ’Ã¢â‚¬Å“RICO DE ENTRADAS</h1>
-                <p>Acompanhe todas as notas fiscais importadas</p>
+                <h1>HISTÓRICO DE ENTRADAS</h1>
             </div>
         </section>
         ${renderEntradaNFHistorySummaryCards(historico)}

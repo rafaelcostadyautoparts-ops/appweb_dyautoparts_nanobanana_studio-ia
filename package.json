@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "npm run check:encoding && vite build",
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "check:encoding": "node scripts/verify-text-repair.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {},

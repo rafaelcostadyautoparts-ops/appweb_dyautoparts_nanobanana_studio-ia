@@ -1242,6 +1242,96 @@ const DataClient = (function () {
         return { separacao: sepData, item: itemData };
     }
 
+    async function savePickingDraftItemsBatchSupabase(payload) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const now = getDataHoraBrasil();
+        const session = payload.session || {};
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        validatePickingSessionBeforeSave(session);
+
+        const separacaoRow = {
+            separacao_id: session.separacao_id,
+            pedido_referencia: session.pedido_referencia || null,
+            canal_id: session.canal_id || '',
+            canal_nome: session.canal_nome || '',
+            status: session.status || 'em_separacao',
+            criado_por: session.criado_por || localStorage.getItem('currentUser') || 'N/A',
+            criado_em: session.criado_em || now,
+            atualizado_em: now,
+            finalizado_em: session.finalizado_em || null,
+            total_produtos_separados: Number(session.total_produtos_separados || 0),
+            total_itens_separados: Number(session.total_itens_separados || 0),
+            total_pacotes_montados: Number(session.total_pacotes_montados || 0),
+            observacao: session.observacao || null
+        };
+
+        let { data: sepData, error: sepError } = await client
+            .from('separacao')
+            .upsert([separacaoRow], { onConflict: 'separacao_id' })
+            .select()
+            .single();
+
+        if (sepError && isMissingPickingTotalsColumnError(sepError)) {
+            const fallbackRow = stripPickingTotalsColumns(separacaoRow);
+            logSepSupabaseError('colunas de totais ausentes; salvando separacao em lote sem totais', sepError, separacaoRow);
+            const fallback = await client
+                .from('separacao')
+                .upsert([fallbackRow], { onConflict: 'separacao_id' })
+                .select()
+                .single();
+            sepData = fallback.data;
+            sepError = fallback.error;
+        }
+
+        if (sepError) {
+            logSepSupabaseError('erro ao salvar separacao em lote', sepError, separacaoRow);
+            throw sepError;
+        }
+
+        const { error: deleteError } = await client
+            .from('separacao_itens')
+            .delete()
+            .eq('separacao_id', session.separacao_id);
+
+        if (deleteError) {
+            logSepSupabaseError('erro ao preparar itens em lote', deleteError, { separacao_id: session.separacao_id });
+            throw deleteError;
+        }
+
+        const itemRows = items
+            .filter(item => item && item.id_interno)
+            .map(item => ({
+                separacao_id: session.separacao_id,
+                id_interno: item.id_interno,
+                ean: item.ean || null,
+                descricao: item.descricao || '',
+                qtd_solicitada: Number(item.qtd_solicitada || item.qtd_separada || 1),
+                qtd_separada: Number(item.qtd_separada || item.qtd_solicitada || 1),
+                atualizado_em: now
+            }));
+
+        let itemData = [];
+        if (itemRows.length) {
+            const { data, error } = await client
+                .from('separacao_itens')
+                .insert(itemRows)
+                .select();
+
+            if (error) {
+                logSepSupabaseError('erro ao inserir itens em lote', error, { separacao_id: session.separacao_id, total: itemRows.length });
+                throw error;
+            }
+            itemData = data || [];
+        }
+
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+
+        return { separacao: sepData, items: itemData };
+    }
     async function finalizePickingDraftSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -1852,6 +1942,7 @@ const DataClient = (function () {
         save,
         saveBatch,
         savePickingDraftSupabase,
+        savePickingDraftItemsBatchSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
         getCachedData,
