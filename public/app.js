@@ -31,75 +31,6 @@ const MOJIBAKE_REPLACEMENTS = [
     ['â€¢', '•'], ['â†’', '→'], ['âˆ’', '-'], ['ï¿½', '']
 ];
 
-function repairMojibakeText(value) {
-    if (value === undefined || value === null) return '';
-    const decodeLatin1AsUtf8 = (text) => {
-        if (!/[\u00c3\u00c2\u00e2\u00ef\u0192\u2020\u20ac\u0161\u0153\u017d]/.test(text)) return text;
-        try {
-            const bytes = Uint8Array.from(Array.from(text), ch => ch.charCodeAt(0) & 255);
-            return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        } catch (err) {
-            return text;
-        }
-    };
-    const hasBrokenAccent = (match) => /[^\x00-\x7F]/.test(match);
-    const keepCase = (match, upperText, titleText = upperText) => match === match.toUpperCase() ? upperText : titleText;
-    const wordFixes = [
-        [/PRE(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'PRE\u00c7O', 'Pre\u00e7o'],
-        [/PREA\S*O/gi, 'PRE\u00c7O', 'Pre\u00e7o'],
-        [/T(?=[^\s]*[^\x00-\x7F])\S*RREO/gi, 'T\u00c9RREO', 'T\u00e9rreo'],
-        [/T\S*RREO/gi, 'T\u00c9RREO', 'T\u00e9rreo'],
-        [/SEPARA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'SEPARA\u00c7\u00c3O', 'Separa\u00e7\u00e3o'],
-        [/CONFER(?=[^\s]*[^\x00-\x7F])\S*NCIA/gi, 'CONFER\u00caNCIA', 'Confer\u00eancia'],
-        [/C(?=[^\s]*[^\x00-\x7F])\S*DIGO/gi, 'C\u00d3DIGO', 'C\u00f3digo'],
-        [/USU(?=[^\s]*[^\x00-\x7F])\S*RIO/gi, 'USU\u00c1RIO', 'Usu\u00e1rio'],
-        [/HIST(?=[^\s]*[^\x00-\x7F])\S*RICO/gi, 'HIST\u00d3RICO', 'Hist\u00f3rico'],
-        [/DISPON(?=[^\s]*[^\x00-\x7F])\S*VEL/gi, 'DISPON\u00cdVEL', 'Dispon\u00edvel'],
-        [/REVIS(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'REVIS\u00c3O', 'Revis\u00e3o'],
-        [/LAN(?=[^\s]*[^\x00-\x7F])\S*AR/gi, 'LAN\u00c7AR', 'Lan\u00e7ar'],
-        [/LAN(?=[^\s]*[^\x00-\x7F])\S*AMENTO/gi, 'LAN\u00c7AMENTO', 'Lan\u00e7amento'],
-        [/V(?=[^\s]*[^\x00-\x7F])\S*NCULOS\b/gi, 'V\u00cdNCULOS', 'V\u00ednculos'],
-        [/V(?=[^\s]*[^\x00-\x7F])\S*NCULO\b/gi, 'V\u00cdNCULO', 'V\u00ednculo'],
-        [/OP(?=[^\s]*[^\x00-\x7F])\S*ES\b/gi, 'OP\u00c7\u00d5ES', 'Op\u00e7\u00f5es'],
-        [/DESCRI(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'DESCRI\u00c7\u00c3O', 'Descri\u00e7\u00e3o'],
-        [/IMPORTA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'IMPORTA\u00c7\u00c3O', 'Importa\u00e7\u00e3o'],
-        [/ATEN(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'ATEN\u00c7\u00c3O', 'Aten\u00e7\u00e3o'],
-        [/CONFIGURA(?=[^\s]*[^\x00-\x7F])\S*ES/gi, 'CONFIGURA\u00c7\u00d5ES', 'Configura\u00e7\u00f5es'],
-        [/INFORMA(?=[^\s]*[^\x00-\x7F])\S*ES/gi, 'INFORMA\u00c7\u00d5ES', 'Informa\u00e7\u00f5es'],
-        [/INFORMA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'INFORMA\u00c7\u00c3O', 'Informa\u00e7\u00e3o'],
-        [/ALTERA(?=[^\s]*[^\x00-\x7F])\S*O/gi, 'ALTERA\u00c7\u00c3O', 'Altera\u00e7\u00e3o'],
-        [/PR(?=[^\s]*[^\x00-\x7F])\S*CADASTRO/gi, 'PR\u00c9-CADASTRO', 'Pr\u00e9-cadastro'],
-        [/N(?=[^\s]*[^\x00-\x7F])\S*O\b/gi, 'N\u00c3O', 'N\u00e3o'],
-        [/S(?=[^\s]*[^\x00-\x7F])\S*O\b/gi, 'S\u00c3O', 'S\u00e3o']
-    ];
-    let output = String(value);
-    for (const [broken, fixed] of MOJIBAKE_REPLACEMENTS) {
-        output = output.split(broken).join(fixed);
-    }
-    for (let pass = 0; pass < 4; pass++) {
-        const before = output;
-        output = decodeLatin1AsUtf8(output)
-            .replace(/\u00c2([\u00ba\u00aa\u00b0\u00b7])/g, '$1')
-            .replace(/\u00e2\u20ac[\u201c\u201d]/g, '-')
-            .replace(/\u00e2\u20ac\u02dc/g, "'")
-            .replace(/\u00e2\u20ac\u2122/g, "'")
-            .replace(/\u00e2\u20ac\u0153/g, '"')
-            .replace(/\u00e2\u20ac\u009d/g, '"')
-            .replace(/\u00e2\u20ac\u00a6/g, '...')
-            .replace(/\u00ef\u00bf\u00bd/g, '');
-        if (output === before) break;
-    }
-    wordFixes.forEach(([pattern, upperText, titleText]) => {
-        output = output.replace(pattern, match => hasBrokenAccent(match) ? keepCase(match, upperText, titleText) : match);
-    });
-    output = output
-        .replace(/\bUS\u00c3O\b/g, 'USU\u00c1RIO')
-        .replace(/\bUs\u00e3o\b/g, 'Usu\u00e1rio')
-        .replace(/\b[^\s\x00-\x7F]*ltima\b/gi, match => keepCase(match, '\u00daLTIMA', '\u00daltima'))
-        .replace(/(\d+)(?=[^\s]*[^\x00-\x7F])\S*\s+ANDAR/gi, '$1\u00ba ANDAR');
-    return output;
-}
-
 const CP1252_BYTE_BY_CHAR = {
     '\u20ac': 0x80, '\u201a': 0x82, '\u0192': 0x83, '\u201e': 0x84, '\u2026': 0x85,
     '\u2020': 0x86, '\u2021': 0x87, '\u02c6': 0x88, '\u2030': 0x89, '\u0160': 0x8a,
@@ -294,6 +225,7 @@ const MATERIAL_ICON_FALLBACKS = {
     pause_circle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8v8M14 8v8"/></svg>',
     percent: '<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
     person: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    photo_camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/><path d="M18 10h.01"/></svg>',
     priority_high: '<svg viewBox="0 0 24 24"><path d="M12 5v9M12 19h.01"/></svg>',
     qr_code_scanner: '<svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 8h3v3H8zM14 8h2M14 11h3M8 14h2M12 14h5M8 17h5"/></svg>',
     request_quote: '<svg viewBox="0 0 24 24"><path d="M6 3h10l4 4v18H6z"/><path d="M16 3v5h5M9 12h6M9 16h6M11 20h2"/></svg>',
@@ -691,6 +623,7 @@ function renderScreenByName(name, push = true) {
         case 'menu': renderMenu(push); break;
         case 'search': renderSearchScreen(push); break;
         case 'catalogo-produtos': renderCatalogoProdutos(false); break;
+        case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
         case 'login': renderLogin(push); break;
         case 'client-quotes': renderClientQuotesList(false); break;
         case 'comissoes': renderComissoesScreen(null, false); break;
@@ -1215,76 +1148,68 @@ const DEFAULT_APP_CONFIG = {
 };
 
 const DY_THEME_STORAGE_KEY = 'dyTheme';
-const DY_THEME_OPTIONS = ['auto', 'light', 'dark'];
+const DY_THEME_OPTIONS = ['light'];
 const DY_APP_VERSION = '2.1.12';
+const DY_APP_BUILD = '2026.06.12.1';
+const DY_APP_COMMIT = 'local';
+const DY_APP_DEPLOY_DATE = '';
 const DY_UPDATE_STATUS_KEY = 'dy_update_status';
 const DY_UPDATE_LAST_CHECK_KEY = 'dy_update_last_check';
+const DY_UPDATE_AVAILABLE_VERSION_KEY = 'dy_update_available_version';
+const DY_UPDATE_AVAILABLE_BUILD_KEY = 'dy_update_available_build';
+const DY_UPDATE_AVAILABLE_COMMIT_KEY = 'dy_update_available_commit';
+const DY_UPDATE_DEPLOY_DATE_KEY = 'dy_update_deploy_date';
 const DY_LOCAL_HISTORY_KEY = 'dy_local_access_history';
 const DY_LOCAL_PIN_HASH_KEY = 'dy_local_pin_hash';
 const DY_LOCAL_PIN_SALT_KEY = 'dy_local_pin_salt';
 const DY_AUTO_LOCK_STATE_KEY = 'dy_auto_lock_state';
 const DY_FONT_SIZE_OPTIONS = ['small', 'medium', 'large'];
 
+function persistLightOnlyTheme() {
+    try {
+        localStorage.setItem(DY_THEME_STORAGE_KEY, 'light');
+    } catch (error) {
+        console.warn('[THEME] Nao foi possivel persistir o tema light-only:', error);
+    }
+}
+
 function getStoredTheme() {
     try {
-        const theme = localStorage.getItem(DY_THEME_STORAGE_KEY) || 'light';
-        return DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
+        const theme = localStorage.getItem(DY_THEME_STORAGE_KEY);
+        if (theme !== 'light') persistLightOnlyTheme();
+        return 'light';
     } catch (error) {
         return 'light';
     }
 }
 
 function getResolvedTheme(theme = getStoredTheme()) {
-    if (theme !== 'auto') return theme;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return 'light';
 }
 
 function applyTheme(theme = getStoredTheme()) {
-    const safeTheme = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
-    const resolvedTheme = getResolvedTheme(safeTheme);
-    document.documentElement.setAttribute('data-theme', resolvedTheme);
-    document.documentElement.setAttribute('data-theme-mode', safeTheme);
+    persistLightOnlyTheme();
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.documentElement.setAttribute('data-theme-mode', 'light');
 }
 
 function setAppTheme(theme) {
-    const safeTheme = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
-    localStorage.setItem(DY_THEME_STORAGE_KEY, safeTheme);
-    applyTheme(safeTheme);
-    updateThemeControlsUI(safeTheme);
+    persistLightOnlyTheme();
+    applyTheme('light');
+    updateThemeControlsUI('light');
     updateLoginThemeBackground();
 }
 
 function cycleLoginTheme() {
-    const current = getResolvedTheme(getStoredTheme());
-    const nextTheme = current === 'dark' ? 'light' : 'dark';
-    setAppTheme(nextTheme);
+    setAppTheme('light');
 }
 
 function getThemeLabel(theme) {
-    return theme === 'auto' ? 'AutomÃƒÆ’Ã‚Â¡tico' : theme === 'light' ? 'Claro' : 'Escuro';
+    return 'Claro';
 }
 
 function updateThemeControlsUI(theme = getStoredTheme()) {
-    const current = DY_THEME_OPTIONS.includes(theme) ? theme : 'light';
-    document.querySelectorAll('[data-theme-option]').forEach((button) => {
-        const active = button.dataset.themeOption === current;
-        button.classList.toggle('active', active);
-        button.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
-
-    const loginButton = document.getElementById('btn-theme-login');
-    if (loginButton) {
-        loginButton.removeAttribute('title');
-        loginButton.setAttribute('aria-label', `Alternar tema. Atual: ${getThemeLabel(current)}`);
-        const icon = loginButton.querySelector('.material-symbols-rounded');
-        if (icon) icon.textContent = current === 'light' ? 'dark_mode' : current === 'dark' ? 'light_mode' : 'lightbulb';
-    }
-
-    document.querySelectorAll('.login-theme-toggle[data-login-theme]').forEach((button) => {
-        const active = button.dataset.loginTheme === getResolvedTheme(current);
-        button.classList.toggle('active', active);
-        button.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
+    return 'light';
 }
 
 function getLoginBackgroundStyleValue() {
@@ -1878,15 +1803,52 @@ function isValidUrl(value) {
     }
 }
 
+function parseBrazilianMoney(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+    const raw = String(value).trim();
+    if (!raw) return 0;
+
+    const cleaned = raw.replace(/[^\d,.-]/g, '');
+    if (!cleaned || cleaned === '-' || cleaned === ',' || cleaned === '.') return 0;
+
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    let normalized = cleaned;
+
+    if (lastComma >= 0 && lastDot >= 0) {
+        const decimalSep = lastComma > lastDot ? ',' : '.';
+        const thousandSep = decimalSep === ',' ? '.' : ',';
+        normalized = cleaned.split(thousandSep).join('').replace(decimalSep, '.');
+    } else if (lastComma >= 0) {
+        normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (lastDot >= 0) {
+        const parts = cleaned.split('.');
+        const lastPart = parts[parts.length - 1] || '';
+        normalized = parts.length > 2 && lastPart.length === 3
+            ? parts.join('')
+            : cleaned.replace(/,(?=\d{3}(?:\D|$))/g, '');
+    }
+
+    const number = Number.parseFloat(normalized.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(number) ? number : 0;
+}
+
+function roundMoney(value, decimals = 2) {
+    const factor = Math.pow(10, decimals);
+    return Math.round((parseBrazilianMoney(value) + Number.EPSILON) * factor) / factor;
+}
+
 function formatPrice(value, prefix = 'R$ ') {
-    if (!value && value !== 0) return 'R$ 0,00';
-    const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'));
-    if (isNaN(num)) return 'R$ 0,00';
-    return prefix + num.toFixed(2).replace('.', ',');
+    return prefix + roundMoney(value).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 }
 
 function formatCurrency(value) {
-    const number = Number(value || 0);
+    const number = roundMoney(value);
 
     return number.toLocaleString('pt-BR', {
         style: 'currency',
@@ -2200,11 +2162,15 @@ async function initApp() {
             }
         }
 
-        // 8. RENDERIZAR LOGIN SEMPRE
+        // 8. VERIFICAR ATUALIZACAO ANTES DO USUARIO INICIAR O USO
+        console.log('[BOOT] Verificando atualizacao do aplicativo...');
+        await runStartupUpdateCheck();
+
+        // 9. RENDERIZAR LOGIN SEMPRE
         console.log('[BOOT] Renderizando tela de login...');
         renderLogin();
         
-        // 9. CONCLUIR BOOTSTRAP
+        // 10. CONCLUIR BOOTSTRAP
         clearTimeout(totalTimeout);
         bootstrapState.completed = true;
         bootstrapState.running = false;
@@ -2721,13 +2687,27 @@ function getInlineAppIconHTML(iconName) {
     return `<span class="app-inline-icon" aria-hidden="true">${svg}</span>`;
 }
 
+function getBackButtonStandardIconHTML() {
+    return '<img class="app-back-icon" src="/assets/icons/icons8-voltar-96.png" alt="" aria-hidden="true">';
+}
+
+const DS_HEADER_MODULES = new Set(['inventario', 'kit_lampada', 'pick', 'pack']);
+
+function getDesignSystemModuleClass(moduleKey) {
+    return DS_HEADER_MODULES.has(moduleKey) ? ` ds-app-header ds-module-header ds-header-${moduleKey}` : '';
+}
+
+function getDesignSystemOperationalClass(type = 'PICKING') {
+    return ` ds-app-header ds-operational-header ds-header-${type === 'PACK' ? 'pack' : 'pick'}`;
+}
+
 function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') {
     const isMenu = screenType === 'menu';
     return `
-        <div class="top-action-group">
+        <div class="top-action-group ds-top-action-group">
                 ${!isMenu && backAction ? `
-                <button class="fab-icon-btn fab-voltar" type="button" onclick="${backAction}" aria-label="Voltar">
-                    <img class="app-back-icon" src="/assets/icons/icons8-voltar-96.png" alt="" aria-hidden="true">
+                <button class="fab-icon-btn fab-voltar back-button-standard ds-back-button" type="button" onclick="${backAction}" aria-label="Voltar">
+                    ${getBackButtonStandardIconHTML()}
                 </button>
                 ` : ''}
                 ${isMenu ? `
@@ -2742,6 +2722,27 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
     `;
 }
 
+function getInventoryModuleBackButtonHTML(backAction = 'renderInventarioSubMenu()') {
+    return `
+        <button type="button" class="inventory-module-back back-button-standard ds-back-button" onclick="${backAction}" aria-label="Voltar">
+            ${getBackButtonStandardIconHTML()}
+        </button>
+    `;
+}
+
+function getInventoryModuleHeaderHTML(title, backAction = 'renderInventarioSubMenu()', rightHTML = '') {
+    return `
+        <header class="inventory-module-header ds-app-header ds-inventory-header ds-header-inventario">
+            ${getInventoryModuleBackButtonHTML(backAction)}
+            <div class="inventory-module-heading">
+                <span>INVENT\u00c1RIO F\u00cdSICO</span>
+                <h1>${escapeKitAttribute(title || 'Inventario')}</h1>
+            </div>
+            <div class="inventory-module-header-right">${rightHTML || ''}</div>
+        </header>
+    `;
+}
+
 
 function getOperationalIdentityHTML(type = 'PICKING') {
     const isPick = type === 'PICKING';
@@ -2752,7 +2753,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
         : 'linear-gradient(90deg, #22C55E 0%, #15803D 100%)';
     
     return `
-        <div class="operational-top-bar" style="background:${mobileGradient};">
+        <div class="operational-top-bar${getDesignSystemOperationalClass(type)}" style="background:${mobileGradient};">
             <div class="top-bar-icon-wrap">
                 <span class="material-symbols-rounded top-bar-icon">${icon}</span>
             </div>
@@ -2779,13 +2780,14 @@ const MODULE_SIDEBAR_CONFIG = {
 function getModuleSidebarHTML(moduleKey) {
     const cfg = MODULE_SIDEBAR_CONFIG[moduleKey];
     if (!cfg) return '';
+    const moduleLabel = moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label;
     const topBarBg = `linear-gradient(90deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%)`;
     return `
-        <div class="module-top-bar mod-topbar-${moduleKey}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);">
+        <div class="module-top-bar mod-topbar-${moduleKey}${getDesignSystemModuleClass(moduleKey)}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
             <div class="top-bar-icon-wrap">
                 <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
             </div>
-            <span class="top-bar-label">${cfg.label}</span>
+            <span class="top-bar-label">${moduleLabel}</span>
         </div>
     `;
 }
@@ -3259,7 +3261,7 @@ function toggleCostVisibility() {
             if (activeEan) {
                 const p = appData.products.find(x => x.ean === activeEan || x.id_interno === activeEan);
                 if (p) {
-                   costField.innerText = ((p.preco_custo || '0,00').toString().includes('R$') ? '' : 'R$ ') + (p.preco_custo || '0,00');
+                   costField.innerText = formatPrice(p.preco_custo);
                 }
             } else {
                 console.warn("Contexto do produto perdido para exibiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o do custo.");
@@ -3316,8 +3318,8 @@ function removeLegacyLoginFullscreenControls() {
         .forEach((el) => el.remove());
 
     document.querySelectorAll('button, [role="button"], div').forEach((el) => {
-        if (!el || el.id === 'exit-fullscreen-login' || el.id === 'btn-fullscreen-login' || el.id === 'btn-theme-login' || el.id === 'btn-theme-light-login' || el.id === 'btn-theme-dark-login') return;
-        if (el.closest('#exit-fullscreen-login') || el.closest('#btn-fullscreen-login') || el.closest('#btn-theme-login') || el.closest('#btn-theme-light-login') || el.closest('#btn-theme-dark-login')) return;
+        if (!el || el.id === 'exit-fullscreen-login' || el.id === 'btn-fullscreen-login') return;
+        if (el.closest('#exit-fullscreen-login') || el.closest('#btn-fullscreen-login')) return;
 
         const text = (el.textContent || '').trim().toLowerCase();
         const signature = `${el.id || ''} ${el.className || ''} ${text}`;
@@ -3415,9 +3417,10 @@ function renderLogin(push = true) {
         const safeLastName = escapeKitAttribute(lastName);
         const safeInitials = escapeKitAttribute(initials);
         const automotiveIconHTML = getLoginAutomotiveIconHTML(initials, index);
+        const loginClickAction = `try{window.playLoginSound&&window.playLoginSound(${index})}catch(e){};setUser(${quoteKitInlineArg(u.nome)},${quoteKitInlineArg(u.id)},${quoteKitInlineArg(u.perfil)})`;
         
         return `
-                <div class="user-card login-user-card" onclick="window.playLoginSound(${index}); setUser('${u.nome}', '${u.id}', '${u.perfil}')">
+                <div class="user-card login-user-card" onclick="${loginClickAction}">
                     <span class="login-card-glow login-card-glow-top" aria-hidden="true"></span>
                     <span class="login-card-glow login-card-glow-bottom" aria-hidden="true"></span>
                     <div class="user-avatar-box">
@@ -3438,17 +3441,11 @@ function renderLogin(push = true) {
     const loginHTML = `
         <div class="login-screen fade-in" id="login-screen" ${backgroundStyle}>
             <div class="top-hover-zone">
-                <button id="btn-theme-light-login" onclick="setAppTheme('light')" class="btn-floating-app btn-theme-login login-theme-toggle" data-login-theme="light" type="button" aria-label="Tema claro" aria-pressed="false">
-                    <img src="/assets/icons/sun.svg" alt="" aria-hidden="true">
-                </button>
-                <button id="btn-theme-dark-login" onclick="setAppTheme('dark')" class="btn-floating-app btn-theme-login login-theme-toggle" data-login-theme="dark" type="button" aria-label="Tema escuro" aria-pressed="false">
-                    <img src="/assets/icons/moon.svg" alt="" aria-hidden="true">
-                </button>
                 <button id="btn-fullscreen-login" onclick="toggleFullscreen()" class="btn-floating-app btn-tela-cheia" type="button" aria-label="Tela cheia">
                     <img src="/assets/icons/fullscreen.svg" alt="" aria-hidden="true">
                 </button>
             </div>
-            <img src="${getLoginLogoSrc()}" alt="DY AutoParts" class="login-logo dy-app-logo" onerror="this.onerror=null; this.src='${getResolvedTheme(getStoredTheme()) === 'light' ? LOGO_LIGHT_BG_FALLBACK : LOGO_DARK_BG_FALLBACK}';">
+            <img src="${getLoginLogoSrc()}" alt="DY AutoParts" class="login-logo dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_LIGHT_BG_FALLBACK}';">
             <div class="user-grid login-user-grid">
                 ${userGridHTML}
             </div>
@@ -3456,6 +3453,7 @@ function renderLogin(push = true) {
                 <span class="material-symbols-rounded">person</span>
                 <span class="login-user-hint-text">SELECIONE SEU USUÃƒÆ’Ã‚ÂRIO</span>
             </div>
+            ${getAppVersionBadgeHTML('login')}
         </div>
     `;
 
@@ -3590,6 +3588,7 @@ const menu3DIcons = {
     manual: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M22 22 L42 42 M42 22 L22 42" stroke="#fff" stroke-width="3"/></svg>',
     inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
     inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
+    inventario_localizacao: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M18 20 H46 V44 H18 Z" stroke="#fff" stroke-width="2.8" fill="none" rx="2"/><path d="M18 28 H46 M18 36 H46 M28 20 V44 M38 20 V44" stroke="#fff" stroke-width="2.4" opacity="0.9"/><path d="M32 16 C27 16 23 20 23 25 C23 32 32 39 32 39 C32 39 41 32 41 25 C41 20 37 16 32 16 Z" fill="#fff" opacity="0.96"/><circle cx="32" cy="25" r="3" fill="#0F766E"/></svg>',
     inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>'
 };
 
@@ -3646,8 +3645,21 @@ const menuRoutes = {
     ajuste: 'renderAjusteEstoqueScreen()'
 };
 
+function isEntradaNFOperationalPending(entrada = {}) {
+    const status = String(entrada.status || '').toLowerCase();
+    const tipo = String(entrada.tipo_lancamento || '').toLowerCase();
+    if (!status && !entrada.id) return false;
+    if (tipo === 'somente_financeiro' || status === 'financeiro_lancado') return false;
+    return !['finalizada', 'cancelada', 'entrada_confirmada'].includes(status);
+}
+
+function getEntradaNFQuickPendingCount() {
+    return getEntradaNFXMLDrafts().length;
+}
+
 function getQuickActionsHTML(modoRapidoAtivo) {
     let pendingSeparationsCount = 0;
+    let pendingEntradaNFCount = 0;
     try {
         pendingSeparationsCount = getDraftPickSessionsWithLocalDraft().length;
     } catch (error) {
@@ -3656,10 +3668,19 @@ function getQuickActionsHTML(modoRapidoAtivo) {
     const pendingSeparationsBadge = pendingSeparationsCount > 0
         ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes pendentes">${pendingSeparationsCount}</span>`
         : '';
+    try {
+        pendingEntradaNFCount = getEntradaNFQuickPendingCount();
+    } catch (error) {
+        pendingEntradaNFCount = 0;
+    }
+    const pendingEntradaNFBadge = pendingEntradaNFCount > 0
+        ? `<span class="quick-action-pending-badge" aria-label="${pendingEntradaNFCount} notas fiscais pendentes">${pendingEntradaNFCount}</span>`
+        : '';
     const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
+    const pendingEntradaNFClass = pendingEntradaNFCount > 0 ? 'has-pending' : '';
     const quickActionImage = modoRapidoAtivo
-        ? 'assets/icons/modo-rapido-on.png'
-        : 'assets/icons/modo-rapido-off.png';
+        ? '/assets/icons/modo-rapido-on.png'
+        : '/assets/icons/modo-rapido-off.png';
     return `
         <div id="quick-actions-overlay" class="quick-actions-overlay hidden" onclick="toggleQuickActions()" aria-hidden="true"></div>
         <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
@@ -3669,6 +3690,12 @@ function getQuickActionsHTML(modoRapidoAtivo) {
                     <span class="quick-action-icon quick-action-icon-picking-drafts material-symbols-rounded">folder_open</span>
                     <span class="quick-action-label">SEPARAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã¢â‚¬Â¢ES</span>
                     ${pendingSeparationsBadge}
+                    <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+                </button>
+                <button class="quick-action-item quick-action-card quick-action-priority quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
+                    <span class="quick-action-icon quick-action-icon-nf-drafts material-symbols-rounded">receipt_long</span>
+                    <span class="quick-action-label">ENTRADA NF</span>
+                    ${pendingEntradaNFBadge}
                     <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
                 </button>
                 <button class="quick-action-item quick-action-card quick-action-priority quick-action-romaneio" type="button" role="menuitem" onclick="quickActionGerarRomaneio()">
@@ -3746,6 +3773,7 @@ ${finalMenuItems.map(item => {
 }).join('')}
                         </div>
                     </main>
+                    ${getAppVersionBadgeHTML('footer')}
                     ${getQuickActionsHTML(false)}
                 </div>
     `;
@@ -4578,9 +4606,8 @@ function formatMovHistoryDate(value) {
 }
 
 function formatMovHistoryMoney(value) {
-    const num = parseDecimal(value);
-    if (!num) return '-';
-    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const num = roundMoney(value);
+    return num ? formatCurrency(num) : '-';
 }
 
 function getMovHistoryTypeConfig(type) {
@@ -5298,8 +5325,8 @@ function renderMovHistoryShell(loading = false) {
 
     return `
         <div class="dashboard-screen internal fade-in mov-history-screen no-top-bar">
-            <button type="button" class="mov-history-back" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
-                <span class="material-symbols-rounded">arrow_back</span>
+            <button type="button" class="mov-history-back back-button-standard" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                ${getBackButtonStandardIconHTML()}
             </button>
             <main class="mov-history-workspace">
                 <header class="mov-history-header">
@@ -5814,9 +5841,6 @@ function showPickModeChoiceModal() {
                 <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
                     <span class="material-symbols-rounded">close</span>
                 </button>
-                <div class="app-confirm-icon info">
-                    <span class="material-symbols-rounded">rule_settings</span>
-                </div>
                 <h3 id="pick-mode-title">Como deseja fazer a separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o?</h3>
                 <p>Escolha o fluxo que serÃƒÆ’Ã‚Â¡ utilizado nesta separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o. Essa escolha evita baixa de estoque no momento errado.</p>
                 <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o">
@@ -7000,8 +7024,8 @@ async function renderTransferenciaScreen() {
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in no-top-bar transfer-ops-screen">
-            <button type="button" class="transfer-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
-                <span class="material-symbols-rounded">arrow_back</span>
+            <button type="button" class="transfer-back-btn back-button-standard" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                ${getBackButtonStandardIconHTML()}
             </button>
 
             <main class="transfer-ops-shell">
@@ -7498,8 +7522,8 @@ function renderAjusteEstoqueScreen() {
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in no-top-bar ajuste-ops-screen">
-            <button type="button" class="ajuste-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
-                <span class="material-symbols-rounded">arrow_back</span>
+            <button type="button" class="ajuste-back-btn back-button-standard" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                ${getBackButtonStandardIconHTML()}
             </button>
 
             <main class="ajuste-ops-shell">
@@ -7948,7 +7972,7 @@ async function renderInventorySetup(type) {
     // UI de Carregamento inicial
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
-            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            ${getInventoryModuleHeaderHTML(`Invent\u00e1rio ${getInventoryTypeLabel(type)}`, 'renderInventarioSubMenu()')}
             <div id="inventory-setup-content" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 80px);">
                 <div class="loading-spinner"></div>
                 <p style="color: #aaa; margin-top: 15px;">Validando sessÃƒÆ’Ã‚Âµes no servidor...</p>
@@ -8630,7 +8654,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in inventory-screen-shell" style="background: #232323; height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
-            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            ${getInventoryModuleHeaderHTML(`Invent\u00e1rio ${invTypeLabel}`, 'renderInventarioSubMenu()')}
             <div class="inventory-scanning-screen" style="flex: 1; min-height: 0; width: min(94vw, 880px); max-width: 880px; margin: 0 auto; display: flex; flex-direction: column;">
                 <div style="padding: 20px 10px 0 10px; flex-shrink: 0;">
                     <div class="inv-screen-title">
@@ -9407,7 +9431,7 @@ window.finishInventorySession = async function () {
             const saldo_sistema = parseFloat(item.saldo_sistema || 0);
             const saldo_fisico = parseFloat(item.qty || item.saldo_fisico || 0);
             const diferenca = saldo_fisico - saldo_sistema;
-            const valor_unitario = parseFloat(item.valor_unitario || 0);
+            const valor_unitario = roundMoney(item.valor_unitario || 0);
 
             total_itens += saldo_sistema;
             total_itens_contados += saldo_fisico;
@@ -9679,6 +9703,7 @@ function renderInventarioSubMenu() {
         { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
         { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergÃƒÆ’Ã‚Âªncias de estoque.' },
         { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventorySetup('parcial')", description: 'Contar uma seleÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o especÃƒÆ’Ã‚Â­fica de produtos, marcas ou locais.' },
+        { id: 'inv_localizacao', label: 'INVENT\u00c1RIO POR LOCALIZA\u00c7\u00c3O', icon: 'inventario_localizacao', onclick: 'renderInventarioLocalizacao()', description: 'Consultar produtos seguindo a sequencia fisica das posicoes do estoque.' },
         { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventÃƒÆ’Ã‚Â¡rios abertos, fechados e anulados.' }
     ];
 
@@ -9692,6 +9717,1528 @@ function renderInventarioSubMenu() {
             </main>
         </div>
     `;
+}
+
+const INVENTORY_LOCATION_QUICK_FILTERS = [
+    'Todos',
+    '1.1.A', '1.1.B', '1.1.C',
+    '1.2.A', '1.2.B', '1.2.C',
+    '1.3.A', '1.3.B', '1.3.C',
+    '2.1.A', '2.1.B', '2.1.C',
+    '2.2.A', '2.2.B', '2.2.C',
+    '2.3.A', '2.3.B', '2.3.C',
+    '3.1.A', '3.1.B', '3.1.C',
+    '3.2.A', '3.2.B', '3.2.C',
+    '3.3.A', '3.3.B', '3.3.C',
+    '4.1.A', '4.1.B', '4.1.C',
+    '4.2.A', '4.2.B', '4.2.C',
+    '4.3.A', '4.3.B', '4.3.C',
+    '5.1.A', '5.1.B', '5.1.C',
+    '5.2.A', '5.2.B', '5.2.C',
+    '5.3.A', '5.3.B', '5.3.C',
+    '7',
+    '1\u00ba ANDAR'
+];
+
+const inventoryLocationState = {
+    loading: false,
+    error: '',
+    items: [],
+    search: '',
+    location: 'Todos',
+    selectedLocations: [],
+    status: 'todos',
+    page: 1,
+    pageSize: 10,
+    sort: 'location_az',
+    view: 'table',
+    collapsedLocations: {},
+    countSession: null,
+    adjustmentLocals: {}
+};
+
+function normalizeInventoryLocationText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function parseInventoryLocationPart(part) {
+    return /^\d+$/.test(part) ? Number(part) : part;
+}
+
+function compareInventoryLocation(a, b) {
+    const locA = normalizeInventoryLocationText(a.localizacao_estoque || '');
+    const locB = normalizeInventoryLocationText(b.localizacao_estoque || '');
+    if (!locA && locB) return 1;
+    if (locA && !locB) return -1;
+
+    const partsA = locA.split(/[.\-\s]+/).filter(Boolean).map(parseInventoryLocationPart);
+    const partsB = locB.split(/[.\-\s]+/).filter(Boolean).map(parseInventoryLocationPart);
+    const max = Math.max(partsA.length, partsB.length);
+
+    for (let i = 0; i < max; i++) {
+        const valueA = partsA[i];
+        const valueB = partsB[i];
+        if (valueA === undefined) return -1;
+        if (valueB === undefined) return 1;
+        if (typeof valueA === 'number' && typeof valueB === 'number' && valueA !== valueB) return valueA - valueB;
+        const textA = String(valueA);
+        const textB = String(valueB);
+        if (textA !== textB) return textA.localeCompare(textB, 'pt-BR', { numeric: true });
+    }
+
+    return String(a.id_interno || '').localeCompare(String(b.id_interno || ''), 'pt-BR', { numeric: true });
+}
+
+function toInventoryLocationNumber(value) {
+    const number = Number(String(value ?? 0).replace(',', '.'));
+    return Number.isFinite(number) ? number : 0;
+}
+
+async function fetchAllSupabaseRows(table, columns, orderColumn = null) {
+    const client = await window.supabaseClientReady;
+    const pageSize = 1000;
+    let from = 0;
+    let rows = [];
+
+    while (true) {
+        let query = client.from(table).select(columns).range(from, from + pageSize - 1);
+        if (orderColumn) query = query.order(orderColumn, { ascending: true });
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const chunk = data || [];
+        rows = rows.concat(chunk);
+        if (chunk.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadInventoryLocationData(force = false) {
+    if (!force && inventoryLocationState.items.length) return inventoryLocationState.items;
+
+    const [products, stockRows] = await Promise.all([
+        fetchAllSupabaseRows('produtos', 'localizacao_estoque,id_interno,descricao_completa,descricao_base,marca,sku_fornecedor,ean,url_imagem', 'localizacao_estoque'),
+        fetchAllSupabaseRows('estoque_atual', 'id_interno,local,saldo_disponivel,saldo_reservado,saldo_total', 'id_interno')
+    ]);
+
+    const stockByProduct = new Map();
+    stockRows.forEach(row => {
+        const id = String(row.id_interno || '').trim();
+        if (!id) return;
+
+        if (!stockByProduct.has(id)) {
+            stockByProduct.set(id, {
+                local: new Set(),
+                locais: new Map(),
+                saldo_disponivel: 0,
+                saldo_reservado: 0,
+                saldo_total: 0
+            });
+        }
+
+        const current = stockByProduct.get(id);
+        if (row.local) current.local.add(row.local);
+        const localKey = String(row.local || 'Sem local').trim() || 'Sem local';
+        const saldoDisponivel = toInventoryLocationNumber(row.saldo_disponivel);
+        const saldoReservado = toInventoryLocationNumber(row.saldo_reservado);
+        const saldoTotal = row.saldo_total === null || row.saldo_total === undefined || row.saldo_total === ''
+            ? saldoDisponivel + saldoReservado
+            : toInventoryLocationNumber(row.saldo_total);
+        if (!current.locais.has(localKey)) {
+            current.locais.set(localKey, {
+                local: localKey,
+                saldo_disponivel: 0,
+                saldo_reservado: 0,
+                saldo_total: 0
+            });
+        }
+        const localStock = current.locais.get(localKey);
+        localStock.saldo_disponivel += saldoDisponivel;
+        localStock.saldo_reservado += saldoReservado;
+        localStock.saldo_total += saldoTotal;
+        current.saldo_disponivel += saldoDisponivel;
+        current.saldo_reservado += saldoReservado;
+        current.saldo_total += saldoTotal;
+    });
+
+    inventoryLocationState.items = products
+        .map(product => {
+            const id = String(product.id_interno || '').trim();
+            const stock = stockByProduct.get(id) || {
+                local: new Set(),
+                locais: new Map(),
+                saldo_disponivel: 0,
+                saldo_reservado: 0,
+                saldo_total: 0
+            };
+
+            return {
+                localizacao_estoque: product.localizacao_estoque || 'Sem localizacao',
+                id_interno: id,
+                descricao_produto: product.descricao_completa || product.descricao_base || 'Produto sem descricao',
+                marca: product.marca || '',
+                sku_fornecedor: product.sku_fornecedor || '',
+                ean: product.ean || '',
+                url_imagem: product.url_imagem || '',
+                local: Array.from(stock.local).sort().join(', '),
+                locais: Array.from(stock.locais.values())
+                    .sort((a, b) => normalizeInventoryLocationText(a.local).localeCompare(normalizeInventoryLocationText(b.local), 'pt-BR', { numeric: true })),
+                saldo_disponivel: stock.saldo_disponivel,
+                saldo_reservado: stock.saldo_reservado,
+                saldo_total: stock.saldo_total
+            };
+        })
+        .sort(compareInventoryLocation);
+
+    return inventoryLocationState.items;
+}
+
+function getFilteredInventoryLocationItems() {
+    const search = normalizeInventoryLocationText(inventoryLocationState.search);
+    const selectedLocations = getInventoryLocationSelectedFilters();
+    const status = inventoryLocationState.status || 'todos';
+
+    return inventoryLocationState.items
+        .filter(item => {
+            const itemLocation = normalizeInventoryLocationText(item.localizacao_estoque);
+            if (selectedLocations.length && !selectedLocations.some(filter => inventoryLocationFilterMatches(itemLocation, filter))) return false;
+            if (status !== 'todos' && getInventoryLocationStatusKey(item) !== status) return false;
+            if (!search) return true;
+
+            return [
+                item.id_interno,
+                item.descricao_produto,
+                item.sku_fornecedor,
+                item.marca,
+                item.ean
+            ].some(value => normalizeInventoryLocationText(value).includes(search));
+        })
+        .sort(compareInventoryLocation);
+}
+
+function groupInventoryLocationItems(items) {
+    return items.reduce((groups, item) => {
+        const key = item.localizacao_estoque || 'Sem localizacao';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+        return groups;
+    }, new Map());
+}
+
+function formatInventoryLocationQty(value) {
+    return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(toInventoryLocationNumber(value));
+}
+
+function getInventoryLocationSessionItems() {
+    return inventoryLocationState.countSession?.items || {};
+}
+
+function getInventoryLocationCountEntry(idInterno) {
+    return getInventoryLocationSessionItems()[String(idInterno || '')] || null;
+}
+
+function getInventoryLocationDefaultAdjustmentLocal(item) {
+    const locais = Array.isArray(item?.locais) ? item.locais : [];
+    const withStock = locais.find(local => toInventoryLocationNumber(local.saldo_total) !== 0);
+    return (withStock || locais[0])?.local || 'TERREO';
+}
+
+function getInventoryLocationAdjustmentLocal(item) {
+    const entry = getInventoryLocationCountEntry(item.id_interno);
+    return entry?.adjustLocal || inventoryLocationState.adjustmentLocals[String(item.id_interno || '')] || getInventoryLocationDefaultAdjustmentLocal(item);
+}
+
+function buildInventoryLocationSessionId() {
+    const date = new Date();
+    const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
+    return `INV-LOC-${dateStr}-${String(Date.now()).slice(-5)}`;
+}
+
+function buildInventoryLocationCountPayload(item, countedQty, adjustLocal = null) {
+    const count = Math.max(0, Math.floor(toInventoryLocationNumber(countedQty)));
+    const saldoSistema = toInventoryLocationNumber(item.saldo_total);
+    const diferenca = count - saldoSistema;
+    const costInfo = resolveInventoryUnitCost(item.id_interno);
+    const applyLocal = adjustLocal || getInventoryLocationDefaultAdjustmentLocal(item);
+    return {
+        id_interno: item.id_interno,
+        localizacao_estoque: item.localizacao_estoque || 'Sem localizacao',
+        adjustLocal: applyLocal,
+        qty: count,
+        saldo_sistema: saldoSistema,
+        saldo_fisico: count,
+        diferenca,
+        valor_unitario: costInfo.value,
+        valor_diferenca: diferenca * costInfo.value
+    };
+}
+
+async function loadOpenInventoryLocationSession() {
+    if (inventoryLocationState.countSession) return inventoryLocationState.countSession;
+    const client = window.supabaseClient;
+    const currentUser = localStorage.getItem('currentUser') || 'N/A';
+    if (!client) return null;
+
+    try {
+        const { data: sessions, error } = await client
+            .from('inventarios')
+            .select('*')
+            .eq('tipo', 'localizacao')
+            .eq('status', 'ABERTO')
+            .eq('usuario_responsavel', currentUser)
+            .order('criado_em', { ascending: false })
+            .limit(1);
+
+        if (error) throw error;
+        const session = sessions?.[0];
+        if (!session) return null;
+
+        const { data: rows, error: itemsError } = await client
+            .from('inventarios_itens')
+            .select('*')
+            .eq('inventario_id', session.inventario_id);
+        if (itemsError) throw itemsError;
+
+        const items = {};
+        (rows || []).forEach(row => {
+            const id = String(row.id_interno || '').trim();
+            if (!id) return;
+            items[id] = {
+                id_interno: id,
+                localizacao_estoque: row.local || '',
+                adjustLocal: '',
+                qty: toInventoryLocationNumber(row.saldo_fisico),
+                saldo_sistema: toInventoryLocationNumber(row.saldo_sistema),
+                saldo_fisico: toInventoryLocationNumber(row.saldo_fisico),
+                diferenca: toInventoryLocationNumber(row.diferenca),
+                valor_unitario: parseInventoryMoney(row.valor_unitario),
+                valor_diferenca: parseInventoryMoney(row.valor_diferenca)
+            };
+        });
+
+        inventoryLocationState.countSession = {
+            id: session.inventario_id,
+            user: session.usuario_responsavel || session.criado_por || currentUser,
+            date: session.data_inicio || session.criado_em || getDataHoraBrasil(),
+            status: session.status || 'ABERTO',
+            items
+        };
+        return inventoryLocationState.countSession;
+    } catch (error) {
+        console.warn('[INV_LOCALIZACAO] nao foi possivel carregar sessao aberta:', error);
+        return null;
+    }
+}
+
+async function startInventoryLocationCountSession() {
+    const client = window.supabaseClient;
+    if (!client) {
+        showToast('Supabase nao disponivel.', 'error');
+        return;
+    }
+
+    try {
+        const existing = await loadOpenInventoryLocationSession();
+        if (existing) {
+            showToast('Sessao de contagem retomada.', 'success');
+            updateInventoryLocationResults();
+            return;
+        }
+
+        const currentUser = localStorage.getItem('currentUser') || 'N/A';
+        const sessionId = buildInventoryLocationSessionId();
+        const now = getDataHoraBrasil();
+        const payload = {
+            inventario_id: sessionId,
+            tipo: 'localizacao',
+            filtro_aplicado: inventoryLocationState.location || 'Todos',
+            status: 'ABERTO',
+            criado_por: currentUser,
+            usuario_responsavel: currentUser,
+            data_inicio: now,
+            local: 'LOCALIZACAO_ESTOQUE',
+            observacao: 'Inventario por localizacao com contagem fisica por posicao'
+        };
+
+        const { error } = await client.from('inventarios').insert([payload]);
+        if (error) throw error;
+
+        inventoryLocationState.countSession = {
+            id: sessionId,
+            user: currentUser,
+            date: now,
+            status: 'ABERTO',
+            items: {}
+        };
+        DataClient.invalidateCache?.('inventarios');
+        showToast('Sessao de contagem criada.', 'success');
+        updateInventoryLocationResults();
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao criar sessao:', error);
+        showToast('Erro ao criar sessao: ' + (error.message || error), 'error');
+    }
+}
+
+async function saveInventoryLocationCount(item, countedQty) {
+    const session = inventoryLocationState.countSession;
+    const client = window.supabaseClient;
+    if (!session || !client) return false;
+
+    const existing = getInventoryLocationCountEntry(item.id_interno);
+    const countPayload = buildInventoryLocationCountPayload(item, countedQty, existing?.adjustLocal || inventoryLocationState.adjustmentLocals[String(item.id_interno)] || getInventoryLocationDefaultAdjustmentLocal(item));
+    const auditUser = getInventoryAuditUser();
+    const payload = {
+        inventario_id: session.id,
+        id_interno: item.id_interno,
+        local: countPayload.localizacao_estoque,
+        saldo_sistema: countPayload.saldo_sistema,
+        saldo_fisico: countPayload.saldo_fisico,
+        diferenca: countPayload.diferenca,
+        valor_unitario: countPayload.valor_unitario,
+        valor_diferenca: countPayload.valor_diferenca,
+        auditado_por: auditUser.name,
+        auditado_em: getDataHoraBrasil(),
+        atualizado_em: getDataHoraBrasil()
+    };
+
+    try {
+        const { data: existingRows, error: selectError } = await client
+            .from('inventarios_itens')
+            .select('id')
+            .eq('inventario_id', session.id)
+            .eq('id_interno', item.id_interno);
+        if (selectError) throw selectError;
+
+        const result = (existingRows || []).length
+            ? await client.from('inventarios_itens').update(payload).eq('inventario_id', session.id).eq('id_interno', item.id_interno)
+            : await client.from('inventarios_itens').insert([payload]);
+        if (result.error) throw result.error;
+
+        session.items[String(item.id_interno)] = countPayload;
+        DataClient.invalidateCache?.('inventarios');
+        return true;
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao salvar contagem:', error);
+        showToast('Erro ao salvar contagem: ' + (error.message || error), 'error');
+        return false;
+    }
+}
+
+async function setInventoryLocationPhysicalCount(idInterno, value) {
+    const item = inventoryLocationState.items.find(row => String(row.id_interno) === String(idInterno));
+    if (!item) return;
+    if (!inventoryLocationState.countSession) {
+        showToast('Inicie uma sessao de contagem primeiro.', 'warning');
+        return;
+    }
+
+    const count = Math.max(0, Math.floor(toInventoryLocationNumber(value)));
+    const saved = await saveInventoryLocationCount(item, count);
+    if (saved) {
+        updateInventoryLocationResults();
+        showToast('Contagem salva.', 'success');
+    }
+}
+
+function adjustInventoryLocationPhysicalCount(idInterno, delta) {
+    const current = getInventoryLocationCountEntry(idInterno);
+    const input = document.querySelector(`[data-inventory-location-count-input="${CSS.escape(String(idInterno))}"]`);
+    const baseValue = current ? current.saldo_fisico : input?.value;
+    const nextValue = Math.max(0, Math.floor(toInventoryLocationNumber(baseValue) + toInventoryLocationNumber(delta)));
+    if (input) input.value = nextValue;
+    setInventoryLocationPhysicalCount(idInterno, nextValue);
+}
+
+function setInventoryLocationAdjustmentLocal(idInterno, local) {
+    const session = inventoryLocationState.countSession;
+    if (!session) return;
+    const item = inventoryLocationState.items.find(row => String(row.id_interno) === String(idInterno));
+    if (!item) return;
+    const normalizedLocal = local || getInventoryLocationDefaultAdjustmentLocal(item);
+    inventoryLocationState.adjustmentLocals[String(idInterno)] = normalizedLocal;
+    const entry = getInventoryLocationCountEntry(idInterno);
+    if (entry) entry.adjustLocal = normalizedLocal;
+}
+
+function getInventoryLocationCountSummary() {
+    const entries = Object.values(getInventoryLocationSessionItems());
+    return {
+        counted: entries.length,
+        divergences: entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0).length,
+        units: entries.reduce((sum, entry) => sum + toInventoryLocationNumber(entry.saldo_fisico), 0)
+    };
+}
+
+function getInventoryLocationSessionSummary(items = getFilteredInventoryLocationItems()) {
+    const visibleItems = Array.isArray(items) ? items : [];
+    const total = visibleItems.length;
+    let counted = 0;
+    let divergences = 0;
+
+    visibleItems.forEach(item => {
+        const entry = getInventoryLocationCountEntry(item.id_interno);
+        if (!entry) return;
+        counted++;
+        if (toInventoryLocationNumber(entry.diferenca) !== 0) divergences++;
+    });
+
+    const pending = Math.max(0, total - counted);
+    const progress = total > 0 ? Math.round((counted / total) * 100) : 0;
+    return { total, counted, divergences, pending, progress };
+}
+
+function getInventoryLocationNextPendingId(items = getFilteredInventoryLocationItems()) {
+    const next = (items || []).find(item => !getInventoryLocationCountEntry(item.id_interno));
+    return next ? String(next.id_interno) : '';
+}
+
+function getInventoryLocationCardState(item, nextPendingId = '') {
+    const entry = getInventoryLocationCountEntry(item.id_interno);
+    const isNext = !entry && String(item.id_interno) === String(nextPendingId);
+
+    if (entry) {
+        const diff = toInventoryLocationNumber(entry.diferenca);
+        if (diff === 0) {
+            return { key: 'checked', icon: 'check_circle', label: 'Conferido', detail: 'Sem divergencia' };
+        }
+        return {
+            key: 'divergence',
+            icon: 'warning',
+            label: 'Divergencia',
+            detail: `${diff > 0 ? '+' : ''}${formatInventoryLocationQty(diff)}`
+        };
+    }
+
+    if (isNext) return { key: 'next', icon: 'play_arrow', label: 'Proximo a contar', detail: 'Prioridade' };
+    return { key: 'pending', icon: 'hourglass_empty', label: 'Pendente', detail: 'Aguardando contagem' };
+}
+
+function getInventoryLocationSelectedFilters() {
+    if (Array.isArray(inventoryLocationState.selectedLocations) && inventoryLocationState.selectedLocations.length) {
+        return inventoryLocationState.selectedLocations.filter(value => normalizeInventoryLocationText(value) !== 'TODOS');
+    }
+    const legacyLocation = inventoryLocationState.location || 'Todos';
+    return normalizeInventoryLocationText(legacyLocation) === 'TODOS' ? [] : [legacyLocation];
+}
+
+function inventoryLocationFilterMatches(itemLocation, filterValue) {
+    const location = normalizeInventoryLocationText(itemLocation);
+    const filter = normalizeInventoryLocationText(filterValue);
+    if (!filter || filter === 'TODOS') return true;
+    if (filter.endsWith('.*.*')) return location.startsWith(filter.replace('.*.*', '.'));
+    if (filter.endsWith('.*')) return location.startsWith(filter.replace('.*', '.'));
+    return location === filter;
+}
+
+function getInventoryLocationStatusKey(item) {
+    const entry = getInventoryLocationCountEntry(item?.id_interno);
+    if (!entry) return 'pendente';
+    return toInventoryLocationNumber(entry.diferenca) === 0 ? 'contado' : 'divergencia';
+}
+
+function getInventoryLocationStatusLabel(item) {
+    const status = getInventoryLocationStatusKey(item);
+    if (status === 'contado') return 'Contado';
+    if (status === 'divergencia') return 'Divergencia';
+    return 'Pendente';
+}
+
+function getInventoryLocationFilterLabel(value) {
+    const text = String(value || '').trim();
+    if (!text || normalizeInventoryLocationText(text) === 'TODOS') return 'Todos';
+    if (/^\d+\.\*\.\*$/.test(text)) return `${text} (Grupo ${text.split('.')[0]})`;
+    if (/^\d+\.\d+\.\*$/.test(text)) return `${text} (Grupo ${text.split('.').slice(0, 2).join('.')})`;
+    return text;
+}
+
+function getInventoryLocationFilterOptions() {
+    const locations = Array.from(new Set(inventoryLocationState.items.map(item => item.localizacao_estoque).filter(Boolean)))
+        .sort((a, b) => compareInventoryLocation({ localizacao_estoque: a, id_interno: '' }, { localizacao_estoque: b, id_interno: '' }));
+    const groups = new Set();
+
+    locations.forEach(location => {
+        const parts = normalizeInventoryLocationText(location).split('.');
+        if (/^\d+$/.test(parts[0] || '')) groups.add(`${parts[0]}.*.*`);
+        if (/^\d+$/.test(parts[0] || '') && /^\d+$/.test(parts[1] || '')) groups.add(`${parts[0]}.${parts[1]}.*`);
+    });
+
+    return [
+        { value: 'Todos', label: 'Todos' },
+        ...Array.from(groups)
+            .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
+            .map(value => ({ value, label: getInventoryLocationFilterLabel(value) })),
+        ...locations.map(value => ({ value, label: value }))
+    ];
+}
+
+function renderInventoryLocationFilterChips() {
+    const selected = getInventoryLocationSelectedFilters();
+    const visible = selected.slice(0, 5);
+    const hiddenCount = Math.max(0, selected.length - visible.length);
+
+    if (!selected.length) {
+        return '<div class="inventory-location-chip is-muted">Todas as localiza\u00e7\u00f5es</div>';
+    }
+
+    return `
+        ${visible.map(value => `
+            <button type="button" class="inventory-location-chip" onclick="removeInventoryLocationSelectedFilter('${escapeKitAttribute(String(value).replace(/'/g, "\\'"))}')">
+                <span>${escapeKitAttribute(getInventoryLocationFilterLabel(value))}</span>
+                <i class="material-symbols-rounded">close</i>
+            </button>
+        `).join('')}
+        ${hiddenCount ? `<div class="inventory-location-chip is-more">+${hiddenCount}</div>` : ''}
+    `;
+}
+
+function renderInventoryLocationFiltersPanel() {
+    const selected = getInventoryLocationSelectedFilters();
+    const selectedSet = new Set(selected.map(normalizeInventoryLocationText));
+    const status = inventoryLocationState.status || 'todos';
+
+    return `
+        <section class="invloc-filter-panel" aria-label="Filtros do invent\u00e1rio por localiza\u00e7\u00e3o">
+            <div class="invloc-search-control">
+                <span class="material-symbols-rounded">search</span>
+                <input
+                    id="inventory-location-search-input"
+                    type="search"
+                    value="${escapeKitAttribute(inventoryLocationState.search)}"
+                    placeholder="Buscar por ID, descri\u00e7\u00e3o, SKU ou EAN"
+                    autocomplete="off"
+                    oninput="setInventoryLocationSearch(this.value)"
+                >
+            </div>
+            <label class="invloc-field invloc-location-select">
+                <span>Localiza\u00e7\u00e3o</span>
+                <select id="inventory-location-select" onchange="addInventoryLocationSelectedFilter(this.value); this.value = '';">
+                    <option value="">Selecionar localiza\u00e7\u00e3o ou grupo</option>
+                    ${getInventoryLocationFilterOptions().map(option => `
+                        <option value="${escapeKitAttribute(option.value)}" ${selectedSet.has(normalizeInventoryLocationText(option.value)) ? 'disabled' : ''}>
+                            ${escapeKitAttribute(option.label)}
+                        </option>
+                    `).join('')}
+                </select>
+            </label>
+            <label class="invloc-field">
+                <span>Status</span>
+                <select id="inventory-location-status-select" onchange="setInventoryLocationStatus(this.value)">
+                    <option value="todos" ${status === 'todos' ? 'selected' : ''}>Todos</option>
+                    <option value="pendente" ${status === 'pendente' ? 'selected' : ''}>Pendente</option>
+                    <option value="contado" ${status === 'contado' ? 'selected' : ''}>Contado</option>
+                    <option value="divergencia" ${status === 'divergencia' ? 'selected' : ''}>Divergencia</option>
+                </select>
+            </label>
+            <button type="button" class="invloc-clear-filters" onclick="clearInventoryLocationFilters()">
+                Limpar filtros
+                <span class="material-symbols-rounded">refresh</span>
+            </button>
+            <div class="invloc-selected-locations">
+                <span>Localiza\u00e7\u00f5es selecionadas:</span>
+                <div>${renderInventoryLocationFilterChips()}</div>
+            </div>
+        </section>
+    `;
+}
+
+function getInventoryLocationPageItems(items) {
+    const pageSize = Number(inventoryLocationState.pageSize || 10);
+    const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+    const page = Math.max(1, Math.min(Number(inventoryLocationState.page || 1), totalPages));
+    inventoryLocationState.page = page;
+    return {
+        page,
+        pageSize,
+        totalPages,
+        items: items.slice((page - 1) * pageSize, page * pageSize)
+    };
+}
+
+function renderInventoryLocationProductThumb(item) {
+    const imgUrl = getProductImageUrl(item);
+    if (!imgUrl) {
+        return `<div class="invloc-product-thumb is-empty"><span class="material-symbols-rounded">inventory_2</span></div>`;
+    }
+    return `
+        <div class="invloc-product-thumb">
+            <img src="${escapeKitAttribute(imgUrl)}" alt="${escapeKitAttribute(item.descricao_produto || 'Produto')}" loading="lazy" onerror="this.style.display='none'; this.parentElement.classList.add('is-empty'); this.parentElement.innerHTML='<span class=&quot;material-symbols-rounded&quot;>inventory_2</span>'">
+        </div>
+    `;
+}
+
+function openInventoryLocationProductDetails(idInterno) {
+    const item = inventoryLocationState.items.find(row => String(row.id_interno) === String(idInterno));
+    const product = (appData.products || []).find(row => String(row.id_interno || row.col_A || '') === String(idInterno)) || item;
+    if (!product) {
+        showToast('Produto nao encontrado.', 'warning');
+        return;
+    }
+    renderProductDetails({
+        ...product,
+        id_interno: product.id_interno || item?.id_interno,
+        descricao_completa: product.descricao_completa || item?.descricao_produto,
+        descricao_base: product.descricao_base || item?.descricao_produto,
+        marca: product.marca || item?.marca,
+        sku_fornecedor: product.sku_fornecedor || item?.sku_fornecedor,
+        ean: product.ean || item?.ean,
+        localizacao_estoque: product.localizacao_estoque || item?.localizacao_estoque
+    });
+}
+
+async function saveInventoryLocationRow(idInterno, value, focusNext = false) {
+    await setInventoryLocationPhysicalCount(idInterno, value);
+    if (!focusNext) return;
+
+    setTimeout(() => {
+        const inputs = Array.from(document.querySelectorAll('[data-invloc-count-order]'));
+        const current = document.querySelector(`[data-inventory-location-count-input="${CSS.escape(String(idInterno))}"]`);
+        const currentIndex = inputs.indexOf(current);
+        const nextInput = currentIndex >= 0 ? inputs[currentIndex + 1] : null;
+        if (nextInput) {
+            nextInput.focus();
+            nextInput.select?.();
+        }
+    }, 80);
+}
+
+function toggleInventoryLocationGroup(location) {
+    const key = normalizeInventoryLocationText(location || 'Sem localizacao');
+    inventoryLocationState.collapsedLocations[key] = !inventoryLocationState.collapsedLocations[key];
+    updateInventoryLocationResults();
+}
+
+function renderInventoryLocationTableRow(item, orderIndex = 0) {
+    const countEntry = getInventoryLocationCountEntry(item.id_interno);
+    const countedValue = countEntry ? toInventoryLocationNumber(countEntry.saldo_fisico) : '';
+    const statusKey = getInventoryLocationStatusKey(item);
+    const escapedId = escapeKitAttribute(String(item.id_interno || '').replace(/'/g, "\\'"));
+    const inputId = `invloc-count-${String(item.id_interno || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    const actionLabel = countEntry ? 'Atualizar' : 'Salvar';
+
+    return `
+        <tr class="invloc-row invloc-row-${statusKey}">
+            <td class="invloc-product-cell">
+                ${renderInventoryLocationProductThumb(item)}
+                <div class="invloc-product-copy">
+                    <strong>${escapeKitAttribute(item.descricao_produto || 'Produto sem descricao')}</strong>
+                    <small><b>${escapeKitAttribute(item.marca || 'Sem marca')}</b><span>SKU: ${escapeKitAttribute(item.sku_fornecedor || '-')}</span></small>
+                </div>
+            </td>
+            <td class="invloc-ident-cell">
+                <span><b>ID:</b> ${escapeKitAttribute(item.id_interno || '-')}</span>
+                <span><b>EAN:</b> ${escapeKitAttribute(item.ean || '-')}</span>
+            </td>
+            <td class="invloc-count-cell">
+                <input
+                    id="${escapeKitAttribute(inputId)}"
+                    type="number"
+                    inputmode="numeric"
+                    min="0"
+                    step="1"
+                    value="${countedValue}"
+                    placeholder="0"
+                    data-inventory-location-count-input="${escapeKitAttribute(item.id_interno || '')}"
+                    data-invloc-count-order="${orderIndex}"
+                    onkeydown="if(event.key === 'Enter'){ event.preventDefault(); saveInventoryLocationRow('${escapedId}', this.value, true); }"
+                >
+                <span>unid.</span>
+            </td>
+            <td class="invloc-actions-cell">
+                <div class="invloc-action-stack">
+                    ${countEntry ? `
+                        <em class="invloc-save-status">
+                            <span class="material-symbols-rounded">check_circle</span>
+                            Atualizado
+                        </em>
+                    ` : ''}
+                    <button type="button" class="invloc-row-primary" onclick="saveInventoryLocationRow('${escapedId}', document.getElementById('${escapeKitAttribute(inputId)}')?.value || 0)">
+                        <span class="material-symbols-rounded">save</span>
+                        ${actionLabel}
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+function renderInventoryLocationTableFooter(pageInfo, totalItems) {
+    return `
+        <footer class="invloc-table-footer">
+            <div class="invloc-page-size">
+                <span>Exibir</span>
+                <select onchange="setInventoryLocationPageSize(this.value)">
+                    ${[10, 25, 50].map(size => `<option value="${size}" ${Number(inventoryLocationState.pageSize) === size ? 'selected' : ''}>${size}</option>`).join('')}
+                </select>
+                <span>produtos por p\u00e1gina</span>
+            </div>
+            <div class="invloc-pagination" aria-label="Paginacao">
+                <button type="button" ${pageInfo.page <= 1 ? 'disabled' : ''} onclick="setInventoryLocationPage(${pageInfo.page - 1})">
+                    <span class="material-symbols-rounded">chevron_left</span>
+                </button>
+                ${Array.from({ length: Math.min(pageInfo.totalPages, 5) }, (_, index) => {
+                    const page = Math.max(1, Math.min(pageInfo.totalPages - 4, pageInfo.page - 2)) + index;
+                    if (page > pageInfo.totalPages) return '';
+                    return `<button type="button" class="${page === pageInfo.page ? 'is-active' : ''}" onclick="setInventoryLocationPage(${page})">${page}</button>`;
+                }).join('')}
+                <button type="button" ${pageInfo.page >= pageInfo.totalPages ? 'disabled' : ''} onclick="setInventoryLocationPage(${pageInfo.page + 1})">
+                    <span class="material-symbols-rounded">chevron_right</span>
+                </button>
+                <span>${totalItems} produto${totalItems === 1 ? '' : 's'}</span>
+            </div>
+        </footer>
+    `;
+}
+
+function renderInventoryLocationGroups() {
+    if (inventoryLocationState.loading) {
+        return `
+            <div class="inventory-location-empty">
+                <span class="material-symbols-rounded">hourglass_top</span>
+                <strong>Carregando invent\u00e1rio por localiza\u00e7\u00e3o</strong>
+            </div>
+        `;
+    }
+
+    if (inventoryLocationState.error) {
+        return `
+            <div class="inventory-location-empty error">
+                <span class="material-symbols-rounded">warning</span>
+                <strong>Falha ao carregar consulta</strong>
+                <small>${escapeKitAttribute(inventoryLocationState.error)}</small>
+                <button type="button" onclick="refreshInventoryLocationData()">Tentar novamente</button>
+            </div>
+        `;
+    }
+
+    const filtered = getFilteredInventoryLocationItems();
+    if (!filtered.length) {
+        return `
+            <div class="inventory-location-empty">
+                <span class="material-symbols-rounded">search_off</span>
+                <strong>Nenhum produto encontrado</strong>
+            </div>
+        `;
+    }
+
+    const selectedCount = getInventoryLocationSelectedFilters().length;
+    const groups = Array.from(groupInventoryLocationItems(filtered).entries());
+    let rowOrder = 0;
+
+    return `
+        <section class="invloc-products-head">
+            <div>
+                <h2>Produtos por localiza\u00e7\u00e3o <span>${selectedCount ? `${selectedCount} localiza\u00e7\u00e3o${selectedCount === 1 ? '' : 'es'}` : `${filtered.length} produtos`}</span></h2>
+                <p>Exibindo produtos das localiza\u00e7\u00f5es selecionadas.</p>
+            </div>
+            <div class="invloc-products-tools">
+                <label>
+                    <span>Ordenar por:</span>
+                    <select onchange="setInventoryLocationSort(this.value)">
+                        <option value="location_az" ${inventoryLocationState.sort === 'location_az' ? 'selected' : ''}>Localizacao (A-Z)</option>
+                    </select>
+                </label>
+                <div class="invloc-view-toggle" aria-label="Modo de visualizacao">
+                    <button type="button" class="is-active" aria-label="Tabela"><span class="material-symbols-rounded">format_list_bulleted</span></button>
+                    <button type="button" aria-label="Grade" disabled><span class="material-symbols-rounded">grid_view</span></button>
+                </div>
+            </div>
+        </section>
+
+        <section class="invloc-location-groups" aria-label="Produtos agrupados por localizacao">
+            ${groups.map(([location, items]) => {
+                const key = normalizeInventoryLocationText(location || 'Sem localizacao');
+                const isCollapsed = !!inventoryLocationState.collapsedLocations[key];
+                const counted = items.filter(item => getInventoryLocationCountEntry(item.id_interno)).length;
+                const rows = items.map(item => renderInventoryLocationTableRow(item, rowOrder++)).join('');
+
+                return `
+                    <article class="invloc-location-group ${isCollapsed ? 'is-collapsed' : ''}">
+                        <button type="button" class="invloc-location-group-head" onclick="toggleInventoryLocationGroup('${escapeKitAttribute(String(location).replace(/'/g, "\\'"))}')">
+                            <span class="material-symbols-rounded invloc-location-pin">location_on</span>
+                            <strong>LOCALIZA\u00c7\u00c3O <b>${escapeKitAttribute(location || 'Sem localizacao')}</b></strong>
+                            <small>${items.length} produto${items.length === 1 ? '' : 's'}</small>
+                            <em>${counted} de ${items.length} contados</em>
+                            <i class="material-symbols-rounded">expand_more</i>
+                        </button>
+                        ${isCollapsed ? '' : `
+                            <div class="invloc-table-shell">
+                                <table class="invloc-table">
+                                    <colgroup>
+                                        <col class="invloc-col-product">
+                                        <col class="invloc-col-ident">
+                                        <col class="invloc-col-count">
+                                        <col class="invloc-col-actions">
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th>Identifica\u00e7\u00e3o</th>
+                                            <th>Contagem f\u00edsica</th>
+                                            <th>A\u00e7\u00e3o</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        `}
+                    </article>
+                `;
+            }).join('')}
+        </section>
+    `;
+}
+
+function renderInventoryLocationSessionPanel() {
+    const session = inventoryLocationState.countSession;
+    const visibleSummary = getInventoryLocationSessionSummary();
+
+    if (!session) {
+        return `
+            <section class="inventory-location-session-panel">
+                <div class="inventory-location-session-empty-copy">
+                    <strong>Sessao de contagem</strong>
+                    <span>Crie uma sessao para informar a quantidade fisica e apurar divergencias.</span>
+                </div>
+                <button type="button" class="inventory-location-session-primary" onclick="startInventoryLocationCountSession()">
+                    <span class="material-symbols-rounded">add_task</span>
+                    Criar sess\u00e3o de contagem
+                </button>
+            </section>
+        `;
+    }
+
+    const selectedLocation = inventoryLocationState.location || 'Todos';
+    const progress = Math.max(0, Math.min(100, visibleSummary.progress));
+
+    return `
+        <section class="inventory-location-session-panel is-active">
+            <div class="inventory-location-session-main">
+                <div class="inventory-location-session-title">
+                    <strong>Sessao ${escapeKitAttribute(session.id)}</strong>
+                    <span>Inicio: ${escapeKitAttribute(formatInventoryDateTime(session.date))}</span>
+                    <span>Localizacao: ${escapeKitAttribute(selectedLocation)}</span>
+                </div>
+                <div class="inventory-location-session-metrics" aria-label="Resumo da sessao">
+                    <div><small>Total produtos</small><strong>${visibleSummary.total}</strong></div>
+                    <div><small>Conferidos</small><strong>${visibleSummary.counted}</strong></div>
+                    <div><small>Divergencias</small><strong>${visibleSummary.divergences}</strong></div>
+                    <div><small>Pendentes</small><strong>${visibleSummary.pending}</strong></div>
+                    <div><small>Progresso</small><strong>${progress}%</strong></div>
+                </div>
+                <div class="inventory-location-progress" aria-label="Progresso ${progress}%">
+                    <span style="width: ${progress}%"></span>
+                </div>
+            </div>
+            <div class="inventory-location-session-actions">
+                <button type="button" class="secondary" onclick="finishInventoryLocationCountSession(false)">
+                    Finalizar sem ajustar
+                </button>
+                <button type="button" onclick="finishInventoryLocationCountSession(true)">
+                    <span class="material-symbols-rounded">tune</span>
+                    Aplicar ajustes
+                </button>
+                <button type="button" class="danger" onclick="confirmDeleteInventoryLocationSession()">
+                    <span class="material-symbols-rounded">delete</span>
+                    Excluir sessao
+                </button>
+            </div>
+        </section>
+    `;
+}
+
+async function confirmDeleteInventoryLocationSession() {
+    const session = inventoryLocationState.countSession;
+    if (!session) {
+        showToast('Nenhuma sessao de contagem aberta.', 'warning');
+        return;
+    }
+
+    const confirmed = await showAppConfirm({
+        title: 'Excluir sessao',
+        message: 'Deseja excluir esta sessao de inventario?',
+        detail: 'Esta acao remove apenas esta sessao de contagem e seus itens, sem alterar estoque.',
+        confirmLabel: 'Excluir sessao',
+        cancelLabel: 'Cancelar',
+        danger: true
+    });
+    if (!confirmed) return;
+
+    const client = window.supabaseClient;
+    if (!client) {
+        showToast('Supabase nao disponivel.', 'error');
+        return;
+    }
+
+    try {
+        const { error: itemsError } = await client
+            .from('inventarios_itens')
+            .delete()
+            .eq('inventario_id', session.id);
+        if (itemsError) throw itemsError;
+
+        const { error: sessionError } = await client
+            .from('inventarios')
+            .delete()
+            .eq('inventario_id', session.id);
+        if (sessionError) throw sessionError;
+
+        inventoryLocationState.countSession = null;
+        inventoryLocationState.adjustmentLocals = {};
+        DataClient.invalidateCache?.('inventarios');
+        updateInventoryLocationResults();
+        showToast('Sessao excluida sem alterar estoque.', 'success');
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao excluir sessao:', error);
+        showToast('Erro ao excluir sessao: ' + (error.message || error), 'error');
+    }
+}
+
+async function finishInventoryLocationCountSession(applyAdjustments = true) {
+    if (isFinalizing) return;
+    const session = inventoryLocationState.countSession;
+    if (!session) {
+        showToast('Nenhuma sessao de contagem aberta.', 'warning');
+        return;
+    }
+
+    const entries = Object.values(getInventoryLocationSessionItems());
+    if (!entries.length) {
+        showToast('Informe ao menos uma contagem fisica.', 'warning');
+        return;
+    }
+
+    const divergences = entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0);
+    const confirmed = await showAppConfirm({
+        title: applyAdjustments ? 'Aplicar ajustes do inventario?' : 'Finalizar sem ajustar estoque?',
+        message: applyAdjustments
+            ? 'As divergencias contadas serao aplicadas ao estoque e registradas em movimentos.'
+            : 'A sessao sera fechada somente como registro de contagem, sem alterar estoque.',
+        summary: `Produtos contados: ${entries.length}\nDivergencias: ${divergences.length}`,
+        confirmLabel: applyAdjustments ? 'Aplicar ajustes' : 'Finalizar sem ajustar',
+        cancelLabel: 'Cancelar',
+        danger: applyAdjustments && divergences.length > 0
+    });
+    if (!confirmed) return;
+
+    const client = window.supabaseClient;
+    if (!client) {
+        showToast('Supabase nao disponivel.', 'error');
+        return;
+    }
+
+    isFinalizing = true;
+    try {
+        const user = localStorage.getItem('currentUser') || session.user || 'N/A';
+        let total_itens = 0;
+        let total_itens_contados = 0;
+        let total_divergencias = 0;
+        let valor_ajuste_positivo = 0;
+        let valor_ajuste_negativo = 0;
+
+        if (applyAdjustments) {
+            let step = 0;
+            for (const entry of entries) {
+                step++;
+                const diferenca = toInventoryLocationNumber(entry.diferenca);
+                total_itens += toInventoryLocationNumber(entry.saldo_sistema);
+                total_itens_contados += toInventoryLocationNumber(entry.saldo_fisico);
+                if (diferenca === 0) continue;
+
+                total_divergencias++;
+                const adjustmentValue = Math.abs(diferenca) * toInventoryLocationNumber(entry.valor_unitario);
+                if (diferenca > 0) valor_ajuste_positivo += adjustmentValue;
+                else valor_ajuste_negativo += adjustmentValue;
+
+                const operacao = diferenca > 0 ? 'soma' : 'subtrai';
+                const adjustLocal = entry.adjustLocal || 'TERREO';
+                showToast(`Aplicando ajuste ${step}/${entries.length}...`, 'info');
+                await applyStockChangeWithRequiredMovement({
+                    idInterno: entry.id_interno,
+                    local: adjustLocal,
+                    operacao,
+                    quantidade: Math.abs(diferenca),
+                    movPayload: {
+                        tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO',
+                        id_interno: entry.id_interno,
+                        local_origem: diferenca < 0 ? adjustLocal : null,
+                        local_destino: diferenca > 0 ? adjustLocal : null,
+                        quantidade: Math.abs(diferenca),
+                        usuario: user,
+                        origem: 'APP_INVENTARIO',
+                        observacao: `Inventario por localizacao ${session.id} | Posicao ${entry.localizacao_estoque || '-'}`
+                    },
+                    contextLabel: `ajuste do inventario por localizacao ${session.id}`
+                });
+            }
+        } else {
+            entries.forEach(entry => {
+                const diferenca = toInventoryLocationNumber(entry.diferenca);
+                total_itens += toInventoryLocationNumber(entry.saldo_sistema);
+                total_itens_contados += toInventoryLocationNumber(entry.saldo_fisico);
+                if (diferenca !== 0) total_divergencias++;
+                const adjustmentValue = Math.abs(diferenca) * toInventoryLocationNumber(entry.valor_unitario);
+                if (diferenca > 0) valor_ajuste_positivo += adjustmentValue;
+                if (diferenca < 0) valor_ajuste_negativo += adjustmentValue;
+            });
+        }
+
+        const { error } = await client.from('inventarios').update({
+            status: 'FECHADO',
+            data_fim: getDataHoraBrasil(),
+            atualizado_em: getDataHoraBrasil(),
+            total_skus: entries.length,
+            total_itens,
+            total_itens_contados,
+            total_divergencias,
+            valor_ajuste_positivo,
+            valor_ajuste_negativo,
+            observacao: applyAdjustments
+                ? 'Inventario por localizacao finalizado com ajustes aplicados'
+                : 'Inventario por localizacao finalizado sem aplicar ajustes'
+        }).eq('inventario_id', session.id);
+        if (error) throw error;
+
+        inventoryLocationState.countSession = null;
+        DataClient.invalidateCache?.('inventarios');
+        DataClient.invalidateCache?.('movimentos');
+        await loadInventoryLocationData(true);
+        updateInventoryLocationResults();
+        showToast(applyAdjustments ? 'Ajustes aplicados e sessao finalizada.' : 'Sessao finalizada sem ajuste.', 'success');
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao finalizar sessao:', error);
+        showToast('Erro ao finalizar sessao: ' + (error.message || error), 'error');
+    } finally {
+        isFinalizing = false;
+    }
+}
+
+function renderInventoryLocationCard(item, nextPendingId = '') {
+    const isNegativeStock = toInventoryLocationNumber(item.saldo_total) < 0;
+    const locais = Array.isArray(item.locais) ? item.locais : [];
+    const session = inventoryLocationState.countSession;
+    const countEntry = getInventoryLocationCountEntry(item.id_interno);
+    const countedValue = countEntry ? toInventoryLocationNumber(countEntry.saldo_fisico) : '';
+    const diffValue = countEntry ? toInventoryLocationNumber(countEntry.diferenca) : null;
+    const diffClass = diffValue === null ? '' : diffValue === 0 ? 'is-ok' : diffValue > 0 ? 'is-positive' : 'is-negative';
+    const state = getInventoryLocationCardState(item, nextPendingId);
+    const adjustmentLocal = getInventoryLocationAdjustmentLocal(item);
+    const escapedId = escapeKitAttribute(String(item.id_interno || '').replace(/'/g, "\\'"));
+    return `
+        <article class="inventory-location-card inventory-location-card-${state.key} ${isNegativeStock ? 'has-negative-stock' : ''}">
+            <div class="inventory-location-status-badge">
+                <span class="material-symbols-rounded">${state.icon}</span>
+                <strong>${state.label}</strong>
+                <small>${state.detail}</small>
+            </div>
+            <h3>${escapeKitAttribute(item.descricao_produto)}</h3>
+            ${item.marca ? `<p class="inventory-location-brand">${escapeKitAttribute(item.marca)}</p>` : ''}
+            <div class="inventory-location-meta">
+                <span><b>ID:</b><em>${escapeKitAttribute(item.id_interno || '-')}</em></span>
+                <span><b>SKU:</b><em>${escapeKitAttribute(item.sku_fornecedor || '-')}</em></span>
+                <span><b>EAN:</b><em>${escapeKitAttribute(item.ean || '-')}</em></span>
+            </div>
+            <div class="inventory-location-highlight">
+                <span>Localizacao</span>
+                <strong>${escapeKitAttribute(item.localizacao_estoque || '-')}</strong>
+            </div>
+            <div class="inventory-location-stock">
+                <div class="total ${isNegativeStock ? 'negative' : ''}">
+                    <span>Saldo Total</span>
+                    <strong>${formatInventoryLocationQty(item.saldo_total)}</strong>
+                </div>
+                <div>
+                    <span>Disponivel</span>
+                    <strong>${formatInventoryLocationQty(item.saldo_disponivel)}</strong>
+                </div>
+                <div>
+                    <span>Reservado</span>
+                    <strong>${formatInventoryLocationQty(item.saldo_reservado)}</strong>
+                </div>
+            </div>
+            <div class="inventory-location-distribution">
+                <strong>Distribuicao por estoque</strong>
+                ${locais.length ? locais.map(local => `
+                    <div class="inventory-location-distribution-row ${toInventoryLocationNumber(local.saldo_total) < 0 ? 'negative' : ''}">
+                        <span>${escapeKitAttribute(local.local || '-')}</span>
+                        <small>Total ${formatInventoryLocationQty(local.saldo_total)} | Disp. ${formatInventoryLocationQty(local.saldo_disponivel)} | Res. ${formatInventoryLocationQty(local.saldo_reservado)}</small>
+                    </div>
+                `).join('') : `
+                    <div class="inventory-location-distribution-row">
+                        <span>Sem local</span>
+                        <small>Total 0 | Disp. 0 | Res. 0</small>
+                    </div>
+                `}
+            </div>
+            ${countEntry ? `
+                <div class="inventory-location-result-strip ${diffClass}">
+                    <strong>${diffValue === 0 ? 'Conferido sem divergencia' : `Divergencia ${diffValue > 0 ? '+' : ''}${formatInventoryLocationQty(diffValue)}`}</strong>
+                    <span>Sistema: ${formatInventoryLocationQty(countEntry.saldo_sistema)} | Fisica: ${formatInventoryLocationQty(countEntry.saldo_fisico)} | Diferenca: ${diffValue > 0 ? '+' : ''}${formatInventoryLocationQty(diffValue)}</span>
+                </div>
+            ` : (state.key === 'next' ? `
+                <div class="inventory-location-result-strip is-next">
+                    <strong>Proximo produto a contar</strong>
+                    <span>Informe a quantidade fisica para avancar o destaque.</span>
+                </div>
+            ` : '')}
+            ${session ? `
+                <div class="inventory-location-count-box ${diffClass}">
+                    <div class="inventory-location-count-head">
+                        <strong>Contagem fisica</strong>
+                        <span>${countEntry ? `Diferenca ${diffValue > 0 ? '+' : ''}${formatInventoryLocationQty(diffValue)}` : 'Pendente'}</span>
+                    </div>
+                    <div class="inventory-location-count-grid">
+                        <label>
+                            <span>Quantidade fisica</span>
+                            <div class="inventory-location-qty-stepper">
+                                <button type="button" onclick="adjustInventoryLocationPhysicalCount('${escapedId}', -1)" aria-label="Diminuir quantidade">-</button>
+                                <input
+                                    type="number"
+                                    inputmode="numeric"
+                                    min="0"
+                                    step="1"
+                                    value="${countedValue}"
+                                    placeholder="0"
+                                    data-inventory-location-count-input="${escapeKitAttribute(item.id_interno || '')}"
+                                    onchange="setInventoryLocationPhysicalCount('${escapedId}', this.value)"
+                                    onkeydown="if(event.key === 'Enter'){ event.preventDefault(); this.blur(); }"
+                                >
+                                <button type="button" onclick="adjustInventoryLocationPhysicalCount('${escapedId}', 1)" aria-label="Aumentar quantidade">+</button>
+                            </div>
+                        </label>
+                        <label>
+                            <span>Aplicar ajuste em</span>
+                            <select onchange="setInventoryLocationAdjustmentLocal('${escapedId}', this.value)">
+                                ${(locais.length ? locais : [{ local: 'TERREO' }]).map(local => `
+                                    <option value="${escapeKitAttribute(local.local || 'TERREO')}" ${normalizeLocal(local.local || 'TERREO') === normalizeLocal(adjustmentLocal) ? 'selected' : ''}>
+                                        ${escapeKitAttribute(local.local || 'TERREO')}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            ` : ''}
+        </article>
+    `;
+}
+
+function updateInventoryLocationResults() {
+    const results = document.getElementById('inventory-location-results');
+    const filters = document.getElementById('inventory-location-filters');
+    const count = document.getElementById('inventory-location-count');
+    const input = document.getElementById('inventory-location-search-input');
+    const sessionPanel = document.getElementById('inventory-location-session-panel');
+
+    if (input && input.value !== inventoryLocationState.search) input.value = inventoryLocationState.search;
+    if (sessionPanel) sessionPanel.innerHTML = '';
+    if (results) results.innerHTML = renderInventoryLocationGroups();
+    if (filters) filters.innerHTML = renderInventoryLocationFiltersPanel();
+    if (count) {
+        const total = getFilteredInventoryLocationItems().length;
+        count.textContent = `${total} produto${total === 1 ? '' : 's'}`;
+    }
+    scheduleMaterialIconFallbacks(document);
+}
+
+function setInventoryLocationSearch(value) {
+    inventoryLocationState.search = String(value || '');
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationFilter(value) {
+    inventoryLocationState.location = value || 'Todos';
+    inventoryLocationState.selectedLocations = normalizeInventoryLocationText(value) === 'TODOS' ? [] : [value];
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationSelectedFilters(values = []) {
+    const cleaned = Array.from(new Set((values || []).filter(Boolean)));
+    inventoryLocationState.selectedLocations = cleaned.some(value => normalizeInventoryLocationText(value) === 'TODOS')
+        ? []
+        : cleaned;
+    inventoryLocationState.location = inventoryLocationState.selectedLocations.length ? inventoryLocationState.selectedLocations.join(', ') : 'Todos';
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function addInventoryLocationSelectedFilter(value) {
+    if (!value) return;
+    if (normalizeInventoryLocationText(value) === 'TODOS') {
+        setInventoryLocationSelectedFilters([]);
+        return;
+    }
+    setInventoryLocationSelectedFilters([...getInventoryLocationSelectedFilters(), value]);
+}
+
+function removeInventoryLocationSelectedFilter(value) {
+    inventoryLocationState.selectedLocations = getInventoryLocationSelectedFilters()
+        .filter(current => normalizeInventoryLocationText(current) !== normalizeInventoryLocationText(value));
+    inventoryLocationState.location = inventoryLocationState.selectedLocations.length ? inventoryLocationState.selectedLocations.join(', ') : 'Todos';
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationStatus(value) {
+    inventoryLocationState.status = value || 'todos';
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationPage(page) {
+    inventoryLocationState.page = Math.max(1, Number(page || 1));
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationPageSize(value) {
+    inventoryLocationState.pageSize = Math.max(1, Number(value || 10));
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function setInventoryLocationSort(value) {
+    inventoryLocationState.sort = value || 'location_az';
+    updateInventoryLocationResults();
+}
+
+function clearInventoryLocationFilters() {
+    inventoryLocationState.search = '';
+    inventoryLocationState.location = 'Todos';
+    inventoryLocationState.selectedLocations = [];
+    inventoryLocationState.status = 'todos';
+    inventoryLocationState.page = 1;
+    updateInventoryLocationResults();
+}
+
+function getInventoryLocationDistributionText(item) {
+    const locais = Array.isArray(item?.locais) ? item.locais : [];
+    if (!locais.length) return 'Sem local: Total 0 | Disp. 0 | Res. 0';
+
+    return locais.map(local => {
+        const name = local.local || 'Sem local';
+        return `${name}: Total ${formatInventoryLocationQty(local.saldo_total)} | Disp. ${formatInventoryLocationQty(local.saldo_disponivel)} | Res. ${formatInventoryLocationQty(local.saldo_reservado)}`;
+    }).join('\n');
+}
+
+async function generateInventoryLocationPDF() {
+    try {
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) throw new Error('jsPDF nao carregado');
+
+        if (!inventoryLocationState.items.length) {
+            await loadInventoryLocationData(true);
+        }
+
+        const items = getFilteredInventoryLocationItems();
+        if (!items.length) {
+            showToast('Nenhum produto para gerar PDF.', 'warning');
+            return;
+        }
+
+        showToast('Gerando PDF por setor...', 'info');
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 6;
+        const headerBottomY = 17;
+        const generatedAt = formatDateTimeBR(new Date());
+        const groups = Array.from(groupInventoryLocationItems(items).entries());
+
+        const drawHeader = () => {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(17, 24, 39);
+            doc.text('Inventario por Localizacao', margin, 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6);
+            doc.setTextColor(75, 85, 99);
+            doc.text(`Gerado: ${generatedAt}`, margin, 12);
+            const filterText = `Filtro: ${inventoryLocationState.location || 'Todos'} | Busca: ${inventoryLocationState.search || '-'}`;
+            doc.text(filterText, pageWidth - margin, 12, { align: 'right' });
+            doc.setDrawColor(229, 231, 235);
+            doc.line(margin, 14, pageWidth - margin, 14);
+        };
+
+        drawHeader();
+        let cursorY = headerBottomY;
+
+        groups.forEach(([location, groupItems], groupIndex) => {
+            const minSpaceForGroupStart = 24;
+            if (groupIndex > 0 && cursorY > pageHeight - minSpaceForGroupStart) {
+                doc.addPage();
+                drawHeader();
+                cursorY = headerBottomY;
+            }
+
+            doc.setFillColor(239, 246, 255);
+            doc.setDrawColor(191, 219, 254);
+            doc.roundedRect(margin, cursorY - 4, pageWidth - (margin * 2), 6, 1, 1, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(30, 64, 175);
+            doc.text(String(location || 'Sem localizacao'), margin + 3, cursorY);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6);
+            doc.setTextColor(75, 85, 99);
+            doc.text(`${groupItems.length} produto${groupItems.length === 1 ? '' : 's'}`, pageWidth - margin - 3, cursorY, { align: 'right' });
+            cursorY += 4;
+
+            doc.autoTable({
+                startY: cursorY,
+                margin: { top: headerBottomY, left: margin, right: margin },
+                head: [[
+                    'ID',
+                    'Descricao',
+                    'SKU / EAN',
+                    'Sistema',
+                    'Fisica',
+                    'Dif.',
+                    'Obs.'
+                ]],
+                body: groupItems.map(item => [
+                    item.id_interno || '-',
+                    [item.descricao_produto || '-', item.marca || ''].filter(Boolean).join(' | '),
+                    [item.sku_fornecedor || '-', item.ean || '-'].join('\n'),
+                    formatInventoryLocationQty(item.saldo_total),
+                    '',
+                    '',
+                    ''
+                ]),
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 6,
+                    cellPadding: 0.7,
+                    overflow: 'linebreak',
+                    valign: 'top',
+                    lineColor: [229, 231, 235],
+                    lineWidth: 0.1
+                },
+                headStyles: {
+                    fillColor: [17, 24, 39],
+                    textColor: 255,
+                    fontStyle: 'bold',
+                    fontSize: 6,
+                    minCellHeight: 3.8,
+                    cellPadding: 0.7
+                },
+                alternateRowStyles: { fillColor: [249, 250, 251] },
+                columnStyles: {
+                    0: { cellWidth: 20 },
+                    1: { cellWidth: 78 },
+                    2: { cellWidth: 32 },
+                    3: { cellWidth: 15, halign: 'right' },
+                    4: { cellWidth: 16 },
+                    5: { cellWidth: 11 },
+                    6: { cellWidth: 26 }
+                },
+                didParseCell: data => {
+                    if (data.section !== 'body') return;
+                    const total = toInventoryLocationNumber(groupItems[data.row.index]?.saldo_total);
+                    if (total < 0 && data.column.index === 3) {
+                        data.cell.styles.textColor = [185, 28, 28];
+                        data.cell.styles.fillColor = [254, 242, 242];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                },
+                didDrawPage: data => {
+                    drawHeader();
+                }
+            });
+
+            cursorY = (doc.lastAutoTable?.finalY || cursorY) + 5;
+        });
+
+        const fileDate = new Date().toISOString().slice(0, 10);
+        doc.save(`inventario-por-localizacao-${fileDate}.pdf`);
+        showToast('PDF gerado com sucesso.', 'success');
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao gerar PDF:', error);
+        showToast('Falha ao gerar PDF: ' + (error.message || error), 'error');
+    }
+}
+
+async function refreshInventoryLocationData() {
+    inventoryLocationState.loading = true;
+    inventoryLocationState.error = '';
+    updateInventoryLocationResults();
+
+    try {
+        await loadInventoryLocationData(true);
+    } catch (error) {
+        console.error('[INV_LOCALIZACAO] erro ao carregar consulta:', error);
+        inventoryLocationState.error = error.message || String(error);
+    } finally {
+        inventoryLocationState.loading = false;
+        updateInventoryLocationResults();
+    }
+}
+
+async function renderInventarioLocalizacao(push = true) {
+    stopScanner();
+    currentScreen = 'inventario-localizacao';
+    if (push) pushNav('inventario-localizacao');
+    inventoryLocationState.countSession = null;
+    inventoryLocationState.adjustmentLocals = {};
+    document.body.style.overflow = '';
+    document.body.style.overflowY = 'auto';
+    document.documentElement.style.overflowY = 'auto';
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal inventory-location-screen">
+            <main class="inventory-location-main">
+                <header class="invloc-hero">
+                    <div class="invloc-title-wrap">
+                        <button type="button" class="invloc-back back-button-standard" onclick="renderInventarioSubMenu()" aria-label="Voltar">
+                            ${getBackButtonStandardIconHTML()}
+                        </button>
+                        <div>
+                            <h1>Invent\u00e1rio por <span>Localiza\u00e7\u00e3o</span></h1>
+                            <p>Consulte os produtos por localiza\u00e7\u00e3o e informe a contagem f\u00edsica do invent\u00e1rio.</p>
+                        </div>
+                    </div>
+                    <div class="invloc-hero-actions">
+                        <button type="button" class="invloc-btn secondary" onclick="generateInventoryLocationPDF()">
+                            <span class="material-symbols-rounded">picture_as_pdf</span>
+                            Gerar PDF por setor
+                        </button>
+                        <button type="button" class="invloc-btn primary" onclick="startInventoryLocationCountSession()">
+                            <span class="material-symbols-rounded">add_circle</span>
+                            Criar sess\u00e3o de contagem
+                        </button>
+                    </div>
+                </header>
+
+                <section id="inventory-location-filters">
+                    ${renderInventoryLocationFiltersPanel()}
+                </section>
+
+                <section id="inventory-location-session-panel">
+                </section>
+
+                <section id="inventory-location-results" class="inventory-location-results">
+                    ${renderInventoryLocationGroups()}
+                </section>
+            </main>
+        </div>
+    `;
+
+    scheduleMaterialIconFallbacks(document);
+
+    if (!inventoryLocationState.items.length && !inventoryLocationState.loading) {
+        refreshInventoryLocationData();
+    } else {
+        updateInventoryLocationResults();
+    }
 }
 
 let inventoryHistoryFilter = 'todos';
@@ -9839,11 +11386,14 @@ function renderInventoryHistoryCard(inv, options = {}) {
 
 async function renderInventarioHistory() {
     const currentUser = localStorage.getItem('currentUser');
+    document.body.style.overflow = '';
+    document.body.style.overflowY = 'auto';
+    document.documentElement.style.overflowY = 'auto';
     
     // UI de Carregamento
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in inventory-history-screen">
-            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+            ${getInventoryModuleHeaderHTML('Hist\u00f3rico', 'renderInventarioSubMenu()')}
             <main class="inventory-history-shell">
                 <div class="inventory-history-loading">
                     <div class="loading-spinner"></div>
@@ -9874,7 +11424,7 @@ async function renderInventarioHistory() {
 
         app.innerHTML = `
             <div class="dashboard-screen internal fade-in inventory-history-screen">
-                ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
+                ${getInventoryModuleHeaderHTML('Hist\u00f3rico', 'renderInventarioSubMenu()')}
                 <main class="inventory-history-shell">
                     <header class="inventory-history-header">
                         <h1>HISTÃƒÆ’Ã¢â‚¬Å“RICO DE INVENTÃƒÆ’Ã‚ÂRIO</h1>
@@ -10352,6 +11902,15 @@ function clearProductSearch() {
     setTimeout(() => document.getElementById('search-input')?.focus(), 80);
 }
 
+function clearProductSearchText() {
+    const input = document.getElementById('search-input');
+    if (!input) return;
+    input.value = '';
+    debouncedSearch();
+    updateProductSearchStatus('');
+    setTimeout(() => input.focus(), 30);
+}
+
 function renderProductFilterBottomSheet() {
     const existingSheet = document.getElementById('product-filter-sheet');
     const html = `
@@ -10407,6 +11966,7 @@ function renderProductFilterBottomSheet() {
 window.openProductFilterSheet = openProductFilterSheet;
 window.closeProductFilterSheet = closeProductFilterSheet;
 window.clearProductSearch = clearProductSearch;
+window.clearProductSearchText = clearProductSearchText;
 
 async function renderSearchScreen(push = true) {
     if (currentScreen === 'search' && document.getElementById('search-input')) {
@@ -10429,7 +11989,7 @@ async function renderSearchScreen(push = true) {
     
     app.innerHTML = `
         <div class="dashboard-screen fade-in internal product-search-screen">
-            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}
+            ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderProductSubMenu()')}
             
             <main class="container product-search-center">
                 <div id="scanner-container" class="hidden">
@@ -10482,7 +12042,7 @@ let lastScanTime = 0;
 let isScannerStarting = false;
 let isScannerScanProcessing = false;
 
-async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false) {
+async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false, isInventoryLocation = false) {
     if (isScannerStarting) return;
     isScannerStarting = true;
 
@@ -10511,6 +12071,10 @@ async function startScanner(isPicking = false, isConference = false, isInventory
         containerId = 'scanner-container-edit';
         readerId = 'reader-edit';
         inputId = 'edit-search-input';
+    } else if (isInventoryLocation) {
+        containerId = 'scanner-container-inv-location';
+        readerId = 'reader-inv-location';
+        inputId = 'inventory-location-search-input';
     }
 
     const scannerContainer = document.getElementById(containerId);
@@ -10597,9 +12161,21 @@ async function startScanner(isPicking = false, isConference = false, isInventory
                 else if (isConference) context = 'conference';
                 else if (isGarantia) context = 'garantia';
                 else if (isEdit) context = 'edit';
+                else if (isInventoryLocation) context = 'inventory-location';
 
                 let product = null;
                 try {
+                    if (isInventoryLocation) {
+                        const input = document.getElementById('inventory-location-search-input');
+                        if (input) {
+                            input.value = decodedText;
+                            input.removeAttribute('inputmode');
+                        }
+                        await stopScanner();
+                        setInventoryLocationSearch(decodedText);
+                        return;
+                    }
+
                     product = await handleProductScan(decodedText, context);
                 
 
@@ -10717,7 +12293,7 @@ async function stopScanner() {
     document.body.classList.remove('scanner-torch-on');
 
     // Restore inputmode
-    const inputs = ['search-input', 'pick-ean-input', 'pack-ean-input', 'garantia-search-input', 'edit-search-input'];
+    const inputs = ['search-input', 'pick-ean-input', 'pack-ean-input', 'garantia-search-input', 'edit-search-input', 'inventory-location-search-input'];
     inputs.forEach(id => {
         const input = document.getElementById(id);
         if (input) input.removeAttribute('inputmode');
@@ -10729,7 +12305,8 @@ async function stopScanner() {
         'scanner-container-pick',
         'scanner-container-pack',
         'scanner-container-garantia',
-        'scanner-container-edit'
+        'scanner-container-edit',
+        'scanner-container-inv-location'
     ];
 
     containers.forEach(id => {
@@ -11059,8 +12636,6 @@ function resetProductSearchScroll() {
         const resultsContainer = document.getElementById('search-results');
         if (resultsContainer) resultsContainer.scrollTop = 0;
 
-        const sidePanel = document.querySelector('.product-side-card.product-side-filters');
-        if (sidePanel) sidePanel.scrollTop = 0;
     };
 
     reset();
@@ -11123,9 +12698,9 @@ function getSearchCardSellableLocationQty(productId, filterKey) {
 function renderSearchProductSellableLocations(product) {
     const productId = product?.id_interno || product?.col_A;
     const locations = [
-        { key: 'TERREO', label: 'TÃƒÆ’Ã¢â‚¬Â°RREO' },
-        { key: 'PRIMEIRO_ANDAR', label: '1Ãƒâ€šÃ‚Âº ANDAR' },
-        { key: 'MOSTRUARIO', label: 'MOSTRUÃƒÆ’Ã‚ÂRIO' }
+        { key: 'TERREO', label: 'TERREO' },
+        { key: 'PRIMEIRO_ANDAR', label: '1º ANDAR' },
+        { key: 'MOSTRUARIO', label: 'MOSTRUARIO' }
     ]
         .map(location => ({
             ...location,
@@ -11136,7 +12711,7 @@ function renderSearchProductSellableLocations(product) {
     if (!locations.length) return '';
 
     return `
-        <div class="stock-sellable-locations" aria-label="Estoque disponÃƒÆ’Ã‚Â­vel por local">
+        <div class="stock-sellable-locations" aria-label="Estoque disponivel por local">
             ${locations.map(location => `
                 <span class="stock-sellable-location">
                     <strong>${location.label}:</strong>
@@ -11147,36 +12722,9 @@ function renderSearchProductSellableLocations(product) {
     `;
 }
 
-function renderProductStockFilterSideList() {
-    return `
-        <div class="product-side-filter-list" role="tablist" aria-label="Setor do estoque">
-            ${PRODUCT_STOCK_LOCATION_FILTERS.map(filter => {
-                const count = getProductStockFilterCount(filter.key);
-                return `
-                    <button
-                        type="button"
-                        class="product-stock-filter-chip product-side-filter-chip ${currentProductStockFilter === filter.key ? 'active' : ''}"
-                        data-filter-key="${filter.key}"
-                        role="tab"
-                        aria-selected="${currentProductStockFilter === filter.key}"
-                        onclick="setProductStockFilter('${filter.key}')"
-                    >
-                        <span class="product-stock-filter-dot" aria-hidden="true"></span>
-                        <span class="product-stock-filter-label">${filter.label}</span>
-                        <span class="product-stock-filter-count">${count}</span>
-                    </button>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
-
 function renderProductSearchSummaryBar(resultCount = 0) {
     return `
         <section class="product-search-summary-bar product-search-command-bar" aria-label="Consulta de produtos">
-            <button class="fab-icon-btn fab-voltar product-mobile-back-btn" type="button" onclick="renderProductSubMenu()" aria-label="Voltar">
-                ${getInlineAppIconHTML('arrow_back')}
-            </button>
             <div class="search-bar-wrapper product-search-command-input">
                 <div class="product-search-bar">
                     <span class="material-symbols-rounded search-icon">search</span>
@@ -11194,32 +12742,20 @@ function renderProductSearchSummaryBar(resultCount = 0) {
                         onkeypress="if(event.key === 'Enter') handleSearchEnter(event)"
                         onkeydown="handleSearchKeyDown(event)"
                     />
-                    <div class="search-actions mobile-only-scanner">
+                    <button class="mobile-products-clear-input" type="button" aria-label="Limpar busca" onclick="clearProductSearchText()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                    <div class="search-actions product-search-scanner-action">
                         <button class="product-search-camera-btn" type="button" aria-label="Escanear" onclick="startScanner()">
-                            <span class="material-symbols-rounded">qr_code_scanner</span>
+                            <span class="material-symbols-rounded">photo_camera</span>
                         </button>
                     </div>
                 </div>
             </div>
-            
-            <button class="product-search-camera-btn-desktop desktop-only-scanner" type="button" aria-label="Escanear" onclick="startScanner()">
-                <span class="material-symbols-rounded">qr_code_scanner</span>
-            </button>
 
             <div class="product-summary-metric product-found-counter">
                 <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
                 <span class="found-label">PRODUTOS ENCONTRADOS</span>
-            </div>
-            
-            <div class="product-mobile-search-actions" aria-label="Acoes rapidas da busca">
-                <button type="button" class="btn-filter" onclick="openProductFilterSheet()">
-                    <span class="material-symbols-rounded">tune</span>
-                    <span class="btn-text">Filtros</span>
-                </button>
-                <button type="button" class="btn-clear" onclick="clearProductSearch()">
-                    <span class="material-symbols-rounded">delete</span>
-                    <span class="btn-text">Limpar</span>
-                </button>
             </div>
         </section>
     `;
@@ -11258,37 +12794,8 @@ function renderSearchInitialStateHTML() {
 
 function updateProductSearchSummary(resultCount = 0) {
     const countEl = document.getElementById('product-summary-count');
-    const helpEl = document.getElementById('product-side-search-help');
-    const query = document.getElementById('search-input')?.value?.trim() || '';
 
     if (countEl) countEl.textContent = formatStockNumber(resultCount);
-    if (helpEl) {
-        helpEl.textContent = query ? `${resultCount} produto(s) para "${cleanProductSearchText(query)}"` : 'Filtros por local/setor do estoque';
-    }
-}
-
-function renderProductSearchSidePanel(resultCount, queryRaw = '') {
-    const query = String(queryRaw || '').trim();
-    return `
-        <aside class="product-search-side-panel">
-            <section class="product-side-card product-side-filters">
-                <div class="product-side-heading product-side-heading-main">
-                    <button class="product-side-back-btn" type="button" aria-label="Voltar" onclick="renderProductSubMenu()">
-                        <span class="material-symbols-rounded">arrow_back</span>
-                    </button>
-                    <span class="material-symbols-rounded">filter_alt</span>
-                    <span>Filtros</span>
-                </div>
-                <p id="product-side-search-help" class="product-side-search-help">${query ? `${resultCount} produto(s) para "${cleanProductSearchText(query)}"` : 'Filtros por local/setor do estoque'}</p>
-
-                <div class="product-side-heading">
-                    <span class="material-symbols-rounded">warehouse</span>
-                    <span>Setor do estoque</span>
-                </div>
-                ${renderProductStockFilterSideList()}
-            </section>
-        </aside>
-    `;
 }
 
 
@@ -11374,12 +12881,12 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
 
                 <div class="card-price-block">
                     <div class="card-price-tier card-price-tier-retail">
-                        <span class="price-label">PREÃƒÆ’Ã¢â‚¬Â¡O VAREJO</span>
-                        <span class="price-value">R$ ${Number(precoVarejo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        <span class="price-label">PRECO VAREJO</span>
+                        <span class="price-value">${formatPrice(precoVarejo)}</span>
                     </div>
                     <div class="card-price-tier card-price-tier-wholesale">
-                        <span class="price-label">PREÃƒÆ’Ã¢â‚¬Â¡O ATACADO</span>
-                        <span class="price-value">R$ ${Number(precoAtacado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        <span class="price-label">PRECO ATACADO</span>
+                        <span class="price-value">${formatPrice(precoAtacado)}</span>
                     </div>
                 </div>
             </div>
@@ -12087,8 +13594,8 @@ function sortEquivalentProductsForDetail(a, b) {
     const brandCompare = String(a.marca || '').localeCompare(String(b.marca || ''), 'pt-BR');
     if (brandCompare !== 0) return brandCompare;
 
-    const priceA = parseFloat(String(a.preco_varejo || 0).replace(',', '.')) || 0;
-    const priceB = parseFloat(String(b.preco_varejo || 0).replace(',', '.')) || 0;
+    const priceA = roundMoney(a.preco_varejo);
+    const priceB = roundMoney(b.preco_varejo);
     return priceA - priceB;
 }
 
@@ -13677,8 +15184,7 @@ function getFinanceiroFiltroConfig(filtro) {
 }
 
 function formatFinanceiroMoney(value) {
-    const number = Number(String(value ?? 0).replace(',', '.'));
-    return (Number.isFinite(number) ? number : 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return formatCurrency(value);
 }
 
 function formatFinanceiroDate(value) {
@@ -13713,7 +15219,7 @@ async function renderFinanceiroLista(filtro = 'pendentes') {
     const config = getFinanceiroFiltroConfig(filtro);
     const itens = config.calcular(parcelas);
     const currentUser = localStorage.getItem('currentUser');
-    const total = itens.reduce((sum, item) => sum + Number(String(item.valor ?? 0).replace(',', '.')), 0);
+    const total = itens.reduce((sum, item) => sum + roundMoney(item.valor), 0);
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
@@ -13780,7 +15286,7 @@ async function renderFinanceiroACombinar() {
         const tipo = String(entrada.tipo_condicao_financeira || '').toLowerCase();
         return status === 'a_combinar' || tipo === 'a_combinar';
     });
-    const total = pendentes.reduce((sum, entrada) => sum + Number(String(entrada.valor_total ?? 0).replace(',', '.')), 0);
+    const total = pendentes.reduce((sum, entrada) => sum + roundMoney(entrada.valor_total), 0);
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
@@ -14252,29 +15758,39 @@ async function confirmDiscardSavedPickingDraft(sessionId) {
     renderSeparacoesAndamentoScreen();
 }
 
+function getSeparationItemsForSession(session) {
+    const sessionId = getPackSeparationSessionId(session);
+    if (!sessionId) return [];
+    return (appData.separacao_itens || [])
+        .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId));
+}
+
 function getSeparationProductTotal(session) {
+    const sessionItems = getSeparationItemsForSession(session);
+    if (sessionItems.length > 0) {
+        const uniqueProducts = new Set(sessionItems
+            .map(item => getPickingProductId(item) || String(item.id_interno || item.ean || item.descricao || '').trim())
+            .filter(Boolean));
+        return uniqueProducts.size;
+    }
     const storedTotal = Number(session.total_produtos_separados || session.totalProdutosSeparados || 0);
     if (storedTotal > 0) return storedTotal;
-    const sessionId = getPackSeparationSessionId(session);
-    if (!sessionId) return 0;
-    const uniqueProducts = new Set((appData.separacao_itens || [])
-        .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId))
-        .map(item => getPickingProductId(item) || String(item.id_interno || item.ean || item.descricao || '').trim())
-        .filter(Boolean));
-    return uniqueProducts.size;
+    return 0;
 }
 
 function getSeparationItemTotal(session) {
-    const storedTotal = Number(session.total_itens_separados || session.totalItensSeparados || 0);
-    if (storedTotal > 0) return storedTotal;
     const sessionId = getPackSeparationSessionId(session);
     if (!sessionId) {
         return Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
     }
-    const itemsTotal = (appData.separacao_itens || [])
-        .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId))
-        .reduce((sum, item) => sum + (Number(item.qtd_separada || item.quantidade || item.qty || item.qtd_solicitada || 0) || 0), 0);
-    return itemsTotal || Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
+    const sessionItems = getSeparationItemsForSession(session);
+    if (sessionItems.length > 0) {
+        return sessionItems
+            .reduce((sum, item) => sum + (Number(item.qtd_separada || item.quantidade || item.qty || item.qtd_solicitada || 0) || 0), 0);
+    }
+    const storedTotal = Number(session.total_itens_separados || session.totalItensSeparados || 0);
+    if (storedTotal > 0) return storedTotal;
+    return Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
 }
 
 function getDraftPickSessionsWithLocalDraft() {
@@ -15287,6 +16803,20 @@ function getSafePickSessionId(sessionId, channelLabel) {
     return generatePickSessionId(channelLabel);
 }
 
+function sanitizePickSessionIdForChannel(sessionId, channelLabel, context = 'separacao') {
+    const currentId = String(sessionId || '').trim();
+    const safeId = getSafePickSessionId(currentId, channelLabel);
+    if (currentId && currentId !== safeId) {
+        console.warn('[SEP] separacao_id fora do padrao substituido', {
+            context,
+            antigo: currentId,
+            novo: safeId,
+            canal: channelLabel || ''
+        });
+    }
+    return safeId;
+}
+
 function assertValidPickSessionForPersist(sessionId, channelLabel, context = 'separacao') {
     const cleanSessionId = String(sessionId || '').trim();
     const cleanChannelLabel = String(channelLabel || '').trim();
@@ -15335,14 +16865,14 @@ function getPickingScreenDataset() {
 }
 
 async function ensureActivePickingContext() {
-    if (currentPickingContext?.sessionId && !isTemporaryPickSessionId(currentPickingContext.sessionId) && currentPickingContext?.channelLabel) {
+    if (currentPickingContext?.sessionId && isValidPickSessionId(currentPickingContext.sessionId) && currentPickingContext?.channelLabel) {
         return currentPickingContext;
     }
 
     const data = getPickingScreenDataset();
-    if (data.sessionId && data.channelLabel && !isTemporaryPickSessionId(data.sessionId)) {
+    if (data.sessionId && data.channelLabel && isValidPickSessionId(data.sessionId)) {
         currentPickingContext = {
-            sessionId: data.sessionId,
+            sessionId: sanitizePickSessionIdForChannel(data.sessionId, data.channelLabel, 'retomar contexto de separacao'),
             channelId: data.channelId,
             channelLabel: data.channelLabel,
             channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
@@ -15667,12 +17197,37 @@ async function deletePickingDraftItemSupabaseDirect(payload = {}) {
 
     if (itemError) throw itemError;
 
+    const { data: remainingItems, error: remainingError } = await client
+        .from('separacao_itens')
+        .select('*')
+        .eq('separacao_id', sessionId);
+
+    if (remainingError) throw remainingError;
+
+    const updatedStats = getPickingOperationalStats(remainingItems || []);
+    const sessionUpdate = {
+        atualizado_em: getDataHoraBrasil(),
+        total_produtos_separados: updatedStats.total_produtos_separados,
+        total_itens_separados: updatedStats.total_itens_separados
+    };
+
     const { error: sessionError } = await client
         .from('separacao')
-        .update({ atualizado_em: getDataHoraBrasil() })
+        .update(sessionUpdate)
         .eq('separacao_id', sessionId);
 
     if (sessionError) throw sessionError;
+
+    if (Array.isArray(appData.separacao_itens)) {
+        appData.separacao_itens = appData.separacao_itens.filter(item =>
+            !(String(item.separacao_id || item.codigo_separacao || '') === String(sessionId)
+                && String(item.id_interno || item.col_a || item.col_A || '') === String(idInterno))
+        );
+    }
+    if (Array.isArray(appData.separacao)) {
+        const sessionIndex = appData.separacao.findIndex(item => String(item.separacao_id || item.col_a || '') === String(sessionId));
+        if (sessionIndex >= 0) appData.separacao[sessionIndex] = { ...appData.separacao[sessionIndex], ...sessionUpdate };
+    }
 
     DataClient.invalidateCache('separacao');
     DataClient.invalidateCache('conferencia');
@@ -16100,12 +17655,13 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
              data-channel-color="${escapeKitAttribute(channelColor || '')}"
              data-created-at="${escapeKitAttribute(currentPickingContext.createdAt || '')}">
             ${getModuleSidebarHTML('pick')}
+            ${getTopBarHTML(currentUser, 'renderPickMenu()')}
             ${getQuickActionsHTML(getActivePickingFastMode(draft))}
 
             <main class="pick-workflow-shell">
                 <header class="pick-workflow-header">
-                    <button class="pick-back-btn" type="button" onclick="renderPickMenu()" aria-label="Voltar">
-                        <span class="material-symbols-rounded">arrow_back</span>
+                    <button class="pick-back-btn pick-inline-back back-button-standard ds-back-button" type="button" onclick="renderPickMenu()" aria-label="Voltar">
+                        ${getBackButtonStandardIconHTML()}
                     </button>
 
                     <div class="pick-workflow-title">
@@ -16988,6 +18544,10 @@ async function removePickItem(index) {
 }
 
 async function pausePickingSession(sessionId, channelId, channelLabel, channelColor) {
+    channelLabel = channelLabel || currentPickingContext?.channelLabel || '';
+    sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId, channelLabel, 'pausar separacao');
+    if (currentPickingContext) currentPickingContext.sessionId = sessionId;
+
     const draft = saveDraftPickSession({
         sessionId,
         channelId,
@@ -17024,6 +18584,13 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
     if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Salvando...'; }
 
     try {
+        channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || '';
+        channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || '';
+        channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
+        sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id, channelLabel, 'finalizar separacao');
+        assertValidPickSessionForPersist(sessionId, channelLabel, 'finalizar separacao');
+        if (currentPickingContext) currentPickingContext.sessionId = sessionId;
+
         if (currentSessionItems.length === 0) {
             await showAppModal({
                 type: 'warning',
@@ -17323,8 +18890,8 @@ async function createPickingConferenceWithoutStock(payload = {}) {
     const client = window.supabaseClient;
     if (!client) throw new Error('Supabase client nao encontrado');
 
-    const sessionId = payload.sessionId;
     const channelLabel = payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '';
+    const sessionId = sanitizePickSessionIdForChannel(payload.sessionId, channelLabel, 'criar conferencia da separacao');
     if (!sessionId) throw new Error('separacao_id nao informado');
     assertValidPickSessionForPersist(sessionId, channelLabel, 'criar conferencia da separacao');
     if (isFastPickingPayload(payload)) {
@@ -17494,6 +19061,15 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
     showToast("Finalizando separaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o...");
 
     try {
+        channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || '';
+        channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '';
+        channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
+        sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id, channelLabel, 'salvar resultado da separacao');
+        assertValidPickSessionForPersist(sessionId, channelLabel, 'salvar resultado da separacao');
+        if (currentPickingContext) currentPickingContext.sessionId = sessionId;
+        if (currentPickSession?.pickingData) currentPickSession.pickingData.separacao_id = sessionId;
+        if (currentPickSession) currentPickSession.id = sessionId;
+
         if (!currentPickSession?.items || currentPickSession.items.length === 0) {
             await showAppModal({
                 type: 'warning',
@@ -18128,11 +19704,12 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
     app.innerHTML = `
         <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen ${channelColorClass}">
             ${getModuleSidebarHTML('pack')}
+            ${getTopBarHTML(currentUser, 'renderPackMenu()')}
 
             <main class="pack-blind-shell">
                 <header class="pack-blind-header">
-                    <button class="pack-blind-back-btn" type="button" onclick="renderPackMenu()" aria-label="Voltar">
-                        <span class="material-symbols-rounded">arrow_back</span>
+                    <button class="pack-blind-back-btn pack-blind-inline-back back-button-standard ds-back-button" type="button" onclick="renderPackMenu()" aria-label="Voltar">
+                        ${getBackButtonStandardIconHTML()}
                     </button>
 
                     <div class="pack-blind-title">
@@ -19201,6 +20778,11 @@ async function confirmConferenceCorrectionFlow() {
 function quickActionSeparacoesAndamento() {
     toggleQuickActions();
     renderSeparacoesAndamentoScreen();
+}
+
+function quickActionEntradaNF() {
+    toggleQuickActions();
+    renderEntradaNFRascunhosList();
 }
 
 function quickActionGerarRomaneio() {
@@ -20926,7 +22508,7 @@ function quoteInlineArg(value) {
 }
 
 function quoteMoney(value) {
-    return formatPrice(Number(value) || 0);
+    return formatPrice(value);
 }
 
 function quoteDateInput(daysFromNow = 0) {
@@ -24901,9 +26483,9 @@ async function renderGuiaLampada(push = true) {
     window.kitLampadaUiState = { term: '', montadora: 'todos' };
     
     app.innerHTML = `
-        <div class="dashboard-screen fade-in internal product-search-screen kit-lampada-screen kit-v2-screen module-screen">
-            ${getTopBarHTML(currentUser, 'renderMenu()')}
+        <div class="dashboard-screen fade-in internal module-screen product-search-screen kit-lampada-screen kit-v2-screen">
             ${getModuleSidebarHTML('kit_lampada')}
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
             <main class="container product-search-center kit-v2-container">
                 <div id="kit-content-area">
                     <div class="kit-premium-state">
@@ -25222,11 +26804,14 @@ window.renderKitDetailsCard = function(item) {
 
 function renderProductSubMenu() {
   const container = document.getElementById("app");
+  const currentUser = localStorage.getItem('currentUser');
 
   if (!container) {
     console.error("Container principal nÃƒÆ’Ã‚Â£o encontrado para renderProductSubMenu");
     return;
   }
+
+  if (!currentUser) return renderLogin();
 
   const subItems = [
     { id: 'prod_buscar', label: 'BUSCAR', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, ID, EAN, SKU e conferir estoque disponÃƒÆ’Ã‚Â­vel.' },
@@ -25235,11 +26820,7 @@ function renderProductSubMenu() {
 
   container.innerHTML = `
     <div class="dashboard-screen internal fade-in product-submenu-screen module-screen standard-card-menu-screen">
-      <div class="top-action-group">
-        <button class="fab-icon-btn fab-voltar" type="button" onclick="renderMenu()" aria-label="Voltar">
-          <img class="product-top-back-icon" src="/assets/icons/icons8-voltar-96.png" alt="" aria-hidden="true">
-        </button>
-      </div>
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('produtos')}
 
       <main class="container">
@@ -25295,10 +26876,69 @@ function formatConfigDate(value) {
     return new Date(value).toLocaleString('pt-BR');
 }
 
+function getAppVersionBadgeHTML(context = 'footer') {
+    return `
+        <div class="app-version-badge app-version-badge-${escapeKitAttribute(context)}" aria-label="Versao atual do aplicativo">
+            <span>v${escapeKitAttribute(DY_APP_VERSION)}</span>
+            <small>${escapeKitAttribute(DY_APP_BUILD || DY_APP_COMMIT || getUpdateStatusLabel())}</small>
+        </div>
+    `;
+}
+
+function getStoredAvailableVersion() {
+    return localStorage.getItem(DY_UPDATE_AVAILABLE_VERSION_KEY) || '';
+}
+
+function getStoredAvailableBuild() {
+    return localStorage.getItem(DY_UPDATE_AVAILABLE_BUILD_KEY) || '';
+}
+
+function getStoredAvailableCommit() {
+    return localStorage.getItem(DY_UPDATE_AVAILABLE_COMMIT_KEY) || '';
+}
+
+function getStoredDeployDate() {
+    return localStorage.getItem(DY_UPDATE_DEPLOY_DATE_KEY) || DY_APP_DEPLOY_DATE || '';
+}
+
+function normalizeVersionPart(value) {
+    return String(value || '').trim();
+}
+
+function isRemoteAppVersionNewer(remote = {}) {
+    const remoteVersion = normalizeVersionPart(remote.version);
+    const remoteBuild = normalizeVersionPart(remote.build);
+    const remoteCommit = normalizeVersionPart(remote.commit);
+    if (remoteVersion && remoteVersion !== DY_APP_VERSION) return true;
+    if (remoteBuild && remoteBuild !== DY_APP_BUILD) return true;
+    if (remoteCommit && remoteCommit !== 'local' && DY_APP_COMMIT !== 'local' && remoteCommit !== DY_APP_COMMIT) return true;
+    return false;
+}
+
+function storeUpdateCheckResult({ status = 'updated', remote = null } = {}) {
+    localStorage.setItem(DY_UPDATE_STATUS_KEY, status);
+    localStorage.setItem(DY_UPDATE_LAST_CHECK_KEY, new Date().toISOString());
+    if (remote) {
+        if (remote.version) localStorage.setItem(DY_UPDATE_AVAILABLE_VERSION_KEY, String(remote.version));
+        if (remote.build) localStorage.setItem(DY_UPDATE_AVAILABLE_BUILD_KEY, String(remote.build));
+        if (remote.commit) localStorage.setItem(DY_UPDATE_AVAILABLE_COMMIT_KEY, String(remote.commit));
+        if (remote.deployDate) localStorage.setItem(DY_UPDATE_DEPLOY_DATE_KEY, String(remote.deployDate));
+    }
+    if (status === 'updated') {
+        [
+            DY_UPDATE_AVAILABLE_VERSION_KEY,
+            DY_UPDATE_AVAILABLE_BUILD_KEY,
+            DY_UPDATE_AVAILABLE_COMMIT_KEY,
+            DY_UPDATE_DEPLOY_DATE_KEY
+        ].forEach(key => localStorage.removeItem(key));
+    }
+}
+
 function getUpdateStatusLabel() {
     const status = localStorage.getItem(DY_UPDATE_STATUS_KEY) || 'updated';
     if (status === 'available') return 'Atualizacao disponivel';
     if (status === 'checking') return 'Verificando';
+    if (status === 'offline') return 'Verificacao indisponivel';
     return 'Atualizado';
 }
 
@@ -25401,28 +27041,123 @@ function renderConfigOptionButtons(name, options, current, handlerName) {
     `;
 }
 
-async function checkAppUpdate() {
+async function fetchRemoteVersionInfo() {
+    const response = await fetch(`/version.json?ts=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (!response.ok) throw new Error(`version.json ${response.status}`);
+    return response.json();
+}
+
+async function detectAppUpdate({ renderConfig = false } = {}) {
     localStorage.setItem(DY_UPDATE_STATUS_KEY, 'checking');
-    localStorage.setItem(DY_UPDATE_LAST_CHECK_KEY, new Date().toISOString());
-    renderConfigSubMenu();
+    if (renderConfig && currentScreen === 'internal') renderConfigSubMenu();
+
+    let remote = null;
+    let hasUpdate = false;
+    let swChecked = false;
+
     try {
-        let hasUpdate = false;
+        remote = await fetchRemoteVersionInfo();
+        hasUpdate = isRemoteAppVersionNewer(remote);
+    } catch (error) {
+        console.warn('[UPDATE] Falha ao buscar version.json:', error);
+    }
+
+    try {
         if ('serviceWorker' in navigator) {
             const registration = await navigator.serviceWorker.getRegistration();
             if (registration) {
+                swChecked = true;
                 await registration.update();
-                hasUpdate = !!(registration.waiting || registration.installing);
+                hasUpdate = hasUpdate || !!(registration.waiting || registration.installing);
             }
         }
-        localStorage.setItem(DY_UPDATE_STATUS_KEY, hasUpdate ? 'available' : 'updated');
-        addLocalAccessEvent('verificacao_atualizacao', hasUpdate ? 'Atualizacao disponivel' : 'App atualizado');
-        showToast(hasUpdate ? 'Atualizacao disponivel.' : 'Aplicativo atualizado.', hasUpdate ? 'warning' : 'success');
+    } catch (error) {
+        console.warn('[UPDATE] Falha ao atualizar service worker:', error);
+    }
+
+    if (!remote && !swChecked) {
+        storeUpdateCheckResult({ status: 'offline' });
+        return { status: 'offline', hasUpdate: false, remote: null };
+    }
+
+    storeUpdateCheckResult({ status: hasUpdate ? 'available' : 'updated', remote });
+    return { status: hasUpdate ? 'available' : 'updated', hasUpdate, remote };
+}
+
+async function handleDetectedAppUpdate({ source = 'manual', availableVersion = '', availableBuild = '', availableCommit = '', deployDate = '' } = {}) {
+    if (document.getElementById('app-confirm-modal')) return false;
+
+    const installed = `v${DY_APP_VERSION}${DY_APP_BUILD ? ` (${DY_APP_BUILD})` : ''}`;
+    const available = `v${availableVersion || getStoredAvailableVersion() || 'disponivel'}${availableBuild || getStoredAvailableBuild() ? ` (${availableBuild || getStoredAvailableBuild()})` : ''}`;
+    const commit = availableCommit || getStoredAvailableCommit();
+    const deploy = deployDate || getStoredDeployDate();
+    const detail = [
+        `Instalada: ${installed}`,
+        `Disponivel: ${available}`,
+        commit ? `Commit/build: ${commit}` : '',
+        deploy ? `Deploy: ${formatConfigDate(deploy)}` : ''
+    ].filter(Boolean).join('\n');
+
+    const shouldUpdate = await showAppConfirm({
+        title: 'Atualizacao disponivel',
+        message: 'Existe uma nova versao do aplicativo.',
+        detail,
+        confirmLabel: 'Atualizar agora',
+        cancelLabel: 'Continuar sem atualizar'
+    });
+
+    addLocalAccessEvent('atualizacao_detectada', shouldUpdate ? `Atualizar agora (${source})` : `Continuou sem atualizar (${source})`);
+    if (shouldUpdate) {
+        await updateAppNow({ skipConfirm: true, source });
+        return true;
+    }
+    return false;
+}
+
+async function checkAppUpdate() {
+    try {
+        const result = await detectAppUpdate({ renderConfig: true });
+        addLocalAccessEvent('verificacao_atualizacao', result.hasUpdate ? 'Atualizacao disponivel' : getUpdateStatusLabel());
+        if (result.hasUpdate) {
+            showToast('Atualizacao disponivel.', 'warning');
+            await handleDetectedAppUpdate({
+                source: 'manual',
+                availableVersion: result.remote?.version || getStoredAvailableVersion(),
+                availableBuild: result.remote?.build || getStoredAvailableBuild(),
+                availableCommit: result.remote?.commit || getStoredAvailableCommit(),
+                deployDate: result.remote?.deployDate || getStoredDeployDate()
+            });
+        } else {
+            showToast(result.status === 'offline' ? 'Nao foi possivel verificar atualizacao.' : 'Aplicativo atualizado.', result.status === 'offline' ? 'warning' : 'success');
+        }
     } catch (error) {
         console.warn('[UPDATE] Falha ao verificar atualizacao:', error);
-        localStorage.setItem(DY_UPDATE_STATUS_KEY, 'updated');
+        storeUpdateCheckResult({ status: 'offline' });
         showToast('Nao foi possivel verificar atualizacao.', 'warning');
     } finally {
         renderConfigSubMenu();
+    }
+}
+
+async function runStartupUpdateCheck() {
+    try {
+        const result = await detectAppUpdate({ renderConfig: false });
+        addLocalAccessEvent('verificacao_inicial_atualizacao', result.hasUpdate ? 'Atualizacao disponivel antes do login' : getUpdateStatusLabel());
+        if (result.hasUpdate) {
+            await handleDetectedAppUpdate({
+                source: 'startup',
+                availableVersion: result.remote?.version || getStoredAvailableVersion(),
+                availableBuild: result.remote?.build || getStoredAvailableBuild(),
+                availableCommit: result.remote?.commit || getStoredAvailableCommit(),
+                deployDate: result.remote?.deployDate || getStoredDeployDate()
+            });
+        }
+    } catch (error) {
+        console.warn('[UPDATE] Falha na verificacao inicial:', error);
+        storeUpdateCheckResult({ status: 'offline' });
     }
 }
 
@@ -25449,16 +27184,19 @@ async function clearLocalCache() {
     showToast('Cache local limpo.', 'success');
 }
 
-async function updateAppNow() {
-    const confirmed = await showAppConfirm({
-        title: 'Atualizar aplicativo',
-        message: 'O app vai limpar caches locais do PWA, atualizar o service worker e recarregar a pagina sem apagar sua sessao.',
-        confirmLabel: 'Atualizar agora',
-        cancelLabel: 'Cancelar',
-        danger: true
-    });
-    if (!confirmed) return;
-    addLocalAccessEvent('atualizacao_app', 'Atualizacao manual solicitada');
+async function updateAppNow(options = {}) {
+    const skipConfirm = options && options.skipConfirm === true;
+    if (!skipConfirm) {
+        const confirmed = await showAppConfirm({
+            title: 'Atualizar aplicativo',
+            message: 'O app vai limpar caches locais do PWA, atualizar o service worker e recarregar a pagina sem apagar sua sessao.',
+            confirmLabel: 'Atualizar agora',
+            cancelLabel: 'Cancelar',
+            danger: true
+        });
+        if (!confirmed) return;
+    }
+    addLocalAccessEvent('atualizacao_app', `Atualizacao solicitada: ${options.source || 'manual'}`);
     try {
         await deleteAppCaches();
         if ('serviceWorker' in navigator) {
@@ -25645,9 +27383,12 @@ function renderConfigSubMenu() {
                     <section class="config-settings-card config-card-system">
                         <div class="config-card-head"><span class="material-symbols-rounded">system_update</span><div><h2>Sistema</h2><p>Atualizacao do aplicativo</p></div></div>
                         <div class="config-info-list">
-                            <div><span>Versao atual</span><strong>v${DY_APP_VERSION}</strong></div>
+                            <div><span>Versao instalada</span><strong>v${DY_APP_VERSION}</strong></div>
                             <div><span>Ultima verificacao</span><strong>${formatConfigDate(lastCheck)}</strong></div>
                             <div><span>Status</span><strong class="config-status-pill">${getUpdateStatusLabel()}</strong></div>
+                            <div><span>Commit/Build atual</span><strong>${escapeKitAttribute(DY_APP_COMMIT || DY_APP_BUILD || 'Nao informado')}</strong></div>
+                            <div><span>Build</span><strong>${escapeKitAttribute(DY_APP_BUILD || 'Nao informado')}</strong></div>
+                            <div><span>Data do deploy</span><strong>${formatConfigDate(getStoredDeployDate())}</strong></div>
                             <div><span>Service Worker/cache</span><strong>${getServiceWorkerStatusLabel()}</strong></div>
                         </div>
                         <div class="config-action-row">
@@ -25674,12 +27415,7 @@ function renderConfigSubMenu() {
                     </section>
 
                     <section class="config-settings-card config-card-appearance">
-                        <div class="config-card-head"><span class="material-symbols-rounded">palette</span><div><h2>Aparencia</h2><p>Tema, tela cheia e densidade visual</p></div></div>
-                        <div class="theme-segmented-control config-wide-control" role="group" aria-label="Tema do App">
-                            <button type="button" data-theme-option="auto" onclick="setAppTheme('auto')" aria-pressed="false"><span class="material-symbols-rounded">routine</span>Automatico</button>
-                            <button type="button" data-theme-option="light" onclick="setAppTheme('light')" aria-pressed="false"><span class="material-symbols-rounded">light_mode</span>Claro</button>
-                            <button type="button" data-theme-option="dark" onclick="setAppTheme('dark')" aria-pressed="false"><span class="material-symbols-rounded">dark_mode</span>Escuro</button>
-                        </div>
+                        <div class="config-card-head"><span class="material-symbols-rounded">palette</span><div><h2>Aparencia</h2><p>Tela cheia e densidade visual</p></div></div>
                         <div class="config-field-group"><label>Tamanho da fonte</label>${renderConfigOptionButtons('Tamanho da fonte', [{ value: 'small', label: 'Pequena' }, { value: 'medium', label: 'Media' }, { value: 'large', label: 'Grande' }], config.font_size || 'medium', 'setConfigFontSize')}</div>
                         ${renderConfigToggle('toggle-compact-mode', 'Modo compacto', 'Reduz espacamentos sem alterar fluxos.', config.compact_mode === true, "togglePreference('compact_mode', this.checked)")}
                         <div class="config-action-row"><button type="button" onclick="toggleFullscreen()"><span class="material-symbols-rounded">fullscreen</span>Tela cheia</button></div>
@@ -25722,10 +27458,12 @@ function renderConfigSubMenu() {
                         <div class="config-card-head"><span class="material-symbols-rounded">info</span><div><h2>Sobre</h2><p>Sobre o aplicativo</p></div></div>
                         <div class="config-info-list">
                             <div><span>Nome</span><strong>DY Auto Parts</strong></div>
-                            <div><span>Versao atual</span><strong>v${DY_APP_VERSION}</strong></div>
+                            <div><span>Versao instalada</span><strong>v${DY_APP_VERSION}</strong></div>
+                            <div><span>Build</span><strong>${escapeKitAttribute(DY_APP_BUILD || 'Nao informado')}</strong></div>
+                            <div><span>Commit</span><strong>${escapeKitAttribute(DY_APP_COMMIT || 'Nao informado')}</strong></div>
                             <div><span>Ambiente</span><strong>${escapeKitAttribute(getAppEnvironmentLabel())}</strong></div>
                             <div><span>Ultima atualizacao</span><strong>${formatConfigDate(lastCheck)}</strong></div>
-                            <div><span>Repositorio</span><strong>Nao informado no app</strong></div>
+                            <div><span>Deploy</span><strong>${formatConfigDate(getStoredDeployDate())}</strong></div>
                             <div><span>Status do cache</span><strong>${getServiceWorkerStatusLabel()}</strong></div>
                         </div>
                     </section>
@@ -25749,27 +27487,6 @@ function renderConfigSubMenu() {
 
                     
                     <div style="display: flex; flex-direction: column; gap: 16px;">
-                        <section class="config-theme-card" aria-label="Tema do App">
-                            <div class="config-theme-copy">
-                                <div class="config-theme-title">TEMA DO APP</div>
-                                <div class="config-theme-subtitle">Escolha a aparÃƒÆ’Ã‚Âªncia das telas operacionais.</div>
-                            </div>
-                            <div class="theme-segmented-control" role="group" aria-label="Tema do App">
-                                <button type="button" data-theme-option="auto" onclick="setAppTheme('auto')" aria-pressed="false">
-                                    <span class="material-symbols-rounded">routine</span>
-                                    AutomÃƒÆ’Ã‚Â¡tico
-                                </button>
-                                <button type="button" data-theme-option="light" onclick="setAppTheme('light')" aria-pressed="false">
-                                    <span class="material-symbols-rounded">light_mode</span>
-                                    Claro
-                                </button>
-                                <button type="button" data-theme-option="dark" onclick="setAppTheme('dark')" aria-pressed="false">
-                                    <span class="material-symbols-rounded">dark_mode</span>
-                                    Escuro
-                                </button>
-                            </div>
-                        </section>
-
                         <!-- OPCAO 1 -->
                         <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
                             <div style="flex: 1;">
@@ -26201,12 +27918,12 @@ async function renderGarantiaEnvioForm() {
     let selectedProduct = null;
     let selectedSource = 'DEFEITO';
 
-    const formatGarantiaMoney = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const formatGarantiaMoney = value => formatCurrency(value);
     const getGarantiaProductImage = product => product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '/imagens/placeholder-item.png';
 
     function updateGarantiaSummary() {
         const qty = Number(document.getElementById('garantia-quantidade')?.value || 1);
-        const unit = Number(document.getElementById('garantia-custo-unitario')?.value || 0);
+        const unit = roundMoney(document.getElementById('garantia-custo-unitario')?.value || 0);
         const fornecedor = document.getElementById('garantia-fornecedor')?.value || '-';
         const tipo = document.getElementById('garantia-tipo-operacao')?.selectedOptions?.[0]?.textContent || '-';
         const origem = document.getElementById('garantia-origem-estoque')?.selectedOptions?.[0]?.textContent || selectedSource || '-';
@@ -26250,7 +27967,7 @@ async function renderGarantiaEnvioForm() {
         if (fornecedorInput) fornecedorInput.value = selectedProduct.marca || selectedProduct.fornecedor || '';
 
         const custoInput = document.getElementById('garantia-custo-unitario');
-        if (custoInput) custoInput.value = selectedProduct.preco_custo || 0;
+        if (custoInput) custoInput.value = roundMoney(selectedProduct.preco_custo);
 
         updateTotalCost();
 
@@ -26285,17 +28002,17 @@ async function renderGarantiaEnvioForm() {
     }
 
     function updateTotalCost() {
-        const qty = parseFloat(document.getElementById('garantia-quantidade')?.value || 0);
-        const unit = parseFloat(document.getElementById('garantia-custo-unitario')?.value || 0);
+        const qty = Number(document.getElementById('garantia-quantidade')?.value || 0);
+        const unit = roundMoney(document.getElementById('garantia-custo-unitario')?.value || 0);
         const totalInput = document.getElementById('garantia-custo-total');
-        if (totalInput) totalInput.value = (qty * unit).toFixed(2);
+        if (totalInput) totalInput.value = roundMoney(qty * unit).toFixed(2);
         updateGarantiaSummary();
     }
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in garantia-screen garantia-ops-screen no-top-bar">
-            <button type="button" class="garantia-back-btn" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
-                <span class="material-symbols-rounded">arrow_back</span>
+            <button type="button" class="garantia-back-btn back-button-standard" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
+                ${getBackButtonStandardIconHTML()}
             </button>
 
             <main class="garantia-ops-shell">
@@ -26636,8 +28353,8 @@ async function renderGarantiaEnvioForm() {
                 observacao: document.getElementById('garantia-observacao').value,
                 origem_estoque: selectedSource,
                 quantidade: qty,
-                custo_unitario: parseFloat(document.getElementById('garantia-custo-unitario').value),
-                custo_total: parseFloat(document.getElementById('garantia-custo-total').value)
+                custo_unitario: roundMoney(document.getElementById('garantia-custo-unitario').value),
+                custo_total: roundMoney(document.getElementById('garantia-custo-total').value)
             };
 
             // 1. Salvar na tabela garantias
@@ -26700,6 +28417,7 @@ function renderNFSubMenu() {
     document.body.classList.remove('menu-active');
     const subItems = [
         { id: 'nf_xml', label: 'RECEBER POR XML', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML da NF-e, validar fornecedor e preparar os itens da entrada.' },
+        { id: 'nf_rascunhos', label: 'RASCUNHOS DE NF', icon: 'abertas', onclick: 'renderEntradaNFRascunhosList()', description: 'Continuar XMLs iniciados antes de importar a entrada.' },
         { id: 'nf_abertas', label: 'NOTAS EM ABERTO', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Continuar notas com fornecedor, vÃƒÆ’Ã‚Â­nculo ou estoque pendente.' },
         { id: 'nf_historico', label: 'HIST\u00d3RICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas concluÃƒÆ’Ã‚Â­das, financeiras ou canceladas.' }
     ];
@@ -26718,6 +28436,7 @@ function renderNFSubMenu() {
 
 let entradaNfXmlState = null;
 const ENTRADA_NF_XML_DRAFT_KEY = 'entrada_nf_xml_draft';
+const ENTRADA_NF_XML_DRAFTS_KEY = 'entrada_nf_xml_drafts';
 const ENTRADA_NF_XML_DRAFT_BANNER_HIDDEN_KEY = 'entrada_nf_xml_draft_banner_hidden';
 
 const NF_XML_WIZARD_STEPS = [
@@ -26748,17 +28467,11 @@ function nfXmlOnlyDigits(value) {
 }
 
 function nfXmlMoney(value) {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    const raw = String(value ?? '0').trim();
-    if (!raw) return 0;
-    const normalized = raw.includes(',')
-        ? raw.replace(/\./g, '').replace(',', '.')
-        : raw;
-    return parseFloat(normalized.replace(/[^\d.-]/g, '')) || 0;
+    return parseBrazilianMoney(value);
 }
 
 function nfXmlFormatMoneyInput(value) {
-    return nfXmlMoney(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return roundMoney(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatMoneyInputValue(value) {
@@ -26766,7 +28479,7 @@ function formatMoneyInputValue(value) {
 }
 
 function parseMoneyInputValue(value) {
-    return nfXmlMoney(value);
+    return roundMoney(value);
 }
 
 function normalizeMoneyInputElement(input) {
@@ -26779,12 +28492,40 @@ function normalizeMoneyInputElement(input) {
 function getEntradaNFXMLDraft() {
     try {
         const draft = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFT_KEY) || 'null');
-        return draft && typeof draft === 'object' ? draft : null;
+        if (draft && typeof draft === 'object') return draft;
+        const drafts = getEntradaNFXMLDrafts();
+        return drafts[0] || null;
     } catch (error) {
         console.warn('[ENTRADA_NF_XML] rascunho local invalido. Limpando.', error);
         localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
         return null;
     }
+}
+
+function getEntradaNFXMLDrafts() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFTS_KEY) || '[]');
+        const drafts = Array.isArray(raw) ? raw : [];
+        const legacy = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFT_KEY) || 'null');
+        if (legacy?.chave_acesso && !legacy.savedEntradaId && !drafts.some(item => item.chave_acesso === legacy.chave_acesso)) {
+            drafts.unshift(legacy);
+        }
+        return drafts
+            .filter(item => item?.chave_acesso && !item.savedEntradaId)
+            .sort((a, b) => new Date(b.draftSavedAt || b.atualizado_em || 0) - new Date(a.draftSavedAt || a.atualizado_em || 0));
+    } catch (error) {
+        console.warn('[ENTRADA_NF_XML] lista de rascunhos invalida. Limpando.', error);
+        localStorage.removeItem(ENTRADA_NF_XML_DRAFTS_KEY);
+        return [];
+    }
+}
+
+function setEntradaNFXMLDrafts(drafts = []) {
+    const unique = new Map();
+    (drafts || []).forEach(draft => {
+        if (draft?.chave_acesso && !draft.savedEntradaId) unique.set(draft.chave_acesso, draft);
+    });
+    localStorage.setItem(ENTRADA_NF_XML_DRAFTS_KEY, JSON.stringify(Array.from(unique.values())));
 }
 
 function saveEntradaNFXMLDraft() {
@@ -26794,11 +28535,17 @@ function saveEntradaNFXMLDraft() {
         ...entradaNfXmlState,
         draftSavedAt: getDataHoraBrasil()
     };
+    const drafts = getEntradaNFXMLDrafts().filter(item => item.chave_acesso !== draft.chave_acesso);
+    drafts.unshift(draft);
+    setEntradaNFXMLDrafts(drafts);
     localStorage.setItem(ENTRADA_NF_XML_DRAFT_KEY, JSON.stringify(draft));
 }
 
 function clearEntradaNFXMLDraft(chaveAcesso = entradaNfXmlState?.chave_acesso) {
     const draft = getEntradaNFXMLDraft();
+    if (chaveAcesso) {
+        setEntradaNFXMLDrafts(getEntradaNFXMLDrafts().filter(item => item.chave_acesso !== chaveAcesso));
+    }
     if (!draft || !chaveAcesso || draft.chave_acesso === chaveAcesso) {
         localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
     }
@@ -26807,6 +28554,7 @@ function clearEntradaNFXMLDraft(chaveAcesso = entradaNfXmlState?.chave_acesso) {
 function resetEntradaNFXMLLocalFlow() {
     try {
         localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
+        localStorage.removeItem(ENTRADA_NF_XML_DRAFTS_KEY);
         localStorage.removeItem('entrada_nf_historico_cache');
         sessionStorage.removeItem(ENTRADA_NF_XML_DRAFT_BANNER_HIDDEN_KEY);
     } catch (error) {
@@ -26821,12 +28569,13 @@ function resetEntradaNFXMLLocalFlow() {
 }
 
 function hasEntradaNFXMLDraft() {
-    const draft = getEntradaNFXMLDraft();
-    return !!(draft?.chave_acesso && !draft.savedEntradaId);
+    return getEntradaNFXMLDrafts().length > 0;
 }
 
-function resumeEntradaNFXMLDraft() {
-    const draft = getEntradaNFXMLDraft();
+function resumeEntradaNFXMLDraft(chaveAcesso = '') {
+    const draft = chaveAcesso
+        ? getEntradaNFXMLDrafts().find(item => String(item.chave_acesso) === String(chaveAcesso))
+        : getEntradaNFXMLDraft();
     if (!draft?.chave_acesso) {
         showToast('Nenhum rascunho de NF encontrado.', 'warning');
         return;
@@ -26838,6 +28587,25 @@ function resumeEntradaNFXMLDraft() {
     });
     entradaNfXmlState = draft;
     renderNFXmlWizardScreen();
+}
+
+async function confirmDiscardEntradaNFXMLDraft(chaveAcesso = '') {
+    const draft = getEntradaNFXMLDrafts().find(item => String(item.chave_acesso) === String(chaveAcesso));
+    if (!draft) {
+        showToast('Rascunho nao encontrado.', 'warning');
+        return;
+    }
+    const confirmed = await showAppConfirm({
+        title: 'Excluir rascunho?',
+        message: `Excluir o rascunho da NF ${draft.numero_nf || '-'}?`,
+        detail: 'Isso remove somente o rascunho local antes da importacao.',
+        confirmLabel: 'Excluir',
+        cancelLabel: 'Cancelar',
+        danger: true
+    });
+    if (!confirmed) return;
+    clearEntradaNFXMLDraft(chaveAcesso);
+    renderEntradaNFRascunhosList();
 }
 
 function getEntradaNFXMLDraftProgress(draft) {
@@ -26936,7 +28704,7 @@ function nfXmlFormatDate(value) {
 }
 
 function nfXmlFormatMoney(value) {
-    return nfXmlMoney(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return formatCurrency(value);
 }
 
 function closeAppCenterModal() {
@@ -27013,16 +28781,26 @@ function calcularCustoRealItem(item, rateios = {}, contexto = {}) {
     const custoNotaTotal = nfXmlMoney(item.valor_total);
     const totalProdutosNF = nfXmlMoney(contexto.totalProdutosNF);
     const totalFinanceiroPrevisto = nfXmlMoney(contexto.totalFinanceiroPrevisto);
+    const totalNf = nfXmlMoney(contexto.totalNf) || totalProdutosNF;
     const participacaoItem = totalProdutosNF > 0 ? custoNotaTotal / totalProdutosNF : 0;
-    const custoRealTotal = totalFinanceiroPrevisto > 0
-        ? totalFinanceiroPrevisto * participacaoItem
-        : custoNotaTotal;
+    const despesasRateadas = nfXmlMoney(rateios.valor_frete_rateado) +
+        nfXmlMoney(rateios.valor_seguro_rateado) +
+        nfXmlMoney(rateios.valor_outras_despesas_rateado);
+    const descontoRateado = nfXmlMoney(rateios.valor_desconto_rateado);
+    const impostosCusto = nfXmlMoney(item.valor_ipi) +
+        nfXmlMoney(item.valor_icms_st) +
+        (NF_XML_CUSTO_CONFIG.incluir_icms_no_custo ? nfXmlMoney(item.valor_icms) : 0);
+    const complementoFinanceiroTotal = Math.max(0, totalFinanceiroPrevisto - totalNf);
+    const complementoRateadoTotal = complementoFinanceiroTotal * participacaoItem;
+    const custoRealTotal = custoNotaTotal + impostosCusto + despesasRateadas - descontoRateado + complementoRateadoTotal;
     const custoRealUnitario = quantidade > 0 ? custoRealTotal / quantidade : 0;
-    const complementoRateadoTotal = custoRealTotal - custoNotaTotal;
 
     return {
         custo_nota_unitario: nfXmlRoundMoney(nfXmlMoney(item.valor_unitario)),
         custo_nota_total: nfXmlRoundMoney(custoNotaTotal),
+        valor_ipi: nfXmlRoundMoney(item.valor_ipi),
+        valor_icms: nfXmlRoundMoney(item.valor_icms),
+        valor_icms_st: nfXmlRoundMoney(item.valor_icms_st),
         valor_frete_rateado: nfXmlRoundMoney(rateios.valor_frete_rateado),
         valor_seguro_rateado: nfXmlRoundMoney(rateios.valor_seguro_rateado),
         valor_outras_despesas_rateado: nfXmlRoundMoney(rateios.valor_outras_despesas_rateado),
@@ -27115,9 +28893,11 @@ function aplicarCustosReaisNF(nota, options = {}) {
     const totalProdutosNF = nfXmlMoney(nota?.totais?.valor_produtos) ||
         (nota.itens || []).reduce((sum, item) => sum + nfXmlMoney(item.valor_total), 0);
     const totalFinanceiroPrevisto = nfXmlMoney(options.totalFinanceiroPrevisto) || nfXmlMoney(nota?.totais?.valor_total) || totalProdutosNF;
+    const totalNf = nfXmlMoney(nota?.totais?.valor_total) || totalProdutosNF;
     nota.itens = (nota.itens || []).map(item => {
         const resumo = calcularCustoRealItem(item, rateios[item.numero_item] || {}, {
             totalProdutosNF,
+            totalNf,
             totalFinanceiroPrevisto
         });
         return applyNFXmlItemConversion({ ...item, ...resumo });
@@ -27394,7 +29174,6 @@ async function renderNFXmlUploadScreen() {
     const currentUser = localStorage.getItem('currentUser');
     currentScreen = 'internal';
     entradaNfXmlState = null;
-    const draft = getEntradaNFXMLDraft();
 
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
@@ -27405,7 +29184,6 @@ async function renderNFXmlUploadScreen() {
                     <span>ENTRADA NF - XML</span>
                 </div>
                 <div id="nfxml-wizard-root">
-                    ${renderEntradaNFXMLDraftBanner(draft)}
                     ${renderNFXmlWizardHTML()}
                 </div>
             </main>
@@ -27737,6 +29515,12 @@ function renderNFXmlWizardActions() {
                 <span class="material-symbols-rounded">arrow_back</span>
                 ${isFirst ? 'Voltar' : 'Voltar'}
             </button>
+            ${state && !state.savedEntradaId ? `
+                <button type="button" onclick="saveEntradaNFXMLDraftAndGoList()" class="btn-action nfxml-save-draft-action" style="background:#f59e0b !important; color:#111827 !important;">
+                    <span class="material-symbols-rounded">save</span>
+                    Salvar rascunho
+                </button>
+            ` : ''}
             ${isLast ? `
                 <button type="button" onclick="salvarEntradaNFXml()" class="btn-action" ${confirmReady ? '' : 'disabled'} style="opacity:${confirmReady ? '1' : '0.45'}; background:#22c55e !important;">
                     <span class="material-symbols-rounded">check_circle</span>
@@ -27752,6 +29536,17 @@ function renderNFXmlWizardActions() {
     `;
 }
 
+function saveEntradaNFXMLDraftAndGoList() {
+    if (!entradaNfXmlState?.chave_acesso) {
+        showToast('Importe o XML antes de salvar rascunho.', 'warning');
+        return;
+    }
+    saveEntradaNFXMLDraft();
+    showToast('Rascunho de NF salvo.', 'success');
+    entradaNfXmlState = null;
+    renderEntradaNFRascunhosList();
+}
+
 async function handleNFXmlFileSelected(input) {
     const file = input.files?.[0];
     if (!file) return;
@@ -27759,7 +29554,7 @@ async function handleNFXmlFileSelected(input) {
         console.log('[ENTRADA_NF_XML] arquivo selecionado', file.name, file.size);
         const xmlText = await file.text();
         const parsedState = parseNFeXml(xmlText);
-        const draft = getEntradaNFXMLDraft();
+        const draft = getEntradaNFXMLDrafts().find(item => item.chave_acesso === parsedState.chave_acesso);
         if (draft?.chave_acesso && draft.chave_acesso === parsedState.chave_acesso && !draft.savedEntradaId) {
             entradaNfXmlState = {
                 ...parsedState,
@@ -29049,7 +30844,7 @@ async function atualizarCustoProdutosEntradaNF(itens = []) {
         const custoEstoque = getEntradaNFStockUnitCost(item);
         if (!item.id_interno || !Number.isFinite(Number(custoEstoque)) || Number(custoEstoque) <= 0) continue;
         const payload = {
-            preco_custo: nfXmlRoundMoney(custoEstoque, 6),
+            preco_custo: roundMoney(custoEstoque),
             atualizado_em: getDataHoraBrasil()
         };
 
@@ -29350,13 +31145,152 @@ function getEntradaNFOpenStatusInfo(nf) {
     }
     return { label: status ? status.replace(/_/g, ' ') : 'Pendente', tone: '#3b82f6', action: 'Abrir' };
 }
-async function renderNFAbertasList() {
+
+function buildEntradaNFDraftViewModel(draft = {}) {
+    const progress = getEntradaNFXMLDraftProgress(draft);
+    const fornecedor = draft.fornecedor?.razao_social || draft.fornecedor?.nome_fantasia || draft.fornecedor?.cnpj || 'Fornecedor nao informado';
+    const statusLabel = getEntradaNFXMLDraftStatusLabel(draft);
+    const updatedAt = getEntradaNFXMLDraftUpdatedLabel(draft);
+    const missingLinks = Math.max(0, progress.total - progress.vinculados);
+    const searchText = [
+        draft.numero_nf,
+        fornecedor,
+        draft.chave_acesso,
+        statusLabel
+    ].filter(Boolean).join(' ').toLowerCase();
+    return { draft, progress, fornecedor, statusLabel, updatedAt, missingLinks, searchText };
+}
+
+function renderEntradaNFRascunhosList() {
+    const currentUser = localStorage.getItem('currentUser');
+    const drafts = getEntradaNFXMLDrafts();
+    const viewModels = drafts.map(buildEntradaNFDraftViewModel);
+    document.body.classList.remove('menu-active');
+    currentScreen = 'internal';
+
+    app.innerHTML = `
+        <div class="dashboard-screen internal fade-in entrada-nf-drafts-screen entrada-nf-screen no-top-bar">
+            ${getTopBarHTML(currentUser, 'renderMenu()')}
+            <main class="container pick-drafts-shell entrada-nf-drafts-shell">
+                <header class="pick-drafts-header entrada-nf-drafts-header">
+                    <div>
+                        <h1>RASCUNHOS DE ENTRADA NF</h1>
+                        <p>XMLs iniciados e ainda nao importados ficam aqui para continuar depois.</p>
+                    </div>
+                    <aside class="pick-drafts-header-actions">
+                        <button type="button" class="pick-drafts-refresh" onclick="renderEntradaNFRascunhosList()">
+                            <span class="material-symbols-rounded">refresh</span>
+                            Atualizar
+                        </button>
+                        <button type="button" class="pick-drafts-refresh primary" onclick="renderNFXmlUploadScreen()">
+                            <span class="material-symbols-rounded">upload_file</span>
+                            Nova NF
+                        </button>
+                        <span id="nf-drafts-visible-count" class="pick-drafts-counter">${viewModels.length} rascunhos</span>
+                    </aside>
+                </header>
+
+                ${viewModels.length === 0 ? `
+                    <section class="pick-drafts-empty-state">
+                        <span class="material-symbols-rounded">receipt_long</span>
+                        <strong>Nenhum rascunho de NF</strong>
+                        <p>Suba um XML para iniciar uma entrada. Se faltar cadastro ou vinculo de produto, ela ficara salva aqui.</p>
+                        <button type="button" onclick="renderNFXmlUploadScreen()">Importar XML</button>
+                    </section>
+                ` : `
+                    <section class="pick-drafts-summary-grid">
+                        <article class="pick-drafts-summary-card tone-blue">
+                            <span class="material-symbols-rounded">draft</span>
+                            <div>
+                                <strong>${viewModels.length}</strong>
+                                <small>Rascunhos</small>
+                                <em>Em andamento</em>
+                            </div>
+                        </article>
+                        <article class="pick-drafts-summary-card tone-green">
+                            <span class="material-symbols-rounded">link</span>
+                            <div>
+                                <strong>${viewModels.reduce((sum, item) => sum + item.progress.vinculados, 0)}</strong>
+                                <small>Itens vinculados</small>
+                                <em>Progresso</em>
+                            </div>
+                        </article>
+                        <article class="pick-drafts-summary-card tone-orange">
+                            <span class="material-symbols-rounded">priority_high</span>
+                            <div>
+                                <strong>${viewModels.reduce((sum, item) => sum + item.missingLinks, 0)}</strong>
+                                <small>Vinculos pendentes</small>
+                                <em>Antes de importar</em>
+                            </div>
+                        </article>
+                    </section>
+
+                    <section class="pick-drafts-controls">
+                        <div class="pick-drafts-search-row">
+                            <label class="pick-drafts-search">
+                                <span class="material-symbols-rounded">search</span>
+                                <input id="nf-drafts-search" type="search" placeholder="Buscar por NF, fornecedor ou chave..." oninput="applyEntradaNFDraftFilters()">
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="pick-drafts-empty-filter entrada-nf-drafts-empty-filter hidden">
+                        <span class="material-symbols-rounded">search_off</span>
+                        <strong>Nenhum rascunho encontrado</strong>
+                        <p>Ajuste a busca para ver mais resultados.</p>
+                    </section>
+
+                    <section class="pick-drafts-mobile-list entrada-nf-drafts-list">
+                        ${viewModels.map(item => `
+                            <article class="pick-draft-mobile-card entrada-nf-draft-card" data-search="${escapeKitAttribute(item.searchText)}">
+                                <div class="pick-draft-mobile-top">
+                                    <strong>NF ${escapeKitAttribute(item.draft.numero_nf || '-')}</strong>
+                                    <span class="pick-drafts-status status-andamento">${escapeKitAttribute(item.statusLabel)}</span>
+                                </div>
+                                <small class="pick-draft-mobile-client">${escapeKitAttribute(item.fornecedor)}</small>
+                                <div class="pick-draft-mobile-grid">
+                                    <div><small>Itens</small><strong>${item.progress.total}</strong></div>
+                                    <div><small>Vinculados</small><strong>${item.progress.vinculados}</strong></div>
+                                    <div><small>Pendentes</small><strong>${item.missingLinks}</strong></div>
+                                    <div><small>Atualizado</small><strong>${escapeKitAttribute(item.updatedAt)}</strong></div>
+                                </div>
+                                <div class="pick-drafts-actions">
+                                    <button type="button" class="primary" onclick="resumeEntradaNFXMLDraft('${escapeKitAttribute(item.draft.chave_acesso)}')">Continuar</button>
+                                    <button type="button" class="danger-icon" onclick="confirmDiscardEntradaNFXMLDraft('${escapeKitAttribute(item.draft.chave_acesso)}')" aria-label="Excluir rascunho">
+                                        <span class="material-symbols-rounded">delete</span>
+                                    </button>
+                                </div>
+                            </article>
+                        `).join('')}
+                    </section>
+                `}
+            </main>
+        </div>
+    `;
+}
+
+function applyEntradaNFDraftFilters() {
+    const search = (document.getElementById('nf-drafts-search')?.value || '').trim().toLowerCase();
+    const items = document.querySelectorAll('.entrada-nf-draft-card');
+    let visibleCount = 0;
+    items.forEach(item => {
+        const visible = !search || String(item.dataset.search || '').includes(search);
+        item.hidden = !visible;
+        if (visible) visibleCount += 1;
+    });
+    document.getElementById('nf-drafts-visible-count')?.replaceChildren(document.createTextNode(`${visibleCount} rascunhos`));
+    document.querySelector('.entrada-nf-drafts-empty-filter')?.classList.toggle('hidden', visibleCount > 0);
+}
+
+async function renderNFAbertasList(backAction = 'renderNFSubMenu()') {
     const currentUser = localStorage.getItem('currentUser');
     currentScreen = 'internal';
+    document.body.classList.remove('menu-active');
+    const hasLocalDraft = hasEntradaNFXMLDraft();
     
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
-            ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+            ${getTopBarHTML(currentUser, backAction)}
             
             <main class="container">
                 ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
@@ -29364,6 +31298,18 @@ async function renderNFAbertasList() {
                     <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.05);">
                         <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">PendÃƒÆ’Ã‚Âªncias operacionais</strong>
                         <span style="font-size:0.78rem;">Aqui aparecem somente notas que ainda precisam de fornecedor, vÃƒÆ’Ã‚Â­nculo de produtos ou finalizaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de estoque. Notas somente financeiro ficam no HistÃƒÆ’Ã‚Â³rico de entradas.</span>
+                    </div>
+                    <div class="entrada-nf-quick-actions" style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+                        ${hasLocalDraft ? `
+                            <button type="button" class="btn-action" onclick="resumeEntradaNFXMLDraft()" style="background:#f59e0b !important; color:#111827 !important;">
+                                <span class="material-symbols-rounded">restore</span>
+                                Continuar XML local
+                            </button>
+                        ` : ''}
+                        <button type="button" class="btn-action" onclick="renderNFXmlUploadScreen()" style="background:#2563eb !important;">
+                            <span class="material-symbols-rounded">upload_file</span>
+                            Importar nova NF
+                        </button>
                     </div>
                     <div id="nf-list-items">
                         <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas...</div>
@@ -29398,7 +31344,7 @@ async function renderNFAbertasList() {
                         <div style="font-size: 0.75rem; color: #666; text-transform: uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nf.fornecedor_nome}</div>
                     </div>
                     <div style="text-align: right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                        <div style="font-weight: 700; color: var(--primary); font-size: 0.9rem;">R$ ${parseFloat(nf.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        <div style="font-weight: 700; color: var(--primary); font-size: 0.9rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
                         <div style="display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 4px;">
                             <span class="status-dot" style="width: 6px; height: 6px; background: ${statusInfo.tone}; border-radius: 50%;"></span>
                             <span style="font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase;">${statusInfo.label}</span>
@@ -29513,13 +31459,13 @@ function isEntradaNFParcelaComplementar(parcela) {
 
 function calcularResumoEntradaNF(entrada, itens = entrada?.itens || []) {
     const totalItens = (itens || []).reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
-    const valorItens = (itens || []).reduce((sum, item) => sum + Number(item.valor_total || 0), 0);
+    const valorItens = (itens || []).reduce((sum, item) => sum + roundMoney(item.valor_total), 0);
     const parcelas = entrada?.parcelas || [];
     const parcelasNota = parcelas.filter(item => !isEntradaNFParcelaComplementar(item));
     const parcelasComplementares = parcelas.filter(isEntradaNFParcelaComplementar);
-    const valorTotal = Number(entrada?.valor_total || valorItens || 0);
-    const totalParcelasNota = parcelasNota.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-    const totalComplementares = parcelasComplementares.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    const valorTotal = roundMoney(entrada?.valor_total || valorItens || 0);
+    const totalParcelasNota = parcelasNota.reduce((sum, item) => sum + roundMoney(item.valor), 0);
+    const totalComplementares = parcelasComplementares.reduce((sum, item) => sum + roundMoney(item.valor), 0);
     return {
         quantidadeItens: (itens || []).length,
         totalItens,
@@ -29733,8 +31679,8 @@ function renderEntradaNFHistoryDashboard(historico = []) {
 
     return `
         <section class="entrada-nf-history-hero">
-            <button type="button" class="entrada-nf-history-back" onclick="renderNFSubMenu()" aria-label="Voltar">
-                <span class="material-symbols-rounded">arrow_back</span>
+            <button type="button" class="entrada-nf-history-back back-button-standard" onclick="renderNFSubMenu()" aria-label="Voltar">
+                ${getBackButtonStandardIconHTML()}
             </button>
             <div>
                 <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
@@ -29925,7 +31871,7 @@ async function renderDetalheEntradaNF(entradaId) {
                                         <span><b>Qtd</b>${Number(item.quantidade || 0).toLocaleString('pt-BR')}</span>
                                         <span><b>Custo NF</b>${getEntradaNFMoney(item.custo_nota_unitario ?? item.valor_unitario)}</span>
                                         <span><b>Custo real un.</b>${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
-                                        <span><b>Complemento rateado</b>${getEntradaNFMoney(Number(item.custo_real_unitario ?? item.valor_unitario) - Number(item.custo_nota_unitario ?? item.valor_unitario))}</span>
+                                        <span><b>Complemento rateado</b>${getEntradaNFMoney(roundMoney(item.custo_real_unitario ?? item.valor_unitario) - roundMoney(item.custo_nota_unitario ?? item.valor_unitario))}</span>
                                         <span><b>Custo real total</b>${getEntradaNFMoney(item.custo_real_total ?? item.valor_total)}</span>
                                         <span><b>Local</b>${escapeKitAttribute(item.local_entrada || item.local || 'TERREO')}</span>
                                         <span><b>Status</b>${escapeKitAttribute(item.status_vinculo || item.status || '-')}</span>
@@ -30028,7 +31974,7 @@ async function renderNFDetail(id) {
                             </div>
                             <div class="input-group">
                                 <label style="color: #999; font-size: 0.6rem;">VALOR TOTAL (NF)</label>
-                                <div style="font-weight: 800; color: var(--primary); font-size: 1rem;">R$ ${parseFloat(nf.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                                <div style="font-weight: 800; color: var(--primary); font-size: 1rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
                             </div>
                         </div>
 

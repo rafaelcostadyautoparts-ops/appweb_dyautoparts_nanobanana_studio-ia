@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v139';
+const CACHE_NAME = 'dy-autoparts-v140';
 
 // Pre-cache SEM query strings — o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -17,6 +17,7 @@ const ASSETS_TO_CACHE = [
   '/assets/images/logo/logo_dybranco_app.png',
   '/assets/images/logo/logo_dypreto_app.png',
   '/manifest.json',
+  '/version.json',
   '/assets/images/logo/maskable_icon_preto.png',
   '/assets/images/logo/maskable_icon_preto_x192.png',
   '/assets/images/logo/maskable_icon_preto_x384.png',
@@ -86,7 +87,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Network-first para arquivos principais da aplicacao
-  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('index.html')) {
+  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();
