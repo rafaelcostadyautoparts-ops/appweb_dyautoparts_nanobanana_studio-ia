@@ -38,6 +38,10 @@ preco_custo
 preco_varejo
 preco_atacado
 
+estoque_minimo
+estoque_ideal
+modo_reposicao (`MANUAL` ou `AUTOMATICO`)
+
 qtd_minima_atacado
 
 status

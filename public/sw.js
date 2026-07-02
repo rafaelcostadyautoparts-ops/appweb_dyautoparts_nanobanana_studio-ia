@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v140';
+const CACHE_NAME = 'dy-autoparts-v147';
 
 // Pre-cache SEM query strings — o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -7,9 +7,11 @@ const ASSETS_TO_CACHE = [
   '/index.html',
   '/app.js',
   '/dataClient.js',
+  '/purchasePlanning.js',
   '/supabaseClient.js',
   '/timeUtils.js',
   '/src/index.css',
+  '/src/purchasePlanning.css',
   '/assets/images/login-bg-desktop-claro.png',
   '/assets/images/login-bg-desktop-escuro.png',
   '/assets/images/login-bg-mobile-claro.png',
@@ -87,7 +89,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Network-first para arquivos principais da aplicacao
-  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/version.json') || url.includes('index.html')) {
+  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();

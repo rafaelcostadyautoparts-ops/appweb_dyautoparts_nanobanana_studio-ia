@@ -2766,7 +2766,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 const MODULE_SIDEBAR_CONFIG = {
     produtos:      { label: 'PRODUTOS',      icon: 'inventory_2',  colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
     kit_lampada:   { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb',    colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
-    movimentos:    { label: 'MOVIMENTOS',    icon: 'sync_alt',     colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
+    movimentos:    { label: 'ESTOQUE',       icon: 'inventory_2',  colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
     dashboard:     { label: 'DASHBOARD',     icon: 'dashboard',    colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
     inventario:    { label: 'INVENTÁRIO',    icon: 'fact_check',   colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
     nf:            { label: 'ENTRADA NF',    icon: 'receipt_long', colorFrom: '#1E3A8A', colorTo: '#1E40AF', shadow: '30,58,138' },
@@ -3548,7 +3548,7 @@ const menuModulesConfig = [
     { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 2, type: 'principal' },
     { id: 'pick', label: 'SEPARA\u00C7\u00C3O (PICK)', icon: 'pick', order: 3, type: 'principal' },
     { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
-    { id: 'movimentacoes', label: 'MOVIMENTOS', icon: 'movimentacoes', order: 5, type: 'principal' },
+    { id: 'movimentacoes', label: 'ESTOQUE', icon: 'movimentacoes', order: 5, type: 'principal' },
     { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
     { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
     { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
@@ -3734,6 +3734,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
         <button class="quick-action-fab fab-icon-btn fab-funcoes" type="button" onclick="toggleQuickActions()" aria-label="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas" title="FunÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes rÃƒÆ’Ã‚Â¡pidas">
             <img class="quick-action-fab-img quick-action-mode-img" src="${quickActionImage}" alt="" aria-hidden="true" onerror="this.style.display='none'">
             <span class="quick-action-fab-fallback material-symbols-rounded notranslate" translate="no" aria-hidden="true">menu</span>
+            <span class="quick-action-fab-label">ATIVAR A&Ccedil;&Atilde;O R&Aacute;PIDA</span>
         </button>
     `;
 }
@@ -3839,8 +3840,9 @@ async function renderEstoqueAtual() {
     const stockList = Object.values(consolidated).sort((a, b) => a.descricao.localeCompare(b.descricao));
 
     app.innerHTML = `
-                <div class="dashboard-screen fade-in internal">
-                    ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
+                <div class="dashboard-screen fade-in internal movimentos-screen module-screen">
+                    ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+                    ${getModuleSidebarHTML('movimentos')}
                     <main class="container">
                         <div class="sub-menu-header">
                             <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE ATUAL</h2>
@@ -4217,15 +4219,7 @@ function renderCotacaoComprasScreen() {
 }
 
 function renderProdutosAbaixoMinimoComprasScreen() {
-    renderComprasShell('PRODUTOS ABAIXO DO MÃƒÆ’Ã‚ÂNIMO', 'Consulta visual de produtos abaixo do estoque mÃƒÆ’Ã‚Â­nimo.', `
-        <section class="compras-panel">
-            <div class="compras-empty-state">
-                <span class="material-symbols-rounded">production_quantity_limits</span>
-                <strong>Consulta de reposiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</strong>
-                <p>Atalho visual reservado para produtos abaixo do mÃƒÆ’Ã‚Â­nimo. Nenhuma compra automÃƒÆ’Ã‚Â¡tica serÃƒÆ’Ã‚Â¡ gerada.</p>
-            </div>
-        </section>
-    `);
+    return renderPlanejamentoCompras();
 }
 
 function renderPedidosTransporteScreen() {
@@ -4315,11 +4309,13 @@ function handleModuleClick(item, backFunc) {
 function renderMovimentacoesSubMenu() {
     const currentUser = localStorage.getItem('currentUser');
     const subItems = [
-        { id: 'transferencia', label: 'TRANSFERÃƒÆ’Ã…Â NCIA', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
+        { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e sua distribuicao por local.' },
+        { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
+        { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular a sugestao de reposicao do estoque.' },
+        { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo o saldo de origem e destino atualizado.' },
         { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo do ajuste.' },
         { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devoluÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o ao fornecedor.' },
-        { id: 'devolucoes', label: 'DEVOLUÇÕES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devoluções para fornecedores.' },
-        { id: 'historico_mov', label: 'HISTÃƒÆ’Ã¢â‚¬Å“RICO MOVIMENTO', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar movimentaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes registradas, ajustes, transferÃƒÆ’Ã‚Âªncias e garantias.' }
+        { id: 'devolucoes', label: 'DEVOLUÇÕES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devoluções para fornecedores.' }
     ];
 
     app.innerHTML = `
@@ -7968,11 +7964,12 @@ async function saveAjusteEstoque() {
 
 async function renderInventorySetup(type) {
     const currentUser = localStorage.getItem('currentUser');
+    const backAction = type === 'parcial' ? 'renderInventarioParcialMenu()' : 'renderInventarioSubMenu()';
     
     // UI de Carregamento inicial
     app.innerHTML = `
         <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
-            ${getInventoryModuleHeaderHTML(`Invent\u00e1rio ${getInventoryTypeLabel(type)}`, 'renderInventarioSubMenu()')}
+            ${getInventoryModuleHeaderHTML(`Invent\u00e1rio ${getInventoryTypeLabel(type)}`, backAction)}
             <div id="inventory-setup-content" style="padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 80px);">
                 <div class="loading-spinner"></div>
                 <p style="color: #aaa; margin-top: 15px;">Validando sessÃƒÆ’Ã‚Âµes no servidor...</p>
@@ -9701,15 +9698,47 @@ function renderInventarioSubMenu() {
     const currentUser = localStorage.getItem('currentUser');
     const subItems = [
         { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
-        { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergÃƒÆ’Ã‚Âªncias de estoque.' },
-        { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventorySetup('parcial')", description: 'Contar uma seleÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o especÃƒÆ’Ã‚Â­fica de produtos, marcas ou locais.' },
-        { id: 'inv_localizacao', label: 'INVENT\u00c1RIO POR LOCALIZA\u00c7\u00c3O', icon: 'inventario_localizacao', onclick: 'renderInventarioLocalizacao()', description: 'Consultar produtos seguindo a sequencia fisica das posicoes do estoque.' },
-        { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventÃƒÆ’Ã‚Â¡rios abertos, fechados e anulados.' }
+        { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergencias de estoque.' },
+        { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventarioParcialMenu()", description: 'Contar uma selecao especifica de produtos, marcas, locais ou localizacoes fisicas.' },
+        { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventarios abertos, fechados e anulados.' }
     ];
 
     app.innerHTML = `
         <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen">
             ${getTopBarHTML(currentUser, 'renderMenu()')}
+            ${getModuleSidebarHTML('inventario')}
+
+            <main class="container">
+                ${getStandardModuleCardsHTML(subItems)}
+            </main>
+        </div>
+    `;
+}
+
+function renderInventarioParcialMenu() {
+    stopScanner();
+
+    const currentUser = localStorage.getItem('currentUser');
+    const subItems = [
+        {
+            id: 'inv_parcial_produtos',
+            label: 'PARCIAL POR PRODUTO',
+            icon: 'inventario_parcial',
+            onclick: "renderInventorySetup('parcial')",
+            description: 'Criar uma contagem parcial bipando ou buscando produtos especificos.'
+        },
+        {
+            id: 'inv_parcial_localizacao',
+            label: 'PARCIAL POR LOCALIZACAO',
+            icon: 'inventario_localizacao',
+            onclick: 'renderInventarioLocalizacao()',
+            description: 'Contar produtos por posicao fisica, escolhendo TERREO, MOSTRUARIO ou outro local de estoque.'
+        }
+    ];
+
+    app.innerHTML = `
+        <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen">
+            ${getTopBarHTML(currentUser, 'renderInventarioSubMenu()')}
             ${getModuleSidebarHTML('inventario')}
 
             <main class="container">
@@ -9746,6 +9775,7 @@ const inventoryLocationState = {
     items: [],
     search: '',
     location: 'Todos',
+    stockLocal: 'TERREO',
     selectedLocations: [],
     status: 'todos',
     page: 1,
@@ -9823,6 +9853,7 @@ async function fetchAllSupabaseRows(table, columns, orderColumn = null) {
 
 async function loadInventoryLocationData(force = false) {
     if (!force && inventoryLocationState.items.length) return inventoryLocationState.items;
+    const selectedStockLocal = normalizeLocal(inventoryLocationState.stockLocal || 'TERREO');
 
     const [products, stockRows] = await Promise.all([
         fetchAllSupabaseRows('produtos', 'localizacao_estoque,id_interno,descricao_completa,descricao_base,marca,sku_fornecedor,ean,url_imagem', 'localizacao_estoque'),
@@ -9833,6 +9864,7 @@ async function loadInventoryLocationData(force = false) {
     stockRows.forEach(row => {
         const id = String(row.id_interno || '').trim();
         if (!id) return;
+        if (selectedStockLocal && normalizeLocal(row.local || '') !== selectedStockLocal) return;
 
         if (!stockByProduct.has(id)) {
             stockByProduct.set(id, {
@@ -9948,7 +9980,7 @@ function getInventoryLocationCountEntry(idInterno) {
 function getInventoryLocationDefaultAdjustmentLocal(item) {
     const locais = Array.isArray(item?.locais) ? item.locais : [];
     const withStock = locais.find(local => toInventoryLocationNumber(local.saldo_total) !== 0);
-    return (withStock || locais[0])?.local || 'TERREO';
+    return (withStock || locais[0])?.local || inventoryLocationState.stockLocal || 'TERREO';
 }
 
 function getInventoryLocationAdjustmentLocal(item) {
@@ -9985,6 +10017,7 @@ async function loadOpenInventoryLocationSession() {
     if (inventoryLocationState.countSession) return inventoryLocationState.countSession;
     const client = window.supabaseClient;
     const currentUser = localStorage.getItem('currentUser') || 'N/A';
+    const stockLocal = normalizeLocal(inventoryLocationState.stockLocal || 'TERREO');
     if (!client) return null;
 
     try {
@@ -9994,6 +10027,7 @@ async function loadOpenInventoryLocationSession() {
             .eq('tipo', 'localizacao')
             .eq('status', 'ABERTO')
             .eq('usuario_responsavel', currentUser)
+            .eq('local', stockLocal)
             .order('criado_em', { ascending: false })
             .limit(1);
 
@@ -10014,7 +10048,7 @@ async function loadOpenInventoryLocationSession() {
             items[id] = {
                 id_interno: id,
                 localizacao_estoque: row.local || '',
-                adjustLocal: '',
+                adjustLocal: stockLocal,
                 qty: toInventoryLocationNumber(row.saldo_fisico),
                 saldo_sistema: toInventoryLocationNumber(row.saldo_sistema),
                 saldo_fisico: toInventoryLocationNumber(row.saldo_fisico),
@@ -10029,6 +10063,7 @@ async function loadOpenInventoryLocationSession() {
             user: session.usuario_responsavel || session.criado_por || currentUser,
             date: session.data_inicio || session.criado_em || getDataHoraBrasil(),
             status: session.status || 'ABERTO',
+            stockLocal: session.local || stockLocal,
             items
         };
         return inventoryLocationState.countSession;
@@ -10056,16 +10091,17 @@ async function startInventoryLocationCountSession() {
         const currentUser = localStorage.getItem('currentUser') || 'N/A';
         const sessionId = buildInventoryLocationSessionId();
         const now = getDataHoraBrasil();
+        const stockLocal = normalizeLocal(inventoryLocationState.stockLocal || 'TERREO');
         const payload = {
             inventario_id: sessionId,
             tipo: 'localizacao',
-            filtro_aplicado: inventoryLocationState.location || 'Todos',
+            filtro_aplicado: `${stockLocal} | ${inventoryLocationState.location || 'Todos'}`,
             status: 'ABERTO',
             criado_por: currentUser,
             usuario_responsavel: currentUser,
             data_inicio: now,
-            local: 'LOCALIZACAO_ESTOQUE',
-            observacao: 'Inventario por localizacao com contagem fisica por posicao'
+            local: stockLocal,
+            observacao: 'Inventario parcial por localizacao com contagem fisica por posicao'
         };
 
         const { error } = await client.from('inventarios').insert([payload]);
@@ -10076,6 +10112,7 @@ async function startInventoryLocationCountSession() {
             user: currentUser,
             date: now,
             status: 'ABERTO',
+            stockLocal,
             items: {}
         };
         DataClient.invalidateCache?.('inventarios');
@@ -10317,6 +10354,22 @@ function renderInventoryLocationFiltersPanel() {
                     oninput="setInventoryLocationSearch(this.value)"
                 >
             </div>
+            <label class="invloc-field invloc-location-select">
+                <span>Local de estoque</span>
+                <select id="inventory-location-stock-local-select" onchange="setInventoryLocationStockLocal(this.value)">
+                    ${[
+                        { value: 'TERREO', label: 'TERREO' },
+                        { value: 'MOSTRUARIO', label: 'MOSTRUARIO' },
+                        { value: 'PRIMEIRO_ANDAR', label: '1 ANDAR' },
+                        { value: 'FULL_ML', label: 'FULL ML' },
+                        { value: 'EM_TRANSPORTE', label: 'EM TRANSPORTE' }
+                    ].map(option => `
+                        <option value="${escapeKitAttribute(option.value)}" ${normalizeLocal(inventoryLocationState.stockLocal) === normalizeLocal(option.value) ? 'selected' : ''}>
+                            ${escapeKitAttribute(option.label)}
+                        </option>
+                    `).join('')}
+                </select>
+            </label>
             <label class="invloc-field invloc-location-select">
                 <span>Localiza\u00e7\u00e3o</span>
                 <select id="inventory-location-select" onchange="addInventoryLocationSelectedFilter(this.value); this.value = '';">
@@ -10616,6 +10669,7 @@ function renderInventoryLocationSessionPanel() {
     }
 
     const selectedLocation = inventoryLocationState.location || 'Todos';
+    const selectedStockLocal = prettyLocal(inventoryLocationState.stockLocal || 'TERREO');
     const progress = Math.max(0, Math.min(100, visibleSummary.progress));
 
     return `
@@ -10624,6 +10678,7 @@ function renderInventoryLocationSessionPanel() {
                 <div class="inventory-location-session-title">
                     <strong>Sessao ${escapeKitAttribute(session.id)}</strong>
                     <span>Inicio: ${escapeKitAttribute(formatInventoryDateTime(session.date))}</span>
+                    <span>Estoque: ${escapeKitAttribute(selectedStockLocal)}</span>
                     <span>Localizacao: ${escapeKitAttribute(selectedLocation)}</span>
                 </div>
                 <div class="inventory-location-session-metrics" aria-label="Resumo da sessao">
@@ -10639,11 +10694,11 @@ function renderInventoryLocationSessionPanel() {
             </div>
             <div class="inventory-location-session-actions">
                 <button type="button" class="secondary" onclick="finishInventoryLocationCountSession(false)">
-                    Finalizar sem ajustar
+                    Finalizar sem alterar estoque
                 </button>
                 <button type="button" onclick="finishInventoryLocationCountSession(true)">
                     <span class="material-symbols-rounded">tune</span>
-                    Aplicar ajustes
+                    Aplicar contagem
                 </button>
                 <button type="button" class="danger" onclick="confirmDeleteInventoryLocationSession()">
                     <span class="material-symbols-rounded">delete</span>
@@ -10717,12 +10772,12 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
 
     const divergences = entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0);
     const confirmed = await showAppConfirm({
-        title: applyAdjustments ? 'Aplicar ajustes do inventario?' : 'Finalizar sem ajustar estoque?',
+        title: applyAdjustments ? 'Aplicar contagem do inventario?' : 'Finalizar sem alterar estoque?',
         message: applyAdjustments
-            ? 'As divergencias contadas serao aplicadas ao estoque e registradas em movimentos.'
+            ? 'A quantidade fisica preenchida sera definida como saldo final do local escolhido. As diferencas ficam registradas em movimentos.'
             : 'A sessao sera fechada somente como registro de contagem, sem alterar estoque.',
         summary: `Produtos contados: ${entries.length}\nDivergencias: ${divergences.length}`,
-        confirmLabel: applyAdjustments ? 'Aplicar ajustes' : 'Finalizar sem ajustar',
+        confirmLabel: applyAdjustments ? 'Aplicar contagem' : 'Finalizar sem alterar',
         cancelLabel: 'Cancelar',
         danger: applyAdjustments && divergences.length > 0
     });
@@ -10750,32 +10805,33 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
                 const diferenca = toInventoryLocationNumber(entry.diferenca);
                 total_itens += toInventoryLocationNumber(entry.saldo_sistema);
                 total_itens_contados += toInventoryLocationNumber(entry.saldo_fisico);
-                if (diferenca === 0) continue;
+                if (diferenca !== 0) {
+                    total_divergencias++;
+                    const adjustmentValue = Math.abs(diferenca) * toInventoryLocationNumber(entry.valor_unitario);
+                    if (diferenca > 0) valor_ajuste_positivo += adjustmentValue;
+                    else valor_ajuste_negativo += adjustmentValue;
+                }
 
-                total_divergencias++;
-                const adjustmentValue = Math.abs(diferenca) * toInventoryLocationNumber(entry.valor_unitario);
-                if (diferenca > 0) valor_ajuste_positivo += adjustmentValue;
-                else valor_ajuste_negativo += adjustmentValue;
-
-                const operacao = diferenca > 0 ? 'soma' : 'subtrai';
-                const adjustLocal = entry.adjustLocal || 'TERREO';
-                showToast(`Aplicando ajuste ${step}/${entries.length}...`, 'info');
-                await applyStockChangeWithRequiredMovement({
-                    idInterno: entry.id_interno,
-                    local: adjustLocal,
-                    operacao,
-                    quantidade: Math.abs(diferenca),
+                const adjustLocal = entry.adjustLocal || inventoryLocationState.stockLocal || 'TERREO';
+                const saldoFisico = toInventoryLocationNumber(entry.saldo_fisico);
+                const saldoSistema = toInventoryLocationNumber(entry.saldo_sistema);
+                showToast(`Aplicando contagem ${step}/${entries.length}...`, 'info');
+                await applyInventoryStockWithRequiredMovement({
+                    item: { id_interno: entry.id_interno },
+                    itemLocal: adjustLocal,
+                    saldoFisico,
+                    saldoSistema,
                     movPayload: {
-                        tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO',
+                        tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : (diferenca < 0 ? 'AJUSTE_NEGATIVO' : 'INVENTARIO'),
                         id_interno: entry.id_interno,
                         local_origem: diferenca < 0 ? adjustLocal : null,
-                        local_destino: diferenca > 0 ? adjustLocal : null,
+                        local_destino: diferenca >= 0 ? adjustLocal : null,
                         quantidade: Math.abs(diferenca),
                         usuario: user,
                         origem: 'APP_INVENTARIO',
-                        observacao: `Inventario por localizacao ${session.id} | Posicao ${entry.localizacao_estoque || '-'}`
+                        observacao: `Inventario parcial por localizacao ${session.id} | Estoque ${adjustLocal} | Posicao ${entry.localizacao_estoque || '-'}`
                     },
-                    contextLabel: `ajuste do inventario por localizacao ${session.id}`
+                    contextLabel: `contagem do inventario por localizacao ${session.id}`
                 });
             }
         } else {
@@ -10801,8 +10857,8 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
             valor_ajuste_positivo,
             valor_ajuste_negativo,
             observacao: applyAdjustments
-                ? 'Inventario por localizacao finalizado com ajustes aplicados'
-                : 'Inventario por localizacao finalizado sem aplicar ajustes'
+                ? 'Inventario parcial por localizacao finalizado com contagem aplicada ao saldo fisico'
+                : 'Inventario parcial por localizacao finalizado sem alterar estoque'
         }).eq('inventario_id', session.id);
         if (error) throw error;
 
@@ -10811,7 +10867,7 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
         DataClient.invalidateCache?.('movimentos');
         await loadInventoryLocationData(true);
         updateInventoryLocationResults();
-        showToast(applyAdjustments ? 'Ajustes aplicados e sessao finalizada.' : 'Sessao finalizada sem ajuste.', 'success');
+        showToast(applyAdjustments ? 'Contagem aplicada e sessao finalizada.' : 'Sessao finalizada sem alterar estoque.', 'success');
     } catch (error) {
         console.error('[INV_LOCALIZACAO] erro ao finalizar sessao:', error);
         showToast('Erro ao finalizar sessao: ' + (error.message || error), 'error');
@@ -10938,7 +10994,7 @@ function updateInventoryLocationResults() {
     const sessionPanel = document.getElementById('inventory-location-session-panel');
 
     if (input && input.value !== inventoryLocationState.search) input.value = inventoryLocationState.search;
-    if (sessionPanel) sessionPanel.innerHTML = '';
+    if (sessionPanel) sessionPanel.innerHTML = renderInventoryLocationSessionPanel();
     if (results) results.innerHTML = renderInventoryLocationGroups();
     if (filters) filters.innerHTML = renderInventoryLocationFiltersPanel();
     if (count) {
@@ -10952,6 +11008,18 @@ function setInventoryLocationSearch(value) {
     inventoryLocationState.search = String(value || '');
     inventoryLocationState.page = 1;
     updateInventoryLocationResults();
+}
+
+async function setInventoryLocationStockLocal(value) {
+    const nextLocal = normalizeLocal(value || 'TERREO') || 'TERREO';
+    if (normalizeLocal(inventoryLocationState.stockLocal) === nextLocal) return;
+
+    inventoryLocationState.stockLocal = nextLocal;
+    inventoryLocationState.items = [];
+    inventoryLocationState.page = 1;
+    inventoryLocationState.countSession = null;
+    inventoryLocationState.adjustmentLocals = {};
+    await refreshInventoryLocationData();
 }
 
 function setInventoryLocationFilter(value) {
@@ -11198,12 +11266,12 @@ async function renderInventarioLocalizacao(push = true) {
             <main class="inventory-location-main">
                 <header class="invloc-hero">
                     <div class="invloc-title-wrap">
-                        <button type="button" class="invloc-back back-button-standard" onclick="renderInventarioSubMenu()" aria-label="Voltar">
+                        <button type="button" class="invloc-back back-button-standard" onclick="renderInventarioParcialMenu()" aria-label="Voltar">
                             ${getBackButtonStandardIconHTML()}
                         </button>
                         <div>
-                            <h1>Invent\u00e1rio por <span>Localiza\u00e7\u00e3o</span></h1>
-                            <p>Consulte os produtos por localiza\u00e7\u00e3o e informe a contagem f\u00edsica do invent\u00e1rio.</p>
+                            <h1>Invent\u00e1rio Parcial por <span>Localiza\u00e7\u00e3o</span></h1>
+                            <p>Escolha o local de estoque, filtre a posicao fisica e informe a contagem final encontrada.</p>
                         </div>
                     </div>
                     <div class="invloc-hero-actions">
@@ -12121,17 +12189,20 @@ async function startScanner(isPicking = false, isConference = false, isInventory
     ].filter(Boolean);
 
     const config = {
-        fps: window.innerWidth < 768 ? 14 : 18,
+        fps: window.innerWidth < 768 ? 20 : 18,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
             const isPortrait = viewfinderHeight >= viewfinderWidth;
             const widthRatio = isPortrait ? 0.9 : 0.72;
             const heightRatio = isPortrait ? 0.34 : 0.48;
             const width = Math.floor(viewfinderWidth * widthRatio);
             const height = Math.floor(Math.min(viewfinderHeight * heightRatio, width * 0.62));
+            const maxWidth = Math.max(120, viewfinderWidth - 24);
+            const boxWidth = Math.min(Math.max(160, width), maxWidth);
+            const boxHeight = Math.min(Math.max(90, height), Math.max(90, viewfinderHeight - 24), Math.floor(boxWidth * 0.58));
 
             return {
-                width: Math.max(220, width),
-                height: Math.max(120, height)
+                width: boxWidth,
+                height: boxHeight
             };
         },
         aspectRatio: window.innerWidth < 768 ? 1.333334 : 1.777778,
@@ -12139,6 +12210,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
         experimentalFeatures: {
             useBarCodeDetectorIfSupported: true
         },
+        disableFlip: true,
         formatsToSupport: supportedScannerFormats
     };
 
@@ -12149,7 +12221,8 @@ async function startScanner(isPicking = false, isConference = false, isInventory
             config,
             async (decodedText) => {
                 const now = Date.now();
-                if (isScannerScanProcessing || now - lastScanTime < 900) return;
+                const scanCooldownMs = isPicking ? 2000 : 900;
+                if (isScannerScanProcessing || now - lastScanTime < scanCooldownMs) return;
                 lastScanTime = now;
                 isScannerScanProcessing = true;
 
@@ -12207,6 +12280,13 @@ async function startScanner(isPicking = false, isConference = false, isInventory
                 // parse error, ignore it.
             }
         );
+        if (isPicking && typeof html5QrCode?.applyVideoConstraints === 'function') {
+            try {
+                await html5QrCode.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
+            } catch (focusError) {
+                console.log('[SCANNER] foco continuo nao suportado neste aparelho');
+            }
+        }
     } catch (err) {
         console.error("Scanner error:", err);
         showToast("CÃƒÆ’Ã‚Â¢mera em uso ou nÃƒÆ’Ã‚Â£o disponÃƒÆ’Ã‚Â­vel. Tente novamente.");
@@ -12632,6 +12712,9 @@ function resetProductSearchScroll() {
         window.scrollTo(0, 0);
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
+
+        const activeScreen = document.querySelector('#app > .product-search-screen');
+        if (activeScreen) activeScreen.scrollTop = 0;
 
         const resultsContainer = document.getElementById('search-results');
         if (resultsContainer) resultsContainer.scrollTop = 0;
@@ -13826,6 +13909,8 @@ async function renderProductDetails(p) {
     }))) : '';
     const operationalInfoHTML = renderInfoBlock('Operacional', [
         { label: 'Estoque mÃƒÆ’Ã‚Â­nimo', value: p.estoque_minimo },
+        { label: 'Estoque ideal', value: p.estoque_ideal },
+        { label: 'Reposicao', value: p.modo_reposicao || 'MANUAL' },
         { label: 'Unidade', value: p.unidade },
         { label: 'Qtd. embalagem', value: p.quantidade_embalagem },
         { label: 'MÃƒÆ’Ã‚Â­nimo atacado', value: p.quantidade_minima_atacado },
@@ -14205,6 +14290,10 @@ function renderAddProduct(initialEan = '') {
                         <input type="number" id="add-min" class="input-field" placeholder="0">
                     </div>
                     <div class="input-group">
+                        <label>Estoque Ideal (1 mes)</label>
+                        <input type="number" id="add-ideal" class="input-field" min="0" placeholder="0">
+                    </div>
+                    <div class="input-group">
                         <label>Qtd MÃƒÆ’Ã‚Â­nima Atacado</label>
                         <input type="number" id="add-min-at" class="input-field" value="1">
                     </div>
@@ -14313,6 +14402,8 @@ async function saveNewProduct() {
         preco_varejo: parseMoneyInputValue(document.getElementById('add-varejo').value),
         preco_atacado: parseMoneyInputValue(document.getElementById('add-atacado').value),
         estoque_minimo: parseInt(document.getElementById('add-min').value) || 0,
+        estoque_ideal: parseInt(document.getElementById('add-ideal').value) || 0,
+        modo_reposicao: 'MANUAL',
         qtd_minima_atacado: parseInt(document.getElementById('add-min-at').value) || 1,
         status: document.getElementById('add-status').value,
         observacoes: document.getElementById('add-obs').value.trim(),
@@ -14472,6 +14563,8 @@ async function saveEditProduct(originalId) {
         preco_varejo: parseMoneyInputValue(document.getElementById('edit-varejo').value),
         preco_atacado: parseMoneyInputValue(document.getElementById('edit-atacado').value),
         estoque_minimo: parseInt(document.getElementById('edit-min').value) || 0,
+        estoque_ideal: parseInt(document.getElementById('edit-ideal').value) || 0,
+        modo_reposicao: 'MANUAL',
         qtd_minima_atacado: parseInt(document.getElementById('edit-min-at').value) || 1,
         status: document.getElementById('edit-status').value,
         observacoes: document.getElementById('edit-obs').value.trim(),
@@ -14756,6 +14849,10 @@ function renderEditProductForm(p) {
                     <div class="input-group">
                         <label>Estoque MÃƒÆ’Ã‚Â­nimo</label>
                         <input type="number" id="edit-min" class="input-field" value="${p.estoque_minimo || ''}">
+                    </div>
+                    <div class="input-group">
+                        <label>Estoque Ideal (1 mes)</label>
+                        <input type="number" id="edit-ideal" class="input-field" min="0" value="${p.estoque_ideal || ''}">
                     </div>
                     <div class="input-group">
                         <label>Qtd MÃƒÆ’Ã‚Â­nima Atacado</label>
@@ -16198,10 +16295,12 @@ let currentPickingContext = null;
 let lastScannedPickItemKey = null;
 let expandedPickItemKey = null;
 let pickRemovalModeActive = false;
+let pickManualInputModeActive = false;
 let lastPickScanAction = 'add';
 let pickSearchDebounceTimer = null;
 let pickSearchSuggestions = [];
 let pickSearchActiveIndex = -1;
+let pickSearchCatalogPromise = null;
 let scanCenterToastTimeout = null;
 let scanSuccessGlowTimeout = null;
 const PICK_STATUS_DRAFT = 'em_separacao';
@@ -17592,10 +17691,53 @@ function updatePickSummaryUI() {
 function focusPickManualInput() {
     const input = document.getElementById('pick-ean-input');
     if (!input) return;
-    input.setAttribute('inputmode', 'text');
+    pickManualInputModeActive = true;
+    input.blur();
+    input.removeAttribute('readonly');
+    input.setAttribute('inputmode', 'search');
+    input.setAttribute('enterkeyhint', 'search');
+    input.setAttribute('virtualkeyboardpolicy', 'auto');
     input.focus();
     input.select?.();
-    showToast("Digite o codigo e pressione Enter.", "info");
+    try { navigator.virtualKeyboard?.show?.(); } catch (error) {}
+    document.getElementById('pick-keyboard-btn')?.classList.add('is-active');
+    showToast("Digite nome, ID, EAN ou SKU.", "info");
+
+    ensurePickSearchCatalogLoaded().then(() => {
+        const currentValue = input.value.trim();
+        if (currentValue) renderPickSearchSuggestions(findPickProductSuggestions(currentValue), 'Nenhum produto encontrado.');
+    });
+}
+
+async function ensurePickSearchCatalogLoaded() {
+    if (Array.isArray(appData.products) && appData.products.length > 0) return true;
+    if (pickSearchCatalogPromise) return pickSearchCatalogPromise;
+
+    pickSearchCatalogPromise = (async () => {
+        try {
+            const data = await DataClient.loadModule('produtos', false);
+            const products = data?.products || [];
+            if (!products.length) return false;
+            appData.products = hydrateProdutosForSearch(products);
+            if (Array.isArray(data?.estoque)) appData.estoque = data.estoque;
+            console.log('[SEP] catalogo de busca carregado', { total: appData.products.length });
+            return true;
+        } catch (error) {
+            console.warn('[SEP] falha ao carregar catalogo para busca inteligente', error);
+            return false;
+        } finally {
+            pickSearchCatalogPromise = null;
+        }
+    })();
+
+    return pickSearchCatalogPromise;
+}
+
+function startPickCameraScanner() {
+    pickManualInputModeActive = false;
+    document.getElementById('pick-keyboard-btn')?.classList.remove('is-active');
+    preparePickScannerInput();
+    startScanner(true);
 }
 
 function isPickMobileViewport() {
@@ -17605,7 +17747,7 @@ function isPickMobileViewport() {
 function preparePickScannerInput({ focus = false } = {}) {
     const input = document.getElementById('pick-ean-input');
     if (!input) return;
-    input.setAttribute('inputmode', 'none');
+    input.setAttribute('inputmode', pickManualInputModeActive && isPickMobileViewport() ? 'text' : 'none');
     input.removeAttribute('readonly');
     input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('autocorrect', 'off');
@@ -17628,6 +17770,7 @@ function settlePickScannerInput(delay = 60) {
 function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     const currentUser = localStorage.getItem('currentUser');
     pickRemovalModeActive = false;
+    pickManualInputModeActive = false;
     sessionId = getSafePickSessionId(sessionId, channelLabel);
     const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
     const packageCount = getCurrentPickPackageCount(sessionId, channelId, channelLabel);
@@ -17655,15 +17798,12 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
              data-channel-color="${escapeKitAttribute(channelColor || '')}"
              data-created-at="${escapeKitAttribute(currentPickingContext.createdAt || '')}">
             ${getModuleSidebarHTML('pick')}
-            ${getTopBarHTML(currentUser, 'renderPickMenu()')}
-            ${getQuickActionsHTML(getActivePickingFastMode(draft))}
 
             <main class="pick-workflow-shell">
                 <header class="pick-workflow-header">
                     <button class="pick-back-btn pick-inline-back back-button-standard ds-back-button" type="button" onclick="renderPickMenu()" aria-label="Voltar">
                         ${getBackButtonStandardIconHTML()}
                     </button>
-
                     <div class="pick-workflow-title">
                         <span class="pick-title-icon">${channelIcon}</span>
                         <div>
@@ -17678,13 +17818,16 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
                         <div class="pick-scan-field">
                             <span class="material-symbols-rounded">search</span>
                             <input type="text" id="pick-ean-input" class="product-search-input" 
-                                   placeholder="Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)"
+                                   placeholder="${isPickMobileViewport() ? 'Bipe ou digite: nome, ID, EAN ou SKU' : 'Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)'}"
                                    onfocus="preparePickScannerInput({ focus: false })"
                                    oninput="handlePickSearchInput(event)"
                                    onkeydown="handlePickSearchKeyDown(event)"
                                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                    inputmode="none" enterkeyhint="done">
-                            <button class="pick-scanner-btn" onclick="startScanner(true)" title="Abrir Scanner" type="button">
+                            <button id="pick-keyboard-btn" class="pick-keyboard-btn" onclick="focusPickManualInput()" title="Abrir teclado para buscar produto" aria-label="Abrir teclado para buscar produto" type="button">
+                                <span class="material-symbols-rounded" aria-hidden="true">keyboard</span>
+                            </button>
+                            <button class="pick-scanner-btn" onclick="startPickCameraScanner()" title="Abrir Scanner" type="button">
                                 <span class="material-symbols-rounded">qr_code_scanner</span>
                             </button>
                         </div>
@@ -17784,6 +17927,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
     updatePickItemsList();
     updatePickRemovalModeUI();
     preparePickScannerInput({ focus: true });
+    ensurePickSearchCatalogLoaded();
 }
 
 function showInputFeedback(inputId, type) {
@@ -17824,7 +17968,9 @@ function normalizePickCode(rawValue) {
 function getPickScanInputPlaceholder() {
     return pickRemovalModeActive
         ? 'Bipe o produto para remover 1 unidade'
-        : 'Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)';
+        : (isPickMobileViewport()
+            ? 'Bipe ou digite: nome, ID, EAN ou SKU'
+            : 'Bipe o produto (EAN, SKU ou cÃƒÆ’Ã‚Â³digo interno)');
 }
 
 function updatePickRemovalModeUI() {
@@ -17889,6 +18035,7 @@ function getPickSuggestionSearchText(product) {
 
 function findPickProductSuggestions(query, limit = 8) {
     const term = normalizeText(query || '').trim();
+    const termTokens = term.split(/\s+/).filter(Boolean);
     const codeTerm = normalizePickCode(query || '').toLowerCase();
     if (!term && !codeTerm) return [];
 
@@ -17904,6 +18051,7 @@ function findPickProductSuggestions(query, limit = 8) {
             if (codeTerm && [id, ean, sku].some(value => String(value || '').toLowerCase().startsWith(codeTerm))) score += 45;
             if (term && haystack.startsWith(term)) score += 25;
             if (term && haystack.includes(term)) score += 12;
+            if (termTokens.length > 1 && termTokens.every(token => haystack.includes(token))) score += 18;
             return { product, score };
         })
         .filter(entry => entry.score > 0 && getPickSuggestionCode(entry.product))
@@ -17918,14 +18066,19 @@ function findPickProductSuggestions(query, limit = 8) {
         .map(entry => entry.product);
 }
 
-function renderPickSearchSuggestions(suggestions = []) {
+function renderPickSearchSuggestions(suggestions = [], emptyMessage = '') {
     const container = document.getElementById('pick-search-suggestions');
     if (!container) return;
     pickSearchSuggestions = suggestions;
     pickSearchActiveIndex = Math.min(pickSearchActiveIndex, suggestions.length - 1);
     if (!suggestions.length) {
-        container.classList.add('hidden');
-        container.innerHTML = '';
+        if (emptyMessage) {
+            container.classList.remove('hidden');
+            container.innerHTML = `<div class="pick-search-status">${escapeKitAttribute(emptyMessage)}</div>`;
+        } else {
+            container.classList.add('hidden');
+            container.innerHTML = '';
+        }
         return;
     }
 
@@ -17962,10 +18115,24 @@ function handlePickSearchInput(event) {
         clearPickSearchSuggestions();
         return;
     }
-    pickSearchDebounceTimer = setTimeout(() => {
+    pickSearchDebounceTimer = setTimeout(async () => {
+        const input = document.getElementById('pick-ean-input');
+        const currentValue = input?.value?.trim() || '';
+        if (!currentValue) {
+            clearPickSearchSuggestions();
+            return;
+        }
+
         pickSearchActiveIndex = -1;
-        renderPickSearchSuggestions(findPickProductSuggestions(value));
-    }, 140);
+        if (!Array.isArray(appData.products) || !appData.products.length) {
+            renderPickSearchSuggestions([], 'Carregando produtos...');
+            await ensurePickSearchCatalogLoaded();
+        }
+
+        const latestValue = document.getElementById('pick-ean-input')?.value?.trim() || '';
+        if (!latestValue) return clearPickSearchSuggestions();
+        renderPickSearchSuggestions(findPickProductSuggestions(latestValue), 'Nenhum produto encontrado para esta busca.');
+    }, 120);
 }
 
 async function selectPickSearchSuggestion(index) {
@@ -17978,7 +18145,7 @@ async function selectPickSearchSuggestion(index) {
     await addPickItem(code);
 }
 
-function handlePickSearchKeyDown(event) {
+async function handlePickSearchKeyDown(event) {
     if (!event) return;
     if (event.key === 'ArrowDown' && pickSearchSuggestions.length) {
         event.preventDefault();
@@ -17998,6 +18165,13 @@ function handlePickSearchKeyDown(event) {
     }
     if (event.key === 'Enter') {
         event.preventDefault();
+        if (pickSearchCatalogPromise) {
+            renderPickSearchSuggestions([], 'Carregando produtos...');
+            await pickSearchCatalogPromise;
+            const currentValue = document.getElementById('pick-ean-input')?.value?.trim() || '';
+            renderPickSearchSuggestions(findPickProductSuggestions(currentValue), 'Nenhum produto encontrado para esta busca.');
+        }
+
         const selectedIndex = pickSearchActiveIndex >= 0 ? pickSearchActiveIndex : 0;
         if (pickSearchSuggestions[selectedIndex]) {
             selectPickSearchSuggestion(selectedIndex);
@@ -18147,6 +18321,7 @@ async function removePickItemByScan(cleanCode, input) {
     const item = currentSessionItems[existingIndex];
     const productKey = getPickingProductId(item);
     const currentQty = Number(item.qty) || Number(item.qtd_separada) || 1;
+    const roundBeforeRemoval = getPickItemRoundState(item);
     if (!item.remove_scan_count) item.remove_scan_origin_qty = currentQty;
     const nextQty = Math.max(0, currentQty - 1);
     let removedAll = nextQty <= 0;
@@ -18160,6 +18335,11 @@ async function removePickItemByScan(cleanCode, input) {
     currentSessionItems.splice(existingIndex, 1);
     if (!removedAll) {
         item.qty = nextQty;
+        if (roundBeforeRemoval.hasRound && roundBeforeRemoval.qty > 0) {
+            item.pick_round_qty = Math.max(0, roundBeforeRemoval.qty - 1);
+            item.pick_round_last_scan_at = getDataHoraBrasil();
+            if (Number(item.pick_round_qty) < roundBeforeRemoval.target) delete item.pick_round_completed_at;
+        }
         item.remove_scan_count = Number(item.remove_scan_count || 0) + 1;
         item.scanTime = formatTimeBR();
         item.lastRemovedAt = Date.now();
@@ -18274,6 +18454,27 @@ async function addPickItem(scannedEan = null) {
         const stock = getPickAvailableStock(productId);
         const existingItemForQty = currentSessionItems.find(item => getPickingProductId(item) === productId);
         const currentDraftQty = existingItemForQty ? existingItemForQty.qty : 0;
+        const currentRoundBeforeScan = getPickItemRoundState(existingItemForQty || {});
+        let roundCompletedNow = false;
+        let roundOverflowNow = false;
+
+        if (currentRoundBeforeScan.hasRound && currentRoundBeforeScan.qty >= currentRoundBeforeScan.target) {
+            const addBeyondRound = await showAppConfirm({
+                title: 'Rodada ja concluida',
+                message: `${getPickItemTitle(existingItemForQty)} esta em ${currentRoundBeforeScan.qty}/${currentRoundBeforeScan.target}.`,
+                detail: `Total atual: ${Number(existingItemForQty?.qty || 0)} unidade(s). Deseja adicionar mais uma mesmo assim?`,
+                confirmLabel: 'Adicionar mesmo assim',
+                cancelLabel: 'Cancelar bip',
+                danger: true
+            });
+            if (!addBeyondRound) {
+                if (input) input.value = '';
+                showScanFeedback('warning', 'Bip cancelado: rodada concluida');
+                showInputFeedback('pick-ean-input', 'warning');
+                settlePickScannerInput(80);
+                return;
+            }
+        }
 
         if (stock < (currentDraftQty + 1)) {
             console.log('[SEPARACAO_ESTOQUE_NEGATIVO] validacao bipagem', {
@@ -18322,6 +18523,16 @@ async function addPickItem(scannedEan = null) {
             existingItem.qty = (existingItem.qty || 1) + 1;
             existingItem.scanTime = formatTimeBR();
             existingItem.lastAddedAt = Date.now();
+            const roundBeforeIncrement = getPickItemRoundState(existingItem);
+            if (roundBeforeIncrement.hasRound) {
+                const nextRoundQty = roundBeforeIncrement.qty + 1;
+                existingItem.pick_round_qty = nextRoundQty;
+                existingItem.pick_round_last_scan_at = getDataHoraBrasil();
+                roundCompletedNow = roundBeforeIncrement.qty < roundBeforeIncrement.target && nextRoundQty === roundBeforeIncrement.target;
+                roundOverflowNow = nextRoundQty > roundBeforeIncrement.target;
+                if (roundCompletedNow) existingItem.pick_round_completed_at = getDataHoraBrasil();
+                if (nextRoundQty < roundBeforeIncrement.target) delete existingItem.pick_round_completed_at;
+            }
             currentSessionItems.splice(existingIndex, 1);
             currentSessionItems.unshift(existingItem);
         } else {
@@ -18433,8 +18644,23 @@ async function addPickItem(scannedEan = null) {
         }
 
         if (!pickPersistFailed) {
-            showPickScanCenterToast(currentSessionItems.find(item => getPickingProductId(item) === productId) || product);
+            const scannedItem = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
+            showPickScanCenterToast(scannedItem);
+            if (isPickMobileViewport() && !roundCompletedNow && !roundOverflowNow) {
+                const addedTotal = Number(scannedItem?.qty || 1);
+                showScanFeedback('success', `Produto adicionado: ${getPickItemTitle(scannedItem)} | Total ${addedTotal}`);
+            }
             triggerScanSuccessGlow();
+            if (roundCompletedNow) {
+                const completedRound = getPickItemRoundState(scannedItem);
+                showScanFeedback('success', `Rodada concluida: ${completedRound.qty}/${completedRound.target}`);
+                showToast(`Rodada concluida para ${getPickItemTitle(scannedItem)}: ${completedRound.qty}/${completedRound.target}.`, 'success');
+                if (navigator.vibrate) navigator.vibrate([120, 60, 180]);
+            } else if (roundOverflowNow) {
+                const overflowRound = getPickItemRoundState(scannedItem);
+                showScanFeedback('warning', `Rodada excedida: ${overflowRound.qty}/${overflowRound.target}`);
+                showToast(`Atencao: rodada em ${overflowRound.qty}/${overflowRound.target}.`, 'warning');
+            }
         }
         if (currentPackSession) {
             currentPackSession.items = currentSessionItems;
@@ -18455,6 +18681,98 @@ async function addPickItem(scannedEan = null) {
     showInputFeedback('pick-ean-input', product ? 'success' : 'error');
     settlePickScannerInput(80);
     settlePickScannerInput(320);
+}
+
+function getPickItemRoundState(item = {}) {
+    const target = Math.max(0, Math.floor(Number(item.pick_round_target || 0)));
+    const qty = Math.max(0, Math.floor(Number(item.pick_round_qty || 0)));
+    const hasRound = target > 0;
+    const isComplete = hasRound && qty === target;
+    const isOverflow = hasRound && qty > target;
+    return {
+        target,
+        qty,
+        hasRound,
+        isComplete,
+        isOverflow,
+        tone: isOverflow ? 'is-overflow' : (isComplete ? 'is-complete' : (hasRound ? 'is-active' : 'is-empty'))
+    };
+}
+
+function savePickRoundStateLocally() {
+    const scopedDraft = getScopedDraftPickSession(
+        currentPickingContext?.sessionId,
+        currentPickingContext?.channelId,
+        currentPickingContext?.channelLabel
+    ) || getDraftPickSession();
+
+    if (scopedDraft) {
+        return saveDraftPickSession({
+            ...scopedDraft,
+            items: currentSessionItems
+        });
+    }
+
+    return getCurrentPickDraftForUpdate('local_only');
+}
+
+async function startPickItemRound(index) {
+    const item = currentSessionItems[index];
+    if (!item) return;
+
+    const currentRound = getPickItemRoundState(item);
+    if (currentRound.hasRound && currentRound.qty > 0 && !currentRound.isComplete) {
+        const resetConfirmed = await showAppConfirm({
+            title: 'Reiniciar rodada em andamento?',
+            message: `${getPickItemTitle(item)} esta em ${currentRound.qty}/${currentRound.target}.`,
+            detail: 'O total separado nao sera alterado. Apenas o contador da rodada voltara para zero.',
+            confirmLabel: 'Reiniciar rodada',
+            cancelLabel: 'Continuar atual',
+            danger: true
+        });
+        if (!resetConfirmed) {
+            settlePickScannerInput(80);
+            return;
+        }
+    }
+
+    const targetInput = await showAppPrompt({
+        title: currentRound.hasRound ? 'Nova rodada' : 'Iniciar rodada',
+        message: getPickItemTitle(item),
+        detail: `Total ja separado: ${Number(item.qty || 0)} unidade(s).`,
+        label: 'Quantidade desta rodada',
+        defaultValue: currentRound.target > 0 ? String(currentRound.target) : '',
+        placeholder: 'Exemplo: 5',
+        confirmLabel: 'Iniciar rodada',
+        cancelLabel: 'Cancelar',
+        inputType: 'number'
+    });
+
+    if (targetInput === null) {
+        settlePickScannerInput(80);
+        return;
+    }
+
+    const target = Math.floor(Number(targetInput));
+    if (!Number.isFinite(target) || target <= 0 || target > 9999) {
+        await showAppAlert({
+            title: 'Quantidade invalida',
+            message: 'Informe uma quantidade entre 1 e 9999.',
+            buttonLabel: 'Entendi',
+            danger: true
+        });
+        settlePickScannerInput(80);
+        return;
+    }
+
+    item.pick_round_target = target;
+    item.pick_round_qty = 0;
+    item.pick_round_started_at = getDataHoraBrasil();
+    delete item.pick_round_completed_at;
+    savePickRoundStateLocally();
+    updatePickItemsList();
+    showToast(`Nova rodada de ${target} unidade(s) iniciada.`, 'success');
+    settlePickScannerInput(80);
 }
 
 function updatePickItemsList() {
@@ -18483,6 +18801,9 @@ function updatePickItemsList() {
         const isExpanded = productKey === expandedPickItemKey;
         const addedRecently = Date.now() - Number(item.lastAddedAt || 0) < 4500;
         const removedRecently = Date.now() - Number(item.lastRemovedAt || 0) < 4500;
+        const round = getPickItemRoundState(item);
+        const roundLabel = round.isOverflow ? 'ACIMA DA META' : (round.isComplete ? 'CONCLUIDA' : (round.hasRound ? 'EM ANDAMENTO' : 'SEM RODADA'));
+        const roundButtonLabel = round.hasRound ? 'NOVA RODADA' : 'INICIAR RODADA';
         return `
         <article class="pick-product-row separacao-item-card fade-in ${isLastScanned ? 'is-last-scanned' : ''} ${isLastRemoval ? 'is-last-removed' : ''} ${addedRecently ? 'recently-added' : ''} ${removedRecently ? 'recently-removed' : ''}">
             <div class="pick-product-main" data-label="Produto">
@@ -18500,11 +18821,19 @@ function updatePickItemsList() {
             </div>
             <div class="pick-product-qty" data-label="Quantidade bipada">
                 <span class="pick-qty-number">${Number(item.qty) || 0}</span>
-                <span class="pick-qty-unit">un</span>
+                <span class="pick-qty-unit">total</span>
             </div>
-            <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Remover item">
+            <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
                 <span class="material-symbols-rounded">delete</span>
             </button>
+            <div class="pick-round-bar ${round.tone}">
+                <div class="pick-round-counter">
+                    <span>RODADA</span>
+                    <strong>${round.hasRound ? `${round.qty}/${round.target}` : '--'}</strong>
+                    <small>${roundLabel}</small>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); startPickItemRound(${index})">${roundButtonLabel}</button>
+            </div>
             ${isLastScanned ? `
                 <div class="pick-added-now ${isLastRemoval ? 'is-remove' : ''}">
                     <span class="material-symbols-rounded">${isLastRemoval ? 'remove_done' : 'check'}</span>
@@ -18522,6 +18851,24 @@ function togglePickItemExpanded(productKey) {
 
 async function removePickItem(index) {
     const removedItem = currentSessionItems[index];
+    if (!removedItem) return;
+
+    const totalQty = Number(removedItem.qty || removedItem.qtd_separada || 0);
+    const confirmed = await showAppConfirm({
+        title: 'Excluir produto da separacao?',
+        message: getPickItemTitle(removedItem),
+        detail: `Quantidade total que sera excluida: ${totalQty} unidade(s).`,
+        summary: 'Esta acao remove a linha inteira e todo o total bipado deste produto.',
+        confirmLabel: 'Sim, excluir tudo',
+        cancelLabel: 'Nao excluir',
+        danger: true
+    });
+
+    if (!confirmed) {
+        settlePickScannerInput(80);
+        return;
+    }
+
     const removedKey = getPickingProductId(removedItem) || `pick-item-${index}`;
     currentSessionItems.splice(index, 1);
     if (lastScannedPickItemKey === removedKey) lastScannedPickItemKey = null;
