@@ -1,19 +1,19 @@
 /**
- * Data Access Layer - Camada de abstração para acesso a dados
- * Permite futura migração de Google Sheets para Supabase com mínimo impacto
+ * Data Access Layer - Camada de abstraï¿½ï¿½o para acesso a dados
+ * Permite futura migraï¿½ï¿½o de Google Sheets para Supabase com mï¿½nimo impacto
  * 
  * Implementa:
- * - Carregamento sob demanda por módulo
+ * - Carregamento sob demanda por mï¿½dulo
  * - Cache inteligente
- * - Logging de operações
+ * - Logging de operaï¿½ï¿½es
  */
 
 const DataClient = (function () {
-    // Cache por módulo
+    // Cache por mï¿½dulo
     const cache = {};
     const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
-    // Mapeamento de módulos para abas do Google Sheets
+    // Mapeamento de mï¿½dulos para abas do Google Sheets
     const MODULE_TABLES = {
         login: {
             tables: ['usuarios'],
@@ -66,7 +66,7 @@ const DataClient = (function () {
     };
 
     /**
-     * Verifica se cache é válido
+     * Verifica se cache ï¿½ vï¿½lido
      */
     function isCacheValid(key) {
         if (!cache[key]) return false;
@@ -84,7 +84,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Obtém do cache
+     * Obtï¿½m do cache
      */
     function getCache(key) {
         if (isCacheValid(key)) {
@@ -94,7 +94,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Limpa cache de um módulo
+     * Limpa cache de um mï¿½dulo
      */
     function invalidateCache(key) {
         delete cache[key];
@@ -107,9 +107,9 @@ const DataClient = (function () {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[FATAL] Supabase client não inicializado!')
+            console.error('[FATAL] Supabase client nï¿½o inicializado!')
             console.error('[FATAL] Verifique supabaseClient.js - URL e ANON_KEY podem estar incompletas')
-            throw new Error('Supabase não configurado. Configure URL e ANON_KEY em supabaseClient.js')
+            throw new Error('Supabase nï¿½o configurado. Configure URL e ANON_KEY em supabaseClient.js')
         }
 
         console.log('[Supabase] Iniciando consulta na tabela produtos...')
@@ -120,14 +120,14 @@ const DataClient = (function () {
 
         if (error) {
             console.error('[Supabase] ERRO ao buscar produtos:', error.message)
-            console.error('[Supabase] Código do erro:', error.code)
+            console.error('[Supabase] Cï¿½digo do erro:', error.code)
             throw new Error('Erro ao carregar produtos do Supabase: ' + error.message)
         }
 
         if (!data || data.length === 0) {
-            console.warn('[Supabase] ATENÇÃO: Nenhum produto encontrado na tabela!')
+            console.warn('[Supabase] ATENï¿½ï¿½O: Nenhum produto encontrado na tabela!')
             console.warn('[Supabase] Verifique se a tabela "produtos" possui registros')
-            throw new Error('Nenhum produto encontrado no Supabase. A tabela está vazia ou não existe.')
+            throw new Error('Nenhum produto encontrado no Supabase. A tabela estï¿½ vazia ou nï¿½o existe.')
         }
 
         console.log(`[Supabase] Sukesso! ${data.length} produtos carregados do Supabase`)
@@ -181,13 +181,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega usuários do Supabase
+     * Carrega usuï¿½rios do Supabase
      */
     async function fetchUsuariosSupabase() {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[Supabase] client não encontrado')
+            console.error('[Supabase] client nï¿½o encontrado')
             return []
         }
 
@@ -198,7 +198,7 @@ const DataClient = (function () {
 
 
         if (error) {
-            console.error('[Supabase] erro ao buscar usuários:', error)
+            console.error('[Supabase] erro ao buscar usuï¿½rios:', error)
             return []
         }
 
@@ -249,13 +249,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega Kit Lâmpada do Supabase (Paginado para carregar tudo)
+     * Carrega Kit Lï¿½mpada do Supabase (Paginado para carregar tudo)
      */
     async function fetchKitLampadaSupabase() {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[Supabase] client não encontrado')
+            console.error('[Supabase] client nï¿½o encontrado')
             return []
         }
 
@@ -282,7 +282,7 @@ const DataClient = (function () {
                 from += pageSize;
             }
 
-            // Utilitário interno para logs
+            // Utilitï¿½rio interno para logs
             const safeText = (val) => String(val ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
             console.log('[KIT LAMPADA] rows:', allRows);
@@ -291,7 +291,7 @@ const DataClient = (function () {
             console.log('[KIT LAMPADA] primeiro item:', allRows[0]);
 
             if (allRows.length === 0) {
-                console.warn('[KIT LAMPADA] Atenção: Nenhum registro retornado. Verifique as RLS/Policies da tabela "kit_lampada" no Supabase.');
+                console.warn('[KIT LAMPADA] Atenï¿½ï¿½o: Nenhum registro retornado. Verifique as RLS/Policies da tabela "kit_lampada" no Supabase.');
             }
 
             return allRows;
@@ -309,10 +309,10 @@ const DataClient = (function () {
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase()
             .replace(/\s+/g, '_')
-            .replace('1º_ANDAR', 'PRIMEIRO_ANDAR')
-            .replace('1°_ANDAR', 'PRIMEIRO_ANDAR')
+            .replace('1ï¿½_ANDAR', 'PRIMEIRO_ANDAR')
+            .replace('1ï¿½_ANDAR', 'PRIMEIRO_ANDAR')
             .replace('1_ANDAR', 'PRIMEIRO_ANDAR');
-        // Normalizar variações de FULL ML
+        // Normalizar variaï¿½ï¿½es de FULL ML
         if (norm === 'FULL_ML' || norm === 'FULLML' || norm === 'FULL_M_L') return 'FULL_ML';
         return norm;
     }
@@ -381,7 +381,7 @@ const DataClient = (function () {
     async function saveMovimentoSupabase(movData) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[Supabase] Client não encontrado');
+            console.error('[Supabase] Client nï¿½o encontrado');
             return null;
         }
 
@@ -415,13 +415,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Atualiza o saldo na tabela estoque_atual de forma atômica
+     * Atualiza o saldo na tabela estoque_atual de forma atï¿½mica
      */
     async function updateEstoqueSupabase(id_interno, localRaw, operacao, quantidade) {
         const client = window.supabaseClient;
         const local = normalizeLocal(localRaw);
         if (!client || !local) {
-            console.error('[MOV] update estoque ERRO: client ou local inválido');
+            console.error('[MOV] update estoque ERRO: client ou local invï¿½lido');
             return false;
         }
 
@@ -497,6 +497,42 @@ const DataClient = (function () {
         }
     }
 
+    async function registrarAjusteEstoqueSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const local = normalizeLocal(payload.local);
+        const rpcPayload = {
+            p_id_interno: String(payload.id_interno || '').trim(),
+            p_local: local,
+            p_tipo_ajuste: String(payload.tipo_ajuste || 'definir').trim(),
+            p_quantidade: Number(payload.quantidade || 0),
+            p_usuario: payload.usuario || 'N/A',
+            p_observacao: payload.observacao || '',
+            p_permitir_negativo: payload.permitir_negativo === true,
+            p_execution_id: payload.executionId || `ajuste_${Date.now()}`
+        };
+
+        console.log('[AJUSTE RPC] registrar_ajuste_estoque payload:', rpcPayload);
+
+        const { data, error } = await client.rpc('registrar_ajuste_estoque', rpcPayload);
+        if (error) {
+            console.error('[AJUSTE RPC] erro:', error);
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('registrar_ajuste_estoque');
+            const rpcError = new Error(missingRpc
+                ? 'RPC registrar_ajuste_estoque ainda nao aplicada no Supabase. O ajuste foi bloqueado para evitar saldo parcial.'
+                : (error.message || 'Erro ao registrar ajuste de estoque no Supabase'));
+            rpcError.code = error.code;
+            rpcError.details = error.details;
+            rpcError.hint = error.hint;
+            rpcError.supabaseError = error;
+            throw rpcError;
+        }
+
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
     /**
      * Reflete a contagem fisica do inventario em estoque_atual.
      * O inventario e a fonte de verdade: saldo_disponivel e saldo_total recebem saldo_fisico.
@@ -557,7 +593,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca saldos de estoque por local para um produto específico
+     * Busca saldos de estoque por local para um produto especï¿½fico
      */
     async function fetchEstoqueProdutoSupabase(id_interno) {
         const client = window.supabaseClient;
@@ -569,7 +605,7 @@ const DataClient = (function () {
             .eq('id_interno', id_interno);
 
         if (error) {
-            console.warn('[Supabase] Erro ao buscar estoque do produto (não crítico):', error);
+            console.warn('[Supabase] Erro ao buscar estoque do produto (nï¿½o crï¿½tico):', error);
             return [];
         }
 
@@ -577,7 +613,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca saldo real de estoque para um produto em um local específico
+     * Busca saldo real de estoque para um produto em um local especï¿½fico
      */
     async function fetchEstoqueItemLocalSupabase(id_interno, localRaw) {
         const client = window.supabaseClient;
@@ -592,7 +628,7 @@ const DataClient = (function () {
             .maybeSingle();
 
         if (error) {
-            console.warn('[INV] fetchEstoqueItemLocal AVISO (não crítico):', error);
+            console.warn('[INV] fetchEstoqueItemLocal AVISO (nï¿½o crï¿½tico):', error);
             return null;
         }
         return data;
@@ -655,7 +691,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega dados de uma tabela específica (Roteamento Inteligente)
+     * Carrega dados de uma tabela especï¿½fica (Roteamento Inteligente)
      */
     async function fetchTable(tableName) {
         try {
@@ -738,7 +774,7 @@ const DataClient = (function () {
             return data || [];
         } catch (error) {
             console.error(`[DataClient] Erro ao carregar ${tableName}:`, error);
-            // Erro de estoque é tratado como não-crítico para não bloquear visualização
+            // Erro de estoque ï¿½ tratado como nï¿½o-crï¿½tico para nï¿½o bloquear visualizaï¿½ï¿½o
             if (tableName !== 'estoque_atual') {
                 showToast(`Erro ao carregar dados de ${tableName}`, 'error');
             }
@@ -748,32 +784,32 @@ const DataClient = (function () {
 
 
     /**
-     * Carrega dados de um módulo específico (sob demanda)
-     * @param {string} moduleName - Nome do módulo (login, produtos, separacao, etc)
-     * @param {boolean} forceRefresh - Se true, ignora cache e força recarregamento
+     * Carrega dados de um mï¿½dulo especï¿½fico (sob demanda)
+     * @param {string} moduleName - Nome do mï¿½dulo (login, produtos, separacao, etc)
+     * @param {boolean} forceRefresh - Se true, ignora cache e forï¿½a recarregamento
      */
     async function loadModule(moduleName, forceRefresh = false) {
         const config = MODULE_TABLES[moduleName];
         if (!config) {
-            console.warn(`[DataClient] Módulo desconhecido: ${moduleName}`);
+            console.warn(`[DataClient] Mï¿½dulo desconhecido: ${moduleName}`);
             return null;
         }
 
-        // Verificar cache válido
+        // Verificar cache vï¿½lido
         if (!forceRefresh && isCacheValid(config.cacheKey)) {
-            console.log(`[DataClient] Usando cache para módulo: ${moduleName}`);
+            console.log(`[DataClient] Usando cache para mï¿½dulo: ${moduleName}`);
             return getCache(config.cacheKey);
         }
 
-        console.log(`[DataClient] Carregando módulo: ${moduleName}`);
+        console.log(`[DataClient] Carregando mï¿½dulo: ${moduleName}`);
 
         try {
-            // Carregar todas as tabelas do módulo em paralelo
+            // Carregar todas as tabelas do mï¿½dulo em paralelo
             const results = await Promise.all(
                 config.tables.map(table => fetchTable(table))
             );
 
-            // Criar objeto com dados do módulo
+            // Criar objeto com dados do mï¿½dulo
             const moduleData = {};
             config.tables.forEach((table, index) => {
                 const keyMap = {
@@ -794,22 +830,22 @@ const DataClient = (function () {
             // Salvar no cache
             setCache(config.cacheKey, moduleData);
 
-            console.log(`[DataClient] Módulo ${moduleName} carregado com sucesso`);
+            console.log(`[DataClient] Mï¿½dulo ${moduleName} carregado com sucesso`);
             return moduleData;
 
         } catch (error) {
-            console.error(`[DataClient] Erro ao carregar módulo ${moduleName}:`, error);
+            console.error(`[DataClient] Erro ao carregar mï¿½dulo ${moduleName}:`, error);
             showToast(`Erro ao carregar ${moduleName}`, 'error');
             return null;
         }
     }
 
     /**
-     * Carrega dados de múltiplos módulos de uma vez
-     * @param {string[]} moduleNames - Lista de módulos para carregar
+     * Carrega dados de mï¿½ltiplos mï¿½dulos de uma vez
+     * @param {string[]} moduleNames - Lista de mï¿½dulos para carregar
      */
     async function loadModules(moduleNames) {
-        console.log(`[DataClient] Carregando múltiplos módulos:`, moduleNames);
+        console.log(`[DataClient] Carregando mï¿½ltiplos mï¿½dulos:`, moduleNames);
 
         const results = {};
         await Promise.all(
@@ -822,14 +858,14 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca dados de uma tabela específica (sem cache de módulo)
-     * Útil para operações pontuais
+     * Busca dados de uma tabela especï¿½fica (sem cache de mï¿½dulo)
+     * ï¿½til para operaï¿½ï¿½es pontuais
      */
     async function query(tableName, filters = {}) {
         console.log(`[DataClient] SEARCH START -> Table: ${tableName}`, filters);
 
         try {
-            // Se for uma das tabelas SSOT (Supabase), não usamos dyGet (Sheets)
+            // Se for uma das tabelas SSOT (Supabase), nï¿½o usamos dyGet (Sheets)
             const ssotTables = ['produtos', 'usuarios', 'canais_envio'];
             if (ssotTables.includes(tableName)) {
                 console.log(`[DataClient] Redirecionando busca de ${tableName} para SSOT Supabase`);
@@ -845,7 +881,7 @@ const DataClient = (function () {
             }
 
             if (filters.field && filters.value) {
-                // Busca específica no Google Sheets (fallback legado)
+                // Busca especï¿½fica no Google Sheets (fallback legado)
                 const params = {
                     action: 'find',
                     sheet: tableName,
@@ -875,12 +911,12 @@ const DataClient = (function () {
             data: data
         });
 
-        // Invalidar cache do módulo relacionado se salvou com sucesso
+        // Invalidar cache do mï¿½dulo relacionado se salvou com sucesso
         if (result) {
             Object.keys(MODULE_TABLES).forEach(moduleName => {
                 const config = MODULE_TABLES[moduleName];
                 if (config.tables.includes(sheetName)) {
-                    console.log(`[DataClient] Invalidando cache de ${moduleName} após salvamento`);
+                    console.log(`[DataClient] Invalidando cache de ${moduleName} apï¿½s salvamento`);
                     invalidateCache(config.cacheKey);
                 }
             });
@@ -890,7 +926,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Versão batch de save
+     * Versï¿½o batch de save
      */
     async function saveBatch(sheetName, dataArray) {
         console.log(`[DataClient] Salvando batch em ${sheetName}`);
@@ -909,7 +945,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Obtém dados de um módulo específico do cache (sem carregar)
+     * Obtï¿½m dados de um mï¿½dulo especï¿½fico do cache (sem carregar)
      */
     function getCachedData(moduleName) {
         const config = MODULE_TABLES[moduleName];
@@ -918,7 +954,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Verifica se módulo já foi carregado
+     * Verifica se mï¿½dulo jï¿½ foi carregado
      */
     function isModuleLoaded(moduleName) {
         const config = MODULE_TABLES[moduleName];
@@ -934,12 +970,12 @@ const DataClient = (function () {
         console.log('[DataClient] Todo cache limpo');
     }
 
-    // API pública
+    // API pï¿½blica
     async function fetchMovimentosSupabase() {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos: Supabase client não encontrado');
-            throw new Error('Supabase client não encontrado');
+            console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos: Supabase client nï¿½o encontrado');
+            throw new Error('Supabase client nï¿½o encontrado');
         }
 
         // 1. Buscar dados
@@ -976,8 +1012,8 @@ const DataClient = (function () {
     async function fetchMovimentosProdutoSupabase(id_interno, limit = 120) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos: Supabase client não encontrado');
-            throw new Error('Supabase client não encontrado');
+            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos: Supabase client nï¿½o encontrado');
+            throw new Error('Supabase client nï¿½o encontrado');
         }
 
         const cleanId = String(id_interno || '').trim();
@@ -1816,7 +1852,7 @@ const DataClient = (function () {
     async function saveGarantiaSupabase(garantiaData) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[GARANTIA DEBUG] erro supabase: client não encontrado');
+            console.error('[GARANTIA DEBUG] erro supabase: client nï¿½o encontrado');
             return null;
         }
 
@@ -1860,6 +1896,359 @@ const DataClient = (function () {
         return data;
     }
 
+
+
+    // DEVOLUCOES: apenas controle. Estas funcoes nao movimentam estoque.
+    function isDevolucaoReembolsoSchemaError(error) {
+        const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+        return error?.code === 'PGRST204'
+            || error?.code === '42703'
+            || text.includes('tarifa_devolucao_reembolsada')
+            || text.includes('p_tarifa_devolucao_reembolsada')
+            || text.includes('reputacao_revertida')
+            || text.includes('p_reputacao_revertida')
+            || (text.includes('schema cache') && text.includes('devolucoes'));
+    }
+
+    function stripDevolucaoReembolsoColumn(row) {
+        const clone = { ...row };
+        delete clone.tarifa_devolucao_reembolsada;
+        delete clone.reputacao_revertida;
+        return clone;
+    }
+
+    function cleanDevolucaoItemForWrite(item, devolucaoId) {
+        const clone = { ...item, devolucao_id: devolucaoId };
+        delete clone.localId;
+        delete clone.id;
+        delete clone.valor_total;
+        delete clone.criado_em;
+        delete clone.atualizado_em;
+        delete clone.estoque_movimento;
+        return clone;
+    }
+
+    async function saveDevolucaoMarketplaceSupabase(payload) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('salvar_devolucao_marketplace', {
+            p_devolucao: payload.devolucao,
+            p_itens: payload.itens
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202'
+                || error.code === '42883'
+                || String(error.message || '').includes('salvar_devolucao_marketplace');
+            if (missingRpc || isDevolucaoReembolsoSchemaError(error)) {
+                const headerPayload = {
+                    ...payload.devolucao,
+                    tipo: 'marketplace',
+                    status: payload.devolucao.status || (payload.devolucao.marketplace_acionado ? 'em_analise' : 'resolvida')
+                };
+                let { data: header, error: headerError } = await client
+                    .from('devolucoes')
+                    .insert(headerPayload)
+                    .select('id')
+                    .single();
+                if (headerError && isDevolucaoReembolsoSchemaError(headerError)) {
+                    console.warn('[DEVOLUCOES] coluna de reembolso ainda nao aplicada; salvando sem tarifa reembolsada.');
+                    const retry = await client
+                        .from('devolucoes')
+                        .insert(stripDevolucaoReembolsoColumn(headerPayload))
+                        .select('id')
+                        .single();
+                    header = retry.data;
+                    headerError = retry.error;
+                }
+                if (headerError) {
+                    const fallbackError = new Error(
+                        ['42P01', 'PGRST204', 'PGRST205'].includes(headerError.code)
+                            ? 'A estrutura atualizada de devolucoes ainda nao foi aplicada no Supabase.'
+                            : (headerError.message || 'Erro ao salvar a devolucao')
+                    );
+                    fallbackError.code = headerError.code;
+                    throw fallbackError;
+                }
+                const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, header.id));
+                const { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+                if (itemsError) {
+                    await client.from('devolucoes').delete().eq('id', header.id);
+                    throw new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
+                }
+                invalidateCache('devolucoes');
+                return header.id;
+            }
+            console.error('[DEVOLUCOES] erro ao salvar:', error);
+            const missingStructure = ['PGRST202', '42P01', '42883'].includes(error.code)
+                || String(error.message || '').includes('salvar_devolucao_marketplace');
+            const saveError = new Error(missingStructure
+                ? 'A estrutura de devolucoes ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao salvar a devolucao'));
+            saveError.code = error.code;
+            throw saveError;
+        }
+        const savedId = typeof data === 'string' ? data : (data?.id || data);
+        if (savedId && payload.devolucao.status) {
+            try {
+                await client.rpc('atualizar_status_devolucao', { p_id: savedId, p_status: payload.devolucao.status });
+            } catch (statusError) {
+                console.warn('[DEVOLUCOES] status inicial nao atualizado apos salvar:', statusError?.message || statusError);
+            }
+        }
+        invalidateCache('devolucoes');
+        return data;
+    }
+
+    async function updateDevolucaoMarketplaceSupabase(id, payload) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        if (!id) throw new Error('Registro de devolucao nao informado');
+
+        const headerPayload = {
+            ...payload.devolucao,
+            tipo: 'marketplace',
+            status: payload.devolucao.status || (payload.devolucao.marketplace_acionado ? 'em_analise' : 'resolvida'),
+            atualizado_em: new Date().toISOString()
+        };
+
+        let { error: headerError } = await client
+            .from('devolucoes')
+            .update(headerPayload)
+            .eq('id', id);
+        if (headerError && isDevolucaoReembolsoSchemaError(headerError)) {
+            const retry = await client
+                .from('devolucoes')
+                .update(stripDevolucaoReembolsoColumn(headerPayload))
+                .eq('id', id);
+            headerError = retry.error;
+        }
+        if (headerError) {
+            console.error('[DEVOLUCOES] erro ao atualizar devolucao:', headerError);
+            throw new Error(headerError.message || 'Erro ao atualizar a devolucao');
+        }
+
+        const { error: deleteItemsError } = await client
+            .from('devolucao_itens')
+            .delete()
+            .eq('devolucao_id', id);
+        if (deleteItemsError) {
+            console.error('[DEVOLUCOES] erro ao limpar itens da devolucao:', deleteItemsError);
+            throw new Error(deleteItemsError.message || 'Erro ao atualizar os produtos da devolucao');
+        }
+
+        const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, id));
+        if (itemRows.length) {
+            const { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+            if (itemsError) {
+                console.error('[DEVOLUCOES] erro ao recriar itens da devolucao:', itemsError);
+                throw new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
+            }
+        }
+
+        invalidateCache('devolucoes');
+        return true;
+    }
+
+    async function applyDevolucaoEstoqueSupabase(devolucaoId, devolucao = {}, itens = []) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        if (!devolucaoId) throw new Error('Registro de devolucao nao informado para movimentar estoque');
+
+        const itensParaEstoque = (itens || []).filter(item =>
+            item.estoque_movimentado !== true
+            && String(item.id_interno || '').trim()
+            && Number(item.quantidade || 0) > 0
+        );
+        if (!itensParaEstoque.length) return { movimentos: 0 };
+
+        const schemaCheck = await client
+            .from('devolucao_itens')
+            .select('apto_venda,estoque_movimentado,estoque_local,estoque_movimento_id')
+            .eq('devolucao_id', devolucaoId)
+            .limit(1);
+        if (schemaCheck.error) {
+            console.error('[DEVOLUCOES] estrutura de estoque da devolucao ausente:', schemaCheck.error);
+            throw new Error('Rode o SQL de devolucoes no Supabase antes de movimentar estoque pela devolucao.');
+        }
+
+        let movimentos = 0;
+        for (const item of itensParaEstoque) {
+            const localDestino = item.apto_venda !== false ? 'TERREO' : 'DEFEITO';
+            const quantidade = Number(item.quantidade || 0);
+            const movimento = await saveMovimentoSupabase({
+                tipo: 'ENTRADA',
+                id_interno: item.id_interno,
+                local_origem: '',
+                local_destino: localDestino,
+                quantidade,
+                usuario: devolucao.responsavel || localStorage.getItem('currentUser') || 'N/A',
+                origem: 'MANUAL',
+                observacao: 'Devolucao marketplace pedido ' + (devolucao.pedido || '-') + (item.apto_venda !== false ? ' - produto apto para venda' : ' - produto nao apto enviado para defeito')
+            });
+            if (!movimento) throw new Error('Erro ao gerar movimento de estoque para ' + item.id_interno);
+
+            const estoqueOk = await updateEstoqueSupabase(item.id_interno, localDestino, 'soma', quantidade);
+            if (!estoqueOk) throw new Error('Movimento criado, mas o estoque nao foi atualizado para ' + item.id_interno);
+
+            const { error: updateItemError } = await client
+                .from('devolucao_itens')
+                .update({
+                    apto_venda: item.apto_venda !== false,
+                    estoque_movimentado: true,
+                    estoque_local: localDestino,
+                    estoque_movimento_id: movimento.movimento_id || null,
+                    atualizado_em: getDataHoraBrasil()
+                })
+                .eq('devolucao_id', devolucaoId)
+                .eq('id_interno', item.id_interno);
+            if (updateItemError) {
+                console.error('[DEVOLUCOES] erro ao marcar item como movimentado:', updateItemError);
+                throw new Error(updateItemError.message || 'Estoque movimentado, mas nao foi possivel marcar o item da devolucao.');
+            }
+
+            item.estoque_movimentado = true;
+            item.estoque_local = localDestino;
+            item.estoque_movimento_id = movimento.movimento_id || '';
+            movimentos += 1;
+        }
+
+        if (movimentos) {
+            invalidateCache('devolucoes');
+            invalidateCache('movimentos');
+            invalidateCache('produtos');
+        }
+        return { movimentos };
+    }
+
+    async function listDevolucoesSupabase() {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client
+            .from('devolucoes')
+            .select('*, devolucao_itens(*)')
+            .order('data_devolucao', { ascending: false })
+            .order('criado_em', { ascending: false });
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao listar:', error);
+            const listError = new Error(error.code === '42P01'
+                ? 'A estrutura de devolucoes ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao carregar as devolucoes'));
+            listError.code = error.code;
+            throw listError;
+        }
+        return data || [];
+    }
+
+    async function updateDevolucaoStatusSupabase(id, status) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { error } = await client.rpc('atualizar_status_devolucao', { p_id: id, p_status: status });
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao atualizar status:', error);
+            throw new Error(error.message || 'Erro ao atualizar o status da devolucao');
+        }
+        invalidateCache('devolucoes');
+        return true;
+    }
+
+    async function deleteDevolucaoSupabase(id) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { error } = await client
+            .from('devolucoes')
+            .delete()
+            .eq('id', id);
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao excluir:', error);
+            throw new Error(error.message || 'Erro ao excluir a devolucao');
+        }
+        invalidateCache('devolucoes');
+        return true;
+    }
+
+    async function updateDevolucaoFollowUpSupabase(id, marketplaceAcionado, observacao, saldoMarketplace = 0, tarifaReembolso = 0, status = null, reputacaoRevertida = false) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        let { error } = await client.rpc('atualizar_acompanhamento_devolucao', {
+            p_id: id,
+            p_marketplace_acionado: Boolean(marketplaceAcionado),
+            p_observacao: String(observacao || '').trim(),
+            p_saldo_marketplace: Number(saldoMarketplace || 0),
+            p_tarifa_devolucao_reembolsada: Number(tarifaReembolso || 0),
+            p_reputacao_revertida: Boolean(reputacaoRevertida)
+        });
+        if (error && (error.code === 'PGRST202' || error.code === '42883' || isDevolucaoReembolsoSchemaError(error))) {
+            console.warn('[DEVOLUCOES] acompanhamento sem coluna de reembolso; usando funcao antiga.');
+            const legacy = await client.rpc('atualizar_acompanhamento_devolucao', {
+                p_id: id,
+                p_marketplace_acionado: Boolean(marketplaceAcionado),
+                p_observacao: String(observacao || '').trim(),
+                p_saldo_marketplace: Number(saldoMarketplace || 0)
+            });
+            error = legacy.error;
+        }
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao atualizar acompanhamento:', error);
+            throw new Error(error.message || 'Erro ao atualizar o acompanhamento do marketplace');
+        }
+        if (!error) {
+            const { error: reputationError } = await client
+                .from('devolucoes')
+                .update({ reputacao_revertida: Boolean(reputacaoRevertida) })
+                .eq('id', id);
+            if (reputationError && !isDevolucaoReembolsoSchemaError(reputationError)) {
+                console.warn('[DEVOLUCOES] reputacao revertida nao atualizada:', reputationError.message);
+            }
+        }
+        if (status) {
+            const { error: statusError } = await client.rpc('atualizar_status_devolucao', { p_id: id, p_status: status });
+            if (statusError) {
+                console.warn('[DEVOLUCOES] erro ao alinhar status do acompanhamento:', statusError.message);
+            }
+        }
+        invalidateCache('devolucoes');
+        return true;
+    }
+
+
+    async function findFornecedorForProductSupabase(product) {
+        const client = window.supabaseClient;
+        if (!client || !product) return null;
+        const lookups = [
+            ['id_interno', product.id_interno],
+            ['produto_id', product.id],
+            ['ean_fornecedor', product.ean]
+        ].filter(([, value]) => String(value || '').trim());
+        let vinculo = null;
+        for (const [field, rawValue] of lookups) {
+            const { data, error } = await client
+                .from('fornecedor_produtos')
+                .select('fornecedor_cnpj,ultima_compra_em')
+                .eq(field, String(rawValue).trim())
+                .order('ultima_compra_em', { ascending: false, nullsFirst: false })
+                .limit(1)
+                .maybeSingle();
+            if (error) {
+                console.warn('[DEVOLUCOES] fornecedor do produto nao localizado:', error.message);
+                continue;
+            }
+            if (data) {
+                vinculo = data;
+                break;
+            }
+        }
+        if (!vinculo?.fornecedor_cnpj) return null;
+        const { data: fornecedor, error: fornecedorError } = await client
+            .from('fornecedores')
+            .select('nome_fantasia,razao_social,cnpj')
+            .eq('cnpj', vinculo.fornecedor_cnpj)
+            .maybeSingle();
+        if (fornecedorError) {
+            console.warn('[DEVOLUCOES] cadastro do fornecedor nao localizado:', fornecedorError.message);
+            return vinculo.fornecedor_cnpj;
+        }
+        return fornecedor?.nome_fantasia || fornecedor?.razao_social || fornecedor?.cnpj || vinculo.fornecedor_cnpj;
+    }
 
 
     async function finalizarConferenciaSupabase(payload) {
@@ -1951,6 +2340,7 @@ const DataClient = (function () {
         clearAllCache,
         saveMovimentoSupabase,
         updateEstoqueSupabase,
+        registrarAjusteEstoqueSupabase,
         aplicarSaldoFisicoInventarioSupabase,
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,
@@ -1976,6 +2366,16 @@ const DataClient = (function () {
         // GARANTIA
         saveGarantiaSupabase,
 
+        // DEVOLUCOES
+        saveDevolucaoMarketplaceSupabase,
+        updateDevolucaoMarketplaceSupabase,
+        applyDevolucaoEstoqueSupabase,
+        listDevolucoesSupabase,
+        updateDevolucaoStatusSupabase,
+        deleteDevolucaoSupabase,
+        updateDevolucaoFollowUpSupabase,
+        findFornecedorForProductSupabase,
+
         // CONFERENCIA
         finalizarConferenciaSupabase,
 
@@ -1992,15 +2392,15 @@ const DataClient = (function () {
 window.DataClient = DataClient;
 
 /**
- * Teste de conexão com Supabase - apenas leitura
- * NÃO substitui o fluxo atual do Google Sheets
+ * Teste de conexï¿½o com Supabase - apenas leitura
+ * Nï¿½O substitui o fluxo atual do Google Sheets
  */
 async function testeSupabase() {
     try {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('Supabase client não encontrado em window.supabaseClient')
+            console.error('Supabase client nï¿½o encontrado em window.supabaseClient')
             return
         }
 
