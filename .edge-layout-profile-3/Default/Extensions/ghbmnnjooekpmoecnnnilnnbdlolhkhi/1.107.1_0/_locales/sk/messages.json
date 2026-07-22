@@ -3,7 +3,7 @@
       "message": "VYTVORIŤ NOVÝ"
    },
    "explanationofflinedisabled": {
-      "message": "Ste offline. Ak chcete použiť Dokumenty Google bez pripojenia na internet, po najbližšom pripojení na internet prejdite do nastavení na domovskej stránke Dokumentov Google a zapnite offline synchronizáciu."
+      "message": "Ste offline. Ak chcete použiť Dokumenty Google bez pripojenia na internet, po nãom pripojení na internet prejdite do nastavení na domovskej stránke Dokumentov Google a zapnite offline synchronizáciu."
    },
    "explanationofflineenabled": {
       "message": "Ste offline, no stále môžete upravovať dostupné súbory a vytvárať nové."

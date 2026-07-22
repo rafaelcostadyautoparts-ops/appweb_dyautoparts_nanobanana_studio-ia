@@ -2,7 +2,7 @@
 
 Documento substituido pelo padrao atual do projeto.
 
-Para integrações e rotas reais, consulte o codigo atual:
+Para integraes e rotas reais, consulte o codigo atual:
 
 - `public/dataClient.js`
 - `public/supabaseClient.js`

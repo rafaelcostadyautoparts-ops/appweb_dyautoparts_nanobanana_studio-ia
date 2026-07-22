@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 
 <head>
@@ -11,7 +11,7 @@
             if (app && !window.initialized) {
                 app.innerHTML = `
                     <div style="padding: 40px; text-align: center; color: white; background: #181818; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: sans-serif;">
-                        <span style="font-size: 48px; margin-bottom: 20px;">⚠️</span>
+                        <span style="font-size: 48px; margin-bottom: 20px;">!</span>
                         <h2 style="margin-bottom: 10px;">Falha ao Iniciar App</h2>
                         <p style="color: #888; font-size: 0.9rem; margin-bottom: 30px; max-width: 300px;">${msg}</p>
                         <button onclick="location.reload()" style="background: #E30613; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer;">RECARREGAR</button>
@@ -29,8 +29,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="appweb_dyautoparts">
-    <meta name="dy-app-version" content="2.1.12">
-    <meta name="dy-app-build" content="2026.06.12.1">
+    <meta name="dy-app-version" content="2.1.18">
+    <meta name="dy-app-build" content="2026.07.22.5">
     <meta name="dy-app-commit" content="local">
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/images/logo/maskable_icon_preto_x192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="/assets/images/logo/maskable_icon_preto_x512.png">
@@ -108,7 +108,7 @@
         }
     </style>
 
-    <link rel="stylesheet" href="/src/index.css?v=1.2.169">
+    <link rel="stylesheet" href="/src/index.css?v=1.2.172">
     <link rel="stylesheet" href="/src/purchasePlanning.css?v=2.0.1">
 </head>
 
@@ -144,9 +144,9 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="/supabaseClient.js?v=2.23.6"></script>
     <script src="/timeUtils.js?v=1.0.0"></script>
-    <script src="/dataClient.js?v=2.25.4"></script>
+    <script src="/dataClient.js?v=2.25.6"></script>
     <script src="/purchasePlanning.js?v=2.0.1"></script>
-    <script src="/app.js?v=2.25.64"></script>
+    <script src="/app.js?v=2.25.75"></script>
 </body>
 
 </html>

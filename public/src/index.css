@@ -569,7 +569,7 @@
             padding-top: 0;
             /* Zerado para aproximar do grid */
             margin-bottom: -10px;
-            /* Margem negativa estrat��ｽｩgica */
+            /* Margem negativa estratｽｩgica */
             width: 100%;
         }
 
@@ -697,7 +697,7 @@
         }
 
         /* =====================================================
-           INVENTﾃヽIO 窶� LAYOUT PREMIUM 3 COLUNAS
+           INVENTﾃヽIO 窶 LAYOUT PREMIUM 3 COLUNAS
            ===================================================== */
 
         .inventory-scanning-screen {
@@ -4198,7 +4198,7 @@ html[data-theme="dark"] .config-settings-card {
             background: #E30613;
         }
 
-        /* Todo fundo de usu��ｽ｡rio em Vermelho Dyer */
+        /* Todo fundo de usuｽ｡rio em Vermelho Dyer */
 
         .user-card .name {
             display: none;
@@ -4319,7 +4319,7 @@ html[data-theme="dark"] .config-settings-card {
             }
         }
 
-        /* Ajuste para topo fixo removido - Garantindo que o conte��ｽｺdo ocupe melhor a tela */
+        /* Ajuste para topo fixo removido - Garantindo que o conteｽｺdo ocupe melhor a tela */
         .dashboard-screen {
             padding-top: 0 !important; /* Removido 70px */
             box-sizing: border-box;
@@ -4600,7 +4600,7 @@ html[data-theme="dark"] .config-settings-card {
             color: rgba(255, 255, 255, 0.7);
         }
 
-        /* OPERATIONAL UTILITIES (PRODUTOS & SEPARA��ｿｽ繧ｰ) */
+        /* OPERATIONAL UTILITIES (PRODUTOS & SEPARAｿｽ繧ｰ) */
         .op-card {
             background: #18181B !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
@@ -4763,7 +4763,7 @@ html[data-theme="dark"] .config-settings-card {
         .kit-detail-modal {
             width: min(520px, calc(100vw - 32px));
             background: #101018;
-            /* Tema escuro padr��ｽ｣o */
+            /* Tema escuro padrｽ｣o */
             color: #ffffff;
             border-radius: 32px;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -4953,7 +4953,7 @@ html[data-theme="dark"] .config-settings-card {
         }
 
 
-        /* KIT L��ｿｽPADA - TELA CHEIA E POSICIONAMENTO */
+        /* KIT LｿｽPADA - TELA CHEIA E POSICIONAMENTO */
         .kit-lampada-screen {
             min-height: 100vh !important;
             width: 100% !important;
@@ -4975,7 +4975,7 @@ html[data-theme="dark"] .config-settings-card {
             box-sizing: border-box;
         }
 
-        /* KIT L��ｿｽPADA - BUSCA PADRONIZADA (VAZADA / GLOW STYLE) */
+        /* KIT LｿｽPADA - BUSCA PADRONIZADA (VAZADA / GLOW STYLE) */
         .kit-search-container {
             width: min(70vw, 900px);
             min-width: 750px;
@@ -5025,7 +5025,7 @@ html[data-theme="dark"] .config-settings-card {
 
 
 
-        /* KIT L��ｿｽPADA - CARDS DE ALTO CONTRASTE */
+        /* KIT LｿｽPADA - CARDS DE ALTO CONTRASTE */
         .kit-lamp-card {
             background: #ffffff !important;
             color: #111111 !important;
@@ -5057,7 +5057,7 @@ html[data-theme="dark"] .config-settings-card {
 
         .kit-lamp-card .marca {
             color: #e11d48 !important;
-            /* vermelho padr��ｽ｣o */
+            /* vermelho padrｽ｣o */
             font-size: 0.65rem;
             font-weight: 800;
             text-transform: uppercase;
@@ -5218,7 +5218,7 @@ html[data-theme="dark"] .config-settings-card {
             }
 
             .product-result-list {
-                gap: 8px !important; /* Separa��ｽｧ��ｽ｣o elegante e compacta entre cards */
+                gap: 8px !important; /* Separaｽｧｽ｣o elegante e compacta entre cards */
                 width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
@@ -5883,7 +5883,7 @@ html[data-theme="dark"] .config-settings-card {
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        /* HEADER MINIMALISTA & DIN��ｿｽICA DE VISIBILIDADE */
+        /* HEADER MINIMALISTA & DINｿｽICA DE VISIBILIDADE */
         .top-bar-minimal {
             position: fixed;
             top: 0;
@@ -5892,7 +5892,7 @@ html[data-theme="dark"] .config-settings-card {
             height: 50px;
             background: #000;
             display: none;
-            /* Escondido por padr��ｽ｣o */
+            /* Escondido por padrｽ｣o */
             align-items: center;
             justify-content: space-between;
             padding: 0 16px;
@@ -5939,7 +5939,7 @@ html[data-theme="dark"] .config-settings-card {
         }
 
         /* Menu principal - App Shell Layout */
-        /* L��ｽｳgica flutuante do topo e rodap��ｽｩ no Menu - REMOVIDO PARA CONSOLIDA��ｿｽ繧ｰ NO FINAL DO ARQUIVO */
+        /* Lｽｳgica flutuante do topo e rodapｽｩ no Menu - REMOVIDO PARA CONSOLIDAｿｽ繧ｰ NO FINAL DO ARQUIVO */
         .dashboard-screen.menu-screen .top-bar {
             position: fixed !important;
             top: 0 !important;
@@ -6050,10 +6050,10 @@ html[data-theme="dark"] .config-settings-card {
 
 
 
-        /* Ajuste do grid quando o footer est��ｽ｡ vis��ｽｭvel/escondido */
+        /* Ajuste do grid quando o footer estｽ｡ visｽｭvel/escondido */
         .dashboard-screen.menu-screen.menu-footer-visible {
             padding-bottom: 70px;
-            /* Espa��ｽｧo para o footer fixo */
+            /* Espaｽｧo para o footer fixo */
         }
 
 
@@ -6988,19 +6988,19 @@ html[data-theme="dark"] .config-settings-card {
             font-size: 0.85rem;
         }
 
-        /* MODO TELA LIMPA (ESTILOS PERMANENTES) - ALTERN��ｿｽCIA VIA CSS */
+        /* MODO TELA LIMPA (ESTILOS PERMANENTES) - ALTERNｿｽCIA VIA CSS */
 
         /* 1. Em tela normal: o topo minimalista deve sumir */
         body:not(.fullscreen-mode) .top-bar-minimal {
             display: none !important;
         }
 
-        /* 2. Em tela normal: o topo padr��ｽ｣o deve aparecer */
+        /* 2. Em tela normal: o topo padrｽ｣o deve aparecer */
         body:not(.fullscreen-mode) .top-bar {
             display: flex !important;
         }
 
-        /* 3. Em tela cheia: o topo padr��ｽ｣o deve sumir */
+        /* 3. Em tela cheia: o topo padrｽ｣o deve sumir */
         body.fullscreen-mode .top-bar {
             display: none !important;
         }
@@ -7036,7 +7036,7 @@ html[data-theme="dark"] .config-settings-card {
             padding: 0 16px;
             height: 50px;
             display: none;
-            /* Alterado: escondido por padr��ｽ｣o */
+            /* Alterado: escondido por padrｽ｣o */
             justify-content: space-between;
             align-items: center;
             width: 100%;
@@ -7082,12 +7082,12 @@ html[data-theme="dark"] .config-settings-card {
             background: rgba(255, 255, 255, 0.1);
         }
 
-        /* Blindagem: Bot��ｽ｣o de Fullscreen desativado globalmente */
+        /* Blindagem: Botｽ｣o de Fullscreen desativado globalmente */
         .btn-fullscreen-toggle {
             display: none !important;
         }
 
-        /* Ativa��ｽｧ��ｽ｣o exclusiva por contexto: Tela de Login */
+        /* Ativaｽｧｽ｣o exclusiva por contexto: Tela de Login */
         .login-screen .btn-fullscreen-toggle {
             background: rgba(255, 255, 255, 0.05);
             color: white;
@@ -7332,7 +7332,7 @@ html[data-theme="dark"] .config-settings-card {
 
 
 
-        /* KIT L��ｿｽPADA - INTERATIVIDADE */
+        /* KIT LｿｽPADA - INTERATIVIDADE */
         .bulb-info-card {
             background: rgba(255, 255, 255, 0.02) !important;
             padding: 28px !important;
@@ -8479,7 +8479,7 @@ html[data-theme="dark"] .config-settings-card {
             }
         }
 
-        /* OTIMIZA��ｿｽ繧ｰ DE TELAS INTERNAS - FOCO NO CONTE��直O */
+        /* OTIMIZAｿｽ繧ｰ DE TELAS INTERNAS - FOCO NO CONTE直O */
         .dashboard-screen.internal,
         .dashboard-screen.product-detail {
             height: 100dvh;
@@ -8530,7 +8530,7 @@ html[data-theme="dark"] .config-settings-card {
             padding: 16px 20px !important;
         }
 
-        /* Ocultar rodap��ｽｩ em telas internas para maximizar espa��ｽｧo */
+        /* Ocultar rodapｽｩ em telas internas para maximizar espaｽｧo */
         .dashboard-screen.internal .menu-footer,
         .dashboard-screen.product-detail .menu-footer {
             display: none !important;
@@ -8545,7 +8545,7 @@ html[data-theme="dark"] .config-settings-card {
             padding-bottom: 0 !important;
         }
 
-        /* ESTILIZA��ｿｽ繧ｰ DOS CARDS DE CANAIS (SEPARA��ｿｽ繧ｰ) */
+        /* ESTILIZAｿｽ繧ｰ DOS CARDS DE CANAIS (SEPARAｿｽ繧ｰ) */
         .channel-card {
             background: rgba(255, 255, 255, 0.03) !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -8626,11 +8626,11 @@ html[data-theme="dark"] .config-settings-card {
         }
 
         /* ===================================================
-   PADRONIZA��ｿｽ繧ｰ GLOBAL DE CARDS 遯ｶ�ｽ FJALLA ONE + UPPERCASE
+   PADRONIZAｿｽ繧ｰ GLOBAL DE CARDS 遯ｶｽ FJALLA ONE + UPPERCASE
    Aplica a: menu-item, menu-card, channel-card
    =================================================== */
 
-        /* T��ｽｭtulos dos cards (sub-menus internos) com Fjalla One */
+        /* Tｽｭtulos dos cards (sub-menus internos) com Fjalla One */
         .menu-card .label,
         .dashboard-screen.internal .menu-card .label {
             font-family: 'Fjalla One', sans-serif !important;
@@ -8677,7 +8677,7 @@ html[data-theme="dark"] .config-settings-card {
             transition: transform 0.25s ease-in-out !important;
         }
 
-        /* channel-card label (Separa��ｽｧ��ｽ｣o/Picking) */
+        /* channel-card label (Separaｽｧｽ｣o/Picking) */
         .channel-card .op-label,
         .channel-card .label {
             font-family: 'Fjalla One', sans-serif !important;
@@ -8705,7 +8705,7 @@ html[data-theme="dark"] .config-settings-card {
             outline: none !important;
         }
 
-        /* Hover for channel-card (Separa��ｽｧ��ｽ｣o) */
+        /* Hover for channel-card (Separaｽｧｽ｣o) */
         .dashboard-screen.internal .channel-card:hover {
             transform: none !important;
             box-shadow: none !important;
@@ -8738,7 +8738,7 @@ html[data-theme="dark"] .config-settings-card {
 
         /*
    FIX: Remover faixa/topo escuro das telas operacionais
-   Garante que o conte��ｽｺdo comece exatamente no topo (Fullscreen Real)
+   Garante que o conteｽｺdo comece exatamente no topo (Fullscreen Real)
 */
         
 
@@ -8914,13 +8914,13 @@ html[data-theme="dark"] .config-settings-card {
 
 
 
-        /* TELA DE DETALHES - CENTRALIZA��ｿｽ繧ｰ E LAYOUT */
+        /* TELA DE DETALHES - CENTRALIZAｿｽ繧ｰ E LAYOUT */
         .product-detail-screen {
             min-height: 100dvh !important;
             width: 100% !important;
             display: flex !important;
             flex-direction: column !important;
-            /* Coluna para empilhar conte��ｽｺdo e centralizar horizontalmente */
+            /* Coluna para empilhar conteｽｺdo e centralizar horizontalmente */
             align-items: center !important;
             /* Centraliza horizontalmente no eixo cruzado do flex-direction column */
             justify-content: flex-start !important;
@@ -8933,7 +8933,7 @@ html[data-theme="dark"] .config-settings-card {
             margin-right: auto !important;
         }
 
-        /* Container que ocupa melhor a tela - For��ｽｧando centraliza��ｽｧ��ｽ｣o no desktop */
+        /* Container que ocupa melhor a tela - Forｽｧando centralizaｽｧｽ｣o no desktop */
         .product-detail-screen .container,
         .product-detail-card {
             width: 100% !important;
@@ -9353,7 +9353,7 @@ html[data-theme="dark"] .config-settings-card {
     
 }
 
-        /* Identifica��ｽｧ��ｽ｣o */
+        /* Identificaｽｧｽ｣o */
         .product-detail-id-section {
             display: flex !important;
             flex-direction: column !important;
@@ -9410,7 +9410,7 @@ html[data-theme="dark"] .config-settings-card {
             color: #111827 !important;
         }
 
-        /* Ajuste nos textos secund��ｽ｡rios e observa��ｽｧ��ｽｵes */
+        /* Ajuste nos textos secundｽ｡rios e observaｽｧｽｵes */
         .product-obs-text {
             color: #475569 !important;
             font-size: 0.9rem !important;
@@ -9444,11 +9444,11 @@ html[data-theme="dark"] .config-settings-card {
         }
 
         /* ===================================================
-   REFINAMENTOS MENU E CARDS DE NAVEGA��げ DESKTOP
+   REFINAMENTOS MENU E CARDS DE NAVEGAげ DESKTOP
    =================================================== */
         @media (min-width: 1024px) {
 
-            /* Cards de Navega��ｽｧ��ｽ｣o e Canais */
+            /* Cards de Navegaｽｧｽ｣o e Canais */
             .menu-card,
             .channel-card,
             .dashboard-screen.internal .menu-card,
@@ -9462,7 +9462,7 @@ html[data-theme="dark"] .config-settings-card {
                 /* Fundo branco para contraste */
             }
 
-            /* Labels de Navega��ｽｧ��ｽ｣o - COR PRETA OBRIGAT��ｿｭIA */
+            /* Labels de Navegaｽｧｽ｣o - COR PRETA OBRIGATｿｭIA */
             .menu-card .label,
             .channel-card .label,
             .channel-card .op-label,
@@ -9473,7 +9473,7 @@ html[data-theme="dark"] .config-settings-card {
                 font-weight: 700 !important;
             }
 
-            /* ��嚊ones 3D, Imagens e Containers de ��嚊one */
+            /* 嚊ones 3D, Imagens e Containers de 嚊one */
             .menu-icon-3d,
             .channel-card .menu-icon-3d,
             .channel-card img,
@@ -9492,15 +9492,15 @@ html[data-theme="dark"] .config-settings-card {
                 flex-shrink: 0 !important;
             }
 
-            /* Ajuste de tamanho para Material Icons dentro dos cards de navega��ｽｧ��ｽ｣o */
+            /* Ajuste de tamanho para Material Icons dentro dos cards de navegaｽｧｽ｣o */
             .menu-card .icon,
             .channel-card .icon-box .material-symbols-rounded,
             .channel-card .icon-box .icon {
                 font-size: 40px !important;
             }
 
-            /* REMOVER TOPBAR EM TODAS AS TELAS INTERNAS - FULLSCREEN OBRIGAT��ｿｭIO */
-            /* Seletor espec��ｽｭfico para o header/top-bar principal */
+            /* REMOVER TOPBAR EM TODAS AS TELAS INTERNAS - FULLSCREEN OBRIGATｿｭIO */
+            /* Seletor especｽｭfico para o header/top-bar principal */
             .dashboard-screen.internal header.top-bar,
             .dashboard-screen.internal .top-bar-container .top-bar,
             .inventory-screen header.top-bar,
@@ -9508,36 +9508,36 @@ html[data-theme="dark"] .config-settings-card {
                 display: none !important;
             }
 
-            /* Garantir que N��げ haja padding-top nas telas internas para ocupar 100% da altura */
+            /* Garantir que Nげ haja padding-top nas telas internas para ocupar 100% da altura */
             
         }
 
         /* ===================================================
-   NAVEGA��げ FLUTUANTE (HOVER TRIGGER)
+   NAVEGAげ FLUTUANTE (HOVER TRIGGER)
    =================================================== */
 
         /* ===================================================
-   NAVEGA��げ FLUTUANTE (HOVER TRIGGER) - GLOBAL
+   NAVEGAげ FLUTUANTE (HOVER TRIGGER) - GLOBAL
    =================================================== */
 
-        /* ���影a de Hover no Topo (Desktop) */
+        /* 影a de Hover no Topo (Desktop) */
         .menu-top-trigger-area {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 60px;
-            /* Faixa invis��ｽｭvel de gatilho no topo */
+            /* Faixa invisｽｭvel de gatilho no topo */
             z-index: 99998;
             background: transparent;
             pointer-events: auto;
         }
 
-        /* Container das A��ｽｧ��ｽｵes Flutuantes */
+        /* Container das Aｽｧｽｵes Flutuantes */
         .menu-floating-top-actions {
             position: fixed;
             top: 15px;
-            /* Posi��ｽｧ��ｽ｣o left/right injetada via app.js */
+            /* Posiｽｧｽ｣o left/right injetada via app.js */
             z-index: 99999;
             display: flex;
             gap: 15px;
@@ -9550,7 +9550,7 @@ html[data-theme="dark"] .config-settings-card {
             transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Ativar ao passar o mouse na ��ｽ｡rea de trigger ou sobre o pr��ｽｳprio bot��ｽ｣o */
+        /* Ativar ao passar o mouse na ｽ｡rea de trigger ou sobre o prｽｳprio botｽ｣o */
         .menu-top-trigger-area:hover~.menu-floating-top-actions,
         .menu-floating-top-actions:hover {
             opacity: 1;
@@ -9559,7 +9559,7 @@ html[data-theme="dark"] .config-settings-card {
             transform: translateY(0);
         }
 
-        /* Estilo do Bot��ｽ｣o Flutuante */
+        /* Estilo do Botｽ｣o Flutuante */
         .btn-exit-floating {
             width: 48px;
             height: 48px;
@@ -9588,7 +9588,7 @@ html[data-theme="dark"] .config-settings-card {
             font-weight: 700;
         }
 
-        /* AJUSTE PARA MOBILE (Sempre Vis��ｽｭvel e Discreto) */
+        /* AJUSTE PARA MOBILE (Sempre Visｽｭvel e Discreto) */
         @media (max-width: 768px) {
             .menu-floating-top-actions {
                 opacity: 0.7 !important;
@@ -9669,7 +9669,7 @@ html[data-theme="dark"] .config-settings-card {
                 opacity: 1;
             }
 
-            /* Garantir que o conte��ｽｺdo fique acima do brilho */
+            /* Garantir que o conteｽｺdo fique acima do brilho */
             .menu-card>*,
             .channel-card>* {
                 position: relative;
@@ -9678,7 +9678,7 @@ html[data-theme="dark"] .config-settings-card {
                 /* Deixa o evento passar para o card */
             }
 
-            /* Reativar eventos para bot��ｽｵes internos se houver */
+            /* Reativar eventos para botｽｵes internos se houver */
             .menu-card button,
             .channel-card button,
             .menu-card a,
@@ -9686,7 +9686,7 @@ html[data-theme="dark"] .config-settings-card {
                 pointer-events: auto;
             }
 
-            /* Mobile - Redu��ｽｧ��ｽ｣o de intensidade */
+            /* Mobile - Reduｽｧｽ｣o de intensidade */
             @media (max-width: 768px) {
 
                 .menu-card::before,
@@ -9704,7 +9704,7 @@ html[data-theme="dark"] .config-settings-card {
             }
         }
 
-        /* Cores Din��ｽ｢micas para a Tela de Confer��ｽｪncia (Accent) */
+        /* Cores Dinｽ｢micas para a Tela de Conferｽｪncia (Accent) */
         .dashboard-screen.internal.shopee {
             --channel-accent: #FFCCBC;
         }
@@ -9730,11 +9730,11 @@ html[data-theme="dark"] .config-settings-card {
         }
 
         /* ===================================================
-   PADRONIZA��げ CARDS MOBILE (MODO CIR��阜GICO)
+   PADRONIZAげ CARDS MOBILE (MODO CIR阜GICO)
    =================================================== */
         @media (max-width: 768px) {
 
-            /* Grid com 2 colunas para TODAS as telas que usam cards de sele��ｽｧ��ｽ｣o */
+            /* Grid com 2 colunas para TODAS as telas que usam cards de seleｽｧｽ｣o */
             .dashboard-screen .menu-grid {
                 grid-template-columns: repeat(2, 1fr) !important;
                 gap: 12px !important;
@@ -9744,8 +9744,8 @@ html[data-theme="dark"] .config-settings-card {
                 display: grid !important;
             }
 
-            /* Card Layout Global Mobile: ��嚊one acima, Texto abaixo, Totalmente Centralizado */
-            /* Aplicado especificamente em cards de sele��ｽｧ��ｽ｣o (dentro de menu-grid) */
+            /* Card Layout Global Mobile: 嚊one acima, Texto abaixo, Totalmente Centralizado */
+            /* Aplicado especificamente em cards de seleｽｧｽ｣o (dentro de menu-grid) */
             .menu-card,
             .channel-card {
                 display: flex !important;
@@ -9763,7 +9763,7 @@ html[data-theme="dark"] .config-settings-card {
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
             }
 
-            /* Tamanho Padronizado de ��嚊ones (Global Mobile) */
+            /* Tamanho Padronizado de 嚊ones (Global Mobile) */
             .dashboard-screen .menu-card .menu-icon-3d,
             .dashboard-screen .channel-card .menu-icon-3d,
             .dashboard-screen .channel-card .icon-box {
@@ -9781,13 +9781,13 @@ html[data-theme="dark"] .config-settings-card {
                 box-shadow: none !important;
             }
 
-            /* ��嚊ones Material dentro dos cards */
+            /* 嚊ones Material dentro dos cards */
             .dashboard-screen .menu-card .icon,
             .dashboard-screen .channel-card .icon-box .material-symbols-rounded {
                 font-size: 32px !important;
             }
 
-            /* Ajuste do texto (Labels): Centralizado, M��ｽ｡ximo 2 linhas, Cor preta #101018 */
+            /* Ajuste do texto (Labels): Centralizado, Mｽ｡ximo 2 linhas, Cor preta #101018 */
             .dashboard-screen .menu-card .label,
             .dashboard-screen .channel-card .op-label,
             .dashboard-screen .channel-card .label {
@@ -9820,7 +9820,7 @@ html[data-theme="dark"] .config-settings-card {
         }
 
         /* ===================================================
-   PADRONIZA��げ CARDS MOBILE - OBRIGAT��ｿｭIO (CIR��阜GICO)
+   PADRONIZAげ CARDS MOBILE - OBRIGATｿｭIO (CIR阜GICO)
    =================================================== */
         @media (max-width: 768px) {
 
@@ -9844,7 +9844,7 @@ html[data-theme="dark"] .config-settings-card {
                 height: auto !important;
             }
 
-            /* FOR��贈 QUALQUER WRAPPER DE ��椶ONE (Aumentado para 85px igual ao menu principal) */
+            /* FOR贈 QUALQUER WRAPPER DE 椶ONE (Aumentado para 85px igual ao menu principal) */
             .menu-card .menu-icon-3d,
             .channel-card .menu-icon-3d,
             .submenu-card .menu-icon-3d,
@@ -9911,7 +9911,7 @@ html[data-theme="dark"] .config-settings-card {
                 display: block !important;
             }
 
-            /* FOR��贈 TEXTO (0.95rem e 700 weight igual ao menu principal) */
+            /* FOR贈 TEXTO (0.95rem e 700 weight igual ao menu principal) */
             .menu-card span,
             .channel-card span,
             .submenu-card span,
@@ -9962,7 +9962,7 @@ html[data-theme="dark"] .config-settings-card {
                 width: 100% !important;
             }
 
-            /* Garantir que o texto apare��ｽｧa em branco se for fundo escuro ou preto se for fundo claro */
+            /* Garantir que o texto apareｽｧa em branco se for fundo escuro ou preto se for fundo claro */
             .menu-screen .label {
                 color: #ffffff !important;
             }
@@ -9972,7 +9972,7 @@ html[data-theme="dark"] .config-settings-card {
                 color: #101018 !important;
             }
 
-            /* Se houver uma div que engloba o texto, for��ｽｧa-la a alinhar tamb��ｽｩm */
+            /* Se houver uma div que engloba o texto, forｽｧa-la a alinhar tambｽｩm */
             .menu-card>div:not([class*="icon"]):not(img),
             .channel-card>div:not([class*="icon"]):not(img),
             .submenu-card>div:not([class*="icon"]):not(img),
@@ -11951,7 +11951,7 @@ body.search-signal-error::after {
     border-radius: 20px;
 }
 
-/* RODAPﾃ� MENU PRINCIPAL */
+/* RODAPﾃ MENU PRINCIPAL */
 .menu-screen .menu-footer {
     position: fixed !important;
     bottom: 0 !important;
@@ -12107,7 +12107,7 @@ body.search-signal-error::after {
     pointer-events: auto !important;
 }
 
-/* Cﾃ泥IGO OBRIGATﾃ迭IO DE REMOﾃ�グ DE TARJAS */
+/* Cﾃ泥IGO OBRIGATﾃ迭IO DE REMOﾃグ DE TARJAS */
 .top-bar,
 .app-header,
 header.top-bar,
@@ -12257,7 +12257,7 @@ body.fullscreen-mode .btn-tela-cheia {
   }
 }
 
-/* DESTRUIﾃ�グ DE REGRAS DUPLICADAS ANTIGAS */
+/* DESTRUIﾃグ DE REGRAS DUPLICADAS ANTIGAS */
 .btn-back-top,
 .btn-action,
 .btn-exit-floating,
@@ -12352,7 +12352,7 @@ body.fullscreen-mode .btn-tela-cheia {
 }
 
 /* ===================================================
-   PADRONIZAﾃ�グ TIPOGRﾃ：ICA Mﾃ泥ULO PRODUTOS
+   PADRONIZAﾃグ TIPOGRﾃ：ICA Mﾃ泥ULO PRODUTOS
    Objetivo: Unificar a identidade visual com o Menu
    =================================================== */
 
@@ -16644,7 +16644,7 @@ button.quick-action-item {
     box-shadow: 0 6px 18px rgba(239, 43, 45, 0.32) !important;
 }
 
-/* Hover: ﾃｭcone branco (desligar) 窶� sﾃｭmbolo fica vermelho mais escuro */
+/* Hover: ﾃｭcone branco (desligar) 窶 sﾃｭmbolo fica vermelho mais escuro */
 .fab-desligar:hover svg circle {
     fill: #f0f0f0 !important;
 }
@@ -16674,7 +16674,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   TOP-ACTION-GROUP 窶� 3 ﾃｭcones de aﾃｧﾃ｣o no topo direito
+   TOP-ACTION-GROUP 窶 3 ﾃｭcones de aﾃｧﾃ｣o no topo direito
    Presente em TODAS as telas via getTopBarHTML()
    =================================================== */
 
@@ -17013,7 +17013,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   MODULE SIDEBAR 窶� Barra lateral vertical dos mﾃｳdulos
+   MODULE SIDEBAR 窶 Barra lateral vertical dos mﾃｳdulos
    Replicando padrﾃ｣o Pick/Pack para todos os mﾃｳdulos
    =================================================== */
 
@@ -17091,7 +17091,7 @@ button.quick-action-item {
     font-family: 'Fjalla One', sans-serif !important;
 }
 
-/* Responsividade: desktop 竊� barra lateral; mobile 竊� barra horizontal */
+/* Responsividade: desktop 竊 barra lateral; mobile 竊 barra horizontal */
 @media (min-width: 1025px) {
     .module-screen {
         padding-right: 54px !important;
@@ -17119,7 +17119,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   TIPOGRAFIA GLOBAL 窶� Fonte premium em todos os textos
+   TIPOGRAFIA GLOBAL 窶 Fonte premium em todos os textos
    =================================================== */
 
 .dashboard-screen,
@@ -17172,7 +17172,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   CONSISTﾃ劾CIA VISUAL 窶� Menu principal sem modificaﾃｧﾃ｣o
+   CONSISTﾃ劾CIA VISUAL 窶 Menu principal sem modificaﾃｧﾃ｣o
    =================================================== */
 
 /* Garantir que o menu principal nﾃ｣o tenha sidebar */
@@ -17340,7 +17340,7 @@ button.quick-action-item {
 
 /* ===================================================
    FINAL CARD ICON/TEXT STANDARDIZATION
-   ﾃ皇one menor ﾃ� esquerda, texto forte ﾃ� direita, hover comum.
+   ﾃ皇one menor ﾃ esquerda, texto forte ﾃ direita, hover comum.
    =================================================== */
 
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d {
@@ -18353,7 +18353,7 @@ body:not(.login-active) #btn-fullscreen-login {
 }
 
 /* =====================================================
-   GLOBAL MOBILE REFINEMENT 窶� PREMIUM NATIVE LOOK
+   GLOBAL MOBILE REFINEMENT 窶 PREMIUM NATIVE LOOK
    ===================================================== */
 
 @media (max-width: 1023px) {
@@ -18500,7 +18500,7 @@ body:not(.login-active) #btn-fullscreen-login {
         flex: 1 !important;
     }
 
-    /* Adicionar seta ﾃ� direita nos cards (via pseudo) */
+    /* Adicionar seta ﾃ direita nos cards (via pseudo) */
     .menu-card.mobile-nav-card::after {
         content: 'chevron_right' !important;
         font-family: 'Material Symbols Rounded' !important;
@@ -24323,7 +24323,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   KIT LAMPADAS V2 窶� PREMIUM DARK AUTOMOTIVE THEME
+   KIT LAMPADAS V2 窶 PREMIUM DARK AUTOMOTIVE THEME
    ================================================================ */
 
 /* SCREEN BASE */
@@ -24709,7 +24709,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 }
 
 /* ================================================================
-   KIT V2 窶� MOBILE RESPONSIVE
+   KIT V2 窶 MOBILE RESPONSIVE
    ================================================================ */
 @media (max-width: 767px) {
     .kit-v2-container {
@@ -24802,7 +24802,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   KIT V2 窶� SIDEBAR DIREITA (TEXTO VERTICAL)
+   KIT V2 窶 SIDEBAR DIREITA (TEXTO VERTICAL)
    ================================================================ */
 .kit-v2-sidebar-right {
     position: fixed;
@@ -24869,7 +24869,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
     display: none !important;
 }
 
-/* Card refinement 窶� closer to reference */
+/* Card refinement 窶 closer to reference */
 .kit-v2-result-card {
     background: rgba(12,12,20,.85) !important;
     border: 1px solid rgba(255,255,255,.05) !important;
@@ -24881,7 +24881,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
     border-color: rgba(255,255,255,.1) !important;
 }
 
-/* Detail button 窶� white outline style like reference */
+/* Detail button 窶 white outline style like reference */
 .kit-v2-detail-btn-wrap {
     border-color: rgba(255,255,255,.3) !important;
     color: rgba(255,255,255,.8) !important;
@@ -25495,13 +25495,13 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   PADRONIZACAO GLOBAL 窶� SIDEBAR LATERAL (TRACO VERTICAL + FJALLA ONE)
+   PADRONIZACAO GLOBAL 窶 SIDEBAR LATERAL (TRACO VERTICAL + FJALLA ONE)
    ================================================================ */
 
 
 
 /* ================================================================
-   PADRONIZACAO GLOBAL 窶� SIDEBARS (FJALLA ONE, TRACO VERTICAL & ESPACAMENTO)
+   PADRONIZACAO GLOBAL 窶 SIDEBARS (FJALLA ONE, TRACO VERTICAL & ESPACAMENTO)
    ================================================================ */
 
 /* 1. Traﾃｧo vertical padronizado (border-left) para todas as barras laterais */
@@ -26016,7 +26016,7 @@ body.login-active #login-screen .top-hover-zone {
 body.login-active #login-screen .login-logo {
   position: absolute !important;
   top: clamp(32px, 5vh, 48px) !important; /* Descido um pouco / Descended slightly */
-  left: clamp(24px, 4vw, 56px) !important; /* Alinhado ﾃ� esquerda / Aligned to left */
+  left: clamp(24px, 4vw, 56px) !important; /* Alinhado ﾃ esquerda / Aligned to left */
   width: clamp(202px, 18.4vw, 304px) !important; /* Made 15% larger */
   max-width: 35% !important;
   max-height: 20vh !important;
@@ -69068,6 +69068,35 @@ html[data-theme="dark"] .pick-search-status {
   outline: none;
 }
 
+.devolucao-reputation-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff7ed;
+  border-top: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.devolucao-reputation-control > .material-symbols-rounded {
+  font-size: 22px;
+}
+
+.devolucao-reputation-control label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.devolucao-reputation-control select {
+  min-width: 80px;
+  padding: 7px 28px 7px 10px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: #fff;
+}
+
 .devolucao-history-card > footer > span {
   min-width: 0;
   line-height: 1.35;
@@ -69180,3 +69209,921 @@ html[data-theme="dark"] .pick-search-status {
     padding-right: 16px !important;
   }
 }
+/* Ajustes da devolucao marketplace: contraste da busca e controle Nao apto */
+.devolucao-scan-row input,
+.devolucao-history-toolbar input {
+  color: #0f172a !important;
+  caret-color: #0f766e !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+.devolucao-scan-row input::placeholder,
+.devolucao-history-toolbar input::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
+.dev-defect-toggle .dev-checkbox-line {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid #dbe3ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dev-defect-toggle input,
+.dev-draft-toggle input {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  accent-color: #0f766e;
+  flex: 0 0 auto;
+}
+
+.dev-defect-toggle strong,
+.dev-draft-toggle strong {
+  line-height: 1.25;
+}
+
+.devolucao-modal-body .devolucao-draft-item .dev-draft-toggle {
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.dev-draft-toggle-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dev-draft-toggle-check small {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.devolucao-modal-body .devolucao-draft-item .dev-draft-toggle strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .devolucao-modal-body .devolucao-draft-item .dev-draft-toggle {
+    grid-template-columns: 1fr;
+  }
+  .devolucao-modal-body .devolucao-draft-item .dev-draft-toggle strong {
+    text-align: left;
+  }
+}/* Devolucoes Marketplace - redesign isolado */
+.devolucao-history-screen {
+  --dev-purple: #6d3bea;
+  --dev-purple-dark: #5424c9;
+  --dev-green: #22a65a;
+  --dev-red: #e5484d;
+  --dev-orange: #f59e0b;
+  --dev-ink: #172033;
+  --dev-muted: #667085;
+  background: #f5f6f8 !important;
+  overflow-x: hidden;
+}
+
+body:not(.login-active) #app .devolucao-history-screen > main.container {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 100vh;
+  margin: 0 !important;
+  padding: 96px 28px 40px !important;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.devolucao-history-screen .devolucao-page-heading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto 18px !important;
+  padding: 22px 26px !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  background: linear-gradient(115deg, var(--dev-purple), var(--dev-purple-dark)) !important;
+  box-shadow: 0 12px 28px rgba(92, 45, 196, .2);
+  color: #fff;
+}
+
+.devolucao-history-screen .devolucao-heading-copy,
+.devolucao-history-screen .devolucao-heading-actions {
+  display: flex;
+  align-items: center;
+}
+
+.devolucao-history-screen .devolucao-heading-copy {
+  gap: 14px;
+  min-width: 0;
+}
+
+.devolucao-history-screen .devolucao-heading-icon {
+  display: grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 14px;
+  background: rgba(255,255,255,.12);
+  font-size: 26px;
+}
+
+.devolucao-history-screen .devolucao-page-heading h1 {
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: clamp(1.35rem, 2vw, 1.85rem) !important;
+  line-height: 1.1;
+  text-transform: none !important;
+}
+
+.devolucao-history-screen .devolucao-page-heading p {
+  margin: 5px 0 0 !important;
+  color: rgba(255,255,255,.82) !important;
+  font-size: .78rem !important;
+}
+
+.devolucao-history-screen .devolucao-heading-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.devolucao-history-screen .devolucao-heading-actions button,
+.devolucao-history-screen .devolucao-heading-actions label {
+  min-height: 44px;
+  border: 1px solid rgba(255,255,255,.22) !important;
+  border-radius: 10px !important;
+}
+
+.devolucao-history-screen .devolucao-header-btn,
+.devolucao-history-screen .devolucao-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  white-space: nowrap;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.devolucao-history-screen .devolucao-header-btn {
+  background: #fff;
+  color: var(--dev-purple-dark);
+}
+
+.devolucao-history-screen .devolucao-primary-btn {
+  background: #20a85a !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+.devolucao-history-screen .devolucao-heading-actions .devolucao-month-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: #fff !important;
+  color: var(--dev-purple-dark);
+}
+
+.devolucao-history-screen .devolucao-heading-actions .devolucao-month-filter input {
+  width: 132px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #3c2a66;
+  font: inherit;
+  font-weight: 800;
+}
+
+.devolucao-history-screen .devolucao-history-toolbar,
+.devolucao-history-screen .devolucao-history-metrics,
+.devolucao-history-screen .devolucao-results-heading,
+.devolucao-history-screen .devolucao-history-list {
+  width: 100%;
+  max-width: 1500px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box;
+}
+
+.devolucao-history-screen .devolucao-history-toolbar {
+  display: grid !important;
+  grid-template-columns: minmax(280px, 1.8fr) minmax(165px, .7fr) minmax(165px, .7fr) auto !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+  padding: 14px !important;
+  border: 1px solid #e7e9ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(22, 30, 50, .04);
+}
+
+.devolucao-history-screen .devolucao-history-toolbar label,
+.devolucao-history-screen .devolucao-history-toolbar select,
+.devolucao-history-screen .devolucao-history-toolbar button {
+  width: 100% !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  border: 1px solid #e2e5ec !important;
+  border-radius: 9px !important;
+  background: #fbfcfe !important;
+  color: #485268 !important;
+  box-sizing: border-box;
+}
+
+.devolucao-history-screen .devolucao-history-toolbar label:focus-within,
+.devolucao-history-screen .devolucao-history-toolbar select:focus,
+.devolucao-history-screen .devolucao-history-toolbar button:focus-visible,
+.devolucao-history-screen .devolucao-heading-actions button:focus-visible {
+  outline: 3px solid rgba(109, 59, 234, .2) !important;
+  border-color: var(--dev-purple) !important;
+}
+
+.devolucao-history-screen .devolucao-history-metrics {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin-bottom: 24px !important;
+}
+
+.devolucao-history-screen .devolucao-history-metrics article {
+  display: flex !important;
+  align-items: center;
+  gap: 13px;
+  min-height: 92px;
+  padding: 16px !important;
+  border: 1px solid #e8eaf0 !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+  box-shadow: 0 6px 18px rgba(18, 28, 48, .055) !important;
+  box-sizing: border-box;
+}
+
+.devolucao-history-screen .devolucao-history-metrics article > .material-symbols-rounded {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 22px;
+}
+
+.devolucao-history-screen .devolucao-history-metrics .metric-purple > span { color: var(--dev-purple); background: #eee8ff; }
+.devolucao-history-screen .devolucao-history-metrics .metric-green > span { color: var(--dev-green); background: #e5f7ec; }
+.devolucao-history-screen .devolucao-history-metrics .metric-red > span { color: var(--dev-red); background: #fde9ea; }
+.devolucao-history-screen .devolucao-history-metrics .metric-orange > span { color: var(--dev-orange); background: #fff0d9; }
+
+.devolucao-history-screen .devolucao-history-metrics small {
+  color: var(--dev-muted) !important;
+  font-size: .7rem !important;
+  line-height: 1.25;
+}
+
+.devolucao-history-screen .devolucao-history-metrics strong {
+  margin-top: 5px !important;
+  color: var(--dev-ink);
+  font-size: 1.18rem !important;
+}
+
+.devolucao-history-screen .devolucao-results-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px !important;
+}
+
+.devolucao-history-screen .devolucao-results-heading h2 {
+  margin: 0;
+  color: var(--dev-ink);
+  font-size: 1rem;
+}
+
+.devolucao-history-screen .devolucao-results-heading span {
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: #eee8ff;
+  color: var(--dev-purple-dark);
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.devolucao-history-screen .devolucao-history-list {
+  display: grid;
+  gap: 14px;
+}
+
+.devolucao-history-screen .devolucao-history-card {
+  overflow: hidden;
+  border: 1px solid #e4e7ee !important;
+  border-radius: 15px !important;
+  background: #fff !important;
+  box-shadow: 0 7px 20px rgba(18, 28, 48, .055) !important;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.devolucao-history-screen .devolucao-history-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 11px 25px rgba(18, 28, 48, .08) !important;
+}
+
+.devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline {
+  display: grid !important;
+  grid-template-columns: minmax(72px,.55fr) minmax(190px,1.35fr) minmax(190px,1.2fr) minmax(100px,.7fr) minmax(145px,.8fr) auto !important;
+  align-items: center !important;
+  gap: 15px !important;
+  min-height: 72px;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #edf0f4;
+  background: #fff !important;
+}
+
+.devolucao-history-screen .dev-history-cell small {
+  display: block;
+  margin-bottom: 4px;
+  color: #7b8497 !important;
+  font-size: .62rem !important;
+  letter-spacing: .02em;
+}
+
+.devolucao-history-screen .dev-history-cell strong {
+  color: var(--dev-ink) !important;
+  font-size: .78rem !important;
+  overflow-wrap: anywhere;
+}
+
+.devolucao-history-screen .dev-history-channel strong {
+  color: #16864a !important;
+}
+
+.devolucao-history-screen .dev-history-order > span {
+  display: block;
+  margin-top: 3px;
+  color: #8a93a5;
+  font-size: .62rem;
+}
+
+.devolucao-history-screen .devolucao-status-select {
+  min-height: 36px;
+  padding: 0 28px 0 10px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: #e5f7ec !important;
+  color: #147a43 !important;
+  font-size: .68rem !important;
+  font-weight: 900 !important;
+}
+
+.devolucao-history-screen .devolucao-record-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.devolucao-history-screen .devolucao-record-actions button {
+  display: grid;
+  width: 40px !important;
+  height: 40px !important;
+  place-items: center;
+  border: 0 !important;
+  border-radius: 10px !important;
+}
+
+.devolucao-history-screen .devolucao-edit-record-btn { background: #e1f8ed !important; color: #15834a !important; }
+.devolucao-history-screen .devolucao-delete-record-btn { background: #fde9ea !important; color: #dc3941 !important; }
+
+.devolucao-history-screen .devolucao-history-items {
+  padding: 6px 16px !important;
+  background: #fff !important;
+}
+
+.devolucao-history-screen .devolucao-history-items > div {
+  display: grid !important;
+  grid-template-columns: 50px minmax(0,1fr) auto !important;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 0 !important;
+}
+
+.devolucao-history-screen .devolucao-product-placeholder {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid #e5e8ef;
+  border-radius: 10px;
+  background: #fafbfc;
+  color: #8992a4 !important;
+}
+
+.devolucao-history-screen .devolucao-history-items section {
+  min-width: 0;
+}
+
+.devolucao-history-screen .devolucao-history-items section strong {
+  margin-bottom: 5px;
+  color: var(--dev-ink) !important;
+  font-size: .78rem !important;
+}
+
+.devolucao-history-screen .devolucao-history-items section small {
+  display: block;
+  color: #738096 !important;
+  font-size: .66rem !important;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.devolucao-history-screen .devolucao-history-items em {
+  white-space: nowrap;
+  font-size: .63rem !important;
+}
+
+.devolucao-history-screen .devolucao-marketplace-followup {
+  display: grid !important;
+  grid-template-columns: auto minmax(0,1fr);
+  gap: 10px 16px !important;
+  margin: 6px 12px 12px !important;
+  padding: 11px 13px !important;
+  border: 1px solid #fdba74 !important;
+  border-radius: 10px !important;
+  background: #fff8ed !important;
+  box-shadow: none !important;
+}
+
+.devolucao-history-screen .devolucao-followup-state {
+  align-self: center;
+}
+
+.devolucao-history-screen .devolucao-followup-state > span,
+.devolucao-history-screen .devolucao-followup-state > strong {
+  color: #e56f0a !important;
+}
+
+.devolucao-history-screen .devolucao-marketplace-meta {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: #7d5b3a;
+  font-size: .65rem;
+}
+
+.devolucao-history-screen .devolucao-marketplace-meta em {
+  margin-left: auto;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: #ffe7ca;
+  color: #d96000;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.devolucao-history-screen .devolucao-followup-note {
+  display: grid !important;
+  grid-template-columns: minmax(170px,1fr) 120px 120px auto !important;
+  gap: 8px !important;
+}
+
+.devolucao-history-screen .devolucao-followup-note input,
+.devolucao-history-screen .devolucao-followup-note button {
+  min-height: 38px !important;
+}
+
+.devolucao-history-screen .devolucao-history-card > footer {
+  display: grid !important;
+  grid-template-columns: minmax(130px,.8fr) minmax(520px,2.4fr) auto;
+  align-items: center !important;
+  gap: 18px !important;
+  padding: 13px 16px !important;
+  border-top: 1px solid #edf0f4;
+  background: #fafbfc !important;
+}
+
+.devolucao-history-screen .devolucao-card-finance {
+  display: grid !important;
+  grid-template-columns: repeat(4,minmax(100px,1fr));
+  gap: 8px !important;
+  width: 100%;
+  margin: 0 !important;
+  text-align: center;
+}
+
+.devolucao-history-screen .devolucao-card-finance span {
+  min-width: 0 !important;
+}
+
+.devolucao-history-screen .devolucao-card-finance small {
+  font-size: .57rem !important;
+}
+
+.devolucao-history-screen .devolucao-card-finance strong {
+  display: block;
+  margin-top: 3px;
+  font-size: .72rem;
+}
+
+.devolucao-history-screen .devolucao-reputation-control {
+  border-top: 1px solid #fed7aa;
+  background: #fff8ed;
+}
+
+@media (max-width: 1100px) {
+  .devolucao-history-screen .devolucao-page-heading {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+  .devolucao-history-screen .devolucao-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .devolucao-history-screen .devolucao-history-toolbar { grid-template-columns: minmax(260px,1fr) repeat(3,minmax(150px,.55fr)) !important; }
+  .devolucao-history-screen .devolucao-history-metrics { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline {
+    grid-template-columns: repeat(4,minmax(120px,1fr)) auto !important;
+  }
+  .devolucao-history-screen .dev-history-name { grid-column: span 2; }
+  .devolucao-history-screen .devolucao-history-card > footer { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  body:not(.login-active) #app .devolucao-history-screen > main.container {
+    padding: 88px 12px 28px !important;
+  }
+  .devolucao-history-screen .devolucao-page-heading {
+    gap: 16px;
+    padding: 18px !important;
+    border-radius: 14px !important;
+  }
+  .devolucao-history-screen .devolucao-heading-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .devolucao-history-screen .devolucao-heading-actions .devolucao-primary-btn { grid-column: 1 / -1; }
+  .devolucao-history-screen .devolucao-header-btn,
+  .devolucao-history-screen .devolucao-heading-actions .devolucao-month-filter { width: 100%; }
+  .devolucao-history-screen .devolucao-heading-actions .devolucao-month-filter input { width: 100%; min-width: 0; }
+  .devolucao-history-screen .devolucao-history-toolbar {
+    grid-template-columns: minmax(0,1fr) auto !important;
+    overflow: visible !important;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar label { grid-column: 1 / -1; }
+  .devolucao-history-screen .devolucao-history-toolbar select { min-width: 0; }
+  .devolucao-history-screen .devolucao-all-months-btn { grid-column: 1 / -1; }
+  .devolucao-history-screen .devolucao-history-metrics { gap: 8px !important; }
+  .devolucao-history-screen .devolucao-history-metrics article {
+    min-height: 88px;
+    padding: 12px !important;
+  }
+  .devolucao-history-screen .devolucao-history-metrics article > .material-symbols-rounded {
+    flex-basis: 36px;
+    width: 36px;
+    height: 36px;
+  }
+  .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 13px !important;
+  }
+  .devolucao-history-screen .dev-history-name { grid-column: 1 / -1; }
+  .devolucao-history-screen .devolucao-status-select { width: 100% !important; }
+  .devolucao-history-screen .devolucao-record-actions { justify-self: end; }
+  .devolucao-history-screen .devolucao-history-items > div {
+    grid-template-columns: 44px minmax(0,1fr) !important;
+  }
+  .devolucao-history-screen .devolucao-history-items em {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-followup-note { grid-template-columns: 1fr 1fr !important; }
+  .devolucao-history-screen .devolucao-followup-note > input:first-child,
+  .devolucao-history-screen .devolucao-followup-note > button { grid-column: 1 / -1; }
+  .devolucao-history-screen .devolucao-card-finance { grid-template-columns: repeat(2,minmax(0,1fr)); text-align: left; }
+}
+
+@media (max-width: 430px) {
+  .devolucao-history-screen .devolucao-heading-copy { align-items: flex-start; }
+  .devolucao-history-screen .devolucao-heading-icon { flex-basis: 40px; width: 40px; height: 40px; }
+  .devolucao-history-screen .devolucao-heading-actions { grid-template-columns: 1fr; }
+  .devolucao-history-screen .devolucao-heading-actions .devolucao-primary-btn { grid-column: auto; }
+  .devolucao-history-screen .devolucao-history-toolbar { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-history-toolbar label,
+  .devolucao-history-screen .devolucao-all-months-btn { grid-column: auto; }
+  .devolucao-history-screen .devolucao-history-metrics article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 112px;
+  }
+  .devolucao-history-screen .devolucao-history-metrics strong { font-size: 1rem !important; }
+  .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .dev-history-name { grid-column: auto; }
+  .devolucao-history-screen .devolucao-record-actions { justify-self: start; }
+  .devolucao-history-screen .devolucao-history-items { padding: 5px 12px !important; }
+  .devolucao-history-screen .devolucao-history-items > div { grid-template-columns: 38px minmax(0,1fr) !important; }
+  .devolucao-history-screen .devolucao-product-placeholder { width: 36px; height: 36px; }
+  .devolucao-history-screen .devolucao-followup-note { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-followup-note > * { grid-column: auto !important; }
+}
+
+@media (max-width: 375px) {
+  body:not(.login-active) #app .devolucao-history-screen > main.container { padding-left: 8px !important; padding-right: 8px !important; }
+  .devolucao-history-screen .devolucao-page-heading { padding: 15px !important; }
+  .devolucao-history-screen .devolucao-history-metrics article { padding: 10px !important; }
+}
+
+/* Devolucoes Marketplace - barra superior padrao */
+.devolucao-history-screen .devolucao-app-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-columns: minmax(52px, 1fr) auto minmax(420px, 1fr);
+  align-items: center;
+  width: 100%;
+  height: 82px;
+  padding: 0 30px 0 18px;
+  border: 0;
+  background: linear-gradient(100deg, #6020de 0%, #7730ec 52%, #5420c7 100%);
+  box-shadow: 0 4px 16px rgba(68, 27, 151, .18);
+  box-sizing: border-box;
+}
+
+.devolucao-history-screen .devolucao-app-bar h1 {
+  grid-column: 2;
+  margin: 0;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-align: center;
+}
+
+.devolucao-history-screen .devolucao-app-bar-back {
+  display: grid;
+  grid-column: 1;
+  justify-self: start;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(49, 10, 151, .62);
+  color: #fff;
+  cursor: pointer;
+}
+
+.devolucao-history-screen .devolucao-app-bar-back :where(img, .app-back-icon, .product-top-back-icon) {
+  width: 25px;
+  height: 25px;
+  filter: brightness(0) invert(1);
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions {
+  display: flex;
+  grid-column: 3;
+  align-items: center;
+  justify-self: end;
+  gap: 12px;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions button,
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 9px;
+  box-shadow: 0 4px 10px rgba(38, 16, 88, .12);
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-header-btn,
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+  background: #fff;
+  color: #5f2bd3;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-primary-btn {
+  background: #139a55 !important;
+  color: #fff !important;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions button {
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .material-symbols-rounded {
+  font-size: 19px;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+  min-width: 132px;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter b {
+  min-width: 66px;
+  color: #28324a;
+  font-size: .77rem;
+  text-align: left;
+}
+
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.devolucao-history-screen .devolucao-app-bar :where(button, label):focus-within,
+.devolucao-history-screen .devolucao-app-bar button:focus-visible {
+  outline: 3px solid rgba(255,255,255,.45);
+  outline-offset: 2px;
+}
+
+body:not(.login-active) #app .devolucao-history-screen > main.container {
+  padding-top: 104px !important;
+}
+
+.devolucao-history-screen .devolucao-history-toolbar {
+  margin-top: 0 !important;
+}
+
+.devolucao-history-screen .devolucao-history-metrics article {
+  min-height: 78px;
+  padding: 12px 14px !important;
+}
+
+.devolucao-history-screen .devolucao-history-metrics article > .material-symbols-rounded {
+  flex-basis: 38px;
+  width: 38px;
+  height: 38px;
+  font-size: 20px;
+}
+
+.devolucao-history-screen .devolucao-history-metrics strong {
+  font-size: 1.08rem !important;
+}
+
+@media (max-width: 1180px) {
+  .devolucao-history-screen .devolucao-app-bar {
+    grid-template-columns: minmax(52px, .7fr) auto minmax(390px, 1.5fr);
+    padding-right: 16px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions { gap: 7px; }
+  .devolucao-history-screen .devolucao-app-bar-actions button,
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar {
+    grid-template-columns: minmax(250px, 1fr) minmax(160px, .55fr) minmax(160px, .55fr) auto !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .devolucao-history-screen .devolucao-app-bar {
+    grid-template-columns: 58px 1fr;
+    grid-template-rows: 66px 62px;
+    height: 128px;
+    padding: 0 14px 10px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-back {
+    grid-column: 1;
+    grid-row: 1;
+    width: 46px;
+    height: 46px;
+  }
+  .devolucao-history-screen .devolucao-app-bar h1 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    pointer-events: none;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+    width: 100%;
+    justify-content: center;
+  }
+  body:not(.login-active) #app .devolucao-history-screen > main.container {
+    padding-top: 146px !important;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar > label:first-child {
+    grid-column: 1 / -1;
+  }
+  .devolucao-history-screen .devolucao-all-months-btn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .devolucao-history-screen .devolucao-app-bar {
+    height: 128px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .devolucao-history-screen .devolucao-app-bar h1 {
+    font-size: 1.05rem;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions {
+    gap: 6px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions button,
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+    min-height: 44px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-header-btn > span:last-child {
+    display: none;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-header-btn {
+    flex: 0 0 44px;
+    width: 44px;
+    padding: 0;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+    flex: 0 0 120px;
+    min-width: 120px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-primary-btn {
+    flex: 1 1 145px;
+    max-width: 180px;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar {
+    grid-template-columns: 1fr !important;
+  }
+  .devolucao-history-screen .devolucao-history-toolbar > * {
+    grid-column: auto !important;
+  }
+  .devolucao-history-screen .devolucao-history-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .devolucao-history-screen .devolucao-history-metrics article {
+    min-height: 88px;
+    padding: 11px !important;
+  }
+}
+
+@media (max-width: 375px) {
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter {
+    flex-basis: 112px;
+    min-width: 112px;
+  }
+  .devolucao-history-screen .devolucao-app-bar-actions .devolucao-primary-btn {
+    flex-basis: 132px;
+    font-size: .69rem;
+  }
+}
+
+/* Devolucoes - acabamento da barra superior */
+html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar {
+  position: fixed !important;
+  inset: 0 0 auto 0 !important;
+  background: linear-gradient(100deg, #6020de 0%, #7730ec 52%, #5420c7 100%) !important;
+}
+
+html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar h1 {
+  color: #fff !important;
+  background: transparent !important;
+  -webkit-text-fill-color: #fff !important;
+  text-shadow: none !important;
+}
+

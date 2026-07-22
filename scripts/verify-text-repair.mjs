@@ -1,48 +1,132 @@
 import fs from 'node:fs';
-import vm from 'node:vm';
+import path from 'node:path';
 
-const appSource = fs.readFileSync('public/app.js', 'utf8');
-const start = appSource.indexOf('const MOJIBAKE_REPLACEMENTS =');
-const end = appSource.indexOf('function restoreScanFieldFocus');
+const root = process.cwd();
+const allowedExts = new Set([
+  '.css', '.csv', '.html', '.js', '.json', '.md', '.mjs', '.sql', '.svg', '.ts', '.tsx', '.txt', '.xml', '.yml', '.yaml'
+]);
+const rootFiles = new Set(['index.html', 'package.json', 'package-lock.json', 'vite.config.js']);
+const skipDirs = new Set([
+  '.git', '.agents', '.codex', 'node_modules', 'dist', 'build', 'coverage', '.vite', '.cache'
+]);
+const skipDirPatterns = [/^\.edge-layout-profile/i, /^\.playwright/i, /^playwright-report$/i];
+const scanRoots = ['public', 'scripts', 'docs', 'supabase'];
+const artifactRe = new RegExp([
+  '\\u00c3\\u0192',
+  '\\u00c3\\u201a',
+  '\\u00c2\\u00a2',
+  '\\u00c2\\u00ac',
+  '\\u00e2\\u20ac',
+  '\\u00e2\\u201a',
+  '\\ufffd',
+  '\\u00ef\\u00bf\\u00bd',
+  '\\u0192',
+  '\\u0081',
+  '[\\u0080-\\u009f]'
+].join('|'));
+const asciiResidueTokens = [
+  ['A', 'asi'], ['Ai', 'Ai'], ['A', 'azi'], ['AA', 'a'], ['AA', 'o'], ['AA', 'es'], ['AAA', 'es'], ['AA', "'Ai"],
+  ['seguran', 'Aa'], ['sens', 'Avel'], ['or', 'Aamento'], ['repos', 'ao'], ['Repos', 'ao'], ['con', 'ao'], ['Con', 'ao'], ['or', 'Aamento'], ['Or', 'Aamento'], ['sess', 'Aes']
+].map((parts) => parts.join(''));
+const asciiResidueRe = new RegExp(asciiResidueTokens.join('|'), 'g');
+const decoder = new TextDecoder('utf-8', { fatal: true });
+const issues = [];
+const checked = [];
 
-if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Nao foi possivel localizar o reparador de encoding em public/app.js.');
+function shouldSkipDir(name) {
+  return skipDirs.has(name) || skipDirPatterns.some((re) => re.test(name));
 }
 
-const repairSource = `${appSource.slice(start, end)}\nglobalThis.__repairMojibakeText = repairMojibakeText;`;
-const context = { TextDecoder };
-vm.createContext(context);
-vm.runInContext(repairSource, context);
+function isTextCandidate(file) {
+  const rel = path.relative(root, file).replaceAll(path.sep, '/');
+  if (rootFiles.has(rel)) return true;
+  return allowedExts.has(path.extname(file).toLowerCase());
+}
 
-const repair = context.__repairMojibakeText;
-const cases = [
-    ['VocÃƒÆ’Ã‚Âª pode importar outra nota agora ou ir para Notas em aberto.', 'Você pode importar outra nota agora ou ir para Notas em aberto.'],
-    ['Ela ficarÃƒÆ’Ã‚Â¡ em Notas em aberto atÃƒÆ’Ã‚Â© concluir os vÃƒÆ’Ã‚Â­nculos.', 'Ela ficará em Notas em aberto até concluir os vínculos.'],
-    ['Este tipo de lanÃƒÆ’Ã‚Â§amento nÃƒÆ’Ã‚Â£o altera estoque.', 'Este tipo de lançamento não altera estoque.'],
-    ['NF recebida com sucesso. O estoque foi atualizado no TÃƒÆ’Ã¢â‚¬Â°RREO.', 'NF recebida com sucesso. O estoque foi atualizado no TÉRREO.'],
-    ['Deseja lanÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ar as quantidades no estoque do TÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°RREO? Esta aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o registra movimentos e camadas de custo.', 'Deseja lan\u00e7ar as quantidades no estoque do T\u00c9RREO? Esta a\u00e7\u00e3o registra movimentos e camadas de custo.'],
-    ['SÃƒÆ’O (PICK)', 'S\u00c3O (PICK)'],
-    ['INÃƒÆ’O', 'N\u00c3O'],
-    ['TRANSFERÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â NCIA', 'TRANSFER\u00caNCIA'],
-    ['HISTÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œRICO MOVIMENTO', 'HIST\u00d3RICO MOVIMENTO'],
-    ['SEPARAÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ES', 'SEPARA\u00c7\u00d5ES'],
-    ['REPOSIÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢O', 'REPOSI\u00c7\u00c3O'],
-    ['COMISSÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ES', 'COMISS\u00d5ES'],
-    ['ORÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡AMENTO CLIENTE', 'OR\u00c7AMENTO CLIENTE'],
-    ['INVENTÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂRIO', 'INVENT\u00c1RIO'],
-    ['SEPARAÃ‡ÃƒO (PICK)', 'SEPARA\u00c7\u00c3O (PICK)']
-];
+function walk(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!shouldSkipDir(entry.name)) walk(path.join(dir, entry.name));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const file = path.join(dir, entry.name);
+    if (!isTextCandidate(file)) continue;
+    checked.push(file);
+    checkFile(file);
+  }
+}
 
-const failures = cases
-    .map(([input, expected]) => ({ input, expected, actual: repair(input) }))
-    .filter(({ actual, expected }) => actual !== expected);
+function lineFor(text, index) {
+  let line = 1;
+  let column = 1;
+  for (let i = 0; i < index; i += 1) {
+    if (text.charCodeAt(i) === 10) {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+  return { line, column };
+}
 
-if (failures.length) {
-    console.error('Falha na verificacao de encoding:');
-    failures.forEach(({ input, expected, actual }) => {
-        console.error(`- ${input} => ${actual} (esperado: ${expected})`);
+function snippetFor(text, index) {
+  const lineStart = text.lastIndexOf('\n', index) + 1;
+  const nextBreak = text.indexOf('\n', index);
+  const lineEnd = nextBreak === -1 ? text.length : nextBreak;
+  return text.slice(lineStart, lineEnd).trim().slice(0, 180);
+}
+
+function checkFile(file) {
+  const bytes = fs.readFileSync(file);
+  let text;
+  try {
+    text = decoder.decode(bytes);
+  } catch (error) {
+    issues.push({ file, message: 'arquivo nao esta em UTF-8 valido', detail: error.message });
+    return;
+  }
+
+  const match = artifactRe.exec(text);
+  if (match) {
+    const pos = lineFor(text, match.index);
+    issues.push({
+      file,
+      message: `texto com possivel caractere corrompido em ${pos.line}:${pos.column}`,
+      detail: snippetFor(text, match.index)
     });
-    process.exit(1);
+  }
+
+  const residueMatch = asciiResidueRe.exec(text);
+  if (residueMatch) {
+    const pos = lineFor(text, residueMatch.index);
+    issues.push({
+      file,
+      message: `texto com residuo de conversao corrompida em ${pos.line}:${pos.column}`,
+      detail: snippetFor(text, residueMatch.index)
+    });
+  }
 }
 
-console.log(`Encoding guard OK (${cases.length} casos).`);
+for (const name of scanRoots) walk(path.join(root, name));
+for (const name of rootFiles) {
+  const file = path.join(root, name);
+  if (fs.existsSync(file)) {
+    checked.push(file);
+    checkFile(file);
+  }
+}
+
+if (issues.length) {
+  console.error('Falha na verificacao de encoding. Corrija os textos abaixo:');
+  for (const issue of issues.slice(0, 80)) {
+    console.error(`- ${path.relative(root, issue.file)}: ${issue.message}`);
+    if (issue.detail) console.error(`  ${issue.detail}`);
+  }
+  if (issues.length > 80) console.error(`... mais ${issues.length - 80} ocorrencias.`);
+  process.exit(1);
+}
+
+console.log(`Encoding OK: ${checked.length} arquivos verificados em UTF-8.`);

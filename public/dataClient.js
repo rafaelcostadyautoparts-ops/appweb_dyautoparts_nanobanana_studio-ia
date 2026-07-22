@@ -1,19 +1,19 @@
 /**
- * Data Access Layer - Camada de abstra��o para acesso a dados
- * Permite futura migra��o de Google Sheets para Supabase com m�nimo impacto
+ * Data Access Layer - Camada de abstrao para acesso a dados
+ * Permite futura migrao de Google Sheets para Supabase com mnimo impacto
  * 
  * Implementa:
- * - Carregamento sob demanda por m�dulo
+ * - Carregamento sob demanda por mdulo
  * - Cache inteligente
- * - Logging de opera��es
+ * - Logging de operaes
  */
 
 const DataClient = (function () {
-    // Cache por m�dulo
+    // Cache por mdulo
     const cache = {};
     const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
-    // Mapeamento de m�dulos para abas do Google Sheets
+    // Mapeamento de mdulos para abas do Google Sheets
     const MODULE_TABLES = {
         login: {
             tables: ['usuarios'],
@@ -66,7 +66,7 @@ const DataClient = (function () {
     };
 
     /**
-     * Verifica se cache � v�lido
+     * Verifica se cache  vlido
      */
     function isCacheValid(key) {
         if (!cache[key]) return false;
@@ -84,7 +84,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Obt�m do cache
+     * Obtm do cache
      */
     function getCache(key) {
         if (isCacheValid(key)) {
@@ -94,7 +94,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Limpa cache de um m�dulo
+     * Limpa cache de um mdulo
      */
     function invalidateCache(key) {
         delete cache[key];
@@ -107,9 +107,9 @@ const DataClient = (function () {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[FATAL] Supabase client n�o inicializado!')
+            console.error('[FATAL] Supabase client no inicializado!')
             console.error('[FATAL] Verifique supabaseClient.js - URL e ANON_KEY podem estar incompletas')
-            throw new Error('Supabase n�o configurado. Configure URL e ANON_KEY em supabaseClient.js')
+            throw new Error('Supabase no configurado. Configure URL e ANON_KEY em supabaseClient.js')
         }
 
         console.log('[Supabase] Iniciando consulta na tabela produtos...')
@@ -120,14 +120,14 @@ const DataClient = (function () {
 
         if (error) {
             console.error('[Supabase] ERRO ao buscar produtos:', error.message)
-            console.error('[Supabase] C�digo do erro:', error.code)
+            console.error('[Supabase] Cdigo do erro:', error.code)
             throw new Error('Erro ao carregar produtos do Supabase: ' + error.message)
         }
 
         if (!data || data.length === 0) {
-            console.warn('[Supabase] ATEN��O: Nenhum produto encontrado na tabela!')
+            console.warn('[Supabase] ATENO: Nenhum produto encontrado na tabela!')
             console.warn('[Supabase] Verifique se a tabela "produtos" possui registros')
-            throw new Error('Nenhum produto encontrado no Supabase. A tabela est� vazia ou n�o existe.')
+            throw new Error('Nenhum produto encontrado no Supabase. A tabela est vazia ou no existe.')
         }
 
         console.log(`[Supabase] Sukesso! ${data.length} produtos carregados do Supabase`)
@@ -181,13 +181,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega usu�rios do Supabase
+     * Carrega usurios do Supabase
      */
     async function fetchUsuariosSupabase() {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[Supabase] client n�o encontrado')
+            console.error('[Supabase] client no encontrado')
             return []
         }
 
@@ -198,7 +198,7 @@ const DataClient = (function () {
 
 
         if (error) {
-            console.error('[Supabase] erro ao buscar usu�rios:', error)
+            console.error('[Supabase] erro ao buscar usurios:', error)
             return []
         }
 
@@ -249,13 +249,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega Kit L�mpada do Supabase (Paginado para carregar tudo)
+     * Carrega Kit Lmpada do Supabase (Paginado para carregar tudo)
      */
     async function fetchKitLampadaSupabase() {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('[Supabase] client n�o encontrado')
+            console.error('[Supabase] client no encontrado')
             return []
         }
 
@@ -282,7 +282,7 @@ const DataClient = (function () {
                 from += pageSize;
             }
 
-            // Utilit�rio interno para logs
+            // Utilitrio interno para logs
             const safeText = (val) => String(val ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
             console.log('[KIT LAMPADA] rows:', allRows);
@@ -291,7 +291,7 @@ const DataClient = (function () {
             console.log('[KIT LAMPADA] primeiro item:', allRows[0]);
 
             if (allRows.length === 0) {
-                console.warn('[KIT LAMPADA] Aten��o: Nenhum registro retornado. Verifique as RLS/Policies da tabela "kit_lampada" no Supabase.');
+                console.warn('[KIT LAMPADA] Ateno: Nenhum registro retornado. Verifique as RLS/Policies da tabela "kit_lampada" no Supabase.');
             }
 
             return allRows;
@@ -309,10 +309,10 @@ const DataClient = (function () {
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase()
             .replace(/\s+/g, '_')
-            .replace('1�_ANDAR', 'PRIMEIRO_ANDAR')
-            .replace('1�_ANDAR', 'PRIMEIRO_ANDAR')
+            .replace('1_ANDAR', 'PRIMEIRO_ANDAR')
+            .replace('1_ANDAR', 'PRIMEIRO_ANDAR')
             .replace('1_ANDAR', 'PRIMEIRO_ANDAR');
-        // Normalizar varia��es de FULL ML
+        // Normalizar variaes de FULL ML
         if (norm === 'FULL_ML' || norm === 'FULLML' || norm === 'FULL_M_L') return 'FULL_ML';
         return norm;
     }
@@ -381,7 +381,7 @@ const DataClient = (function () {
     async function saveMovimentoSupabase(movData) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[Supabase] Client n�o encontrado');
+            console.error('[Supabase] Client no encontrado');
             return null;
         }
 
@@ -415,13 +415,13 @@ const DataClient = (function () {
     }
 
     /**
-     * Atualiza o saldo na tabela estoque_atual de forma at�mica
+     * Atualiza o saldo na tabela estoque_atual de forma atmica
      */
     async function updateEstoqueSupabase(id_interno, localRaw, operacao, quantidade) {
         const client = window.supabaseClient;
         const local = normalizeLocal(localRaw);
         if (!client || !local) {
-            console.error('[MOV] update estoque ERRO: client ou local inv�lido');
+            console.error('[MOV] update estoque ERRO: client ou local invlido');
             return false;
         }
 
@@ -593,7 +593,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca saldos de estoque por local para um produto espec�fico
+     * Busca saldos de estoque por local para um produto especfico
      */
     async function fetchEstoqueProdutoSupabase(id_interno) {
         const client = window.supabaseClient;
@@ -605,7 +605,7 @@ const DataClient = (function () {
             .eq('id_interno', id_interno);
 
         if (error) {
-            console.warn('[Supabase] Erro ao buscar estoque do produto (n�o cr�tico):', error);
+            console.warn('[Supabase] Erro ao buscar estoque do produto (no crtico):', error);
             return [];
         }
 
@@ -613,7 +613,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca saldo real de estoque para um produto em um local espec�fico
+     * Busca saldo real de estoque para um produto em um local especfico
      */
     async function fetchEstoqueItemLocalSupabase(id_interno, localRaw) {
         const client = window.supabaseClient;
@@ -628,7 +628,7 @@ const DataClient = (function () {
             .maybeSingle();
 
         if (error) {
-            console.warn('[INV] fetchEstoqueItemLocal AVISO (n�o cr�tico):', error);
+            console.warn('[INV] fetchEstoqueItemLocal AVISO (no crtico):', error);
             return null;
         }
         return data;
@@ -691,7 +691,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Carrega dados de uma tabela espec�fica (Roteamento Inteligente)
+     * Carrega dados de uma tabela especfica (Roteamento Inteligente)
      */
     async function fetchTable(tableName) {
         try {
@@ -774,7 +774,7 @@ const DataClient = (function () {
             return data || [];
         } catch (error) {
             console.error(`[DataClient] Erro ao carregar ${tableName}:`, error);
-            // Erro de estoque � tratado como n�o-cr�tico para n�o bloquear visualiza��o
+            // Erro de estoque  tratado como no-crtico para no bloquear visualizao
             if (tableName !== 'estoque_atual') {
                 showToast(`Erro ao carregar dados de ${tableName}`, 'error');
             }
@@ -784,32 +784,32 @@ const DataClient = (function () {
 
 
     /**
-     * Carrega dados de um m�dulo espec�fico (sob demanda)
-     * @param {string} moduleName - Nome do m�dulo (login, produtos, separacao, etc)
-     * @param {boolean} forceRefresh - Se true, ignora cache e for�a recarregamento
+     * Carrega dados de um mdulo especfico (sob demanda)
+     * @param {string} moduleName - Nome do mdulo (login, produtos, separacao, etc)
+     * @param {boolean} forceRefresh - Se true, ignora cache e fora recarregamento
      */
     async function loadModule(moduleName, forceRefresh = false) {
         const config = MODULE_TABLES[moduleName];
         if (!config) {
-            console.warn(`[DataClient] M�dulo desconhecido: ${moduleName}`);
+            console.warn(`[DataClient] Mdulo desconhecido: ${moduleName}`);
             return null;
         }
 
-        // Verificar cache v�lido
+        // Verificar cache vlido
         if (!forceRefresh && isCacheValid(config.cacheKey)) {
-            console.log(`[DataClient] Usando cache para m�dulo: ${moduleName}`);
+            console.log(`[DataClient] Usando cache para mdulo: ${moduleName}`);
             return getCache(config.cacheKey);
         }
 
-        console.log(`[DataClient] Carregando m�dulo: ${moduleName}`);
+        console.log(`[DataClient] Carregando mdulo: ${moduleName}`);
 
         try {
-            // Carregar todas as tabelas do m�dulo em paralelo
+            // Carregar todas as tabelas do mdulo em paralelo
             const results = await Promise.all(
                 config.tables.map(table => fetchTable(table))
             );
 
-            // Criar objeto com dados do m�dulo
+            // Criar objeto com dados do mdulo
             const moduleData = {};
             config.tables.forEach((table, index) => {
                 const keyMap = {
@@ -830,22 +830,22 @@ const DataClient = (function () {
             // Salvar no cache
             setCache(config.cacheKey, moduleData);
 
-            console.log(`[DataClient] M�dulo ${moduleName} carregado com sucesso`);
+            console.log(`[DataClient] Mdulo ${moduleName} carregado com sucesso`);
             return moduleData;
 
         } catch (error) {
-            console.error(`[DataClient] Erro ao carregar m�dulo ${moduleName}:`, error);
+            console.error(`[DataClient] Erro ao carregar mdulo ${moduleName}:`, error);
             showToast(`Erro ao carregar ${moduleName}`, 'error');
             return null;
         }
     }
 
     /**
-     * Carrega dados de m�ltiplos m�dulos de uma vez
-     * @param {string[]} moduleNames - Lista de m�dulos para carregar
+     * Carrega dados de mltiplos mdulos de uma vez
+     * @param {string[]} moduleNames - Lista de mdulos para carregar
      */
     async function loadModules(moduleNames) {
-        console.log(`[DataClient] Carregando m�ltiplos m�dulos:`, moduleNames);
+        console.log(`[DataClient] Carregando mltiplos mdulos:`, moduleNames);
 
         const results = {};
         await Promise.all(
@@ -858,14 +858,14 @@ const DataClient = (function () {
     }
 
     /**
-     * Busca dados de uma tabela espec�fica (sem cache de m�dulo)
-     * �til para opera��es pontuais
+     * Busca dados de uma tabela especfica (sem cache de mdulo)
+     * til para operaes pontuais
      */
     async function query(tableName, filters = {}) {
         console.log(`[DataClient] SEARCH START -> Table: ${tableName}`, filters);
 
         try {
-            // Se for uma das tabelas SSOT (Supabase), n�o usamos dyGet (Sheets)
+            // Se for uma das tabelas SSOT (Supabase), no usamos dyGet (Sheets)
             const ssotTables = ['produtos', 'usuarios', 'canais_envio'];
             if (ssotTables.includes(tableName)) {
                 console.log(`[DataClient] Redirecionando busca de ${tableName} para SSOT Supabase`);
@@ -881,7 +881,7 @@ const DataClient = (function () {
             }
 
             if (filters.field && filters.value) {
-                // Busca espec�fica no Google Sheets (fallback legado)
+                // Busca especfica no Google Sheets (fallback legado)
                 const params = {
                     action: 'find',
                     sheet: tableName,
@@ -911,12 +911,12 @@ const DataClient = (function () {
             data: data
         });
 
-        // Invalidar cache do m�dulo relacionado se salvou com sucesso
+        // Invalidar cache do mdulo relacionado se salvou com sucesso
         if (result) {
             Object.keys(MODULE_TABLES).forEach(moduleName => {
                 const config = MODULE_TABLES[moduleName];
                 if (config.tables.includes(sheetName)) {
-                    console.log(`[DataClient] Invalidando cache de ${moduleName} ap�s salvamento`);
+                    console.log(`[DataClient] Invalidando cache de ${moduleName} aps salvamento`);
                     invalidateCache(config.cacheKey);
                 }
             });
@@ -926,7 +926,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Vers�o batch de save
+     * Verso batch de save
      */
     async function saveBatch(sheetName, dataArray) {
         console.log(`[DataClient] Salvando batch em ${sheetName}`);
@@ -945,7 +945,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Obt�m dados de um m�dulo espec�fico do cache (sem carregar)
+     * Obtm dados de um mdulo especfico do cache (sem carregar)
      */
     function getCachedData(moduleName) {
         const config = MODULE_TABLES[moduleName];
@@ -954,7 +954,7 @@ const DataClient = (function () {
     }
 
     /**
-     * Verifica se m�dulo j� foi carregado
+     * Verifica se mdulo j foi carregado
      */
     function isModuleLoaded(moduleName) {
         const config = MODULE_TABLES[moduleName];
@@ -970,12 +970,12 @@ const DataClient = (function () {
         console.log('[DataClient] Todo cache limpo');
     }
 
-    // API p�blica
+    // API pblica
     async function fetchMovimentosSupabase() {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos: Supabase client n�o encontrado');
-            throw new Error('Supabase client n�o encontrado');
+            console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos: Supabase client no encontrado');
+            throw new Error('Supabase client no encontrado');
         }
 
         // 1. Buscar dados
@@ -1012,8 +1012,8 @@ const DataClient = (function () {
     async function fetchMovimentosProdutoSupabase(id_interno, limit = 120) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos: Supabase client n�o encontrado');
-            throw new Error('Supabase client n�o encontrado');
+            console.error('[MOVIMENTOS PRODUTO] erro ao listar movimentos: Supabase client no encontrado');
+            throw new Error('Supabase client no encontrado');
         }
 
         const cleanId = String(id_interno || '').trim();
@@ -1852,7 +1852,7 @@ const DataClient = (function () {
     async function saveGarantiaSupabase(garantiaData) {
         const client = window.supabaseClient;
         if (!client) {
-            console.error('[GARANTIA DEBUG] erro supabase: client n�o encontrado');
+            console.error('[GARANTIA DEBUG] erro supabase: client no encontrado');
             return null;
         }
 
@@ -1898,7 +1898,7 @@ const DataClient = (function () {
 
 
 
-    // DEVOLUCOES: apenas controle. Estas funcoes nao movimentam estoque.
+    // DEVOLUCOES: controle e entrada automatica no estoque.
     function isDevolucaoReembolsoSchemaError(error) {
         const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
         return error?.code === 'PGRST204'
@@ -1914,6 +1914,26 @@ const DataClient = (function () {
         const clone = { ...row };
         delete clone.tarifa_devolucao_reembolsada;
         delete clone.reputacao_revertida;
+        return clone;
+    }
+
+    function isDevolucaoItemStockSchemaError(error) {
+        const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+        return error?.code === 'PGRST204'
+            || error?.code === '42703'
+            || text.includes('apto_venda')
+            || text.includes('estoque_movimentado')
+            || text.includes('estoque_local')
+            || text.includes('estoque_movimento_id')
+            || (text.includes('schema cache') && text.includes('devolucao_itens'));
+    }
+
+    function stripDevolucaoItemStockColumns(item) {
+        const clone = { ...item };
+        delete clone.apto_venda;
+        delete clone.estoque_movimentado;
+        delete clone.estoque_local;
+        delete clone.estoque_movimento_id;
         return clone;
     }
 
@@ -1939,7 +1959,7 @@ const DataClient = (function () {
             const missingRpc = error.code === 'PGRST202'
                 || error.code === '42883'
                 || String(error.message || '').includes('salvar_devolucao_marketplace');
-            if (missingRpc || isDevolucaoReembolsoSchemaError(error)) {
+            if (missingRpc || isDevolucaoReembolsoSchemaError(error) || isDevolucaoItemStockSchemaError(error)) {
                 const headerPayload = {
                     ...payload.devolucao,
                     tipo: 'marketplace',
@@ -1970,7 +1990,14 @@ const DataClient = (function () {
                     throw fallbackError;
                 }
                 const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, header.id));
-                const { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+                let { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+                if (itemsError && isDevolucaoItemStockSchemaError(itemsError)) {
+                    console.warn('[DEVOLUCOES] colunas de estoque dos itens ausentes; salvando itens no formato antigo e movimentando pelo payload.');
+                    const retry = await client
+                        .from('devolucao_itens')
+                        .insert(itemRows.map(stripDevolucaoItemStockColumns));
+                    itemsError = retry.error;
+                }
                 if (itemsError) {
                     await client.from('devolucoes').delete().eq('id', header.id);
                     throw new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
@@ -2038,7 +2065,14 @@ const DataClient = (function () {
 
         const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, id));
         if (itemRows.length) {
-            const { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+            let { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
+            if (itemsError && isDevolucaoItemStockSchemaError(itemsError)) {
+                console.warn('[DEVOLUCOES] colunas de estoque dos itens ausentes; recriando itens no formato antigo e movimentando pelo payload.');
+                const retry = await client
+                    .from('devolucao_itens')
+                    .insert(itemRows.map(stripDevolucaoItemStockColumns));
+                itemsError = retry.error;
+            }
             if (itemsError) {
                 console.error('[DEVOLUCOES] erro ao recriar itens da devolucao:', itemsError);
                 throw new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
@@ -2066,9 +2100,13 @@ const DataClient = (function () {
             .select('apto_venda,estoque_movimentado,estoque_local,estoque_movimento_id')
             .eq('devolucao_id', devolucaoId)
             .limit(1);
-        if (schemaCheck.error) {
+        const canMarkDevolucaoItems = !schemaCheck.error;
+        if (schemaCheck.error && !isDevolucaoItemStockSchemaError(schemaCheck.error)) {
             console.error('[DEVOLUCOES] estrutura de estoque da devolucao ausente:', schemaCheck.error);
             throw new Error('Rode o SQL de devolucoes no Supabase antes de movimentar estoque pela devolucao.');
+        }
+        if (schemaCheck.error) {
+            console.warn('[DEVOLUCOES] colunas de controle de estoque da devolucao ausentes; movimento sera criado sem marcar o item como movimentado.');
         }
 
         let movimentos = 0;
@@ -2090,20 +2128,22 @@ const DataClient = (function () {
             const estoqueOk = await updateEstoqueSupabase(item.id_interno, localDestino, 'soma', quantidade);
             if (!estoqueOk) throw new Error('Movimento criado, mas o estoque nao foi atualizado para ' + item.id_interno);
 
-            const { error: updateItemError } = await client
-                .from('devolucao_itens')
-                .update({
-                    apto_venda: item.apto_venda !== false,
-                    estoque_movimentado: true,
-                    estoque_local: localDestino,
-                    estoque_movimento_id: movimento.movimento_id || null,
-                    atualizado_em: getDataHoraBrasil()
-                })
-                .eq('devolucao_id', devolucaoId)
-                .eq('id_interno', item.id_interno);
-            if (updateItemError) {
-                console.error('[DEVOLUCOES] erro ao marcar item como movimentado:', updateItemError);
-                throw new Error(updateItemError.message || 'Estoque movimentado, mas nao foi possivel marcar o item da devolucao.');
+            if (canMarkDevolucaoItems) {
+                const { error: updateItemError } = await client
+                    .from('devolucao_itens')
+                    .update({
+                        apto_venda: item.apto_venda !== false,
+                        estoque_movimentado: true,
+                        estoque_local: localDestino,
+                        estoque_movimento_id: movimento.movimento_id || null,
+                        atualizado_em: getDataHoraBrasil()
+                    })
+                    .eq('devolucao_id', devolucaoId)
+                    .eq('id_interno', item.id_interno);
+                if (updateItemError) {
+                    console.error('[DEVOLUCOES] erro ao marcar item como movimentado:', updateItemError);
+                    throw new Error(updateItemError.message || 'Estoque movimentado, mas nao foi possivel marcar o item da devolucao.');
+                }
             }
 
             item.estoque_movimentado = true;
@@ -2137,6 +2177,22 @@ const DataClient = (function () {
             throw listError;
         }
         return data || [];
+    }
+
+    async function updateDevolucaoItemCostSupabase(itemId, valorUnitario) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        if (!itemId) throw new Error('Item da devolucao nao informado');
+        const { error } = await client
+            .from('devolucao_itens')
+            .update({ valor_unitario: Number(valorUnitario || 0) })
+            .eq('id', itemId);
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao atualizar custo do item:', error);
+            throw new Error(error.message || 'Erro ao atualizar custo do produto da devolucao');
+        }
+        invalidateCache('devolucoes');
+        return true;
     }
 
     async function updateDevolucaoStatusSupabase(id, status) {
@@ -2392,15 +2448,15 @@ const DataClient = (function () {
 window.DataClient = DataClient;
 
 /**
- * Teste de conex�o com Supabase - apenas leitura
- * N�O substitui o fluxo atual do Google Sheets
+ * Teste de conexo com Supabase - apenas leitura
+ * NO substitui o fluxo atual do Google Sheets
  */
 async function testeSupabase() {
     try {
         const client = window.supabaseClient
 
         if (!client) {
-            console.error('Supabase client n�o encontrado em window.supabaseClient')
+            console.error('Supabase client no encontrado em window.supabaseClient')
             return
         }
 
