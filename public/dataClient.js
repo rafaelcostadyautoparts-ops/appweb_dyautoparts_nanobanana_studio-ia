@@ -978,18 +978,28 @@ const DataClient = (function () {
             throw new Error('Supabase client no encontrado');
         }
 
-        // 1. Buscar dados
-        const { data, error } = await client
-            .from('movimentos')
-            .select('*')
-            .order('data_hora', { ascending: false });
-
-        if (error) {
-            console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos:', error);
-            throw error;
+        const pageSize = 1000;
+        const maxPages = 50;
+        const movimentos = [];
+        for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+            const from = pageIndex * pageSize;
+            const to = from + pageSize - 1;
+            const { data, error } = await client
+                .from('movimentos')
+                .select('*')
+                .order('data_hora', { ascending: false })
+                .range(from, to);
+            if (error) {
+                console.error('[MOVIMENTOS DEBUG] erro ao listar movimentos:', error);
+                throw error;
+            }
+            const page = data || [];
+            movimentos.push(...page);
+            if (page.length < pageSize) break;
+            if (pageIndex === maxPages - 1) console.warn('[MOVIMENTOS DEBUG] limite de seguranca da paginacao atingido');
         }
-
-        return data || [];
+        console.log('[MOVIMENTOS DEBUG] movimentos carregados:', movimentos.length);
+        return movimentos;
     }
 
     async function fetchSeparacaoSupabase() {
@@ -2090,14 +2100,14 @@ const DataClient = (function () {
 
         const itensParaEstoque = (itens || []).filter(item =>
             item.estoque_movimentado !== true
+            && !['nao_recebido', 'divergencia'].includes(String(item.destino || '').toLowerCase())
             && String(item.id_interno || '').trim()
             && Number(item.quantidade || 0) > 0
         );
-        if (!itensParaEstoque.length) return { movimentos: 0 };
 
         const schemaCheck = await client
             .from('devolucao_itens')
-            .select('apto_venda,estoque_movimentado,estoque_local,estoque_movimento_id')
+            .select('apto_venda,estoque_movimentado,estoque_local,estoque_movimento_id,destino')
             .eq('devolucao_id', devolucaoId)
             .limit(1);
         const canMarkDevolucaoItems = !schemaCheck.error;
@@ -2109,6 +2119,26 @@ const DataClient = (function () {
             console.warn('[DEVOLUCOES] colunas de controle de estoque da devolucao ausentes; movimento sera criado sem marcar o item como movimentado.');
         }
 
+        if (canMarkDevolucaoItems) {
+            for (const item of itens || []) {
+                if (!String(item.id_interno || '').trim()) continue;
+                const { error: controlError } = await client
+                    .from('devolucao_itens')
+                    .update({
+                        devolveu_correto: item.devolveu_correto !== false,
+                        apto_venda: item.apto_venda === true,
+                        destino: item.destino || (item.apto_venda === true ? 'disponivel' : 'quarentena'),
+                        estoque_local: item.estoque_local || null,
+                        atualizado_em: getDataHoraBrasil()
+                    })
+                    .eq('devolucao_id', devolucaoId)
+                    .eq('id_interno', item.id_interno);
+                if (controlError) {
+                    console.error('[DEVOLUCOES] erro ao salvar resultado do item:', controlError);
+                    throw new Error(controlError.message || 'Nao foi possivel salvar o resultado do item da devolucao.');
+                }
+            }
+        }
         let movimentos = 0;
         for (const item of itensParaEstoque) {
             const localDestino = item.apto_venda !== false ? 'TERREO' : 'DEFEITO';

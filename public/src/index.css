@@ -70127,3 +70127,193 @@ html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar
   text-shadow: none !important;
 }
 
+/* Devolucoes - controle operacional por item */
+.devolucao-draft-item .dev-draft-toggle {
+  display: none !important;
+}
+
+.devolucao-draft-item .dev-draft-result {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+}
+
+.devolucao-draft-item .dev-draft-result select {
+  min-height: 38px;
+  padding: 0 32px 0 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  color: #263248;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.devolucao-draft-item .dev-draft-result select:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.devolucao-draft-item .dev-draft-result > strong,
+.devolucao-draft-item .dev-draft-classification > strong {
+  font-size: .65rem;
+}
+
+.devolucao-history-screen .devolucao-control-metrics {
+  width: 100%;
+  max-width: 1500px;
+  margin: -10px auto 22px;
+  padding: 15px;
+  border: 1px solid #e4e7ee;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(18, 28, 48, .05);
+  box-sizing: border-box;
+}
+
+.devolucao-history-screen .devolucao-control-metrics > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.devolucao-history-screen .devolucao-control-metrics header small,
+.devolucao-history-screen .devolucao-control-metrics header strong {
+  display: block;
+}
+
+.devolucao-history-screen .devolucao-control-metrics header small {
+  color: #6d3bea;
+  font-size: .62rem;
+  font-weight: 900;
+}
+
+.devolucao-history-screen .devolucao-control-metrics header strong {
+  margin-top: 3px;
+  color: #172033;
+  font-size: .88rem;
+}
+
+.devolucao-history-screen .devolucao-control-metrics header > span {
+  color: #7a8497;
+  font-size: .65rem;
+}
+
+.devolucao-history-screen .devolucao-control-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.devolucao-history-screen .devolucao-control-grid article {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #edf0f4;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.devolucao-history-screen .devolucao-control-grid small,
+.devolucao-history-screen .devolucao-control-grid strong,
+.devolucao-history-screen .devolucao-control-grid span {
+  display: block;
+}
+
+.devolucao-history-screen .devolucao-control-grid small {
+  min-height: 28px;
+  color: #687489;
+  font-size: .61rem;
+  font-weight: 800;
+}
+
+.devolucao-history-screen .devolucao-control-grid strong {
+  margin-top: 4px;
+  color: #172033;
+  font-size: .9rem;
+}
+
+.devolucao-history-screen .devolucao-control-grid span {
+  margin-top: 3px;
+  color: #7a8497;
+  font-size: .6rem;
+}
+
+.devolucao-history-screen .devolucao-control-grid .is-stock strong { color: #15834a; }
+.devolucao-history-screen .devolucao-control-grid .is-defect strong { color: #d97706; }
+.devolucao-history-screen .devolucao-control-grid .is-loss strong,
+.devolucao-history-screen .devolucao-control-grid .is-gross strong,
+.devolucao-history-screen .devolucao-control-grid .is-net strong { color: #d7333d; }
+
+.devolucao-history-screen .devolucao-history-items em.resultado-apto {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.devolucao-history-screen .devolucao-history-items em.resultado-defeito,
+.devolucao-history-screen .devolucao-history-items em.resultado-garantia {
+  color: #a65308;
+  background: #ffedd5;
+}
+
+.devolucao-history-screen .devolucao-history-items em.resultado-nao_recebido,
+.devolucao-history-screen .devolucao-history-items em.resultado-divergencia {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+@media (max-width: 1050px) {
+  .devolucao-history-screen .devolucao-control-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .devolucao-history-screen .devolucao-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .devolucao-history-screen .devolucao-control-metrics > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .devolucao-history-screen .devolucao-control-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Devolucoes - alinhamento do resultado no card do produto */
+.devolucao-modal-body .devolucao-draft-item .dev-draft-result {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-self: stretch;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.devolucao-modal-body .devolucao-draft-item .dev-draft-result select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.devolucao-modal-body .devolucao-draft-item .dev-draft-result > strong {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+

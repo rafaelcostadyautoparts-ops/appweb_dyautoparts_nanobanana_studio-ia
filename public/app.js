@@ -2645,7 +2645,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 const MODULE_SIDEBAR_CONFIG = {
  produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
- movimentos: { label: 'ESTOQUE', icon: 'inventory_2', colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
+ movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
  dashboard: { label: 'DASHBOARD', icon: 'dashboard', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
  inventario: { label: 'INVENTÁRIO', icon: 'fact_check', colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
  nf: { label: 'ENTRADA NF', icon: 'receipt_long', colorFrom: '#1E3A8A', colorTo: '#1E40AF', shadow: '30,58,138' },
@@ -3428,7 +3428,7 @@ const menuModulesConfig = [
  { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 2, type: 'principal' },
  { id: 'pick', label: 'SEPARAÇÃO (PICK)', icon: 'pick', order: 3, type: 'principal' },
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
- { id: 'movimentacoes', label: 'ESTOQUE', icon: 'movimentacoes', order: 5, type: 'principal' },
+ { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
  { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
@@ -4342,6 +4342,7 @@ const MOV_HISTORY_PERIODS = [
  { id: 'hoje', label: 'Hoje' },
  { id: '7d', label: '7 dias' },
  { id: '30d', label: '30 dias' },
+ { id: 'todos', label: 'Todo o historico' },
  { id: 'custom', label: 'Personalizado' }
 ];
 
@@ -4358,6 +4359,8 @@ const PRODUCT_MOVEMENT_FILTERS = [
 
 let movementHistoryState = {
  operations: [],
+ loadedMovements: 0,
+ loadedOperations: 0,
  filtered: [],
  filter: 'todos',
  period: '30d',
@@ -4696,14 +4699,25 @@ async function fetchMovHistoryTable(table, select = '*', orderColumn = null, asc
  const client = window.supabaseClient || (window.supabaseClientReady ? await window.supabaseClientReady.catch(() => null) : null);
  if (!client) return [];
  try {
+ const pageSize = 1000;
+ const maxPages = 50;
+ const rows = [];
+ for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+ const from = pageIndex * pageSize;
+ const to = from + pageSize - 1;
  let query = client.from(table).select(select);
  if (orderColumn) query = query.order(orderColumn, { ascending });
- const { data, error } = await query;
+ const { data, error } = await query.range(from, to);
  if (error) {
  console.warn(`[MOV_HISTORY] tabela ${table} indisponivel`, error);
  return [];
  }
- return data || [];
+ const page = data || [];
+ rows.push(...page);
+ if (page.length < pageSize) break;
+ if (pageIndex === maxPages - 1) console.warn(`[MOV_HISTORY] limite de seguranca atingido em ${table}`);
+ }
+ return rows;
  } catch (error) {
  console.warn(`[MOV_HISTORY] erro ao carregar ${table}`, error);
  return [];
@@ -5074,6 +5088,8 @@ async function loadMovHistoryOperations() {
  ...buildMovHistoryFromMovements(movimentos, entradaNumbers)
  ];
  movementHistoryState.operations = ops;
+ movementHistoryState.loadedMovements = movimentos.length;
+ movementHistoryState.loadedOperations = ops.length;
  applyMovHistoryFilters();
  return ops;
 }
@@ -5113,7 +5129,7 @@ function renderMovHistoryShell(loading = false) {
  </div>
  <div>
  <h1>HISTORICO DE MOVIMENTOS</h1>
- <p>Operacoes agrupadas por documento, origem ou processo.</p>
+ <p>Operacoes agrupadas por documento, origem ou processo. <strong>${formatStockNumber(movementHistoryState.loadedMovements)} movimentos e ${formatStockNumber(movementHistoryState.loadedOperations)} operacoes carregadas.</strong></p>
  </div>
  </header>
 
@@ -5125,7 +5141,7 @@ function renderMovHistoryShell(loading = false) {
  </div>
  <div class="mov-history-search">
  <span class="material-symbols-rounded">search</span>
- <input id="mov-history-search-input" value="${escapeKitAttribute(movementHistoryState.search)}" oninput="setMovHistorySearch(this.value)" placeholder="Buscar por NF, produto, fornecedor...">
+ <input id="mov-history-search-input" value="${escapeKitAttribute(movementHistoryState.search)}" oninput="setMovHistorySearch(this.value)" placeholder="Buscar por NF, produto, separacao, fornecedor...">
  </div>
  <div class="mov-history-period">
  ${MOV_HISTORY_PERIODS.map(item => `
@@ -32365,6 +32381,37 @@ async function syncDevolucaoRecordCostsWithSupabase(records = []) {
  if (failed.length) console.warn('[DEVOLUCOES] alguns custos antigos nao foram sincronizados:', failed);
  return results.length - failed.length;
 }
+function getDevolucaoItemResultado(item = {}) {
+ const destino = String(item.destino || '').trim().toLowerCase();
+ if (destino === 'disponivel') return 'apto';
+ if (destino === 'nao_recebido') return 'nao_recebido';
+ if (destino === 'divergencia' || item.devolveu_correto === false) return 'divergencia';
+ if (destino === 'garantia') return 'garantia';
+ if (['quarentena', 'aguardando_analise'].includes(destino)) return 'defeito';
+ return item.apto_venda !== false ? 'apto' : 'defeito';
+}
+
+function getDevolucaoResultadoLabel(item = {}) {
+ const resultado = getDevolucaoItemResultado(item);
+ if (resultado === 'apto') return 'Apto para venda';
+ if (resultado === 'nao_recebido') return 'Produto n\u00e3o devolvido';
+ if (resultado === 'divergencia') return 'Produto diferente';
+ if (resultado === 'garantia') return 'Defeito / fornecedor';
+ return 'Defeito / em an\u00e1lise';
+}
+
+function getDevolucaoResultadoCost(item = {}) {
+ return Number(item.valor_unitario || 0) * Number(item.quantidade || 0);
+}
+
+function applyDevolucaoResultado(item, resultado) {
+ if (!item) return;
+ const selected = ['apto', 'defeito', 'garantia', 'nao_recebido', 'divergencia'].includes(resultado) ? resultado : 'defeito';
+ item.destino = selected === 'apto' ? 'disponivel' : selected === 'garantia' ? 'garantia' : selected === 'nao_recebido' ? 'nao_recebido' : selected === 'divergencia' ? 'divergencia' : 'quarentena';
+ item.apto_venda = selected === 'apto';
+ item.devolveu_correto = selected !== 'divergencia';
+ item.estoque_local = selected === 'apto' ? 'TERREO' : ['defeito', 'garantia'].includes(selected) ? 'DEFEITO' : '';
+}
 
 function setDevolucaoModalValue(id, value) {
  const element = document.getElementById(id);
@@ -32388,21 +32435,28 @@ function mapDevolucaoRecordItemToDraft(item = {}) {
  estoque_movimentado: item.estoque_movimentado === true,
  estoque_local: item.estoque_local || '',
  estoque_movimento_id: item.estoque_movimento_id || '',
- observacoes: item.observacoes || ''
+ observacoes: item.observacoes || '',
+ destino: item.destino || (item.devolveu_correto === false ? 'divergencia' : item.apto_venda !== false ? 'disponivel' : 'quarentena')
  };
 }
 
 function getDevolucaoItemPayload(item = {}) {
  const { localId, id, devolucao_id, valor_total, criado_em, atualizado_em, ...payload } = item;
- payload.apto_venda = payload.apto_venda !== false;
  payload.valor_unitario = getDevolucaoItemAutoCost(payload);
- payload.estoque_local = payload.apto_venda ? 'TERREO' : 'DEFEITO';
+ const resultado = getDevolucaoItemResultado(payload);
+ payload.destino = resultado === 'apto' ? 'disponivel' : resultado === 'garantia' ? 'garantia' : resultado === 'nao_recebido' ? 'nao_recebido' : resultado === 'divergencia' ? 'divergencia' : 'quarentena';
+ payload.apto_venda = resultado === 'apto';
+ payload.devolveu_correto = resultado !== 'divergencia';
+ payload.estoque_local = resultado === 'apto' ? 'TERREO' : ['defeito', 'garantia'].includes(resultado) ? 'DEFEITO' : '';
  return payload;
 }
 
 function getDevolucaoItemEstoqueLabel(item = {}) {
- if (item.estoque_movimentado) return 'Estoque OK';
- return item.apto_venda !== false ? 'Entrar em TERREO' : 'Entrar em DEFEITO';
+ const resultado = getDevolucaoItemResultado(item);
+ if (resultado === 'nao_recebido') return 'Sem entrada no estoque';
+ if (resultado === 'divergencia') return 'Aguardando diverg\u00eancia';
+ if (item.estoque_movimentado) return resultado === 'apto' ? 'Estoque TERREO' : 'Estoque DEFEITO';
+ return resultado === 'apto' ? 'Entrar em TERREO' : 'Entrar em DEFEITO';
 }
 
 function buildDevolucaoMarketplacePayload(pedido, dataDevolucao) {
@@ -32723,7 +32777,7 @@ function addDevolucaoDraftItem() {
  const quantidade = Number(document.getElementById('dev-item-qty')?.value || 0);
  if (!(quantidade > 0)) return showToast('Informe uma quantidade v\u00e1lida.', 'warning');
 
- const aptoVenda = true;
+ const devolveuCorreto = document.getElementById('dev-item-correct')?.value === 'true';
  const custoProduto = getDevolucaoProductCost(product);
 
  devolucaoMarketplaceState.draftItems.push({
@@ -32737,12 +32791,13 @@ function addDevolucaoDraftItem() {
  quantidade,
  valor_unitario: custoProduto,
  fornecedor: document.getElementById('dev-item-brand')?.value.trim() || getDevolucaoProductBrand(product),
- devolveu_correto: document.getElementById('dev-item-correct')?.value === 'true',
- apto_venda: aptoVenda,
+ devolveu_correto: devolveuCorreto,
+ apto_venda: devolveuCorreto,
  estoque_movimentado: false,
- estoque_local: aptoVenda ? 'TERREO' : 'DEFEITO',
+ estoque_local: devolveuCorreto ? 'TERREO' : '',
  estoque_movimento_id: '',
- observacoes: document.getElementById('dev-item-notes')?.value.trim() || ''
+ observacoes: document.getElementById('dev-item-notes')?.value.trim() || '',
+ destino: devolveuCorreto ? 'disponivel' : 'divergencia'
  });
 
  devolucaoMarketplaceState.selectedProduct = null;
@@ -32753,14 +32808,16 @@ function addDevolucaoDraftItem() {
  document.getElementById('dev-product-code')?.focus();
 }
 
-function toggleDevolucaoDraftItemApto(localId, naoApto) {
+function setDevolucaoDraftItemResultado(localId, resultado) {
  const item = devolucaoMarketplaceState.draftItems.find(entry => entry.localId === localId);
  if (!item) return;
- item.apto_venda = naoApto !== true;
- item.estoque_local = item.apto_venda ? 'TERREO' : 'DEFEITO';
+ applyDevolucaoResultado(item, resultado);
  renderDevolucaoDraftItems();
 }
 function removeDevolucaoDraftItem(localId) {
+function toggleDevolucaoDraftItemApto(localId, naoApto) {
+ setDevolucaoDraftItemResultado(localId, naoApto ? 'defeito' : 'apto');
+}
  devolucaoMarketplaceState.draftItems = devolucaoMarketplaceState.draftItems.filter(item => item.localId !== localId);
  renderDevolucaoDraftItems();
 }
@@ -32784,6 +32841,8 @@ function renderDevolucaoDraftItems() {
  <div><small>Quantidade</small><strong>${item.quantidade}</strong></div>
  <div><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
  <label class="dev-draft-toggle"><span class="dev-draft-toggle-check"><input type="checkbox" ${item.apto_venda === false ? 'checked' : ''} onchange="toggleDevolucaoDraftItemApto('${item.localId}', this.checked)"><small>Não apto</small></span><strong class="${item.apto_venda !== false ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
+ <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Apto para venda</option><option value="defeito" ${getDevolucaoItemResultado(item) === 'defeito' ? 'selected' : ''}>Defeito / em an\u00e1lise</option><option value="garantia" ${getDevolucaoItemResultado(item) === 'garantia' ? 'selected' : ''}>Defeito / fornecedor</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o devolvido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto diferente recebido</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
+ <div class="dev-draft-classification"><small>Classifica\u00e7\u00e3o</small><strong>${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</strong></div>
  <div><small>Custo</small><strong>${formatCurrency(Number(item.valor_unitario || 0))}</strong></div>
  <button type="button" title="Remover item" onclick="removeDevolucaoDraftItem('${item.localId}')"><span class="material-symbols-rounded">delete</span></button>
  </article>`).join('')}</div>`;
@@ -32844,6 +32903,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
  </section>
  <div id="dev-history-metrics" class="devolucao-history-metrics"></div>
+ <section id="dev-control-metrics" class="devolucao-control-metrics"></section>
  <div id="dev-history-results-heading" class="devolucao-results-heading"><h2>Pedidos e produtos</h2><span>0 produto(s)</span></div>
  <section id="dev-history-list" class="devolucao-history-list"><div class="devolucao-history-loading"><span class="material-symbols-rounded dev-spin">progress_activity</span> Carregando devolu\u00e7\u00f5es...</div></section>
  </main>
@@ -32858,10 +32918,18 @@ async function renderHistoricoDevolucoes(options = {}) {
  updateDevolucaoMonthDisplay(devolucaoHistoricoState.month);
  devolucaoHistoricoState.error = '';
  try {
- await ensureProdutosLoaded();
- const records = await DataClient.listDevolucoesSupabase();
+ const records = await withTimeout(
+ DataClient.listDevolucoesSupabase(),
+ Math.max(Number(BOOT_CONFIG.TIMEOUT_MS || 0), 15000),
+ 'carregamento das devolucoes'
+ );
  devolucaoHistoricoState.records = normalizeDevolucaoRecordCosts(records);
  syncDevolucaoRecordCostsWithSupabase(devolucaoHistoricoState.records).catch(error => console.warn('[DEVOLUCOES] sync custos antigos:', error));
+ ensureProdutosLoaded().then(() => {
+ devolucaoHistoricoState.records = normalizeDevolucaoRecordCosts(devolucaoHistoricoState.records);
+ syncDevolucaoRecordCostsWithSupabase(devolucaoHistoricoState.records).catch(error => console.warn('[DEVOLUCOES] sync custos apos catalogo:', error));
+ if (document.getElementById('dev-history-list')) renderHistoricoDevolucaoList();
+ }).catch(error => console.warn('[DEVOLUCOES] catalogo carregado em segundo plano:', error));
  } catch (error) {
  devolucaoHistoricoState.records = [];
  devolucaoHistoricoState.error = error.message || 'Erro ao carregar devolu\u00e7\u00f5es.';
@@ -32973,7 +33041,7 @@ function exportHistoricoDevolucoesCSV() {
  'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo',
  'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
  'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
- 'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
+ 'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
  ];
  const rows = records.flatMap(row => {
  const items = row.devolucao_itens?.length ? row.devolucao_itens : [{}];
@@ -33001,6 +33069,8 @@ function exportHistoricoDevolucoesCSV() {
  item.devolveu_correto === false ? 'Nao' : 'Sim',
  item.apto_venda === true ? 'Sim' : 'Nao',
  item.estoque_movimentado === true ? 'Sim' : 'Nao',
+ getDevolucaoResultadoLabel(item),
+ item.destino || '',
  item.estoque_local || '',
  Number(item.valor_unitario || 0).toFixed(2).replace('.', ','),
  (Number(item.valor_unitario || 0) * Number(item.quantidade || 0)).toFixed(2).replace('.', ','),
@@ -33024,7 +33094,8 @@ function exportHistoricoDevolucoesCSV() {
 function renderHistoricoDevolucaoList() {
  const list = document.getElementById('dev-history-list');
  const metrics = document.getElementById('dev-history-metrics');
- if (!list || !metrics) return;
+ const controlMetrics = document.getElementById('dev-control-metrics');
+ if (!list || !metrics || !controlMetrics) return;
  const all = devolucaoHistoricoState.records || [];
  const periodRecords = all.filter(row =>
  (!devolucaoHistoricoState.month || String(row.data_devolucao || '').startsWith(devolucaoHistoricoState.month))
@@ -33036,6 +33107,26 @@ function renderHistoricoDevolucaoList() {
  const reputacaoRevertida = periodRecords.filter(row => row.reputacao_revertida).length;
  const saldoMarketplaceTotal = periodRecords.reduce((sum, row) => sum + Number(row.saldo_marketplace || 0), 0);
  const reembolsos = periodRecords.reduce((sum, row) => sum + getDevolucaoReembolsoMarketplace(row), 0);
+ const periodItems = periodRecords.flatMap(row => row.devolucao_itens || []);
+ const aptos = periodItems.filter(item => getDevolucaoItemResultado(item) === 'apto');
+ const defeitos = periodItems.filter(item => ['defeito', 'garantia'].includes(getDevolucaoItemResultado(item)));
+ const naoRecebidos = periodItems.filter(item => ['nao_recebido', 'divergencia'].includes(getDevolucaoItemResultado(item)));
+ const quantidadeResultado = items => items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+ const custoResultado = items => items.reduce((sum, item) => sum + getDevolucaoResultadoCost(item), 0);
+ const custoDefeitos = custoResultado(defeitos);
+ const custoNaoRecebidos = custoResultado(naoRecebidos);
+ const prejuizoBruto = custoDefeitos + custoNaoRecebidos;
+ const recuperadoFinanceiro = reembolsos + Math.max(0, saldoMarketplaceTotal);
+ const prejuizoLiquidoProdutos = Math.max(0, prejuizoBruto + Math.max(0, -saldoMarketplaceTotal) - recuperadoFinanceiro);
+ controlMetrics.innerHTML = `
+ <header><div><small>CONTROLE DOS PRODUTOS</small><strong>Destino e preju\u00edzo das devolu\u00e7\u00f5es</strong></div><span>Baseado no custo cadastrado</span></header>
+ <div class="devolucao-control-grid">
+ <article class="is-stock"><small>Aptos / estoque recuperado</small><strong>${quantidadeResultado(aptos)} un.</strong><span>${formatCurrency(custoResultado(aptos))}</span></article>
+ <article class="is-defect"><small>Em defeito / an\u00e1lise</small><strong>${quantidadeResultado(defeitos)} un.</strong><span>${formatCurrency(custoDefeitos)}</span></article>
+ <article class="is-loss"><small>N\u00e3o devolvidos / divergentes</small><strong>${quantidadeResultado(naoRecebidos)} un.</strong><span>${formatCurrency(custoNaoRecebidos)}</span></article>
+ <article class="is-gross"><small>Preju\u00edzo bruto em produtos</small><strong>${formatCurrency(prejuizoBruto)}</strong><span>Defeito + n\u00e3o recebido</span></article>
+ <article class="is-net"><small>Preju\u00edzo l\u00edquido estimado</small><strong>${formatCurrency(prejuizoLiquidoProdutos)}</strong><span>Ap\u00f3s recupera\u00e7\u00f5es marketplace</span></article>
+ </div>`;
  const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
  metrics.innerHTML = `
  <article class="metric-purple"><span class="material-symbols-rounded">assignment_return</span><div><small>Devolu\u00e7\u00f5es no per\u00edodo</small><strong>${periodRecords.length}</strong></div></article>
@@ -33049,11 +33140,11 @@ function renderHistoricoDevolucaoList() {
  if (devolucaoHistoricoState.error) {
  list.innerHTML = `<div class="devolucao-history-error"><span class="material-symbols-rounded">database_off</span><strong>Hist\u00f3rico indispon\u00edvel</strong><p>${escapeDevolucaoHTML(devolucaoHistoricoState.error)}</p></div>`;
  return;
+ }
+ const filtered = getHistoricoDevolucaoFilteredRecords();
  const resultsHeading = document.getElementById('dev-history-results-heading');
  const filteredProductCount = filtered.reduce((sum, row) => sum + (row.devolucao_itens || []).reduce((itemSum, item) => itemSum + Number(item.quantidade || 0), 0), 0);
  if (resultsHeading) resultsHeading.innerHTML = `<h2>Pedidos e produtos</h2><span>${filteredProductCount} produto(s)</span>`;
- }
- const filtered = getHistoricoDevolucaoFilteredRecords();
 
  if (!filtered.length) {
  list.innerHTML = '<div class="devolucao-history-empty"><span class="material-symbols-rounded">assignment_return</span><strong>Nenhuma devolu\u00e7\u00e3o encontrada</strong><p>Cadastre uma nova devolu\u00e7\u00e3o ou ajuste os filtros.</p></div>';
@@ -33103,7 +33194,7 @@ function renderHistoricoDevolucaoList() {
  <div class="devolucao-history-items">${items.map(item => `<div>
  <span class="material-symbols-rounded devolucao-product-placeholder">inventory_2</span>
  <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo: ${formatCurrency(item.valor_unitario || 0)}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
- <em class="${item.devolveu_correto ? 'is-correct' : 'is-wrong'}">${item.devolveu_correto ? 'Produto correto' : 'Produto diferente'}</em>
+ <em class="resultado-${getDevolucaoItemResultado(item)}">${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</em>
  </div>`).join('')}</div>
  ${followupMarkup}
  <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo produtos</small><strong>${formatCurrency(custoProdutosRegistro)}</strong></span><span class="${saldoMarketplace < 0 ? 'is-negative' : saldoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplace)}</strong></span><span class="is-positive"><small>Reembolsado</small><strong>${formatCurrency(reembolsoMarketplace)}</strong></span><span class="${saldoLiquidoMarketplace < 0 ? 'is-negative' : saldoLiquidoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><small>Saldo liquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquidoMarketplace)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
@@ -33195,8 +33286,6 @@ async function saveHistoricoMarketplaceObservation(id) {
  showToast(error.message || 'Erro ao salvar a observa\u00e7\u00e3o.', 'error');
  }
 }
-function getDevolucaoRecordProductCost(row) {
-
 async function updateHistoricoReputacaoRevertida(id, value, select) {
  const record = devolucaoHistoricoState.records.find(row => row.id === id);
  if (!record) return;
@@ -33221,6 +33310,8 @@ async function updateHistoricoReputacaoRevertida(id, value, select) {
  showToast(error.message || 'Erro ao atualizar a reputacao da devolucao.', 'error');
  }
 }
+
+function getDevolucaoRecordProductCost(row) {
  return (row?.devolucao_itens || []).reduce((sum, item) => sum + (Number(item.valor_unitario || 0) * Number(item.quantidade || 0)), 0);
 }
 
