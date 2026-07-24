@@ -70127,6 +70127,519 @@ html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar
   text-shadow: none !important;
 }
 
+/* Devolucoes Marketplace - painel centralizado */
+html body:not(.login-active) #app .devolucao-history-screen { min-height: 100vh; padding: 24px; background: #f7f8fb; box-sizing: border-box; }
+html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar { position: fixed !important; top: 0 !important; right: 0 !important; left: 0 !important; width: 100% !important; max-width: none !important; height: 84px; padding: 0 clamp(14px, 2vw, 30px); border-radius: 0; transform: none !important; }
+html body:not(.login-active) #app .devolucao-history-screen > main.container { width: min(100%, 1500px) !important; max-width: 1500px !important; min-height: calc(100vh - 48px); margin: 0 auto !important; padding: 136px 30px 32px !important; border: 1px solid #e8eaf0; border-radius: 20px; background: #fff; box-shadow: 0 12px 34px rgba(28, 36, 58, .06); box-sizing: border-box; }
+.devolucao-history-screen .devolucao-history-toolbar, .devolucao-history-screen .devolucao-history-metrics, .devolucao-history-screen .devolucao-results-heading, .devolucao-history-screen .devolucao-history-list, .devolucao-history-screen .devolucao-control-metrics { max-width: none; }
+.devolucao-history-screen .devolucao-history-toolbar { gap: 14px !important; margin-bottom: 22px !important; padding: 24px !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(35, 44, 68, .055); }
+.devolucao-history-screen .devolucao-history-toolbar label, .devolucao-history-screen .devolucao-history-toolbar select, .devolucao-history-screen .devolucao-history-toolbar button { min-height: 54px !important; padding-left: 18px !important; padding-right: 18px !important; border-color: #dfe4ed !important; border-radius: 12px !important; background: #fff !important; color: #17213b !important; }
+.devolucao-history-screen .devolucao-history-metrics { gap: 18px !important; margin-bottom: 22px !important; }
+.devolucao-history-screen .devolucao-history-metrics article { align-items: center; justify-content: center; flex-direction: column; gap: 12px; min-height: 185px; padding: 22px 16px !important; border-radius: 18px !important; text-align: center; box-shadow: 0 8px 24px rgba(35, 44, 68, .07) !important; }
+.devolucao-history-screen .devolucao-history-metrics article > .material-symbols-rounded { flex-basis: 58px; width: 58px; height: 58px; font-size: 29px; }
+.devolucao-history-screen .devolucao-history-metrics small { font-size: .84rem !important; font-weight: 600 !important; }
+.devolucao-history-screen .devolucao-history-metrics strong { margin-top: 8px !important; font-size: 1.55rem !important; }
+.devolucao-history-screen .devolucao-history-empty, .devolucao-history-screen .devolucao-history-error, .devolucao-history-screen .devolucao-history-loading { min-height: 195px; border: 1px solid #e5e8ef; border-radius: 18px; background: #fff; box-shadow: 0 8px 24px rgba(35, 44, 68, .05); }
+.devolucao-history-screen .devolucao-control-metrics { margin-top: 22px; }
+@media (max-width: 900px) {
+  html body:not(.login-active) #app .devolucao-history-screen { padding: 12px; }
+  html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar { top: 0 !important; right: 0 !important; left: 0 !important; width: 100% !important; border-radius: 0; transform: none !important; }
+  html body:not(.login-active) #app .devolucao-history-screen > main.container { min-height: calc(100vh - 24px); padding: 166px 18px 24px !important; border-radius: 16px; }
+  .devolucao-history-screen .devolucao-history-toolbar { padding: 16px !important; }
+  .devolucao-history-screen .devolucao-history-metrics article { min-height: 150px; }
+}
+@media (max-width: 600px) {
+  html body:not(.login-active) #app .devolucao-history-screen { padding: 0; }
+  html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar { top: 0 !important; right: 0 !important; left: 0 !important; width: 100% !important; border-radius: 0; transform: none !important; }
+  html body:not(.login-active) #app .devolucao-history-screen > main.container { min-height: 100vh; padding: 150px 10px 24px !important; border: 0; border-radius: 0; }
+  .devolucao-history-screen .devolucao-history-toolbar { gap: 10px !important; padding: 12px !important; }
+  .devolucao-history-screen .devolucao-history-metrics { gap: 10px !important; }
+  .devolucao-history-screen .devolucao-history-metrics article { align-items: center; min-height: 132px; padding: 14px 8px !important; text-align: center; }
+  .devolucao-history-screen .devolucao-history-metrics article > .material-symbols-rounded { flex-basis: 42px; width: 42px; height: 42px; font-size: 22px; }
+  .devolucao-history-screen .devolucao-history-metrics small { font-size: .7rem !important; }
+  .devolucao-history-screen .devolucao-history-metrics strong { font-size: 1rem !important; }
+}
+/* Devolucoes - campos financeiros do acompanhamento */
+.devolucao-history-screen .devolucao-followup-note {
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(155px, .48fr)) minmax(155px, auto) !important;
+  align-items: stretch;
+  gap: 10px !important;
+}
+.devolucao-history-screen .devolucao-followup-balance {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 11px 6px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid #d8dee9;
+  border-radius: 11px;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.devolucao-history-screen .devolucao-followup-balance:focus-within {
+  border-color: #ea8618;
+  box-shadow: 0 0 0 3px rgba(234, 134, 24, .13);
+}
+.devolucao-history-screen .devolucao-followup-balance > span:first-child {
+  color: #69758b;
+  font-size: .58rem;
+  line-height: 1.1;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.devolucao-history-screen .devolucao-money-input {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.devolucao-history-screen .devolucao-money-input b {
+  color: #43506a;
+  font-size: .72rem;
+  font-weight: 900;
+}
+.devolucao-history-screen .devolucao-money-input input {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #111a31;
+  font-size: .95rem !important;
+  font-weight: 900;
+  box-shadow: none !important;
+}
+.devolucao-history-screen .devolucao-followup-note > input:first-child {
+  min-height: 58px !important;
+  padding: 0 14px;
+}
+.devolucao-history-screen .devolucao-followup-note > button {
+  min-width: 155px;
+  min-height: 58px !important;
+  justify-content: center;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+@media (max-width: 1100px) {
+  .devolucao-history-screen .devolucao-followup-note {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .devolucao-history-screen .devolucao-followup-note > input:first-child,
+  .devolucao-history-screen .devolucao-followup-note > button { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .devolucao-history-screen .devolucao-followup-note { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-followup-note > * { grid-column: auto !important; }
+}
+/* Devolucoes - leitura do acompanhamento e status principal */
+.devolucao-history-screen .devolucao-status-select {
+  min-height: 42px !important;
+  padding: 0 34px 0 15px !important;
+  border: 1px solid transparent !important;
+  font-size: .73rem !important;
+  box-shadow: 0 4px 12px rgba(20, 32, 52, .09);
+}
+.devolucao-history-screen .devolucao-status-select.status-recebida { color: #075985 !important; border-color: #bae6fd !important; background: #e0f2fe !important; }
+.devolucao-history-screen .devolucao-status-select.status-em_analise { color: #92400e !important; border-color: #fcd34d !important; background: #fef3c7 !important; }
+.devolucao-history-screen .devolucao-status-select.status-resolvida { color: #166534 !important; border-color: #bbf7d0 !important; background: #dcfce7 !important; }
+.devolucao-history-screen .devolucao-status-select.status-cancelada { color: #991b1b !important; border-color: #fecaca !important; background: #fee2e2 !important; }
+.devolucao-history-screen .devolucao-marketplace-followup {
+  grid-template-columns: minmax(300px, .78fr) minmax(0, 1.8fr) !important;
+  align-items: stretch;
+  gap: 14px !important;
+  padding: 12px !important;
+}
+.devolucao-history-screen .devolucao-followup-state {
+  display: flex;
+  min-width: 0;
+  padding: 12px 14px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+.devolucao-history-screen .devolucao-followup-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.devolucao-history-screen .devolucao-followup-title > .material-symbols-rounded {
+  color: #e56f0a !important;
+  font-size: 23px;
+}
+.devolucao-history-screen .devolucao-followup-title > div {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+.devolucao-history-screen .devolucao-followup-title strong { color: #c75d05 !important; font-size: .79rem; }
+.devolucao-history-screen .devolucao-followup-title small { color: #966127; font-size: .62rem; }
+.devolucao-history-screen .devolucao-marketplace-meta {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.devolucao-history-screen .devolucao-marketplace-meta > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.72);
+  text-align: center;
+}
+.devolucao-history-screen .devolucao-marketplace-meta small {
+  color: #a06a2f;
+  font-size: .52rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.devolucao-history-screen .devolucao-marketplace-meta b {
+  color: #704214;
+  font-size: .63rem;
+  overflow-wrap: anywhere;
+}
+.devolucao-history-screen .devolucao-followup-observation {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 11px 6px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid #d8dee9;
+  border-radius: 11px;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.devolucao-history-screen .devolucao-followup-observation:focus-within { border-color: #ea8618; box-shadow: 0 0 0 3px rgba(234,134,24,.13); }
+.devolucao-history-screen .devolucao-followup-observation > span {
+  color: #69758b;
+  font-size: .58rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.devolucao-history-screen .devolucao-followup-observation input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.devolucao-history-screen .devolucao-history-card > footer > span:first-child,
+.devolucao-history-screen .devolucao-history-card > footer > strong:last-child { text-align: center; }
+@media (max-width: 1180px) {
+  .devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-followup-state { width: 100%; box-sizing: border-box; }
+}
+@media (max-width: 520px) {
+  .devolucao-history-screen .devolucao-marketplace-meta { grid-template-columns: 1fr; }
+  .devolucao-history-screen .devolucao-followup-title > div { text-align: center; }
+  .devolucao-history-screen .devolucao-followup-title { flex-direction: column; }
+}
+/* Devolucoes - cards orientados por lancamento */
+.devolucao-history-screen .devolucao-results-heading { justify-content: space-between; }
+.devolucao-history-screen .devolucao-results-heading > div { display: grid; gap: 4px; }
+.devolucao-history-screen .devolucao-results-heading > div > small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #6b768c;
+  font-size: .65rem;
+  font-weight: 700;
+}
+.devolucao-history-screen .devolucao-results-heading > div > small .material-symbols-rounded { color: #6d3bea; font-size: 15px; }
+.devolucao-history-screen .devolucao-created-at {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px !important;
+  color: #6d3bea !important;
+  font-size: .58rem !important;
+  font-weight: 800;
+}
+.devolucao-history-screen .devolucao-created-at .material-symbols-rounded { font-size: 13px; }
+.devolucao-history-screen .devolucao-history-card {
+  border-color: #e0e5ed !important;
+  box-shadow: 0 10px 28px rgba(23, 34, 57, .07) !important;
+}
+.devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline {
+  min-height: 82px;
+  background: linear-gradient(180deg, #fff 0%, #fdfdff 100%) !important;
+}
+.devolucao-history-screen .devolucao-history-items { padding: 10px 16px !important; }
+.devolucao-history-screen .devolucao-history-items > div {
+  min-height: 78px;
+  padding: 9px 12px !important;
+  border: 1px solid #edf0f5;
+  border-radius: 12px;
+  background: #fff;
+}
+.devolucao-history-screen .devolucao-product-image,
+.devolucao-history-screen .devolucao-product-placeholder {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  border: 1px solid #e1e6ee;
+  border-radius: 11px;
+  background: #fff;
+  box-sizing: border-box;
+}
+.devolucao-history-screen .devolucao-product-image { display: block; padding: 4px; }
+.devolucao-history-screen .devolucao-history-items > div { grid-template-columns: 58px minmax(0,1fr) auto !important; }
+.devolucao-history-screen .devolucao-history-card > footer {
+  padding: 14px 16px !important;
+  background: #f8fafc !important;
+}
+.devolucao-history-screen .devolucao-history-card > footer > span:first-child {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 58px;
+  padding: 8px 12px;
+  border: 1px solid #e5e9f0;
+  border-radius: 11px;
+  background: #fff;
+}
+.devolucao-history-screen .devolucao-history-card > footer > span:first-child::before {
+  content: 'RESUMO DA DEVOLUCAO';
+  color: #7a8497;
+  font-size: .52rem;
+  font-weight: 900;
+  letter-spacing: .045em;
+}
+.devolucao-history-screen .devolucao-card-finance { gap: 10px !important; }
+.devolucao-history-screen .devolucao-card-finance > span {
+  display: grid;
+  min-height: 58px;
+  padding: 8px 7px;
+  align-content: center;
+  border: 1px solid #e5e9f0;
+  border-radius: 11px;
+  background: #fff;
+}
+.devolucao-history-screen .devolucao-card-finance small { color: #768196 !important; font-size: .55rem !important; letter-spacing: .025em; text-transform: uppercase; }
+.devolucao-history-screen .devolucao-card-finance strong { font-size: .8rem !important; }
+.devolucao-history-screen .devolucao-history-card.has-marketplace-loss .devolucao-card-finance .is-negative {
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+.devolucao-history-screen .devolucao-history-card > footer > strong:last-child {
+  display: grid;
+  min-height: 48px;
+  padding: 5px 10px;
+  place-items: center;
+  border-radius: 10px;
+  background: #eee8ff;
+  color: #5f2bd3;
+  white-space: nowrap;
+}
+.devolucao-history-screen .devolucao-reputation-control {
+  padding: 12px 16px;
+  justify-content: center;
+  background: #fff8ed;
+}
+@media (max-width: 768px) {
+  .devolucao-history-screen .devolucao-results-heading { align-items: flex-start; }
+  .devolucao-history-screen .devolucao-history-items > div { grid-template-columns: 54px minmax(0,1fr) !important; }
+  .devolucao-history-screen .devolucao-product-image,
+  .devolucao-history-screen .devolucao-product-placeholder { width: 50px; height: 50px; }
+}
+@media (max-width: 430px) {
+  .devolucao-history-screen .devolucao-results-heading { align-items: flex-start; flex-direction: column; }
+  .devolucao-history-screen .devolucao-history-card > footer > span:first-child { text-align: left; }
+}
+/* Devolucoes - alinhamento e separacao visual dos indicadores */
+html body:not(.login-active) #app .devolucao-history-screen > main.container {
+  padding-top: 104px !important;
+  padding-right: clamp(18px, 3vw, 40px) !important;
+  padding-left: clamp(18px, 3vw, 40px) !important;
+}
+.devolucao-history-screen > main.container > .devolucao-history-toolbar,
+.devolucao-history-screen > main.container > .devolucao-history-metrics,
+.devolucao-history-screen > main.container > .devolucao-results-heading,
+.devolucao-history-screen > main.container > .devolucao-history-list,
+.devolucao-history-screen > main.container > .devolucao-control-metrics {
+  width: 100% !important;
+  margin-right: auto !important;
+  margin-left: auto !important;
+  box-sizing: border-box;
+}
+.devolucao-history-screen .devolucao-history-toolbar { margin-top: 0 !important; }
+.devolucao-history-screen .devolucao-history-metrics {
+  padding: 18px;
+  border: 1px solid #dfe3ea;
+  border-radius: 20px;
+  background: #e9ecf1;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.72);
+}
+.devolucao-history-screen .devolucao-history-metrics article {
+  border-color: #dfe3e9 !important;
+  background: #f8f9fb !important;
+  box-shadow: 0 5px 14px rgba(28, 39, 60, .055) !important;
+}
+.devolucao-history-screen .devolucao-results-heading {
+  margin-top: 4px !important;
+  padding: 0 2px;
+}
+@media (max-width: 900px) {
+  html body:not(.login-active) #app .devolucao-history-screen > main.container {
+    padding-top: 144px !important;
+    padding-right: 16px !important;
+    padding-left: 16px !important;
+  }
+  .devolucao-history-screen .devolucao-history-metrics { padding: 12px; border-radius: 16px; }
+}
+@media (max-width: 600px) {
+  html body:not(.login-active) #app .devolucao-history-screen > main.container {
+    padding-top: 140px !important;
+    padding-right: 10px !important;
+    padding-left: 10px !important;
+  }
+  .devolucao-history-screen .devolucao-history-metrics { padding: 9px; border-radius: 14px; }
+}
+/* Nova devolucao marketplace - redesign em tres etapas */
+.devolucao-modal-overlay { padding: 14px !important; background: rgba(9, 18, 34, .86) !important; backdrop-filter: blur(6px); }
+.devolucao-modal-dialog.devolucao-modal-redesign {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1500px, calc(100vw - 28px));
+  max-width: 1500px;
+  max-height: calc(100vh - 28px);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.4);
+  border-radius: 17px;
+  background: #f5f7f9;
+  box-shadow: 0 24px 70px rgba(3, 10, 24, .32);
+}
+.devolucao-modal-redesign .devolucao-modal-header {
+  display: grid;
+  grid-template-columns: 64px minmax(0,1fr) 52px;
+  gap: 18px;
+  padding: 26px 30px;
+  align-items: center;
+  border-bottom: 1px solid #e3e7ed;
+  background: #fff;
+}
+.devolucao-modal-redesign .devolucao-modal-heading-icon {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  border-radius: 12px;
+  background: #e6f4ee;
+  color: #087c5e;
+}
+.devolucao-modal-redesign .devolucao-modal-heading-icon .material-symbols-rounded { font-size: 31px; }
+.devolucao-modal-redesign .devolucao-modal-heading-copy h2 { margin: 0; color: #111a2e; font-size: 1.42rem; }
+.devolucao-modal-redesign .devolucao-modal-heading-copy p { margin: 7px 0 0; color: #768198; font-size: .84rem; }
+.devolucao-modal-redesign .devolucao-modal-close { width: 50px; height: 50px; border: 1px solid #dbe1e9; border-radius: 11px; background: #fff; color: #111827; }
+.devolucao-modal-redesign .devolucao-modal-body { display: grid; gap: 14px; min-height: 0; padding: 14px 18px; overflow: auto; background: #f5f7f9; }
+.devolucao-modal-redesign .devolucao-section-card { padding: 20px; border: 1px solid #e1e6ed; border-radius: 14px; background: #fff; box-shadow: 0 4px 12px rgba(26, 38, 58, .04); }
+.devolucao-modal-redesign .devolucao-section-title { display: flex; gap: 11px; margin-bottom: 16px; align-items: flex-start; }
+.devolucao-modal-redesign .devolucao-section-title > span { display: grid; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; place-items: center; border-radius: 9px; background: #078363; color: #fff; font-size: .82rem; }
+.devolucao-modal-redesign .devolucao-section-title h2 { margin: 2px 0 0; color: #182136; font-size: 1rem; }
+.devolucao-modal-redesign .devolucao-section-title p { margin: 5px 0 0; color: #8490a5; font-size: .72rem; }
+.devolucao-modal-redesign .devolucao-form-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)) !important; gap: 16px 18px !important; }
+.devolucao-modal-redesign .devolucao-form-grid > label { display: grid; min-width: 0; grid-column: auto !important; gap: 7px; }
+.devolucao-modal-redesign .devolucao-form-grid > label > span:first-child { color: #344056; font-size: .7rem; font-weight: 800; }
+.devolucao-modal-redesign .devolucao-form-grid > label > span:first-child em { color: #8a95a8; font-style: normal; font-weight: 500; }
+.devolucao-modal-redesign .devolucao-form-grid input:not([type="hidden"]),
+.devolucao-modal-redesign .devolucao-form-grid select { width: 100%; min-height: 50px; padding: 0 14px; border: 1px solid #d8dfe8; border-radius: 10px; background: #fff; color: #202a40; box-sizing: border-box; }
+.devolucao-modal-redesign .dev-input-with-icon,
+.devolucao-modal-redesign .dev-observation-input { position: relative; display: flex; min-width: 0; align-items: center; }
+.devolucao-modal-redesign .dev-input-with-icon > .material-symbols-rounded,
+.devolucao-modal-redesign .dev-observation-input > .material-symbols-rounded { position: absolute; left: 13px; z-index: 1; color: #748096; font-size: 20px; pointer-events: none; }
+.devolucao-modal-redesign .dev-input-with-icon input { padding-left: 42px !important; }
+.devolucao-modal-redesign .dev-field-marketplace-note { grid-column: 1 / -1 !important; }
+.devolucao-modal-redesign .dev-observation-input input { padding: 0 70px 0 44px !important; }
+.devolucao-modal-redesign .dev-observation-input > small { position: absolute; right: 14px; color: #8a95a8; font-size: .65rem; }
+.devolucao-modal-redesign .dev-saldo-field > small { display: none; }
+.devolucao-modal-redesign .devolucao-workflow-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; gap: 14px; align-items: stretch; }
+.devolucao-modal-redesign .devolucao-workflow-grid .devolucao-section-card { min-height: 330px; }
+.devolucao-modal-redesign .devolucao-scan-section { display: flex; position: static; flex-direction: column; }
+.devolucao-modal-redesign .devolucao-scan-row { min-height: 66px; padding: 7px; border: 2px solid #078363; border-radius: 12px; background: #fff; box-shadow: 0 0 0 4px rgba(7,131,99,.07); }
+.devolucao-modal-redesign .devolucao-scan-row input { min-height: 48px; }
+.devolucao-modal-redesign .devolucao-scan-row button { min-width: 155px; min-height: 48px; border-radius: 9px; background: #078363; }
+.devolucao-modal-redesign .devolucao-scan-count { display: grid; margin-top: auto; padding: 12px; justify-items: center; border: 1px solid #e3e7ed; border-radius: 11px; background: #fafbfc; }
+.devolucao-modal-redesign .devolucao-scan-count small { color: #78849a; font-size: .68rem; }
+.devolucao-modal-redesign .devolucao-scan-count strong { margin-top: 3px; color: #111a2e; font-size: 1.05rem; }
+.devolucao-modal-redesign .devolucao-items-section { display: flex; min-width: 0; flex-direction: column; }
+.devolucao-modal-redesign #dev-draft-items { flex: 1; min-height: 0; }
+.devolucao-modal-redesign .devolucao-items-empty { display: grid; min-height: 245px; padding: 24px; place-content: center; justify-items: center; border: 1px dashed #cad3df; border-radius: 13px; background: #fbfcfd; text-align: center; }
+.devolucao-modal-redesign .devolucao-items-empty > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 10px; background: #e7f4ef; color: #078363; }
+.devolucao-modal-redesign .devolucao-draft-list { display: grid; gap: 9px; max-height: 310px; overflow: auto; }
+.devolucao-modal-redesign .devolucao-draft-item { grid-template-columns: 30px minmax(180px,1fr) 104px minmax(155px,.7fr) 90px 38px !important; gap: 8px !important; padding: 10px !important; align-items: center; }
+.devolucao-modal-redesign .devolucao-draft-item > div:nth-of-type(3),
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-classification { display: none !important; }
+.devolucao-modal-redesign .dev-draft-quantity span { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.devolucao-modal-redesign .dev-draft-quantity button { display: grid; width: 25px; height: 25px; padding: 0; place-items: center; border: 1px solid #d9e0e8; border-radius: 7px; background: #fff; color: #087c5e; font-weight: 900; }
+.devolucao-modal-redesign .devolucao-form-footer { position: static; display: flex; width: auto; margin: 0; padding: 15px 30px; align-items: center; justify-content: space-between; border-top: 1px solid #e1e6ed; border-radius: 0; background: #fff; box-shadow: 0 -6px 18px rgba(20,32,52,.04); }
+.devolucao-modal-redesign .devolucao-form-footer button { min-height: 48px; }
+.devolucao-modal-redesign .devolucao-form-footer .devolucao-cancel-btn { min-width: 145px; border: 1px solid #d8dfe8; background: #fff; color: #172033; box-shadow: none; }
+.devolucao-modal-redesign .devolucao-form-footer #dev-save-btn { min-width: 290px; justify-content: center; background: #078363; }
+@media (max-width: 1100px) {
+  .devolucao-modal-redesign .devolucao-form-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .devolucao-modal-redesign .devolucao-workflow-grid { grid-template-columns: 1fr !important; }
+  .devolucao-modal-redesign .devolucao-draft-list { max-height: none; }
+}
+@media (max-width: 680px) {
+  .devolucao-modal-overlay { padding: 0 !important; }
+  .devolucao-modal-dialog.devolucao-modal-redesign { width: 100%; max-height: 100vh; border: 0; border-radius: 0; }
+  .devolucao-modal-redesign .devolucao-modal-header { grid-template-columns: 46px minmax(0,1fr) 42px; gap: 10px; padding: 14px; }
+  .devolucao-modal-redesign .devolucao-modal-heading-icon { width: 44px; height: 44px; }
+  .devolucao-modal-redesign .devolucao-modal-heading-copy h2 { font-size: 1.05rem; }
+  .devolucao-modal-redesign .devolucao-modal-heading-copy p { display: none; }
+  .devolucao-modal-redesign .devolucao-modal-close { width: 42px; height: 42px; }
+  .devolucao-modal-redesign .devolucao-modal-body { padding: 10px; }
+  .devolucao-modal-redesign .devolucao-section-card { padding: 14px; }
+  .devolucao-modal-redesign .devolucao-form-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .devolucao-modal-redesign .dev-field-marketplace-note { grid-column: auto !important; }
+  .devolucao-modal-redesign .devolucao-scan-row { display: grid; grid-template-columns: 34px minmax(0,1fr); }
+  .devolucao-modal-redesign .devolucao-scan-row button { grid-column: 1 / -1; width: 100%; }
+  .devolucao-modal-redesign .devolucao-draft-item { grid-template-columns: 28px minmax(0,1fr) 38px !important; }
+  .devolucao-modal-redesign .devolucao-draft-item > :not(.devolucao-item-number):not(.devolucao-draft-main):not(button) { grid-column: 2 / -1; }
+  .devolucao-modal-redesign .devolucao-form-footer { gap: 9px; padding: 10px; }
+  .devolucao-modal-redesign .devolucao-form-footer button { min-width: 0 !important; flex: 1; }
+}
+/* Devolucoes - tres status operacionais */
+.devolucao-history-screen .devolucao-status-select { min-width: 205px; white-space: nowrap; }
+.devolucao-history-screen .devolucao-status-select.status-em_analise { color: #9a4b08 !important; border-color: #fdba74 !important; background: #fff3df !important; box-shadow: 0 4px 13px rgba(234,116,16,.14); }
+.devolucao-history-screen .devolucao-status-select.status-concluida_sem_prejuizo { color: #137547 !important; border-color: #a7e3c4 !important; background: #e7f7ee !important; box-shadow: 0 4px 13px rgba(22,128,77,.12); }
+.devolucao-history-screen .devolucao-status-select.status-concluida_com_prejuizo { color: #b4232d !important; border-color: #f5b9bd !important; background: #fdebed !important; box-shadow: 0 4px 13px rgba(220,57,65,.12); }
+.devolucao-history-screen .devolucao-history-card.status-em_analise { border-left: 4px solid #f59e0b !important; }
+.devolucao-history-screen .devolucao-history-card.status-concluida_sem_prejuizo { border-left: 4px solid #22a766 !important; }
+.devolucao-history-screen .devolucao-history-card.status-concluida_com_prejuizo { border-left: 4px solid #e5484d !important; }
+@media (max-width: 768px) { .devolucao-history-screen .devolucao-status-select { min-width: 0; } }
+/* Nova devolucao - observacao em largura total */
+.devolucao-modal-redesign .devolucao-form-grid > .dev-field-marketplace-note {
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1 !important;
+  box-sizing: border-box;
+}
+.devolucao-modal-redesign .dev-field-marketplace-note > .dev-observation-input,
+.devolucao-modal-redesign .dev-field-marketplace-note > .dev-observation-input > input {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+  box-sizing: border-box;
+}
+@media (max-width: 680px) {
+  .devolucao-modal-redesign .devolucao-form-grid > .dev-field-marketplace-note { grid-column: 1 / -1 !important; }
+}
 /* Devolucoes - controle operacional por item */
 .devolucao-draft-item .dev-draft-toggle {
   display: none !important;
@@ -70317,3 +70830,72 @@ html body:not(.login-active) #app .devolucao-history-screen > .devolucao-app-bar
   box-sizing: border-box;
 }
 
+
+/* Devolucoes - impacto financeiro por item */
+.devolucao-modal-redesign .devolucao-draft-item { grid-template-columns:30px 104px minmax(185px,1fr) minmax(145px,.72fr) 38px!important; grid-template-rows:auto auto; }
+.devolucao-modal-redesign .devolucao-draft-item .devolucao-item-number { grid-column:1; grid-row:1/3; }
+.devolucao-modal-redesign .devolucao-draft-item .devolucao-draft-main { grid-column:2/5; grid-row:1; }
+.devolucao-modal-redesign .devolucao-draft-item>button { grid-column:5; grid-row:1; }
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-quantity { grid-column:2; grid-row:2; }
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-result { grid-column:3; grid-row:2; }
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-impact { display:grid; grid-column:4; grid-row:2; gap:2px; min-width:0; padding:8px 10px; border:1px solid #e2e8f0; border-radius:9px; background:#f8fafc; }
+.devolucao-modal-redesign .dev-draft-impact strong,.devolucao-modal-redesign .dev-draft-impact em,.devolucao-modal-redesign .dev-draft-impact span { display:block; min-width:0; font-style:normal; overflow-wrap:anywhere; }
+.devolucao-modal-redesign .dev-draft-impact em { font-size:.72rem; font-weight:800; }
+.devolucao-modal-redesign .dev-draft-impact span { color:#64748b; font-size:.64rem; }
+.devolucao-modal-redesign .dev-draft-impact.is-recuperado { border-color:#bbebd4; background:#f0fbf6; }
+.devolucao-modal-redesign .dev-draft-impact.is-recuperado strong,.devolucao-modal-redesign .dev-draft-impact.is-recuperado em { color:#15834a; }
+.devolucao-modal-redesign .dev-draft-impact.is-em_analise { border-color:#fed7aa; background:#fff8ed; }
+.devolucao-modal-redesign .dev-draft-impact.is-em_analise strong,.devolucao-modal-redesign .dev-draft-impact.is-em_analise em { color:#b86108; }
+.devolucao-modal-redesign .dev-draft-impact.is-prejuizo { border-color:#fecaca; background:#fff3f3; }
+.devolucao-modal-redesign .dev-draft-impact.is-prejuizo strong,.devolucao-modal-redesign .dev-draft-impact.is-prejuizo em { color:#c52d36; }
+.devolucao-modal-redesign .devolucao-draft-item>div:nth-of-type(5) { display:none!important; }
+.devolucao-history-screen .devolucao-control-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.devolucao-history-screen .devolucao-history-items em.resultado-descarte { color:#991b1b; background:#fee2e2; }
+.devolucao-history-screen .devolucao-card-finance .is-warning strong { color:#c2670a; }
+@media(max-width:680px){
+ .devolucao-modal-redesign .devolucao-draft-item { grid-template-columns:28px minmax(0,1fr) 38px!important; grid-template-rows:auto; }
+ .devolucao-modal-redesign .devolucao-draft-item .devolucao-item-number { grid-column:1; grid-row:1; }
+ .devolucao-modal-redesign .devolucao-draft-item .devolucao-draft-main { grid-column:2; grid-row:1; }
+ .devolucao-modal-redesign .devolucao-draft-item>button { grid-column:3; grid-row:1; }
+ .devolucao-modal-redesign .devolucao-draft-item .dev-draft-quantity,.devolucao-modal-redesign .devolucao-draft-item .dev-draft-result,.devolucao-modal-redesign .devolucao-draft-item .dev-draft-impact { grid-column:2/4; grid-row:auto; }
+}
+/* Devolucoes - acompanhamento centralizado e valores por sinal */
+.devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns:minmax(285px,.7fr) minmax(0,2fr)!important; }
+.devolucao-history-screen .devolucao-followup-note { grid-template-columns:minmax(300px,1.65fr) repeat(2,minmax(145px,.72fr)) minmax(150px,.72fr)!important; align-items:stretch; }
+.devolucao-history-screen .devolucao-followup-observation,.devolucao-history-screen .devolucao-followup-balance { min-height:82px; justify-content:center; text-align:center; }
+.devolucao-history-screen .devolucao-followup-observation>span,.devolucao-history-screen .devolucao-followup-balance>span:first-child { text-align:center; }
+.devolucao-history-screen .devolucao-followup-observation textarea { width:100%; min-width:0; min-height:44px; max-height:92px; padding:4px 2px!important; border:0!important; outline:0; resize:vertical; background:transparent!important; color:#172033; font:700 .72rem/1.45 inherit; text-align:center; overflow-wrap:anywhere; white-space:pre-wrap; box-shadow:none!important; box-sizing:border-box; }
+.devolucao-history-screen .devolucao-money-input { justify-content:center; }
+.devolucao-history-screen .devolucao-money-input input { max-width:95px; text-align:center; }
+.devolucao-history-screen .devolucao-followup-balance.is-negative { border-color:#f3b5ba; background:#fff5f5; }
+.devolucao-history-screen .devolucao-followup-balance.is-negative .devolucao-money-input b,.devolucao-history-screen .devolucao-followup-balance.is-negative input { color:#d52f3a!important; }
+.devolucao-history-screen .devolucao-followup-balance.is-positive { border-color:#afe0c5; background:#f2fbf6; }
+.devolucao-history-screen .devolucao-followup-balance.is-positive .devolucao-money-input b,.devolucao-history-screen .devolucao-followup-balance.is-positive input { color:#16834b!important; }
+.devolucao-history-screen .devolucao-followup-balance.is-zero { border-color:#b9d8f3; background:#f3f9ff; }
+.devolucao-history-screen .devolucao-followup-balance.is-zero .devolucao-money-input b,.devolucao-history-screen .devolucao-followup-balance.is-zero input { color:#1769aa!important; }
+.devolucao-history-screen .devolucao-followup-note>button { min-height:82px!important; align-self:stretch; }
+@media(max-width:1180px){ .devolucao-history-screen .devolucao-followup-note { grid-template-columns:minmax(260px,1.4fr) repeat(2,minmax(140px,1fr))!important; } .devolucao-history-screen .devolucao-followup-note>button { grid-column:1/-1; min-height:52px!important; } }
+@media(max-width:760px){ .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr 1fr!important; } .devolucao-history-screen .devolucao-followup-observation { grid-column:1/-1; } }
+@media(max-width:520px){ .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr!important; } .devolucao-history-screen .devolucao-followup-observation,.devolucao-history-screen .devolucao-followup-note>button { grid-column:auto; } }
+/* Devolucoes - reputacao revertida discreta */
+.devolucao-history-screen .devolucao-reputation-control { width:max-content; max-width:calc(100% - 32px); margin:8px 16px 12px auto; padding:6px 9px!important; justify-content:flex-end!important; gap:6px; border:1px solid #e2e8f0!important; border-radius:9px; background:#f8fafc!important; color:#64748b; box-sizing:border-box; }
+.devolucao-history-screen .devolucao-reputation-control>.material-symbols-rounded { font-size:16px; color:#7c8aa0; }
+.devolucao-history-screen .devolucao-reputation-control label { gap:6px; color:#64748b; font-size:.62rem; font-weight:750; }
+.devolucao-history-screen .devolucao-reputation-control select { min-width:62px; min-height:28px; padding:3px 22px 3px 8px; border-color:#dbe2ea; border-radius:7px; color:#475569; font-size:.65rem; background-color:#fff; }
+.devolucao-history-screen .devolucao-reputation-control.is-reverted { border-color:#bfe5cf!important; background:#f2faf6!important; }
+.devolucao-history-screen .devolucao-reputation-control.is-reverted>.material-symbols-rounded,.devolucao-history-screen .devolucao-reputation-control.is-reverted label,.devolucao-history-screen .devolucao-reputation-control.is-reverted select { color:#16834b; }
+@media(max-width:520px){ .devolucao-history-screen .devolucao-reputation-control { width:calc(100% - 24px); max-width:none; margin:8px 12px 12px; justify-content:center!important; } }
+/* Devolucoes - acompanhamento compacto sem repeticao */
+.devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns:minmax(330px,.9fr) minmax(0,1.7fr)!important; }
+.devolucao-history-screen .devolucao-followup-state { flex-direction:row; justify-content:space-between; gap:12px; padding:12px 14px; }
+.devolucao-history-screen .devolucao-followup-title>div { text-align:left; }
+.devolucao-history-screen .devolucao-followup-state .devolucao-reputation-control { flex:0 0 auto; width:auto; max-width:190px; margin:0; }
+.devolucao-history-screen .devolucao-followup-note { grid-template-columns:minmax(280px,1fr) minmax(165px,.52fr) minmax(145px,.46fr)!important; gap:10px!important; }
+.devolucao-history-screen .devolucao-followup-financial-stack { display:grid; min-width:0; grid-template-columns:1fr; gap:8px; }
+.devolucao-history-screen .devolucao-followup-financial-stack .devolucao-followup-balance { min-height:54px; padding:6px 10px; }
+.devolucao-history-screen .devolucao-followup-observation { min-height:116px; }
+.devolucao-history-screen .devolucao-followup-note>button { min-height:116px!important; }
+.devolucao-history-screen .devolucao-marketplace-meta { display:none!important; }
+@media(max-width:1180px){ .devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns:1fr!important; } .devolucao-history-screen .devolucao-followup-note { grid-template-columns:minmax(260px,1fr) minmax(160px,.55fr) minmax(145px,.48fr)!important; } .devolucao-history-screen .devolucao-followup-note>button { grid-column:auto; min-height:116px!important; } }
+@media(max-width:760px){ .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr 1fr!important; } .devolucao-history-screen .devolucao-followup-observation { grid-column:1/-1; } .devolucao-history-screen .devolucao-followup-note>button { min-height:54px!important; } }
+@media(max-width:520px){ .devolucao-history-screen .devolucao-followup-state { align-items:center; flex-direction:column; } .devolucao-history-screen .devolucao-followup-state .devolucao-reputation-control { width:100%; max-width:none; margin:0; } .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr!important; } .devolucao-history-screen .devolucao-followup-observation { grid-column:auto; } }

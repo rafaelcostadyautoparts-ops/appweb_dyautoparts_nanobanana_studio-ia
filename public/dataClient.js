@@ -2100,7 +2100,7 @@ const DataClient = (function () {
 
         const itensParaEstoque = (itens || []).filter(item =>
             item.estoque_movimentado !== true
-            && !['nao_recebido', 'divergencia'].includes(String(item.destino || '').toLowerCase())
+            && !['nao_recebido', 'divergencia', 'descarte'].includes(String(item.destino || '').toLowerCase())
             && String(item.id_interno || '').trim()
             && Number(item.quantidade || 0) > 0
         );
@@ -2196,8 +2196,8 @@ const DataClient = (function () {
         const { data, error } = await client
             .from('devolucoes')
             .select('*, devolucao_itens(*)')
-            .order('data_devolucao', { ascending: false })
-            .order('criado_em', { ascending: false });
+            .order('criado_em', { ascending: false })
+            .order('data_devolucao', { ascending: false });
         if (error) {
             console.error('[DEVOLUCOES] erro ao listar:', error);
             const listError = new Error(error.code === '42P01'
@@ -2255,37 +2255,62 @@ const DataClient = (function () {
     async function updateDevolucaoFollowUpSupabase(id, marketplaceAcionado, observacao, saldoMarketplace = 0, tarifaReembolso = 0, status = null, reputacaoRevertida = false) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
-        let { error } = await client.rpc('atualizar_acompanhamento_devolucao', {
+
+        const basePayload = {
             p_id: id,
             p_marketplace_acionado: Boolean(marketplaceAcionado),
             p_observacao: String(observacao || '').trim(),
-            p_saldo_marketplace: Number(saldoMarketplace || 0),
-            p_tarifa_devolucao_reembolsada: Number(tarifaReembolso || 0),
+            p_saldo_marketplace: Number(saldoMarketplace || 0)
+        };
+        const expectedReimbursement = Number(tarifaReembolso || 0);
+        let supportsReputation = true;
+        let { error } = await client.rpc('atualizar_acompanhamento_devolucao', {
+            ...basePayload,
+            p_tarifa_devolucao_reembolsada: expectedReimbursement,
             p_reputacao_revertida: Boolean(reputacaoRevertida)
         });
+
         if (error && (error.code === 'PGRST202' || error.code === '42883' || isDevolucaoReembolsoSchemaError(error))) {
-            console.warn('[DEVOLUCOES] acompanhamento sem coluna de reembolso; usando funcao antiga.');
-            const legacy = await client.rpc('atualizar_acompanhamento_devolucao', {
-                p_id: id,
-                p_marketplace_acionado: Boolean(marketplaceAcionado),
-                p_observacao: String(observacao || '').trim(),
-                p_saldo_marketplace: Number(saldoMarketplace || 0)
+            supportsReputation = false;
+            console.warn('[DEVOLUCOES] reputacao revertida ainda nao aplicada; salvando acompanhamento com reembolso.');
+            const reimbursementCompatible = await client.rpc('atualizar_acompanhamento_devolucao', {
+                ...basePayload,
+                p_tarifa_devolucao_reembolsada: expectedReimbursement
             });
+            error = reimbursementCompatible.error;
+        }
+
+        if (error && (error.code === 'PGRST202' || error.code === '42883' || isDevolucaoReembolsoSchemaError(error))) {
+            if (Math.abs(expectedReimbursement) > 0.009) {
+                console.error('[DEVOLUCOES] banco sem suporte para persistir reembolso:', error);
+                throw new Error('O banco ainda nao suporta salvar o valor reembolsado. Atualize a estrutura de devolucoes.');
+            }
+            console.warn('[DEVOLUCOES] acompanhamento legado sem reembolso.');
+            const legacy = await client.rpc('atualizar_acompanhamento_devolucao', basePayload);
             error = legacy.error;
         }
+
         if (error) {
             console.error('[DEVOLUCOES] erro ao atualizar acompanhamento:', error);
             throw new Error(error.message || 'Erro ao atualizar o acompanhamento do marketplace');
         }
-        if (!error) {
-            const { error: reputationError } = await client
-                .from('devolucoes')
-                .update({ reputacao_revertida: Boolean(reputacaoRevertida) })
-                .eq('id', id);
-            if (reputationError && !isDevolucaoReembolsoSchemaError(reputationError)) {
-                console.warn('[DEVOLUCOES] reputacao revertida nao atualizada:', reputationError.message);
-            }
+
+        const { data: persisted, error: verifyError } = await client
+            .from('devolucoes')
+            .select('tarifa_devolucao_reembolsada')
+            .eq('id', id)
+            .single();
+        if (verifyError) {
+            console.error('[DEVOLUCOES] erro ao confirmar reembolso salvo:', verifyError);
+            throw new Error('O acompanhamento foi enviado, mas nao foi possivel confirmar o reembolso salvo.');
         }
+        const persistedReimbursement = Number(persisted?.tarifa_devolucao_reembolsada || 0);
+        if (Math.abs(persistedReimbursement - expectedReimbursement) > 0.009) {
+            throw new Error(`O reembolso nao foi confirmado no banco. Informado: ${expectedReimbursement.toFixed(2)}; salvo: ${persistedReimbursement.toFixed(2)}.`);
+        }
+
+        await updateDevolucaoReputacaoRevertidaSupabase(id, reputacaoRevertida);
+
         if (status) {
             const { error: statusError } = await client.rpc('atualizar_status_devolucao', { p_id: id, p_status: status });
             if (statusError) {
@@ -2296,6 +2321,29 @@ const DataClient = (function () {
         return true;
     }
 
+    async function updateDevolucaoReputacaoRevertidaSupabase(id, reputacaoRevertida) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const expected = Boolean(reputacaoRevertida);
+        const { data, error } = await client
+            .from('devolucoes')
+            .update({ reputacao_revertida: expected })
+            .eq('id', id)
+            .select('reputacao_revertida')
+            .single();
+        if (error) {
+            console.error('[DEVOLUCOES] erro ao salvar reputacao revertida:', error);
+            if (isDevolucaoReembolsoSchemaError(error)) {
+                throw new Error('A estrutura do banco ainda precisa receber a coluna de reputacao revertida.');
+            }
+            throw new Error(error.message || 'Erro ao salvar reputacao revertida');
+        }
+        if (Boolean(data?.reputacao_revertida) !== expected) {
+            throw new Error('O banco nao confirmou a alteracao de reputacao revertida.');
+        }
+        invalidateCache('devolucoes');
+        return true;
+    }
 
     async function findFornecedorForProductSupabase(product) {
         const client = window.supabaseClient;
@@ -2460,6 +2508,7 @@ const DataClient = (function () {
         updateDevolucaoStatusSupabase,
         deleteDevolucaoSupabase,
         updateDevolucaoFollowUpSupabase,
+        updateDevolucaoReputacaoRevertidaSupabase,
         findFornecedorForProductSupabase,
 
         // CONFERENCIA

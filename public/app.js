@@ -32347,6 +32347,39 @@ function getDevolucaoItemCostFromCatalog(item = {}) {
  return product ? getDevolucaoProductCost(product) : 0;
 }
 
+function getDevolucaoCreatedTimestamp(row = {}) {
+ const created = Date.parse(row.criado_em || '');
+ if (Number.isFinite(created)) return created;
+ const updated = Date.parse(row.atualizado_em || '');
+ if (Number.isFinite(updated)) return updated;
+ const returnDate = Date.parse(`${row.data_devolucao || ''}T00:00:00`);
+ return Number.isFinite(returnDate) ? returnDate : 0;
+}
+
+function sortDevolucaoRecordsByNewest(records = []) {
+ return [...(records || [])].sort((left, right) => {
+ const createdDiff = getDevolucaoCreatedTimestamp(right) - getDevolucaoCreatedTimestamp(left);
+ if (createdDiff) return createdDiff;
+ const returnDateDiff = String(right.data_devolucao || '').localeCompare(String(left.data_devolucao || ''));
+ if (returnDateDiff) return returnDateDiff;
+ return String(right.id || '').localeCompare(String(left.id || ''));
+ });
+}
+
+function formatDevolucaoCreatedAt(row = {}) {
+ const value = row.criado_em || row.atualizado_em;
+ if (!value) return 'Horário não informado';
+ const date = new Date(value);
+ if (Number.isNaN(date.getTime())) return 'Horário não informado';
+ return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function getDevolucaoItemVisual(item = {}) {
+ const product = findDevolucaoProductForItem(item);
+ const imageUrl = String(product?.url_imagem || '').trim();
+ if (imageUrl) return `<img class="devolucao-product-image" src="${escapeDevolucaoHTML(imageUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'), { className: 'material-symbols-rounded devolucao-product-placeholder', textContent: 'inventory_2' }))">`;
+ return '<span class="material-symbols-rounded devolucao-product-placeholder">inventory_2</span>';
+}
 function normalizeDevolucaoRecordCosts(records = []) {
  return (records || []).map(row => {
  const itens = (row.devolucao_itens || []).map(item => {
@@ -32387,6 +32420,7 @@ function getDevolucaoItemResultado(item = {}) {
  if (destino === 'nao_recebido') return 'nao_recebido';
  if (destino === 'divergencia' || item.devolveu_correto === false) return 'divergencia';
  if (destino === 'garantia') return 'garantia';
+ if (destino === 'descarte') return 'descarte';
  if (['quarentena', 'aguardando_analise'].includes(destino)) return 'defeito';
  return item.apto_venda !== false ? 'apto' : 'defeito';
 }
@@ -32395,8 +32429,9 @@ function getDevolucaoResultadoLabel(item = {}) {
  const resultado = getDevolucaoItemResultado(item);
  if (resultado === 'apto') return 'Apto para venda';
  if (resultado === 'nao_recebido') return 'Produto n\u00e3o devolvido';
- if (resultado === 'divergencia') return 'Produto diferente';
+ if (resultado === 'divergencia') return 'Produto diferente recebido';
  if (resultado === 'garantia') return 'Defeito / fornecedor';
+ if (resultado === 'descarte') return 'Descarte / sem recupera\u00e7\u00e3o';
  return 'Defeito / em an\u00e1lise';
 }
 
@@ -32404,10 +32439,35 @@ function getDevolucaoResultadoCost(item = {}) {
  return Number(item.valor_unitario || 0) * Number(item.quantidade || 0);
 }
 
+function getDevolucaoItemFinancialClass(item = {}) {
+ const resultado = getDevolucaoItemResultado(item);
+ if (resultado === 'apto') return 'recuperado';
+ if (['defeito', 'garantia'].includes(resultado)) return 'em_analise';
+ return 'prejuizo';
+}
+
+function getDevolucaoItemFinancialLabel(item = {}) {
+ const classification = getDevolucaoItemFinancialClass(item);
+ if (classification === 'recuperado') return 'Estoque recuperado';
+ if (classification === 'em_analise') return 'Custo em an\u00e1lise';
+ return 'Preju\u00edzo em produto';
+}
+
+function getDevolucaoFinancialTotals(items = []) {
+ return (items || []).reduce((totals, item) => {
+ const cost = getDevolucaoResultadoCost(item);
+ totals.original += cost;
+ const classification = getDevolucaoItemFinancialClass(item);
+ if (classification === 'recuperado') totals.recuperado += cost;
+ else if (classification === 'em_analise') totals.emAnalise += cost;
+ else totals.prejuizo += cost;
+ return totals;
+ }, { original: 0, recuperado: 0, emAnalise: 0, prejuizo: 0 });
+}
 function applyDevolucaoResultado(item, resultado) {
  if (!item) return;
- const selected = ['apto', 'defeito', 'garantia', 'nao_recebido', 'divergencia'].includes(resultado) ? resultado : 'defeito';
- item.destino = selected === 'apto' ? 'disponivel' : selected === 'garantia' ? 'garantia' : selected === 'nao_recebido' ? 'nao_recebido' : selected === 'divergencia' ? 'divergencia' : 'quarentena';
+ const selected = ['apto', 'defeito', 'garantia', 'nao_recebido', 'divergencia', 'descarte'].includes(resultado) ? resultado : 'defeito';
+ item.destino = selected === 'apto' ? 'disponivel' : selected === 'garantia' ? 'garantia' : selected === 'nao_recebido' ? 'nao_recebido' : selected === 'divergencia' ? 'divergencia' : selected === 'descarte' ? 'descarte' : 'quarentena';
  item.apto_venda = selected === 'apto';
  item.devolveu_correto = selected !== 'divergencia';
  item.estoque_local = selected === 'apto' ? 'TERREO' : ['defeito', 'garantia'].includes(selected) ? 'DEFEITO' : '';
@@ -32444,7 +32504,7 @@ function getDevolucaoItemPayload(item = {}) {
  const { localId, id, devolucao_id, valor_total, criado_em, atualizado_em, ...payload } = item;
  payload.valor_unitario = getDevolucaoItemAutoCost(payload);
  const resultado = getDevolucaoItemResultado(payload);
- payload.destino = resultado === 'apto' ? 'disponivel' : resultado === 'garantia' ? 'garantia' : resultado === 'nao_recebido' ? 'nao_recebido' : resultado === 'divergencia' ? 'divergencia' : 'quarentena';
+ payload.destino = resultado === 'apto' ? 'disponivel' : resultado === 'garantia' ? 'garantia' : resultado === 'nao_recebido' ? 'nao_recebido' : resultado === 'divergencia' ? 'divergencia' : resultado === 'descarte' ? 'descarte' : 'quarentena';
  payload.apto_venda = resultado === 'apto';
  payload.devolveu_correto = resultado !== 'divergencia';
  payload.estoque_local = resultado === 'apto' ? 'TERREO' : ['defeito', 'garantia'].includes(resultado) ? 'DEFEITO' : '';
@@ -32454,7 +32514,8 @@ function getDevolucaoItemPayload(item = {}) {
 function getDevolucaoItemEstoqueLabel(item = {}) {
  const resultado = getDevolucaoItemResultado(item);
  if (resultado === 'nao_recebido') return 'Sem entrada no estoque';
- if (resultado === 'divergencia') return 'Aguardando diverg\u00eancia';
+ if (resultado === 'divergencia') return 'Sem entrada - item divergente';
+ if (resultado === 'descarte') return 'Sem entrada - descarte';
  if (item.estoque_movimentado) return resultado === 'apto' ? 'Estoque TERREO' : 'Estoque DEFEITO';
  return resultado === 'apto' ? 'Entrar em TERREO' : 'Entrar em DEFEITO';
 }
@@ -32526,67 +32587,40 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
 
  document.body.insertAdjacentHTML('beforeend', `
  <div id="devolucao-marketplace-modal" class="devolucao-modal-overlay">
- <section class="devolucao-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="devolucao-modal-title">
+ <section class="devolucao-modal-dialog devolucao-modal-redesign" role="dialog" aria-modal="true" aria-labelledby="devolucao-modal-title">
  <header class="devolucao-modal-header">
- <div>
- <span class="devolucao-eyebrow">${editRecord ? 'EDITAR REGISTRO' : 'NOVO REGISTRO'}</span>
- <h2 id="devolucao-modal-title">${editRecord ? 'Editar devolu\u00e7\u00e3o marketplace' : 'Nova devolu\u00e7\u00e3o marketplace'}</h2>
- <p>${editRecord ? 'Corrija os dados salvos e mantenha o hist\u00f3rico no mesmo registro.' : 'Preencha os dados do pedido e bipe o produto recebido.'}</p>
- </div>
- <button type="button" class="devolucao-modal-close" onclick="closeDevolucaoMarketplaceModal()" aria-label="Fechar">
- <span class="material-symbols-rounded">close</span>
- </button>
+ <div class="devolucao-modal-heading-icon"><span class="material-symbols-rounded">assignment_return</span></div>
+ <div class="devolucao-modal-heading-copy"><h2 id="devolucao-modal-title">${editRecord ? 'Editar devolu\u00e7\u00e3o marketplace' : 'Nova devolu\u00e7\u00e3o marketplace'}</h2><p>${editRecord ? 'Atualize os dados da devolu\u00e7\u00e3o e os itens envolvidos.' : 'Preencha os dados da devolu\u00e7\u00e3o e os itens envolvidos.'}</p></div>
+ <button type="button" class="devolucao-modal-close" onclick="closeDevolucaoMarketplaceModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
  </header>
- <div class="devolucao-modal-body"><section class="devolucao-section-card">
- <div class="devolucao-section-title">
- <span>1</span><div><h2>Dados da devolu\u00e7\u00e3o</h2><p>O n\u00famero do pedido pode ser digitado manualmente.</p></div>
- </div>
+ <div class="devolucao-modal-body">
+ <section class="devolucao-section-card devolucao-data-card">
+ <div class="devolucao-section-title"><span>1</span><div><h2>Dados da devolu\u00e7\u00e3o</h2></div></div>
  <div class="devolucao-form-grid">
  <label class="dev-field-channel"><span>Canal *</span><select id="dev-canal"><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select></label>
- <label class="dev-field-order"><span>N\u00famero do pedido *</span><input id="dev-pedido" type="text" placeholder="Ex.: 2000016754821096" autocomplete="off"></label>
- <label class="dev-field-sender"><span>Remetente</span><input id="dev-remetente" type="text" placeholder="Nome do cliente"></label>
+ <label class="dev-field-order"><span>N\u00ba do pedido *</span><input id="dev-pedido" type="text" placeholder="Ex.: 2000016754821096" autocomplete="off"></label>
+ <label class="dev-field-sender"><span>Remetente</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">person</span><input id="dev-remetente" type="text" placeholder="Nome do cliente"></span></label>
  <label class="dev-field-date"><span>Data da devolu\u00e7\u00e3o *</span><input id="dev-data" type="date"></label>
- <label class="dev-field-reason"><span>Motivo *</span><select id="dev-motivo"><option>Devolu\u00e7\u00e3o</option><option>Troca</option><option>Produto n\u00e3o entregue</option><option>Produto errado</option></select></label>
+ <label class="dev-field-reason"><span>Motivo da devolu\u00e7\u00e3o *</span><select id="dev-motivo"><option>Devolu\u00e7\u00e3o</option><option>Troca</option><option>Produto n\u00e3o entregue</option><option>Produto errado</option></select></label>
  <label class="dev-field-impact"><span>Afetou reputa\u00e7\u00e3o?</span><select id="dev-reputacao"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
  <label class="dev-field-action"><span>Acionado marketplace?</span><select id="dev-marketplace-acionado"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
- <label class="dev-saldo-field"><span>Saldo marketplace (R$)</span><input id="dev-saldo-marketplace" type="number" step="0.01" value="0.00" oninput="updateDevolucaoSaldoFeedback()"><small id="dev-saldo-feedback" class="is-zero">Saldo zerado: opera\u00e7\u00e3o neutra.</small></label>
- <label class="dev-saldo-field dev-reembolso-field"><span>Tarifa devolucao reembolsada (R$)</span><input id="dev-tarifa-reembolso" type="number" step="0.01" value="0.00" oninput="updateDevolucaoSaldoFeedback()"><small>Valor devolvido pelo ML no financeiro.</small></label>
- <label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace</span><input id="dev-marketplace-observacao" type="text" placeholder="Protocolo, resposta recebida ou pr\u00f3xima a\u00e7\u00e3o"></label>
- </div>
- </section>
-
+ <label class="dev-saldo-field"><span>Saldo marketplace (R$)</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">paid</span><input id="dev-saldo-marketplace" type="number" inputmode="decimal" step="0.01" value="0.00" oninput="updateDevolucaoSaldoFeedback()"></span><small id="dev-saldo-feedback" class="is-zero">Saldo zerado: opera\u00e7\u00e3o neutra.</small></label>
+ <label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace <em>(opcional)</em></span><span class="dev-observation-input"><span class="material-symbols-rounded">chat_bubble</span><input id="dev-marketplace-observacao" type="text" maxlength="500" placeholder="Ex.: Protocolo, resposta recebida ou pr\u00f3xima a\u00e7\u00e3o..." oninput="document.getElementById('dev-observation-count').textContent = this.value.length + '/500'"><small id="dev-observation-count">${String(editRecord?.observacao_acompanhamento || '').length}/500</small></span></label>
+ <input id="dev-tarifa-reembolso" type="hidden" value="${Number(editRecord?.tarifa_devolucao_reembolsada || 0).toFixed(2)}">
+ </div></section>
  <div class="devolucao-workflow-grid">
  <section class="devolucao-section-card devolucao-scan-section">
- <div class="devolucao-section-title">
- <span>2</span><div><h2>Produto recebido</h2><p>Bipe EAN, c\u00f3digo interno ou SKU do fornecedor.</p></div>
- </div>
- <div class="devolucao-scan-row">
- <span class="material-symbols-rounded">barcode_scanner</span>
- <input id="dev-product-code" type="text" placeholder="BIPAR, ID OU PESQUISAR PRODUTO..." autocomplete="off" oninput="handleDevolucaoProductSearchInput(this.value)" onkeydown="handleDevolucaoScanKey(event)">
- <button type="button" onclick="scanDevolucaoProduct()">Buscar produto</button>
- </div>
- <div id="dev-product-suggestions" class="devolucao-product-suggestions"></div>
- <div id="dev-product-feedback" class="devolucao-scan-feedback">Digite para pesquisar ou bipe o produto recebido.</div>
- <div id="dev-selected-product"></div>
+ <div class="devolucao-section-title"><span>2</span><div><h2>Produto recebido</h2><p>Bipe EAN, c\u00f3digo interno ou SKU do fornecedor.</p></div></div>
+ <div class="devolucao-scan-row"><span class="material-symbols-rounded">barcode_scanner</span><input id="dev-product-code" type="text" placeholder="BIPAR, ID OU PESQUISAR PRODUTO..." autocomplete="off" oninput="handleDevolucaoProductSearchInput(this.value)" onkeydown="handleDevolucaoScanKey(event)"><button type="button" onclick="scanDevolucaoProduct()">Buscar produto</button></div>
+ <div id="dev-product-suggestions" class="devolucao-product-suggestions"></div><div id="dev-product-feedback" class="devolucao-scan-feedback">Digite para pesquisar ou bipe o produto recebido.</div><div id="dev-selected-product"></div>
+ <div class="devolucao-scan-count"><small>Produtos adicionados</small><strong id="dev-item-count">0</strong></div>
  </section>
-
- <section class="devolucao-section-card">
- <div class="devolucao-section-title">
- <span>3</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Confira os produtos antes de salvar.</p></div>
+ <section class="devolucao-section-card devolucao-items-section">
+ <div class="devolucao-section-title"><span>3</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Confira os produtos antes de salvar.</p></div></div><div id="dev-draft-items"></div>
+ </section></div>
  </div>
- <div id="dev-draft-items"></div>
- </section>
- </div>
-
- <footer class="devolucao-form-footer">
- <div><small>Produtos adicionados</small><strong id="dev-item-count">0</strong></div>
- <button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()">
- <span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}
- </button>
- </footer>
- </div>
- </section>
- </div>`);
+ <footer class="devolucao-form-footer"><button type="button" class="devolucao-cancel-btn" onclick="closeDevolucaoMarketplaceModal()">Cancelar</button><button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()"><span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}</button></footer>
+ </section></div>`);
 
  if (editRecord) {
  setDevolucaoModalValue('dev-canal', editRecord.canal || 'Amazon');
@@ -32646,12 +32680,12 @@ function findDevolucaoProductByIdentity(identity) {
 async function handleDevolucaoProductSearchInput(value) {
  const box = document.getElementById('dev-product-suggestions');
  const feedback = document.getElementById('dev-product-feedback');
- if (!box) return;
+ if (!box) return [];
  const query = String(value || '').trim();
  if (query.length < 2) {
  clearDevolucaoProductSuggestions();
  if (feedback) feedback.textContent = 'Digite ao menos 2 caracteres para pesquisar ou bipe o produto.';
- return;
+ return [];
  }
  if (!Array.isArray(appData.products) || !appData.products.length) {
  if (feedback) feedback.innerHTML = '<span class="material-symbols-rounded dev-spin">progress_activity</span> Carregando catalogo...';
@@ -32672,7 +32706,7 @@ async function handleDevolucaoProductSearchInput(value) {
  if (!matches.length) {
  box.innerHTML = '<div class="devolucao-product-suggestion-empty">Nenhum produto encontrado.</div>';
  if (feedback) feedback.textContent = 'Confira o termo digitado ou bipe o EAN/ID interno.';
- return;
+ return [];
  }
  box.innerHTML = matches.map(product => {
  const identity = encodeURIComponent(String(product.id_interno || product.ean || product.sku_fornecedor || product.id || ''));
@@ -32681,21 +32715,59 @@ async function handleDevolucaoProductSearchInput(value) {
  return '<button type="button" onclick="selectDevolucaoProductFromSearch(\'' + identity + '\')"><strong>' + name + '</strong><small>' + (meta || 'Sem codigos cadastrados') + '</small></button>';
  }).join('');
  if (feedback) feedback.textContent = matches.length + ' produto(s) encontrado(s). Selecione um item da lista.';
+ return matches;
+}
+
+function isSameDevolucaoDraftProduct(item = {}, product = {}) {
+ if (item.produto_id && product.id && String(item.produto_id) === String(product.id)) return true;
+ if (item.id_interno && product.id_interno && String(item.id_interno).toLowerCase() === String(product.id_interno).toLowerCase()) return true;
+ if (item.ean && product.ean && String(item.ean).toLowerCase() === String(product.ean).toLowerCase()) return true;
+ return false;
+}
+
+function addDevolucaoProductDirect(product, source = 'busca') {
+ const existing = devolucaoMarketplaceState.draftItems.find(item => isSameDevolucaoDraftProduct(item, product));
+ if (existing) {
+ existing.quantidade = Number(existing.quantidade || 0) + 1;
+ } else {
+ const productCost = getDevolucaoProductCost(product);
+ devolucaoMarketplaceState.draftItems.push({
+ localId: `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+ produto_id: product.id || null,
+ id_interno: product.id_interno || '',
+ ean: product.ean || '',
+ sku: product.sku_fornecedor || product.sku || '',
+ descricao: product.descricao_completa || product.descricao_base || product.nome || 'Produto sem descri\u00e7\u00e3o',
+ categoria: product.categoria || '',
+ quantidade: 1,
+ valor_unitario: productCost,
+ fornecedor: getDevolucaoProductBrand(product),
+ devolveu_correto: true,
+ apto_venda: true,
+ estoque_movimentado: false,
+ estoque_local: 'TERREO',
+ estoque_movimento_id: '',
+ observacoes: '',
+ destino: 'disponivel'
+ });
+ }
+ devolucaoMarketplaceState.selectedProduct = null;
+ const input = document.getElementById('dev-product-code');
+ if (input) input.value = '';
+ const selected = document.getElementById('dev-selected-product');
+ if (selected) selected.innerHTML = '';
+ clearDevolucaoProductSuggestions();
+ renderDevolucaoDraftItems();
+ const feedback = document.getElementById('dev-product-feedback');
+ if (feedback) feedback.innerHTML = `<span class="material-symbols-rounded">check_circle</span> ${existing ? 'Quantidade atualizada.' : 'Produto adicionado aos itens.'}`;
+ showScanFeedback('success', source === 'sugestao' ? 'Produto adicionado' : 'Produto recebido');
+ input?.focus();
 }
 
 async function prepareDevolucaoSelectedProduct(product, source = 'busca') {
- const input = document.getElementById('dev-product-code');
- const feedback = document.getElementById('dev-product-feedback');
- const marcaCadastro = getDevolucaoProductBrand(product);
- product._marca_devolucao = marcaCadastro || '';
- devolucaoMarketplaceState.selectedProduct = product;
- if (input) input.value = '';
- clearDevolucaoProductSuggestions();
- if (feedback) feedback.innerHTML = '<span class="material-symbols-rounded">check_circle</span> Produto encontrado. Complete os dados do item.';
- showScanFeedback('success', source === 'sugestao' ? 'Produto selecionado' : 'Produto encontrado');
- renderDevolucaoSelectedProduct();
+ product._marca_devolucao = getDevolucaoProductBrand(product) || '';
+ addDevolucaoProductDirect(product, source);
 }
-
 async function selectDevolucaoProductFromSearch(identity) {
  const product = findDevolucaoProductByIdentity(decodeURIComponent(String(identity || '')));
  if (!product) return showToast('Produto nao encontrado na lista carregada.', 'warning');
@@ -32706,7 +32778,8 @@ async function scanDevolucaoProduct() {
  if (devolucaoMarketplaceState.scanning) return;
  const input = document.getElementById('dev-product-code');
  const feedback = document.getElementById('dev-product-feedback');
- const code = String(input?.value || '').trim().replace(/\s+/g, '');
+ const rawQuery = String(input?.value || '').trim();
+ const code = rawQuery.replace(/\s+/g, '');
  if (!code) {
  showToast('Bipe ou digite o c\u00f3digo do produto.', 'warning');
  input?.focus();
@@ -32724,8 +32797,19 @@ async function scanDevolucaoProduct() {
  }
  if (!product) {
  product = (appData.products || []).find(item =>
- [item.ean, item.id_interno, item.sku_fornecedor].some(value => String(value || '').trim().toLowerCase() === code.toLowerCase())
+ [item.id, item.ean, item.id_interno, item.sku_fornecedor, item.sku].some(value => String(value || '').trim().toLowerCase() === code.toLowerCase())
  );
+ }
+ if (!product && rawQuery.length >= 2) {
+ const matches = await handleDevolucaoProductSearchInput(rawQuery);
+ if (matches.length === 1) {
+ product = matches[0];
+ } else if (matches.length > 1) {
+ devolucaoMarketplaceState.selectedProduct = null;
+ document.getElementById('dev-selected-product').innerHTML = '';
+ if (feedback) feedback.textContent = matches.length + ' produtos encontrados. Selecione um item da lista.';
+ return;
+ }
  }
  if (!product) {
  devolucaoMarketplaceState.selectedProduct = null;
@@ -32822,6 +32906,12 @@ function toggleDevolucaoDraftItemApto(localId, naoApto) {
  renderDevolucaoDraftItems();
 }
 
+function changeDevolucaoDraftItemQuantity(localId, delta) {
+ const item = devolucaoMarketplaceState.draftItems.find(entry => entry.localId === localId);
+ if (!item) return;
+ item.quantidade = Math.max(1, Number(item.quantidade || 1) + Number(delta || 0));
+ renderDevolucaoDraftItems();
+}
 function renderDevolucaoDraftItems() {
  const container = document.getElementById('dev-draft-items');
  const itemCount = devolucaoMarketplaceState.draftItems.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
@@ -32830,7 +32920,7 @@ function renderDevolucaoDraftItems() {
  if (!container) return;
 
  if (!devolucaoMarketplaceState.draftItems.length) {
- container.innerHTML = '<div class="devolucao-items-empty"><span class="material-symbols-rounded">barcode_scanner</span><strong>Nenhum produto adicionado</strong><small>Bipe o primeiro produto para montar a devolu\u00e7\u00e3o.</small></div>';
+ container.innerHTML = '<div class="devolucao-items-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum produto adicionado</strong><small>Bipe o primeiro produto para montar a devolu\u00e7\u00e3o.</small></div>';
  return;
  }
 
@@ -32838,11 +32928,11 @@ function renderDevolucaoDraftItems() {
  <article class="devolucao-draft-item ${item.devolveu_correto ? '' : 'is-divergent'}">
  <span class="devolucao-item-number">${index + 1}</span>
  <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p>${escapeDevolucaoHTML(item.id_interno || item.ean || '-')} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca nao informada')}</p></div>
- <div><small>Quantidade</small><strong>${item.quantidade}</strong></div>
+ <div class="dev-draft-quantity"><small>Quantidade</small><span><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', -1)" aria-label="Diminuir quantidade">−</button><strong>${item.quantidade}</strong><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', 1)" aria-label="Aumentar quantidade">+</button></span></div>
  <div><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
  <label class="dev-draft-toggle"><span class="dev-draft-toggle-check"><input type="checkbox" ${item.apto_venda === false ? 'checked' : ''} onchange="toggleDevolucaoDraftItemApto('${item.localId}', this.checked)"><small>Não apto</small></span><strong class="${item.apto_venda !== false ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
- <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Apto para venda</option><option value="defeito" ${getDevolucaoItemResultado(item) === 'defeito' ? 'selected' : ''}>Defeito / em an\u00e1lise</option><option value="garantia" ${getDevolucaoItemResultado(item) === 'garantia' ? 'selected' : ''}>Defeito / fornecedor</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o devolvido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto diferente recebido</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
- <div class="dev-draft-classification"><small>Classifica\u00e7\u00e3o</small><strong>${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</strong></div>
+ <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Apto para venda</option><option value="defeito" ${getDevolucaoItemResultado(item) === 'defeito' ? 'selected' : ''}>Defeito / em an\u00e1lise</option><option value="garantia" ${getDevolucaoItemResultado(item) === 'garantia' ? 'selected' : ''}>Defeito / fornecedor</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o devolvido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto diferente recebido</option><option value="descarte" ${getDevolucaoItemResultado(item) === 'descarte' ? 'selected' : ''}>Descarte / sem recupera\u00e7\u00e3o</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
+ <div class="dev-draft-impact is-${getDevolucaoItemFinancialClass(item)}"><small>Impacto financeiro</small><strong>${escapeDevolucaoHTML(getDevolucaoItemFinancialLabel(item))}</strong><em>Total ${formatCurrency(getDevolucaoResultadoCost(item))}</em><span>Unit. ${formatCurrency(Number(item.valor_unitario || 0))}</span></div>
  <div><small>Custo</small><strong>${formatCurrency(Number(item.valor_unitario || 0))}</strong></div>
  <button type="button" title="Remover item" onclick="removeDevolucaoDraftItem('${item.localId}')"><span class="material-symbols-rounded">delete</span></button>
  </article>`).join('')}</div>`;
@@ -32897,15 +32987,15 @@ async function renderHistoricoDevolucoes(options = {}) {
  </header>
  <main class="container">
  <section class="devolucao-history-toolbar">
- <label><span class="material-symbols-rounded">search</span><input id="dev-history-search" type="search" placeholder="Buscar pedido, remetente ou produto..." oninput="filterHistoricoDevolucoes(this.value)"></label>
- <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Marketplace acionado</option><option value="resolvida">Finalizados</option><option value="cancelada">Canceladas</option><option value="recebida">Recebidos antigos</option></select>
+ <label><span class="material-symbols-rounded">search</span><input id="dev-history-search" type="search" placeholder="Buscar nome, pedido, ID, EAN ou SKU..." oninput="filterHistoricoDevolucoes(this.value)"></label>
+ <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Em an\u00e1lise no marketplace</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
  <select id="dev-history-channel" onchange="setHistoricoDevolucaoChannel(this.value)"><option value="todos">Todos os canais</option><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select>
  <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
  </section>
  <div id="dev-history-metrics" class="devolucao-history-metrics"></div>
- <section id="dev-control-metrics" class="devolucao-control-metrics"></section>
- <div id="dev-history-results-heading" class="devolucao-results-heading"><h2>Pedidos e produtos</h2><span>0 produto(s)</span></div>
+ <div id="dev-history-results-heading" class="devolucao-results-heading"><h2>Devolu\u00e7\u00f5es realizadas</h2><span>0 produto(s)</span></div>
  <section id="dev-history-list" class="devolucao-history-list"><div class="devolucao-history-loading"><span class="material-symbols-rounded dev-spin">progress_activity</span> Carregando devolu\u00e7\u00f5es...</div></section>
+ <section id="dev-control-metrics" class="devolucao-control-metrics"></section>
  </main>
  </div>`;
 
@@ -32923,7 +33013,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  Math.max(Number(BOOT_CONFIG.TIMEOUT_MS || 0), 15000),
  'carregamento das devolucoes'
  );
- devolucaoHistoricoState.records = normalizeDevolucaoRecordCosts(records);
+ devolucaoHistoricoState.records = sortDevolucaoRecordsByNewest(normalizeDevolucaoRecordCosts(records));
  syncDevolucaoRecordCostsWithSupabase(devolucaoHistoricoState.records).catch(error => console.warn('[DEVOLUCOES] sync custos antigos:', error));
  ensureProdutosLoaded().then(() => {
  devolucaoHistoricoState.records = normalizeDevolucaoRecordCosts(devolucaoHistoricoState.records);
@@ -32938,7 +33028,7 @@ async function renderHistoricoDevolucoes(options = {}) {
 }
 
 function filterHistoricoDevolucoes(value) {
- devolucaoHistoricoState.search = String(value || '').trim().toLowerCase();
+ devolucaoHistoricoState.search = normalizeProductSearchTerm(value);
  renderHistoricoDevolucaoList();
 }
 
@@ -32992,38 +33082,66 @@ function formatDevolucaoDate(value) {
  return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function hasDevolucaoLoss(row = {}) {
+ const saldoLiquido = getDevolucaoSaldoLiquido(row);
+ const reputationPending = Boolean(row.impactou_reputacao) && !Boolean(row.reputacao_revertida);
+ const productLoss = (row.devolucao_itens || []).some(item => getDevolucaoItemResultado(item) !== 'apto');
+ return saldoLiquido < -0.009 || reputationPending || productLoss;
+}
+
+function getDevolucaoBusinessStatus(row = {}) {
+ const isMarketplaceOpen = Boolean(row.marketplace_acionado) && !['resolvida', 'cancelada'].includes(String(row.status || ''));
+ if (isMarketplaceOpen || row.status === 'em_analise') return 'em_analise';
+ return hasDevolucaoLoss(row) ? 'concluida_com_prejuizo' : 'concluida_sem_prejuizo';
+}
+
 function getDevolucaoStatusLabel(status, row = null) {
- if (status === 'em_analise') return 'Marketplace acionado';
- if (status === 'resolvida') {
- if (row?.marketplace_acionado) {
- const saldo = getDevolucaoSaldoLiquido(row);
- if (saldo < 0) return 'Finalizado com prejuizo';
- if (saldo > 0) return 'Finalizado positivo';
- return 'Finalizado ML';
- }
- return 'Finalizado OK';
- }
- if (status === 'cancelada') return 'Cancelada';
- if (status === 'recebida') return 'Recebida antiga';
- return status;
+ if (status === 'em_analise') return 'Em an\u00e1lise no marketplace';
+ const businessStatus = row ? getDevolucaoBusinessStatus({ ...row, status: 'resolvida' }) : status;
+ if (businessStatus === 'concluida_com_prejuizo' || status === 'concluida_com_prejuizo') return 'Conclu\u00edda com preju\u00edzo';
+ return 'Conclu\u00edda sem preju\u00edzo';
 }
 
 function getDevolucaoStatusOptions(row) {
- const options = row?.status === 'recebida'
- ? ['recebida', 'em_analise', 'resolvida', 'cancelada']
- : ['em_analise', 'resolvida', 'cancelada'];
- return options.map(status => '<option value="' + status + '" ' + (row.status === status ? 'selected' : '') + '>' + getDevolucaoStatusLabel(status, row) + '</option>').join('');
+ const businessStatus = getDevolucaoBusinessStatus(row);
+ const options = [];
+ if (row?.marketplace_acionado || businessStatus === 'em_analise') options.push({ value: 'em_analise', label: 'Em an\u00e1lise no marketplace' });
+ options.push({
+ value: 'resolvida',
+ label: businessStatus === 'concluida_com_prejuizo' ? 'Conclu\u00edda com preju\u00edzo' : 'Conclu\u00edda sem preju\u00edzo'
+ });
+ const selectedValue = businessStatus === 'em_analise' ? 'em_analise' : 'resolvida';
+ return options.map(option => `<option value="${option.value}" ${selectedValue === option.value ? 'selected' : ''}>${option.label}</option>`).join('');
 }
-
 function getHistoricoDevolucaoFilteredRecords() {
  const all = devolucaoHistoricoState.records || [];
  const search = devolucaoHistoricoState.search;
  return all.filter(row => {
  if (devolucaoHistoricoState.month && !String(row.data_devolucao || '').startsWith(devolucaoHistoricoState.month)) return false;
  if (devolucaoHistoricoState.channel !== 'todos' && row.canal !== devolucaoHistoricoState.channel) return false;
- if (devolucaoHistoricoState.status !== 'todos' && row.status !== devolucaoHistoricoState.status) return false;
- const itemText = (row.devolucao_itens || []).map(item => `${item.descricao} ${item.id_interno} ${item.ean} ${item.fornecedor}`).join('');
- return !search || `${row.pedido} ${row.remetente} ${row.canal} ${itemText}`.toLowerCase().includes(search);
+ if (devolucaoHistoricoState.status !== 'todos' && getDevolucaoBusinessStatus(row) !== devolucaoHistoricoState.status) return false;
+ const itemText = (row.devolucao_itens || []).map(item => [
+ item.descricao,
+ item.id_interno,
+ item.ean,
+ item.sku,
+ item.sku_fornecedor,
+ item.produto_id,
+ item.fornecedor,
+ item.categoria,
+ item.observacoes
+ ].filter(Boolean).join(' ')).join(' ');
+ const haystack = normalizeProductSearchTerm([
+ row.pedido,
+ row.pedido_id_interno,
+ row.id_interno,
+ row.remetente,
+ row.canal,
+ row.motivo,
+ row.observacao_acompanhamento,
+ itemText
+ ].filter(Boolean).join(' '));
+ return !search || haystack.includes(search);
  });
 }
 
@@ -33041,7 +33159,7 @@ function exportHistoricoDevolucoesCSV() {
  'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo',
  'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
  'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
- 'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
+ 'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Classificacao financeira', 'Valor do impacto', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
  ];
  const rows = records.flatMap(row => {
  const items = row.devolucao_itens?.length ? row.devolucao_itens : [{}];
@@ -33068,9 +33186,11 @@ function exportHistoricoDevolucoesCSV() {
  item.fornecedor || '',
  item.devolveu_correto === false ? 'Nao' : 'Sim',
  item.apto_venda === true ? 'Sim' : 'Nao',
- item.estoque_movimentado === true ? 'Sim' : 'Nao',
  getDevolucaoResultadoLabel(item),
+ getDevolucaoItemFinancialLabel(item),
+ getDevolucaoResultadoCost(item).toFixed(2).replace('.', ','),
  item.destino || '',
+ item.estoque_movimentado === true ? 'Sim' : 'Nao',
  item.estoque_local || '',
  Number(item.valor_unitario || 0).toFixed(2).replace('.', ','),
  (Number(item.valor_unitario || 0) * Number(item.quantidade || 0)).toFixed(2).replace('.', ','),
@@ -33101,36 +33221,33 @@ function renderHistoricoDevolucaoList() {
  (!devolucaoHistoricoState.month || String(row.data_devolucao || '').startsWith(devolucaoHistoricoState.month))
  && (devolucaoHistoricoState.channel === 'todos' || row.canal === devolucaoHistoricoState.channel)
  );
- const acionados = periodRecords.filter(row => row.marketplace_acionado && !['resolvida', 'cancelada'].includes(row.status)).length;
- const custoProdutos = periodRecords.reduce((sum, row) => sum + getDevolucaoRecordProductCost(row), 0);
+ const acionados = periodRecords.filter(row => getDevolucaoBusinessStatus(row) === 'em_analise').length;
  const reputacaoAfetada = periodRecords.filter(row => row.impactou_reputacao).length;
  const reputacaoRevertida = periodRecords.filter(row => row.reputacao_revertida).length;
  const saldoMarketplaceTotal = periodRecords.reduce((sum, row) => sum + Number(row.saldo_marketplace || 0), 0);
  const reembolsos = periodRecords.reduce((sum, row) => sum + getDevolucaoReembolsoMarketplace(row), 0);
  const periodItems = periodRecords.flatMap(row => row.devolucao_itens || []);
- const aptos = periodItems.filter(item => getDevolucaoItemResultado(item) === 'apto');
- const defeitos = periodItems.filter(item => ['defeito', 'garantia'].includes(getDevolucaoItemResultado(item)));
- const naoRecebidos = periodItems.filter(item => ['nao_recebido', 'divergencia'].includes(getDevolucaoItemResultado(item)));
+ const financialTotals = getDevolucaoFinancialTotals(periodItems);
+ const aptos = periodItems.filter(item => getDevolucaoItemFinancialClass(item) === 'recuperado');
+ const emAnalise = periodItems.filter(item => getDevolucaoItemFinancialClass(item) === 'em_analise');
+ const perdas = periodItems.filter(item => getDevolucaoItemFinancialClass(item) === 'prejuizo');
  const quantidadeResultado = items => items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
- const custoResultado = items => items.reduce((sum, item) => sum + getDevolucaoResultadoCost(item), 0);
- const custoDefeitos = custoResultado(defeitos);
- const custoNaoRecebidos = custoResultado(naoRecebidos);
- const prejuizoBruto = custoDefeitos + custoNaoRecebidos;
  const recuperadoFinanceiro = reembolsos + Math.max(0, saldoMarketplaceTotal);
- const prejuizoLiquidoProdutos = Math.max(0, prejuizoBruto + Math.max(0, -saldoMarketplaceTotal) - recuperadoFinanceiro);
+ const perdaMarketplace = Math.max(0, -saldoMarketplaceTotal);
+ const prejuizoLiquidoProdutos = Math.max(0, financialTotals.prejuizo + perdaMarketplace - recuperadoFinanceiro);
  controlMetrics.innerHTML = `
- <header><div><small>CONTROLE DOS PRODUTOS</small><strong>Destino e preju\u00edzo das devolu\u00e7\u00f5es</strong></div><span>Baseado no custo cadastrado</span></header>
+ <header><div><small>CONTROLE DOS PRODUTOS</small><strong>Destino e impacto financeiro das devolu\u00e7\u00f5es</strong></div><span>Custos sempre positivos e separados por resultado</span></header>
  <div class="devolucao-control-grid">
- <article class="is-stock"><small>Aptos / estoque recuperado</small><strong>${quantidadeResultado(aptos)} un.</strong><span>${formatCurrency(custoResultado(aptos))}</span></article>
- <article class="is-defect"><small>Em defeito / an\u00e1lise</small><strong>${quantidadeResultado(defeitos)} un.</strong><span>${formatCurrency(custoDefeitos)}</span></article>
- <article class="is-loss"><small>N\u00e3o devolvidos / divergentes</small><strong>${quantidadeResultado(naoRecebidos)} un.</strong><span>${formatCurrency(custoNaoRecebidos)}</span></article>
- <article class="is-gross"><small>Preju\u00edzo bruto em produtos</small><strong>${formatCurrency(prejuizoBruto)}</strong><span>Defeito + n\u00e3o recebido</span></article>
- <article class="is-net"><small>Preju\u00edzo l\u00edquido estimado</small><strong>${formatCurrency(prejuizoLiquidoProdutos)}</strong><span>Ap\u00f3s recupera\u00e7\u00f5es marketplace</span></article>
- </div>`;
- const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
+ <article class="is-gross"><small>Custo original envolvido</small><strong>${formatCurrency(financialTotals.original)}</strong><span>Refer\u00eancia dos produtos vendidos</span></article>
+ <article class="is-stock"><small>Estoque recuperado</small><strong>${quantidadeResultado(aptos)} un.</strong><span>${formatCurrency(financialTotals.recuperado)}</span></article>
+ <article class="is-defect"><small>Custo em an\u00e1lise</small><strong>${quantidadeResultado(emAnalise)} un.</strong><span>${formatCurrency(financialTotals.emAnalise)}</span></article>
+ <article class="is-loss"><small>Preju\u00edzo em produtos</small><strong>${quantidadeResultado(perdas)} un.</strong><span>${formatCurrency(financialTotals.prejuizo)}</span></article>
+ <article class="is-stock"><small>Recuperado no marketplace</small><strong>${formatCurrency(recuperadoFinanceiro)}</strong><span>Saldo positivo + reembolso</span></article>
+ <article class="is-net"><small>Preju\u00edzo l\u00edquido estimado</small><strong>${formatCurrency(prejuizoLiquidoProdutos)}</strong><span>Produtos + marketplace - recupera\u00e7\u00f5es</span></article>
+ </div>`; const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
  metrics.innerHTML = `
  <article class="metric-purple"><span class="material-symbols-rounded">assignment_return</span><div><small>Devolu\u00e7\u00f5es no per\u00edodo</small><strong>${periodRecords.length}</strong></div></article>
- <article class="metric-green"><span class="material-symbols-rounded">shopping_cart</span><div><small>Custo dos produtos</small><strong>${formatCurrency(custoProdutos)}</strong></div></article>
+ <article class="metric-green"><span class="material-symbols-rounded">inventory</span><div><small>Estoque recuperado</small><strong>${formatCurrency(financialTotals.recuperado)}</strong></div></article>
  <article class="metric-red ${saldoMarketplaceTotal > 0 ? 'is-positive' : ''}"><span class="material-symbols-rounded">swap_horiz</span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></article>
  <article class="metric-green is-positive"><span class="material-symbols-rounded">recycling</span><div><small>Reembolsado ML</small><strong>${formatCurrency(reembolsos)}</strong></div></article>
  <article class="${saldoLiquido < 0 ? 'metric-red is-alert' : 'metric-green is-positive'}"><span class="material-symbols-rounded">sync_alt</span><div><small>Saldo l\u00edquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquido)}</strong></div></article>
@@ -33144,7 +33261,10 @@ function renderHistoricoDevolucaoList() {
  const filtered = getHistoricoDevolucaoFilteredRecords();
  const resultsHeading = document.getElementById('dev-history-results-heading');
  const filteredProductCount = filtered.reduce((sum, row) => sum + (row.devolucao_itens || []).reduce((itemSum, item) => itemSum + Number(item.quantidade || 0), 0), 0);
- if (resultsHeading) resultsHeading.innerHTML = `<h2>Pedidos e produtos</h2><span>${filteredProductCount} produto(s)</span>`;
+ if (resultsHeading) {
+ resultsHeading.innerHTML = `<div><h2>Devolu\u00e7\u00f5es realizadas</h2><small><span class="material-symbols-rounded">schedule</span> Mais recentes lan\u00e7adas primeiro</small></div><span>${filteredProductCount} produto(s)</span>`;
+ resultsHeading.hidden = filtered.length === 0;
+ }
 
  if (!filtered.length) {
  list.innerHTML = '<div class="devolucao-history-empty"><span class="material-symbols-rounded">assignment_return</span><strong>Nenhuma devolu\u00e7\u00e3o encontrada</strong><p>Cadastre uma nova devolu\u00e7\u00e3o ou ajuste os filtros.</p></div>';
@@ -33154,36 +33274,37 @@ function renderHistoricoDevolucaoList() {
  list.innerHTML = filtered.map(row => {
  const items = row.devolucao_itens || [];
  const itemQuantity = items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
- const custoProdutosRegistro = getDevolucaoRecordProductCost(row);
+ const recordFinancial = getDevolucaoFinancialTotals(items);
  const hasDivergence = items.some(item => !item.devolveu_correto);
- const needsMarketplaceFollowUp = Boolean(row.marketplace_acionado) && !['resolvida', 'cancelada'].includes(row.status);
+ const businessStatus = getDevolucaoBusinessStatus(row);
+ const needsMarketplaceFollowUp = businessStatus === 'em_analise';
  const saldoMarketplace = Number(row.saldo_marketplace || 0);
  const reembolsoMarketplace = getDevolucaoReembolsoMarketplace(row);
  const saldoLiquidoMarketplace = getDevolucaoSaldoLiquido(row);
- const reputationControlMarkup = row.impactou_reputacao ? `<div class="devolucao-reputation-control"><span class="material-symbols-rounded">shield</span><label class="devolucao-reputation-reverted"><span>Reputacao revertida?</span><select id="dev-followup-reputacao-${row.id}" onchange="updateHistoricoReputacaoRevertida('${row.id}', this.value, this)"><option value="false" ${row.reputacao_revertida ? '' : 'selected'}>Nao</option><option value="true" ${row.reputacao_revertida ? 'selected' : ''}>Sim</option></select></label></div>` : '';
+ const reputationControlMarkup = row.impactou_reputacao ? `<div class="devolucao-reputation-control ${row.reputacao_revertida ? 'is-reverted' : ''}"><span class="material-symbols-rounded">shield</span><label class="devolucao-reputation-reverted"><span>Reputacao revertida?</span><select id="dev-followup-reputacao-${row.id}" onchange="updateHistoricoReputacaoRevertida('${row.id}', this.value, this)"><option value="false" ${row.reputacao_revertida ? '' : 'selected'}>Nao</option><option value="true" ${row.reputacao_revertida ? 'selected' : ''}>Sim</option></select></label></div>` : '';
  const followupMarkup = row.marketplace_acionado ? `
  <div class="devolucao-marketplace-followup ${needsMarketplaceFollowUp ? 'is-active' : ''}">
  <div class="devolucao-followup-state is-on">
- <span class="material-symbols-rounded">campaign</span>
- <strong>Marketplace acionado</strong>
- <small>${needsMarketplaceFollowUp ? 'Aguardando resposta do marketplace' : 'Acompanhamento registrado'}</small>
- <div class="devolucao-marketplace-meta"><span>Canal: <b>${escapeDevolucaoHTML(row.canal || '-')}</b></span><span>A\u00e7\u00e3o: <b>${escapeDevolucaoHTML(row.motivo || '-')}</b></span><span>Data: <b>${formatDevolucaoDate(row.data_devolucao)}</b></span><em>${needsMarketplaceFollowUp ? 'Em andamento' : 'Finalizado'}</em></div>
+ <div class="devolucao-followup-title"><span class="material-symbols-rounded">campaign</span><div><strong>Marketplace acionado</strong><small>${needsMarketplaceFollowUp ? 'Aguardando resposta do marketplace' : 'Acompanhamento registrado'}</small></div></div>
+ ${reputationControlMarkup}
  </div>
  <div class="devolucao-followup-note">
- <input id="dev-followup-note-${row.id}" type="text" value="${escapeDevolucaoHTML(row.observacao_acompanhamento || '')}" placeholder="Observa\u00e7\u00e3o do acompanhamento...">
- <label class="devolucao-followup-balance"><span>Saldo R$</span><input id="dev-followup-saldo-${row.id}" type="number" step="0.01" value="${Number(row.saldo_marketplace || 0).toFixed(2)}"></label>
- <label class="devolucao-followup-balance"><span>Reembolso R$</span><input id="dev-followup-reembolso-${row.id}" type="number" step="0.01" value="${reembolsoMarketplace.toFixed(2)}"></label>
- <button type="button" onclick="saveHistoricoMarketplaceObservation('${row.id}')"><span class="material-symbols-rounded">save</span> Salvar acompanhamento</button>
+ <label class="devolucao-followup-observation"><span>Acompanhamento</span><textarea id="dev-followup-note-${row.id}" rows="3" placeholder="Observa\u00e7\u00e3o do acompanhamento...">${escapeDevolucaoHTML(row.observacao_acompanhamento || '')}</textarea></label>
+ <div class="devolucao-followup-financial-stack">
+ <label class="devolucao-followup-balance ${saldoMarketplace < 0 ? 'is-negative' : saldoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><span>Saldo marketplace</span><span class="devolucao-money-input"><b>R$</b><input id="dev-followup-saldo-${row.id}" type="number" inputmode="decimal" step="0.01" value="${saldoMarketplace.toFixed(2)}" oninput="updateDevolucaoMoneyTone(this)" aria-label="Saldo do marketplace"></span></label>
+ <label class="devolucao-followup-balance ${reembolsoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><span>Valor reembolsado</span><span class="devolucao-money-input"><b>R$</b><input id="dev-followup-reembolso-${row.id}" type="number" inputmode="decimal" min="0" step="0.01" value="${reembolsoMarketplace.toFixed(2)}" oninput="updateDevolucaoMoneyTone(this)" aria-label="Valor reembolsado pelo marketplace"></span></label>
+ </div>
+ <button type="button" onclick="saveHistoricoMarketplaceObservation('${row.id}')"><span class="material-symbols-rounded">save</span> Salvar valores</button>
  </div>
  ${needsMarketplaceFollowUp ? '<small>Este caso permanecer\u00e1 em an\u00e1lise at\u00e9 ser resolvido.</small>' : ''}
  </div>` : '';
- return `<article class="devolucao-history-card ${hasDivergence ? 'has-divergence' : ''} ${needsMarketplaceFollowUp ? 'marketplace-follow-up' : ''} ${saldoLiquidoMarketplace < 0 ? 'has-marketplace-loss' : ''}">
+ return `<article class="devolucao-history-card status-${businessStatus} ${hasDivergence ? 'has-divergence' : ''} ${needsMarketplaceFollowUp ? 'marketplace-follow-up' : ''} ${saldoLiquidoMarketplace < 0 ? 'has-marketplace-loss' : ''}">
  <header class="devolucao-history-mainline">
  <div class="dev-history-cell dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div>
- <div class="dev-history-cell dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}</div>
+ <div class="dev-history-cell dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}<span class="devolucao-created-at"><span class="material-symbols-rounded">schedule</span> Lan\u00e7ado ${formatDevolucaoCreatedAt(row)}</span></div>
  <div class="dev-history-cell dev-history-name"><small>Nome</small><strong>${escapeDevolucaoHTML(row.remetente || 'Remetente n\u00e3o informado')}</strong></div>
  <div class="dev-history-cell devolucao-history-date"><small>Data</small><strong>${formatDevolucaoDate(row.data_devolucao)}</strong></div>
- <select class="devolucao-status-select status-${escapeDevolucaoHTML(row.status)}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
+ <select class="devolucao-status-select status-${businessStatus}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
  ${getDevolucaoStatusOptions(row)}
  </select>
  <div class="devolucao-record-actions">
@@ -33192,13 +33313,13 @@ function renderHistoricoDevolucaoList() {
  </div>
  </header>
  <div class="devolucao-history-items">${items.map(item => `<div>
- <span class="material-symbols-rounded devolucao-product-placeholder">inventory_2</span>
- <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo: ${formatCurrency(item.valor_unitario || 0)}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
+ ${getDevolucaoItemVisual(item)}
+ <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo original: ${formatCurrency(item.valor_unitario || 0)} &middot; ${getDevolucaoItemFinancialLabel(item)}: ${formatCurrency(getDevolucaoResultadoCost(item))}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
  <em class="resultado-${getDevolucaoItemResultado(item)}">${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</em>
  </div>`).join('')}</div>
  ${followupMarkup}
- <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo produtos</small><strong>${formatCurrency(custoProdutosRegistro)}</strong></span><span class="${saldoMarketplace < 0 ? 'is-negative' : saldoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplace)}</strong></span><span class="is-positive"><small>Reembolsado</small><strong>${formatCurrency(reembolsoMarketplace)}</strong></span><span class="${saldoLiquidoMarketplace < 0 ? 'is-negative' : saldoLiquidoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><small>Saldo liquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquidoMarketplace)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
- ${reputationControlMarkup}
+ <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo original</small><strong>${formatCurrency(recordFinancial.original)}</strong></span><span class="is-positive"><small>Estoque recuperado</small><strong>${formatCurrency(recordFinancial.recuperado)}</strong></span><span class="${recordFinancial.emAnalise > 0 ? 'is-warning' : 'is-zero'}"><small>Custo em an\u00e1lise</small><strong>${formatCurrency(recordFinancial.emAnalise)}</strong></span><span class="${recordFinancial.prejuizo > 0 ? 'is-negative' : 'is-zero'}"><small>Preju\u00edzo produtos</small><strong>${formatCurrency(recordFinancial.prejuizo)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
+ ${row.marketplace_acionado ? '' : reputationControlMarkup}
  </article>`;
  }).join('');
 }
@@ -33230,6 +33351,12 @@ async function updateHistoricoDevolucaoStatus(id, status, select) {
  const previous = record?.status || 'recebida';
  if (select) select.disabled = true;
  try {
+ const reputationInput = document.getElementById(`dev-followup-reputacao-${id}`);
+ if (record?.impactou_reputacao && reputationInput) {
+ const reputacaoRevertida = reputationInput.value === 'true';
+ await DataClient.updateDevolucaoReputacaoRevertidaSupabase(id, reputacaoRevertida);
+ record.reputacao_revertida = reputacaoRevertida;
+ }
  await DataClient.updateDevolucaoStatusSupabase(id, status);
  if (record) record.status = status;
  showToast('Status da devolu\u00e7\u00e3o atualizado.', 'success');
@@ -33286,6 +33413,13 @@ async function saveHistoricoMarketplaceObservation(id) {
  showToast(error.message || 'Erro ao salvar a observa\u00e7\u00e3o.', 'error');
  }
 }
+function updateDevolucaoMoneyTone(input) {
+ const field = input?.closest('.devolucao-followup-balance');
+ if (!field) return;
+ const value = Number(input.value || 0);
+ field.classList.remove('is-negative', 'is-positive', 'is-zero');
+ field.classList.add(value < 0 ? 'is-negative' : value > 0 ? 'is-positive' : 'is-zero');
+}
 async function updateHistoricoReputacaoRevertida(id, value, select) {
  const record = devolucaoHistoricoState.records.find(row => row.id === id);
  if (!record) return;
@@ -33293,15 +33427,8 @@ async function updateHistoricoReputacaoRevertida(id, value, select) {
  const reputacaoRevertida = value === 'true';
  if (select) select.disabled = true;
  try {
- await DataClient.updateDevolucaoFollowUpSupabase(
- id,
- Boolean(record.marketplace_acionado),
- record.observacao_acompanhamento || '',
- Number(record.saldo_marketplace || 0),
- Number(record.tarifa_devolucao_reembolsada || 0),
- null,
- reputacaoRevertida
- );
+ await DataClient.updateDevolucaoReputacaoRevertidaSupabase(id, reputacaoRevertida);
+
  record.reputacao_revertida = reputacaoRevertida;
  showToast('Reputacao da devolucao atualizada.', 'success');
  renderHistoricoDevolucaoList();
