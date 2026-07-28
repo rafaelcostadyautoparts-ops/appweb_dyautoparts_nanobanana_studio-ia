@@ -32352,6 +32352,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <div class="devolucao-section-title"><span>3</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Confira os produtos antes de salvar.</p></div></div><div id="dev-draft-items"></div>
  </section></div>
  </div>
+ <div id="dev-save-error" role="alert" style="display:none;margin:0 22px 14px;padding:12px 14px;border:1px solid #fecaca;border-radius:12px;background:#fff1f2;color:#b91c1c;font-weight:800;"></div>
  <footer class="devolucao-form-footer"><button type="button" class="devolucao-cancel-btn" onclick="closeDevolucaoMarketplaceModal()">Cancelar</button><button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()"><span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}</button></footer>
  </section></div>`);
 
@@ -32632,11 +32633,12 @@ function setDevolucaoDraftItemResultado(localId, resultado) {
  renderDevolucaoDraftItems();
 }
 function removeDevolucaoDraftItem(localId) {
-function toggleDevolucaoDraftItemApto(localId, naoApto) {
- setDevolucaoDraftItemResultado(localId, naoApto ? 'defeito' : 'apto');
-}
  devolucaoMarketplaceState.draftItems = devolucaoMarketplaceState.draftItems.filter(item => item.localId !== localId);
  renderDevolucaoDraftItems();
+}
+
+function toggleDevolucaoDraftItemApto(localId, naoApto) {
+ setDevolucaoDraftItemResultado(localId, naoApto ? 'defeito' : 'apto');
 }
 
 function changeDevolucaoDraftItemQuantity(localId, delta) {
@@ -32679,6 +32681,17 @@ async function saveDevolucaoMarketplace() {
  if (!dataDevolucao) return showToast('Informe a data da devolu\u00e7\u00e3o.', 'warning');
  if (!devolucaoMarketplaceState.draftItems.length) return showToast('Adicione ao menos um produto.', 'warning');
 
+ const errorBox = document.getElementById('dev-save-error');
+ if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+ const secureAccess = await ensureSupabaseAuthenticatedAccess();
+ if (!secureAccess) {
+  if (errorBox) {
+   errorBox.textContent = 'Entre com o acesso seguro para salvar a devolucao e movimentar o estoque.';
+   errorBox.style.display = 'block';
+  }
+  return;
+ }
+
  const button = document.getElementById('dev-save-btn');
  devolucaoMarketplaceState.saving = true;
  if (button) { button.disabled = true; button.innerHTML = '<span class="material-symbols-rounded dev-spin">progress_activity</span> Salvando...'; }
@@ -32692,14 +32705,23 @@ async function saveDevolucaoMarketplace() {
  savedResult = await DataClient.saveDevolucaoMarketplaceSupabase(payload);
  }
  const savedId = typeof savedResult === 'string' ? savedResult : (savedResult?.id || savedResult || editingId);
- const estoqueResult = await DataClient.applyDevolucaoEstoqueSupabase(savedId, payload.devolucao, payload.itens);
+ const estoqueResult = savedResult?.atomic === true
+  ? savedResult
+  : await DataClient.applyDevolucaoEstoqueSupabase(savedId, payload.devolucao, payload.itens);
  const estoqueMsg = estoqueResult?.movimentos ? ' Estoque atualizado em ' + estoqueResult.movimentos + ' item(ns).' : '';
  closeDevolucaoMarketplaceModal();
  await renderHistoricoDevolucoes({ month: String(dataDevolucao || '').slice(0, 7) });
  showToast((editingId ? 'Devolucao atualizada com sucesso.' : 'Devolucao salva com sucesso.') + estoqueMsg, 'success');
  } catch (error) {
  console.error('[DEVOLUCOES] salvar:', error);
- showToast(error.message || 'Erro ao salvar a devolu\u00e7\u00e3o.', 'error');
+ const errorMessage = error.message || 'Erro ao salvar a devolucao.';
+ const visibleError = document.getElementById('dev-save-error');
+ if (visibleError) {
+  visibleError.textContent = errorMessage;
+  visibleError.style.display = 'block';
+  visibleError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+ }
+ showToast(errorMessage, 'error');
  if (button) { button.disabled = false; button.innerHTML = devolucaoMarketplaceState.editingId ? '<span class="material-symbols-rounded">save</span> Salvar alteracoes' : '<span class="material-symbols-rounded">save</span> Salvar devolucao'; }
  } finally {
  devolucaoMarketplaceState.saving = false;

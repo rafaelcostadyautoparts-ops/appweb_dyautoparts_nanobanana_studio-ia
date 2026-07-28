@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.42",
-    "build":  "2026.07.28.3",
-    "commit":  "nf-draft-repair",
+    "version":  "2.1.43",
+    "build":  "2026.07.28.4",
+    "commit":  "devolucao-atomica",
     "deployDate":  "2026-07-28"
 }

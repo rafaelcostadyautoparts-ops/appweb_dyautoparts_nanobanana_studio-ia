@@ -2008,81 +2008,27 @@ const DataClient = (function () {
     async function saveDevolucaoMarketplaceSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('salvar_devolucao_marketplace', {
+
+        const { data, error } = await client.rpc('salvar_devolucao_marketplace_atomica', {
             p_devolucao: payload.devolucao,
             p_itens: payload.itens
         });
         if (error) {
-            const missingRpc = error.code === 'PGRST202'
-                || error.code === '42883'
-                || String(error.message || '').includes('salvar_devolucao_marketplace');
-            if (missingRpc || isDevolucaoReembolsoSchemaError(error) || isDevolucaoItemStockSchemaError(error)) {
-                const headerPayload = {
-                    ...payload.devolucao,
-                    tipo: 'marketplace',
-                    status: payload.devolucao.status || (payload.devolucao.marketplace_acionado ? 'em_analise' : 'resolvida')
-                };
-                let { data: header, error: headerError } = await client
-                    .from('devolucoes')
-                    .insert(headerPayload)
-                    .select('id')
-                    .single();
-                if (headerError && isDevolucaoReembolsoSchemaError(headerError)) {
-                    console.warn('[DEVOLUCOES] coluna de reembolso ainda nao aplicada; salvando sem tarifa reembolsada.');
-                    const retry = await client
-                        .from('devolucoes')
-                        .insert(stripDevolucaoReembolsoColumn(headerPayload))
-                        .select('id')
-                        .single();
-                    header = retry.data;
-                    headerError = retry.error;
-                }
-                if (headerError) {
-                    const fallbackError = new Error(
-                        ['42P01', 'PGRST204', 'PGRST205'].includes(headerError.code)
-                            ? 'A estrutura atualizada de devolucoes ainda nao foi aplicada no Supabase.'
-                            : (headerError.message || 'Erro ao salvar a devolucao')
-                    );
-                    fallbackError.code = headerError.code;
-                    throw fallbackError;
-                }
-                const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, header.id));
-                let { error: itemsError } = await client.from('devolucao_itens').insert(itemRows);
-                if (itemsError && isDevolucaoItemStockSchemaError(itemsError)) {
-                    console.warn('[DEVOLUCOES] colunas de estoque dos itens ausentes; salvando itens no formato antigo e movimentando pelo payload.');
-                    const retry = await client
-                        .from('devolucao_itens')
-                        .insert(itemRows.map(stripDevolucaoItemStockColumns));
-                    itemsError = retry.error;
-                }
-                if (itemsError) {
-                    await client.from('devolucoes').delete().eq('id', header.id);
-                    throw new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
-                }
-                invalidateCache('devolucoes');
-                return header.id;
-            }
-            console.error('[DEVOLUCOES] erro ao salvar:', error);
-            const missingStructure = ['PGRST202', '42P01', '42883'].includes(error.code)
-                || String(error.message || '').includes('salvar_devolucao_marketplace');
-            const saveError = new Error(missingStructure
-                ? 'A estrutura de devolucoes ainda nao foi aplicada no Supabase.'
-                : (error.message || 'Erro ao salvar a devolucao'));
+            console.error('[DEVOLUCOES] erro no salvamento atomico:', error);
+            const missingRpc = ['PGRST202', '42883'].includes(error.code)
+                || String(error.message || '').includes('salvar_devolucao_marketplace_atomica');
+            const saveError = new Error(missingRpc
+                ? 'A atualizacao de devolucao atomica ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao salvar a devolucao e movimentar o estoque'));
             saveError.code = error.code;
             throw saveError;
         }
-        const savedId = typeof data === 'string' ? data : (data?.id || data);
-        if (savedId && payload.devolucao.status) {
-            try {
-                await client.rpc('atualizar_status_devolucao', { p_id: savedId, p_status: payload.devolucao.status });
-            } catch (statusError) {
-                console.warn('[DEVOLUCOES] status inicial nao atualizado apos salvar:', statusError?.message || statusError);
-            }
-        }
+
         invalidateCache('devolucoes');
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
         return data;
     }
-
     async function updateDevolucaoMarketplaceSupabase(id, payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
