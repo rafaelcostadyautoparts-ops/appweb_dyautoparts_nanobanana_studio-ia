@@ -1699,7 +1699,7 @@ function parseBrazilianMoney(value) {
  if (lastComma >= 0 && lastDot >= 0) {
  const decimalSep = lastComma > lastDot ? ',' : '.';
  const thousandSep = decimalSep === ',' ? '.' : ',';
- normalized = cleaned.split(thousandSep).join('');
+ normalized = cleaned.split(thousandSep).join('').replace(decimalSep, '.');
  } else if (lastComma >= 0) {
  normalized = cleaned.replace(/\./g, '').replace(',', '.');
  } else if (lastDot >= 0) {

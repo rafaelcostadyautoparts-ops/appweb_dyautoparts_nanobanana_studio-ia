@@ -1,6 +1,6 @@
 {
-  "version": "2.1.40",
-  "build": "2026.07.28.1",
-  "commit": "estoque-auth",
-  "deployDate": "2026-07-28"
+    "version":  "2.1.41",
+    "build":  "2026.07.28.2",
+    "commit":  "nf-money-fix",
+    "deployDate":  "2026-07-28"
 }
