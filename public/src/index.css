@@ -70899,3 +70899,22 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container {
 @media(max-width:1180px){ .devolucao-history-screen .devolucao-marketplace-followup { grid-template-columns:1fr!important; } .devolucao-history-screen .devolucao-followup-note { grid-template-columns:minmax(260px,1fr) minmax(160px,.55fr) minmax(145px,.48fr)!important; } .devolucao-history-screen .devolucao-followup-note>button { grid-column:auto; min-height:116px!important; } }
 @media(max-width:760px){ .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr 1fr!important; } .devolucao-history-screen .devolucao-followup-observation { grid-column:1/-1; } .devolucao-history-screen .devolucao-followup-note>button { min-height:54px!important; } }
 @media(max-width:520px){ .devolucao-history-screen .devolucao-followup-state { align-items:center; flex-direction:column; } .devolucao-history-screen .devolucao-followup-state .devolucao-reputation-control { width:100%; max-width:none; margin:0; } .devolucao-history-screen .devolucao-followup-note { grid-template-columns:1fr!important; } .devolucao-history-screen .devolucao-followup-observation { grid-column:auto; } }
+/* Devolucoes - manter os itens legiveis dentro do modal em telas intermediarias */
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-result > strong,
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-impact strong,
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-impact em,
+.devolucao-modal-redesign .devolucao-draft-item .dev-draft-impact span {
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  white-space: normal !important;
+}
+
+@media (max-width: 1400px) {
+  .devolucao-modal-redesign .devolucao-workflow-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .devolucao-modal-redesign .devolucao-draft-list {
+    max-height: none;
+  }
+}
