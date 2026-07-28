@@ -23,6 +23,12 @@ create table if not exists public.devolucoes (
     atualizado_em timestamptz not null default now()
 );
 
+-- CREATE TABLE IF NOT EXISTS nao adiciona colunas a uma tabela que ja existe.
+-- Este reparo mantem instalacoes antigas compativeis com as funcoes abaixo.
+alter table public.devolucoes
+    add column if not exists cidade text,
+    add column if not exists uf text;
+
 create table if not exists public.devolucao_itens (
     id uuid primary key default gen_random_uuid(),
     devolucao_id uuid not null references public.devolucoes(id) on delete cascade,

@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.48",
-    "build":  "2026.07.28.9",
-    "commit":  "layout-itens-devolucao",
+    "version":  "2.1.49",
+    "build":  "2026.07.28.10",
+    "commit":  "devolucao-cidade-compat",
     "deployDate":  "2026-07-28"
 }
