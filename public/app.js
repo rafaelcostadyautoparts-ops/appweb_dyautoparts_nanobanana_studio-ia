@@ -31991,7 +31991,8 @@ const devolucaoMarketplaceState = {
  saving: false,
  editingId: null,
  editingStatus: null,
- editingMarketplaceAcionado: false
+ editingMarketplaceAcionado: false,
+ manualSelectionRequested: false
 };
 
 const devolucaoHistoricoState = {
@@ -32314,6 +32315,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  devolucaoMarketplaceState.editingId = editRecord?.id || null;
  devolucaoMarketplaceState.editingStatus = editRecord?.status || null;
  devolucaoMarketplaceState.editingMarketplaceAcionado = Boolean(editRecord?.marketplace_acionado);
+ devolucaoMarketplaceState.manualSelectionRequested = false;
 
  document.body.insertAdjacentHTML('beforeend', `
  <div id="devolucao-marketplace-modal" class="devolucao-modal-overlay">
@@ -32338,16 +32340,14 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace <em>(opcional)</em></span><span class="dev-observation-input"><span class="material-symbols-rounded">chat_bubble</span><input id="dev-marketplace-observacao" type="text" maxlength="500" placeholder="Ex.: Protocolo, resposta recebida ou pr\u00f3xima a\u00e7\u00e3o..." oninput="document.getElementById('dev-observation-count').textContent = this.value.length + '/500'"><small id="dev-observation-count">${String(editRecord?.observacao_acompanhamento || '').length}/500</small></span></label>
  <input id="dev-tarifa-reembolso" type="hidden" value="${Number(editRecord?.tarifa_devolucao_reembolsada || 0).toFixed(2)}">
  </div></section>
- <div class="devolucao-workflow-grid">
- <section class="devolucao-section-card devolucao-scan-section">
- <div class="devolucao-section-title"><span>2</span><div><h2>Produto recebido</h2><p>Bipe EAN, c\u00f3digo interno ou SKU do fornecedor.</p></div></div>
- <div class="devolucao-scan-row"><span class="material-symbols-rounded">barcode_scanner</span><input id="dev-product-code" type="text" placeholder="BIPAR, ID OU PESQUISAR PRODUTO..." autocomplete="off" oninput="handleDevolucaoProductSearchInput(this.value)" onkeydown="handleDevolucaoScanKey(event)"><button type="button" onclick="scanDevolucaoProduct()">Buscar produto</button></div>
- <div id="dev-product-suggestions" class="devolucao-product-suggestions"></div><div id="dev-product-feedback" class="devolucao-scan-feedback">Digite para pesquisar ou bipe o produto recebido.</div><div id="dev-selected-product"></div>
- <div class="devolucao-scan-count"><small>Produtos adicionados</small><strong id="dev-item-count">0</strong></div>
+ <section class="devolucao-section-card devolucao-items-section devolucao-items-unified">
+ <div class="devolucao-section-title"><span>2</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Bipe para adicionar diretamente ou use + para preencher os dados manualmente.</p></div><div class="devolucao-scan-count"><small>Produtos adicionados</small><strong id="dev-item-count">0</strong></div></div>
+ <div class="devolucao-scan-row devolucao-items-search"><span class="material-symbols-rounded">barcode_scanner</span><input id="dev-product-code" type="text" placeholder="BIPAR, ID OU PESQUISAR PRODUTO..." autocomplete="off" oninput="handleDevolucaoProductSearchInput(this.value)" onkeydown="handleDevolucaoScanKey(event)"><button type="button" class="devolucao-manual-add-btn" onclick="openDevolucaoManualProduct()" title="Incluir produto manualmente" aria-label="Incluir produto manualmente"><span class="material-symbols-rounded">add</span></button></div>
+ <div id="dev-product-suggestions" class="devolucao-product-suggestions"></div>
+ <div id="dev-product-feedback" class="devolucao-scan-feedback">Bipe o produto para adicionar diretamente aos itens.</div>
+ <div id="dev-selected-product" class="devolucao-manual-editor"></div>
+ <div id="dev-draft-items"></div>
  </section>
- <section class="devolucao-section-card devolucao-items-section">
- <div class="devolucao-section-title"><span>3</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Confira os produtos antes de salvar.</p></div></div><div id="dev-draft-items"></div>
- </section></div>
  </div>
  <div id="dev-save-error" role="alert" style="display:none;margin:0 22px 14px;padding:12px 14px;border:1px solid #fecaca;border-radius:12px;background:#fff1f2;color:#b91c1c;font-weight:800;"></div>
  <footer class="devolucao-form-footer"><button type="button" class="devolucao-cancel-btn" onclick="closeDevolucaoMarketplaceModal()">Cancelar</button><button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()"><span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}</button></footer>
@@ -32499,14 +32499,61 @@ async function prepareDevolucaoSelectedProduct(product, source = 'busca') {
  product._marca_devolucao = getDevolucaoProductBrand(product) || '';
  addDevolucaoProductDirect(product, source);
 }
+async function prepareDevolucaoProductManual(product) {
+ product._marca_devolucao = getDevolucaoProductBrand(product) || '';
+ devolucaoMarketplaceState.selectedProduct = product;
+ devolucaoMarketplaceState.manualSelectionRequested = false;
+ clearDevolucaoProductSuggestions();
+ renderDevolucaoSelectedProduct();
+ const feedback = document.getElementById('dev-product-feedback');
+ if (feedback) feedback.textContent = 'Produto selecionado. Ajuste os dados e clique em Adicionar produto.';
+ setTimeout(() => document.getElementById('dev-item-qty')?.focus(), 50);
+}
+
+async function openDevolucaoManualProduct() {
+ const input = document.getElementById('dev-product-code');
+ const rawQuery = String(input?.value || '').trim();
+ if (!rawQuery) {
+  showToast('Digite ou bipe o codigo do produto antes de usar o botao +.', 'warning');
+  input?.focus();
+  return;
+ }
+ try {
+  await ensureProdutosLoaded();
+  let product = findDevolucaoProductByIdentity(rawQuery);
+  if (!product) {
+   const matches = await handleDevolucaoProductSearchInput(rawQuery);
+   if (matches.length === 1) product = matches[0];
+   else if (matches.length > 1) {
+    devolucaoMarketplaceState.manualSelectionRequested = true;
+    const feedback = document.getElementById('dev-product-feedback');
+    if (feedback) feedback.textContent = 'Selecione abaixo o produto que deseja incluir manualmente.';
+    return;
+   }
+  }
+  if (!product) {
+   showToast('Produto nao encontrado no cadastro.', 'warning');
+   input?.focus();
+   return;
+  }
+  await prepareDevolucaoProductManual(product);
+ } catch (error) {
+  console.error('[DEVOLUCOES] inclusao manual:', error);
+  showToast('Nao foi possivel abrir a inclusao manual do produto.', 'error');
+ }
+}
 async function selectDevolucaoProductFromSearch(identity) {
  const product = findDevolucaoProductByIdentity(decodeURIComponent(String(identity || '')));
  if (!product) return showToast('Produto nao encontrado na lista carregada.', 'warning');
+ if (devolucaoMarketplaceState.manualSelectionRequested) {
+  await prepareDevolucaoProductManual(product);
+  return;
+ }
  await prepareDevolucaoSelectedProduct(product, 'sugestao');
 }
-
 async function scanDevolucaoProduct() {
  if (devolucaoMarketplaceState.scanning) return;
+ devolucaoMarketplaceState.manualSelectionRequested = false;
  const input = document.getElementById('dev-product-code');
  const feedback = document.getElementById('dev-product-feedback');
  const rawQuery = String(input?.value || '').trim();
@@ -32616,11 +32663,14 @@ function addDevolucaoDraftItem() {
  });
 
  devolucaoMarketplaceState.selectedProduct = null;
+ devolucaoMarketplaceState.manualSelectionRequested = false;
  document.getElementById('dev-selected-product').innerHTML = '';
  document.getElementById('dev-product-feedback').textContent = 'Produto adicionado. Continue bipando, pesquisando ou salve a devolucao.';
  clearDevolucaoProductSuggestions();
  renderDevolucaoDraftItems();
- document.getElementById('dev-product-code')?.focus();
+ const searchInput = document.getElementById('dev-product-code');
+ if (searchInput) searchInput.value = '';
+ searchInput?.focus();
 }
 
 function setDevolucaoDraftItemResultado(localId, resultado) {
@@ -32661,11 +32711,11 @@ function renderDevolucaoDraftItems() {
  <span class="devolucao-item-number">${index + 1}</span>
  <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p>${escapeDevolucaoHTML(item.id_interno || item.ean || '-')} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca nao informada')}</p></div>
  <div class="dev-draft-quantity"><small>Quantidade</small><span><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', -1)" aria-label="Diminuir quantidade">−</button><strong>${item.quantidade}</strong><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', 1)" aria-label="Aumentar quantidade">+</button></span></div>
- <div><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
+ <div class="dev-draft-correct"><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
  <label class="dev-draft-toggle"><span class="dev-draft-toggle-check"><input type="checkbox" ${item.apto_venda === false ? 'checked' : ''} onchange="toggleDevolucaoDraftItemApto('${item.localId}', this.checked)"><small>Não apto</small></span><strong class="${item.apto_venda !== false ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
  <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Apto para venda</option><option value="defeito" ${getDevolucaoItemResultado(item) === 'defeito' ? 'selected' : ''}>Defeito / em an\u00e1lise</option><option value="garantia" ${getDevolucaoItemResultado(item) === 'garantia' ? 'selected' : ''}>Defeito / fornecedor</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o devolvido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto diferente recebido</option><option value="descarte" ${getDevolucaoItemResultado(item) === 'descarte' ? 'selected' : ''}>Descarte / sem recupera\u00e7\u00e3o</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
  <div class="dev-draft-impact is-${getDevolucaoItemFinancialClass(item)}"><small>Impacto financeiro</small><strong>${escapeDevolucaoHTML(getDevolucaoItemFinancialLabel(item))}</strong><em>Total ${formatCurrency(getDevolucaoResultadoCost(item))}</em><span>Unit. ${formatCurrency(Number(item.valor_unitario || 0))}</span></div>
- <div><small>Custo</small><strong>${formatCurrency(Number(item.valor_unitario || 0))}</strong></div>
+ <div class="dev-draft-cost"><small>Custo</small><strong>${formatCurrency(Number(item.valor_unitario || 0))}</strong></div>
  <button type="button" title="Remover item" onclick="removeDevolucaoDraftItem('${item.localId}')"><span class="material-symbols-rounded">delete</span></button>
  </article>`).join('')}</div>`;
 }

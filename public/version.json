@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.49",
-    "build":  "2026.07.28.10",
-    "commit":  "devolucao-cidade-compat",
+    "version":  "2.1.50",
+    "build":  "2026.07.28.11",
+    "commit":  "devolucao-busca-itens-unificada",
     "deployDate":  "2026-07-28"
 }
