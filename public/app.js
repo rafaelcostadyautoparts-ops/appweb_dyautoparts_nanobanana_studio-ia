@@ -32089,13 +32089,13 @@ function getDevolucaoCreatedTimestamp(row = {}) {
  return Number.isFinite(returnDate) ? returnDate : 0;
 }
 
-function sortDevolucaoRecordsByNewest(records = []) {
+function sortDevolucaoRecordsChronologically(records = []) {
  return [...(records || [])].sort((left, right) => {
- const createdDiff = getDevolucaoCreatedTimestamp(right) - getDevolucaoCreatedTimestamp(left);
+ const createdDiff = getDevolucaoCreatedTimestamp(left) - getDevolucaoCreatedTimestamp(right);
  if (createdDiff) return createdDiff;
- const returnDateDiff = String(right.data_devolucao || '').localeCompare(String(left.data_devolucao || ''));
+ const returnDateDiff = String(left.data_devolucao || '').localeCompare(String(right.data_devolucao || ''));
  if (returnDateDiff) return returnDateDiff;
- return String(right.id || '').localeCompare(String(left.id || ''));
+ return String(left.id || '').localeCompare(String(right.id || ''));
  });
 }
 
@@ -32709,9 +32709,17 @@ async function saveDevolucaoMarketplace() {
   ? savedResult
   : await DataClient.applyDevolucaoEstoqueSupabase(savedId, payload.devolucao, payload.itens);
  const estoqueMsg = estoqueResult?.movimentos ? ' Estoque atualizado em ' + estoqueResult.movimentos + ' item(ns).' : '';
+ const successMessage = (editingId ? 'Devolucao atualizada com sucesso.' : 'Devolucao salva com sucesso.') + estoqueMsg;
  closeDevolucaoMarketplaceModal();
- await renderHistoricoDevolucoes({ month: String(dataDevolucao || '').slice(0, 7) });
- showToast((editingId ? 'Devolucao atualizada com sucesso.' : 'Devolucao salva com sucesso.') + estoqueMsg, 'success');
+ renderHistoricoDevolucoes({ month: String(dataDevolucao || '').slice(0, 7) });
+ showToast(successMessage, 'success');
+ await showAppAlert({
+  title: editingId ? 'Devolucao atualizada' : 'Devolucao salva',
+  message: successMessage,
+  detail: 'A listagem foi atualizada. Para outro registro, use o botao Nova devolucao.',
+  buttonLabel: 'OK',
+  icon: 'check_circle'
+ });
  } catch (error) {
  console.error('[DEVOLUCOES] salvar:', error);
  const errorMessage = error.message || 'Erro ao salvar a devolucao.';
@@ -32768,7 +32776,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  Math.max(Number(BOOT_CONFIG.TIMEOUT_MS || 0), 15000),
  'carregamento das devolucoes'
  );
- devolucaoHistoricoState.records = sortDevolucaoRecordsByNewest(normalizeDevolucaoRecordCosts(records));
+ devolucaoHistoricoState.records = sortDevolucaoRecordsChronologically(normalizeDevolucaoRecordCosts(records));
  syncDevolucaoRecordCostsWithSupabase(devolucaoHistoricoState.records).catch(error => console.warn('[DEVOLUCOES] sync custos antigos:', error));
  ensureProdutosLoaded().then(() => {
  devolucaoHistoricoState.records = normalizeDevolucaoRecordCosts(devolucaoHistoricoState.records);
