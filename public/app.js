@@ -32179,11 +32179,8 @@ function getDevolucaoItemFinancialClass(item = {}) {
  return 'prejuizo';
 }
 
-function getDevolucaoItemFinancialLabel(item = {}) {
- const classification = getDevolucaoItemFinancialClass(item);
- if (classification === 'recuperado') return 'Estoque recuperado';
- if (classification === 'em_analise') return 'Custo em an\u00e1lise';
- return 'Preju\u00edzo em produto';
+function getDevolucaoItemFinancialLabel() {
+ return 'Custo do produto';
 }
 
 function getDevolucaoFinancialTotals(items = []) {
@@ -32998,25 +32995,14 @@ function renderHistoricoDevolucaoList() {
  const recuperadoFinanceiro = reembolsos + Math.max(0, saldoMarketplaceTotal);
  const perdaMarketplace = Math.max(0, -saldoMarketplaceTotal);
  const prejuizoLiquidoProdutos = Math.max(0, financialTotals.prejuizo + perdaMarketplace - recuperadoFinanceiro);
- controlMetrics.innerHTML = `
- <header><div><small>CONTROLE DOS PRODUTOS</small><strong>Destino e impacto financeiro das devolu\u00e7\u00f5es</strong></div><span>Custos sempre positivos e separados por resultado</span></header>
- <div class="devolucao-control-grid">
- <article class="is-gross"><small>Custo original envolvido</small><strong>${formatCurrency(financialTotals.original)}</strong><span>Refer\u00eancia dos produtos vendidos</span></article>
- <article class="is-stock"><small>Estoque recuperado</small><strong>${quantidadeResultado(aptos)} un.</strong><span>${formatCurrency(financialTotals.recuperado)}</span></article>
- <article class="is-defect"><small>Custo em an\u00e1lise</small><strong>${quantidadeResultado(emAnalise)} un.</strong><span>${formatCurrency(financialTotals.emAnalise)}</span></article>
- <article class="is-loss"><small>Preju\u00edzo em produtos</small><strong>${quantidadeResultado(perdas)} un.</strong><span>${formatCurrency(financialTotals.prejuizo)}</span></article>
- <article class="is-stock"><small>Recuperado no marketplace</small><strong>${formatCurrency(recuperadoFinanceiro)}</strong><span>Saldo positivo + reembolso</span></article>
- <article class="is-net"><small>Preju\u00edzo l\u00edquido estimado</small><strong>${formatCurrency(prejuizoLiquidoProdutos)}</strong><span>Produtos + marketplace - recupera\u00e7\u00f5es</span></article>
- </div>`; const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
+ controlMetrics.innerHTML = '';
+ controlMetrics.style.display = 'none';
+ const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
  metrics.innerHTML = `
- <article class="metric-purple"><span class="material-symbols-rounded">assignment_return</span><div><small>Devolu\u00e7\u00f5es no per\u00edodo</small><strong>${periodRecords.length}</strong></div></article>
- <article class="metric-green"><span class="material-symbols-rounded">inventory</span><div><small>Estoque recuperado</small><strong>${formatCurrency(financialTotals.recuperado)}</strong></div></article>
- <article class="metric-red ${saldoMarketplaceTotal > 0 ? 'is-positive' : ''}"><span class="material-symbols-rounded">swap_horiz</span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></article>
- <article class="metric-green is-positive"><span class="material-symbols-rounded">recycling</span><div><small>Reembolsado ML</small><strong>${formatCurrency(reembolsos)}</strong></div></article>
- <article class="${saldoLiquido < 0 ? 'metric-red is-alert' : 'metric-green is-positive'}"><span class="material-symbols-rounded">sync_alt</span><div><small>Saldo l\u00edquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquido)}</strong></div></article>
- <article class="metric-orange is-warning"><span class="material-symbols-rounded">star</span><div><small>Marketplace acionado</small><strong>${acionados}</strong></div></article>
- <article class="metric-red is-alert"><span class="material-symbols-rounded">shield</span><div><small>Reputa\u00e7\u00e3o afetada</small><strong>${reputacaoAfetada}</strong></div></article>
- <article class="metric-green is-positive"><span class="material-symbols-rounded">check_circle</span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></article>`;
+ <article class="metric-purple"><span class="material-symbols-rounded">inventory_2</span><div><small>Custo do produto</small><strong>${formatCurrency(financialTotals.original)}</strong></div></article>
+ <article class="metric-red ${saldoMarketplaceTotal >= 0 ? 'is-positive' : 'is-alert'}"><span class="material-symbols-rounded">account_balance_wallet</span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></article>
+ <article class="metric-green is-positive"><span class="material-symbols-rounded">payments</span><div><small>Reembolso marketplace</small><strong>${formatCurrency(reembolsos)}</strong></div></article>
+ <article class="${saldoLiquido < 0 ? 'metric-red is-alert' : 'metric-green is-positive'}"><span class="material-symbols-rounded">calculate</span><div><small>Total saldo + reembolso</small><strong>${formatSignedMarketplaceSaldo(saldoLiquido)}</strong></div></article>`;
  if (devolucaoHistoricoState.error) {
  list.innerHTML = `<div class="devolucao-history-error"><span class="material-symbols-rounded">database_off</span><strong>Hist\u00f3rico indispon\u00edvel</strong><p>${escapeDevolucaoHTML(devolucaoHistoricoState.error)}</p></div>`;
  return;
@@ -33077,11 +33063,11 @@ function renderHistoricoDevolucaoList() {
  </header>
  <div class="devolucao-history-items">${items.map(item => `<div>
  ${getDevolucaoItemVisual(item)}
- <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo original: ${formatCurrency(item.valor_unitario || 0)} &middot; ${getDevolucaoItemFinancialLabel(item)}: ${formatCurrency(getDevolucaoResultadoCost(item))}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
+ <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo do produto: ${formatCurrency(getDevolucaoResultadoCost(item))}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
  <em class="resultado-${getDevolucaoItemResultado(item)}">${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</em>
  </div>`).join('')}</div>
  ${followupMarkup}
- <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo original</small><strong>${formatCurrency(recordFinancial.original)}</strong></span><span class="is-positive"><small>Estoque recuperado</small><strong>${formatCurrency(recordFinancial.recuperado)}</strong></span><span class="${recordFinancial.emAnalise > 0 ? 'is-warning' : 'is-zero'}"><small>Custo em an\u00e1lise</small><strong>${formatCurrency(recordFinancial.emAnalise)}</strong></span><span class="${recordFinancial.prejuizo > 0 ? 'is-negative' : 'is-zero'}"><small>Preju\u00edzo produtos</small><strong>${formatCurrency(recordFinancial.prejuizo)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
+ <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo do produto</small><strong>${formatCurrency(recordFinancial.original)}</strong></span><span class="${saldoMarketplace < 0 ? 'is-negative' : 'is-positive'}"><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplace)}</strong></span><span class="is-positive"><small>Reembolso marketplace</small><strong>${formatCurrency(reembolsoMarketplace)}</strong></span><span class="${saldoLiquidoMarketplace < 0 ? 'is-negative' : 'is-positive'}"><small>Total saldo + reembolso</small><strong>${formatSignedMarketplaceSaldo(saldoLiquidoMarketplace)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
  ${row.marketplace_acionado ? '' : reputationControlMarkup}
  </article>`;
  }).join('');
