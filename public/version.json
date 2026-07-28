@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.46",
-    "build":  "2026.07.28.7",
-    "commit":  "devolucao-metricas-fixas",
+    "version":  "2.1.47",
+    "build":  "2026.07.28.8",
+    "commit":  "restaurar-cards-devolucao",
     "deployDate":  "2026-07-28"
 }
