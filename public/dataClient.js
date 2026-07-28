@@ -2017,9 +2017,21 @@ const DataClient = (function () {
             console.error('[DEVOLUCOES] erro no salvamento atomico:', error);
             const missingRpc = ['PGRST202', '42883'].includes(error.code)
                 || String(error.message || '').includes('salvar_devolucao_marketplace_atomica');
-            const saveError = new Error(missingRpc
-                ? 'A atualizacao de devolucao atomica ainda nao foi aplicada no Supabase.'
-                : (error.message || 'Erro ao salvar a devolucao e movimentar o estoque'));
+            if (missingRpc) {
+                console.warn('[DEVOLUCOES] funcao atomica ausente; usando fluxo compativel com o Supabase atual.');
+                const legacy = await client.rpc('salvar_devolucao_marketplace', {
+                    p_devolucao: payload.devolucao,
+                    p_itens: payload.itens
+                });
+                if (legacy.error) {
+                    const legacyError = new Error(legacy.error.message || 'Erro ao salvar a devolucao');
+                    legacyError.code = legacy.error.code;
+                    throw legacyError;
+                }
+                invalidateCache('devolucoes');
+                return legacy.data;
+            }
+            const saveError = new Error(error.message || 'Erro ao salvar a devolucao e movimentar o estoque');
             saveError.code = error.code;
             throw saveError;
         }

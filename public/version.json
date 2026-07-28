@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.44",
-    "build":  "2026.07.28.5",
-    "commit":  "devolucao-success-list",
+    "version":  "2.1.45",
+    "build":  "2026.07.28.6",
+    "commit":  "devolucao-fallback",
     "deployDate":  "2026-07-28"
 }
