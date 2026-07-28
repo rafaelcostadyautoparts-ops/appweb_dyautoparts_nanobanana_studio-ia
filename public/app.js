@@ -1,4 +1,4 @@
-﻿window.onerror = function (msg, url, lineNo, columnNo, error) {
+window.onerror = function (msg, url, lineNo, columnNo, error) {
  console.error('Global Error:', msg, error);
  const app = document.getElementById('app');
  if (app) {
@@ -29799,7 +29799,32 @@ function renderNFXmlTipoLancamentoCards() {
  `;
 }
 
+function repairNFXmlStoredParcelValues() {
+ const state = entradaNfXmlState;
+ const fin = state?.financeiro;
+ const parcelas = fin?.parcelasEditaveis || [];
+ const totalNf = nfXmlMoney(state?.totais?.valor_total);
+ if (!parcelas.length || totalNf <= 0) return false;
+
+ const totalParcelas = parcelas.reduce((sum, item) => sum + nfXmlMoney(item.valor), 0);
+ const expectedCorruptedTotal = totalNf * 10000;
+ const tolerance = Math.max(0.01, totalNf * 0.000001);
+ if (Math.abs(totalParcelas - expectedCorruptedTotal) > tolerance) return false;
+
+ parcelas.forEach(item => {
+ item.valor = nfXmlRoundMoney(nfXmlMoney(item.valor) / 10000, 2);
+ });
+ fin.confirmarDiferenca = false;
+ console.warn('[ENTRADA_NF_FINANCEIRO] valores de parcelas locais corrigidos automaticamente', {
+ totalNf,
+ totalAnterior: totalParcelas
+ });
+ return true;
+}
+
+
 function getNFXmlFinanceTotals() {
+ repairNFXmlStoredParcelValues();
  const state = entradaNfXmlState;
  const parcelasNota = getNFXmlFinanceParcelas();
  const complementares = getNFXmlFinanceComplementares();
@@ -29859,6 +29884,7 @@ function updateNFXmlFinanceOption(mode) {
  if (mode === 'editar' && (!fin.parcelasEditaveis || !fin.parcelasEditaveis.length)) {
  fin.parcelasEditaveis = createNFXmlParcelasFromDuplicatas(entradaNfXmlState.duplicatas || [], entradaNfXmlState.totais?.valor_total);
  }
+ if (mode === 'editar') repairNFXmlStoredParcelValues();
  console.log('[ENTRADA_NF_FINANCEIRO] modo atualizado', { mode });
  saveEntradaNFXMLDraft();
  renderNFXmlPreview();
@@ -29888,16 +29914,18 @@ function setNFXmlFinanceParcelCount(count) {
  const existing = current[index];
  const due = new Date(baseDate);
  due.setMonth(due.getMonth() + index);
- return existing || {
- id: `manual-${Date.now()}-${index + 1}`,
- parcela: String(index + 1).padStart(3, '0'),
- descricao: `Parcela ${String(index + 1).padStart(3, '0')}`,
- valor: index === qty - 1 ? nfXmlRoundMoney(total - (value * (qty - 1)), 2) : value,
- vencimento: getDataBrasilISO(due),
- forma_pagamento: 'boleto',
- observacoes: '',
- status: 'pendente',
- pago: false,
+ const calculatedValue = index === qty - 1 ? nfXmlRoundMoney(total - (value * (qty - 1)), 2) : value;
+ return {
+ ...(existing || {}),
+ id: existing?.id || `manual-${Date.now()}-${index + 1}`,
+ parcela: existing?.parcela || String(index + 1).padStart(3, '0'),
+ descricao: existing?.descricao || `Parcela ${String(index + 1).padStart(3, '0')}`,
+ valor: calculatedValue,
+ vencimento: existing?.vencimento || getDataBrasilISO(due),
+ forma_pagamento: existing?.forma_pagamento || 'boleto',
+ observacoes: existing?.observacoes || '',
+ status: existing?.status || 'pendente',
+ pago: existing?.pago || false,
  origem: 'manual'
  };
  });
