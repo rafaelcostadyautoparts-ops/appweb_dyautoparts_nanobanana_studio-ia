@@ -1,4 +1,4 @@
--- DY Auto Parts - estoque transacional, inventario atomico e auditoria
+﻿-- DY Auto Parts - estoque transacional, inventario atomico e auditoria
 -- Aplicar pelo SQL Editor do Supabase antes de publicar o frontend correspondente.
 
 ALTER TABLE public.movimentos
@@ -9,12 +9,12 @@ CREATE OR REPLACE FUNCTION public.preencher_movimento_auth_user()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
-AS $
+AS $$
 BEGIN
     NEW.auth_user_id := coalesce(NEW.auth_user_id, auth.uid());
     RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS movimentos_preencher_auth_user ON public.movimentos;
 CREATE TRIGGER movimentos_preencher_auth_user
