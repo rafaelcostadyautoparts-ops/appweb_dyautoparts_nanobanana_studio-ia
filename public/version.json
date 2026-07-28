@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.50",
-    "build":  "2026.07.28.11",
-    "commit":  "devolucao-busca-itens-unificada",
+    "version":  "2.1.51",
+    "build":  "2026.07.28.12",
+    "commit":  "devolucao-sem-cidade-uf",
     "deployDate":  "2026-07-28"
 }

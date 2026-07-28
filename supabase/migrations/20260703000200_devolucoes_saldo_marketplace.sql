@@ -18,13 +18,12 @@ begin
     end if;
 
     insert into public.devolucoes (
-        tipo, canal, pedido, remetente, cidade, uf, data_devolucao, motivo,
+        tipo, canal, pedido, remetente, data_devolucao, motivo,
         impactou_reputacao, marketplace_acionado, observacao_acompanhamento,
         saldo_marketplace, status, observacoes, responsavel
     ) values (
         'marketplace', coalesce(nullif(btrim(p_devolucao->>'canal'), ''), 'MAGALU'),
         btrim(p_devolucao->>'pedido'), nullif(btrim(p_devolucao->>'remetente'), ''),
-        nullif(btrim(p_devolucao->>'cidade'), ''), nullif(upper(btrim(p_devolucao->>'uf')), ''),
         coalesce(nullif(p_devolucao->>'data_devolucao', '')::date, current_date),
         coalesce(nullif(btrim(p_devolucao->>'motivo'), ''), 'Devolucao'),
         coalesce((p_devolucao->>'impactou_reputacao')::boolean, false),
@@ -56,4 +55,4 @@ end;
 $$;
 
 grant execute on function public.salvar_devolucao_marketplace(jsonb, jsonb)
-    to anon, authenticated, service_role;
+    to anon, authenticated, service_role;

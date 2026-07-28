@@ -4,8 +4,6 @@ create table if not exists public.devolucoes (
     canal text not null,
     pedido text not null,
     remetente text,
-    cidade text,
-    uf text,
     data_devolucao date not null default current_date,
     motivo text not null,
     impactou_reputacao boolean not null default false,
@@ -78,12 +76,11 @@ begin
     end if;
 
     insert into public.devolucoes (
-        tipo, canal, pedido, remetente, cidade, uf, data_devolucao, motivo,
+        tipo, canal, pedido, remetente, data_devolucao, motivo,
         impactou_reputacao, marketplace_acionado, observacao_acompanhamento, saldo_marketplace, status, observacoes, responsavel
     ) values (
         'marketplace', coalesce(nullif(btrim(p_devolucao->>'canal'), ''), 'MAGALU'),
         btrim(p_devolucao->>'pedido'), nullif(btrim(p_devolucao->>'remetente'), ''),
-        nullif(btrim(p_devolucao->>'cidade'), ''), nullif(upper(btrim(p_devolucao->>'uf')), ''),
         coalesce(nullif(p_devolucao->>'data_devolucao', '')::date, current_date),
         coalesce(nullif(btrim(p_devolucao->>'motivo'), ''), 'Devolucao'),
         coalesce((p_devolucao->>'impactou_reputacao')::boolean, false),

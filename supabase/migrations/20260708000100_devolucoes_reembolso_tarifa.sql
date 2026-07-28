@@ -24,7 +24,7 @@ begin
     end if;
 
     insert into public.devolucoes (
-        tipo, canal, pedido, remetente, cidade, uf, data_devolucao, motivo,
+        tipo, canal, pedido, remetente, data_devolucao, motivo,
         impactou_reputacao, marketplace_acionado, observacao_acompanhamento,
         saldo_marketplace, tarifa_devolucao_reembolsada, status, observacoes, responsavel
     ) values (
@@ -32,8 +32,6 @@ begin
         coalesce(nullif(btrim(p_devolucao->>'canal'), ''), 'Amazon'),
         btrim(p_devolucao->>'pedido'),
         nullif(btrim(p_devolucao->>'remetente'), ''),
-        nullif(btrim(p_devolucao->>'cidade'), ''),
-        nullif(upper(btrim(p_devolucao->>'uf')), ''),
         coalesce(nullif(p_devolucao->>'data_devolucao', '')::date, current_date),
         coalesce(nullif(btrim(p_devolucao->>'motivo'), ''), 'Devolucao'),
         coalesce((p_devolucao->>'impactou_reputacao')::boolean, false),

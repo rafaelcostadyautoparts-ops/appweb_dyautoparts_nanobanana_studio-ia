@@ -1,26 +1,14 @@
--- DY Auto Parts - itens de devolucao aptos para venda e movimento de estoque
--- Rode no Supabase para o app gravar se o item voltou para estoque.
+-- DY Auto Parts - devolucoes sem cidade e UF
+-- Recria o salvamento usando somente os campos presentes no formulario atual.
 
-alter table public.devolucao_itens
-    add column if not exists apto_venda boolean not null default false,
-    add column if not exists estoque_movimentado boolean not null default false,
-    add column if not exists estoque_local text,
-    add column if not exists estoque_movimento_id text;
-
-comment on column public.devolucao_itens.apto_venda
-    is 'Indica se o produto recebido na devolucao esta apto para venda e deve voltar ao estoque.';
-comment on column public.devolucao_itens.estoque_movimentado
-    is 'Indica se a entrada de estoque da devolucao ja foi gerada para evitar movimento duplicado.';
-comment on column public.devolucao_itens.estoque_local
-    is 'Local de estoque usado na entrada gerada pela devolucao: TERREO quando apto, DEFEITO quando nao apto.';
-comment on column public.devolucao_itens.estoque_movimento_id
-    is 'Identificador do movimento de estoque gerado pela devolucao.';
-
-create or replace function public.salvar_devolucao_marketplace(p_devolucao jsonb, p_itens jsonb)
+create or replace function public.salvar_devolucao_marketplace(
+    p_devolucao jsonb,
+    p_itens jsonb
+)
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
     v_devolucao_id uuid;
@@ -28,6 +16,7 @@ begin
     if coalesce(nullif(btrim(p_devolucao->>'pedido'), ''), '') = '' then
         raise exception 'O numero do pedido e obrigatorio';
     end if;
+
     if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) = 0 then
         raise exception 'Adicione ao menos um produto a devolucao';
     end if;
@@ -35,7 +24,8 @@ begin
     insert into public.devolucoes (
         tipo, canal, pedido, remetente, data_devolucao, motivo,
         impactou_reputacao, marketplace_acionado, observacao_acompanhamento,
-        saldo_marketplace, tarifa_devolucao_reembolsada, status, observacoes, responsavel
+        saldo_marketplace, tarifa_devolucao_reembolsada, status,
+        observacoes, responsavel
     ) values (
         'marketplace',
         coalesce(nullif(btrim(p_devolucao->>'canal'), ''), 'Amazon'),
@@ -57,9 +47,11 @@ begin
     insert into public.devolucao_itens (
         devolucao_id, produto_id, id_interno, ean, sku, descricao, categoria,
         quantidade, valor_unitario, fornecedor, devolveu_correto, apto_venda,
-        estoque_movimentado, estoque_local, estoque_movimento_id, observacoes, destino
+        estoque_movimentado, estoque_local, estoque_movimento_id,
+        observacoes, destino
     )
-    select v_devolucao_id,
+    select
+        v_devolucao_id,
         nullif(item->>'produto_id', '')::uuid,
         nullif(btrim(item->>'id_interno'), ''),
         nullif(btrim(item->>'ean'), ''),
@@ -72,7 +64,11 @@ begin
         coalesce((item->>'devolveu_correto')::boolean, true),
         coalesce((item->>'apto_venda')::boolean, false),
         coalesce((item->>'estoque_movimentado')::boolean, false),
-        coalesce(nullif(btrim(item->>'estoque_local'), ''), case when coalesce((item->>'apto_venda')::boolean, false) then 'TERREO' else 'DEFEITO' end),
+        coalesce(
+            nullif(btrim(item->>'estoque_local'), ''),
+            case when coalesce((item->>'apto_venda')::boolean, false)
+                then 'TERREO' else 'DEFEITO' end
+        ),
         nullif(btrim(item->>'estoque_movimento_id'), ''),
         nullif(btrim(item->>'observacoes'), ''),
         case when coalesce((item->>'devolveu_correto')::boolean, true)
@@ -83,7 +79,8 @@ begin
 end;
 $$;
 
+revoke all on function public.salvar_devolucao_marketplace(jsonb, jsonb) from public;
 grant execute on function public.salvar_devolucao_marketplace(jsonb, jsonb)
-    to anon, authenticated, service_role;
+    to authenticated, service_role;
 
 notify pgrst, 'reload schema';

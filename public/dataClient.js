@@ -2005,59 +2005,6 @@ const DataClient = (function () {
         return clone;
     }
 
-    function isDevolucaoLocationSchemaError(error) {
-        const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
-        return (error?.code === '42703' || error?.code === 'PGRST204')
-            && text.includes('devolucoes')
-            && (text.includes('cidade') || text.includes('uf'));
-    }
-
-    async function saveDevolucaoMarketplaceCompatible(client, payload) {
-        const headerPayload = {
-            ...payload.devolucao,
-            tipo: 'marketplace',
-            status: payload.devolucao.status || (payload.devolucao.marketplace_acionado ? 'em_analise' : 'resolvida')
-        };
-        delete headerPayload.cidade;
-        delete headerPayload.uf;
-
-        let headerResult = await client
-            .from('devolucoes')
-            .insert(headerPayload)
-            .select('id')
-            .single();
-        if (headerResult.error && isDevolucaoReembolsoSchemaError(headerResult.error)) {
-            headerResult = await client
-                .from('devolucoes')
-                .insert(stripDevolucaoReembolsoColumn(headerPayload))
-                .select('id')
-                .single();
-        }
-        if (headerResult.error || !headerResult.data?.id) {
-            const error = new Error(headerResult.error?.message || 'Erro ao salvar a devolucao no formato compativel');
-            error.code = headerResult.error?.code;
-            throw error;
-        }
-
-        const devolucaoId = headerResult.data.id;
-        const itemRows = (payload.itens || []).map(item => cleanDevolucaoItemForWrite(item, devolucaoId));
-        let itemsError = null;
-        if (itemRows.length) {
-            let result = await client.from('devolucao_itens').insert(itemRows);
-            if (result.error && isDevolucaoItemStockSchemaError(result.error)) {
-                result = await client.from('devolucao_itens').insert(itemRows.map(stripDevolucaoItemStockColumns));
-            }
-            itemsError = result.error;
-        }
-        if (itemsError) {
-            await client.from('devolucoes').delete().eq('id', devolucaoId);
-            const error = new Error(itemsError.message || 'Erro ao salvar os produtos da devolucao');
-            error.code = itemsError.code;
-            throw error;
-        }
-
-        return devolucaoId;
-    }
     async function saveDevolucaoMarketplaceSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2068,12 +2015,7 @@ const DataClient = (function () {
         });
         if (error) {
             console.error('[DEVOLUCOES] erro no salvamento atomico:', error);
-            if (isDevolucaoLocationSchemaError(error)) {
-                console.warn('[DEVOLUCOES] tabela antiga sem cidade/UF; usando salvamento compativel.');
-                const compatibleId = await saveDevolucaoMarketplaceCompatible(client, payload);
-                invalidateCache('devolucoes');
-                return compatibleId;
-            }
+
             const missingRpc = ['PGRST202', '42883'].includes(error.code)
                 || String(error.message || '').includes('salvar_devolucao_marketplace_atomica');
             if (missingRpc) {
