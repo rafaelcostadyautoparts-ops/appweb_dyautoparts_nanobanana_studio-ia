@@ -1,4 +1,4 @@
-window.onerror = function (msg, url, lineNo, columnNo, error) {
+﻿window.onerror = function (msg, url, lineNo, columnNo, error) {
  console.error('Global Error:', msg, error);
  const app = document.getElementById('app');
  if (app) {
@@ -1758,7 +1758,7 @@ let hasCriticalStock = false;
 let cameraStream = null;
 
 const SPREADSHEET_ID = '1NK_rmdEfZYQPnFEil5pDWF1rIt9adajd1GpkcObSkv0';
-const CACHE_NAME = 'dy-autoparts-v10';
+const CACHE_NAME = 'dy-autoparts-v11';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznHLTXr_--3PrR8GAz4-TrtX4jttC5cg7CH8cPa7KzoRQPQMZrmtEPBAMWE5KqMTUXwA/exec'; // URL do Google Apps Script para salvar dados
 const API_BASE = "https://script.google.com/macros/s/AKfycbznHLTXr_--3PrR8GAz4-TrtX4jttC5cg7CH8cPa7KzoRQPQMZrmtEPBAMWE5KqMTUXwA/exec";
 
@@ -3063,9 +3063,93 @@ function hideSyncLoader() {
  // Silent mode - UI screen removed per User request
 }
 
+async function getSupabaseAuthSession() {
+    const client = window.supabaseClient ||
+        (window.supabaseClientReady ? await window.supabaseClientReady.catch(() => null) : null);
+    if (!client?.auth) return null;
+    const { data, error } = await client.auth.getSession();
+    if (error) {
+        console.warn('[AUTH] Falha ao consultar sessao:', error);
+        return null;
+    }
+    return data?.session || null;
+}
+
+async function ensureSupabaseAuthenticatedAccess() {
+    const existingSession = await getSupabaseAuthSession();
+    if (existingSession?.user?.id) {
+        localStorage.setItem('dy_supabase_auth_user_id', existingSession.user.id);
+        localStorage.setItem('dy_supabase_auth_email', existingSession.user.email || '');
+        return true;
+    }
+
+    const savedEmail = localStorage.getItem('dy_supabase_auth_email') || '';
+    const email = await showAppPrompt({
+        title: 'Acesso seguro ao estoque',
+        message: 'Entre com a conta criada no Supabase para autorizar inventarios e movimentacoes.',
+        detail: 'Este login sera solicitado apenas quando a sessao segura deste aparelho expirar.',
+        label: 'E-mail',
+        defaultValue: savedEmail,
+        placeholder: 'usuario@empresa.com',
+        confirmLabel: 'Continuar',
+        cancelLabel: 'Cancelar',
+        inputType: 'email'
+    });
+    if (!email) return false;
+
+    const password = await showAppPrompt({
+        title: 'Senha do acesso seguro',
+        message: 'Informe a senha da conta Supabase.',
+        detail: 'A senha nao sera salva pelo aplicativo.',
+        label: 'Senha',
+        placeholder: 'Digite a senha',
+        confirmLabel: 'Entrar',
+        cancelLabel: 'Cancelar',
+        inputType: 'password'
+    });
+    if (!password) return false;
+
+    const client = window.supabaseClient ||
+        (window.supabaseClientReady ? await window.supabaseClientReady.catch(() => null) : null);
+    if (!client?.auth) {
+        showToast('Servico de autenticacao indisponivel.', 'error');
+        return false;
+    }
+
+    const { data, error } = await client.auth.signInWithPassword({
+        email: String(email).trim(),
+        password: String(password)
+    });
+    if (error || !data?.session?.user) {
+        console.error('[AUTH] Login seguro recusado:', error);
+        showToast('E-mail ou senha do acesso seguro incorretos.', 'error');
+        return false;
+    }
+
+    localStorage.setItem('dy_supabase_auth_user_id', data.session.user.id);
+    localStorage.setItem('dy_supabase_auth_email', data.session.user.email || String(email).trim());
+    showToast('Acesso seguro autorizado neste aparelho.', 'success');
+    return true;
+}
+
+async function disconnectSupabaseSecureAccess() {
+    const client = window.supabaseClient;
+    if (client?.auth) await client.auth.signOut();
+    localStorage.removeItem('dy_supabase_auth_user_id');
+    showToast('Acesso seguro desconectado deste aparelho.', 'info');
+    renderLogin();
+}
+
+window.disconnectSupabaseSecureAccess = disconnectSupabaseSecureAccess;
+
 async function setUser(userName, userId, userProfile) {
- console.log('[INFO] Operacao registrada.');
- console.log(`[LOGIN DEBUG] isSyncingFlowActive antes: ${isSyncingFlowActive}`);
+    console.log('[LOGIN DEBUG] usuario clicado');
+    const secureAccess = await ensureSupabaseAuthenticatedAccess();
+    if (!secureAccess) {
+        isSyncingFlowActive = false;
+        return;
+    }
+    console.log(`[LOGIN DEBUG] isSyncingFlowActive antes: ${isSyncingFlowActive}`);
 
  if (isSyncingFlowActive) {
  console.log('[LOGIN DEBUG] resetando bloqueio');
@@ -3318,24 +3402,27 @@ function renderLogin(push = true) {
  `;
  }).join('');
 
- const loginHTML = `
- <div class="login-screen fade-in" id="login-screen" ${backgroundStyle}>
- <div class="top-hover-zone">
- <button id="btn-fullscreen-login" onclick="toggleFullscreen()" class="btn-floating-app btn-tela-cheia" type="button" aria-label="Tela cheia">
- <img src="/assets/icons/fullscreen.svg" alt="" aria-hidden="true">
- </button>
- </div>
- <img src="${getLoginLogoSrc()}" alt="DY AutoParts" class="login-logo dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_LIGHT_BG_FALLBACK}';">
- <div class="user-grid login-user-grid">
- ${userGridHTML}
- </div>
- <div class="login-user-hint" aria-label="Selecione seu usao">
- <span class="material-symbols-rounded">person</span>
- <span class="login-user-hint-text">SELECIONE SEU USUAiRIO</span>
- </div>
- ${getAppVersionBadgeHTML('login')}
- </div>
- `;
+    const loginHTML = `
+        <div class="login-screen fade-in" id="login-screen" ${backgroundStyle}>
+            <div class="top-hover-zone">
+                <button id="btn-fullscreen-login" onclick="toggleFullscreen()" class="btn-floating-app btn-tela-cheia" type="button" aria-label="Tela cheia">
+                    <img src="/assets/icons/fullscreen.svg" alt="" aria-hidden="true">
+                </button>
+            </div>
+            <img src="${getLoginLogoSrc()}" alt="DY AutoParts" class="login-logo dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_LIGHT_BG_FALLBACK}';">
+            <div class="user-grid login-user-grid">
+                ${userGridHTML}
+            </div>
+            <div class="login-user-hint" aria-label="Selecione seu usuario">
+                <span class="material-symbols-rounded">person</span>
+                <span class="login-user-hint-text">SELECIONE SEU USUARIO</span>
+            </div>
+            <button type="button" onclick="disconnectSupabaseSecureAccess()" aria-label="Trocar conta de acesso seguro" style="position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 9px 13px; background: rgba(10,10,12,.72); color: #fff; font: inherit; font-size: .72rem; cursor: pointer; backdrop-filter: blur(10px);">
+                Trocar acesso seguro
+            </button>
+            ${getAppVersionBadgeHTML('login')}
+        </div>
+    `;
 
  const appContainer = document.getElementById('app');
  if (!appContainer) return;
@@ -6272,235 +6359,67 @@ function selectProductForMovInModal(id) {
  console.log('[MOV] produto vinculado ao state');
 }
 
+async function saveMovimentacaoAtomica(tipo, options = {}) {
+    if (isFinalizing) return;
+    isFinalizing = true;
+    try {
+        const rawTipo = String(tipo || '').toUpperCase();
+        const normalizedTipo = rawTipo === 'ENVIO_DEFEITO' ? 'TRANSFERENCIA'
+            : rawTipo.startsWith('TRANSFER') ? 'TRANSFERENCIA'
+            : rawTipo.startsWith('SA') ? 'SAIDA'
+            : rawTipo.startsWith('ENTRADA') ? 'ENTRADA'
+            : rawTipo.startsWith('AJUSTE') ? rawTipo
+            : rawTipo;
+        const qtyInput = document.getElementById('mov-qty');
+        const qty = Number(qtyInput?.value || 0);
+        if (!selectedProductForMov || !Number.isFinite(qty) || qty <= 0) {
+            showToast('Selecione o produto e informe uma quantidade maior que zero.', 'warning');
+            return;
+        }
+        const localInput = document.getElementById('mov-local');
+        const origemInput = document.getElementById('mov-origem');
+        const destinoInput = document.getElementById('mov-destino');
+        const ajusteTipo = document.getElementById('mov-tipo-ajuste')?.value || 'positivo';
+        const tipoRpc = normalizedTipo === 'AJUSTE'
+            ? (ajusteTipo === 'positivo' ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO')
+            : normalizedTipo;
+        const localOrigem = tipoRpc === 'TRANSFERENCIA'
+            ? (origemInput?.value || '')
+            : (tipoRpc === 'SAIDA' || tipoRpc === 'AJUSTE_NEGATIVO' ? (localInput?.value || origemInput?.value || '') : '');
+        const localDestino = tipoRpc === 'TRANSFERENCIA' || tipoRpc === 'ENTRADA'
+            ? (destinoInput?.value || '')
+            : (tipoRpc === 'AJUSTE_POSITIVO' ? (localInput?.value || destinoInput?.value || '') : '');
+        const config = typeof getAppConfig === 'function' ? getAppConfig() : {};
+        const movement = await DataClient.registrarMovimentoEstoqueSupabase({
+            tipo: tipoRpc,
+            id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
+            local_origem: localOrigem,
+            local_destino: localDestino,
+            quantidade: qty,
+            usuario: localStorage.getItem('currentUser') || 'N/A',
+            origem: origemInput?.value && tipoRpc !== 'TRANSFERENCIA' ? origemInput.value : 'MANUAL',
+            observacao: document.getElementById('mov-obs')?.value?.trim() || '',
+            permitir_negativo: config.permitir_saida_estoque_zero === true,
+            executionId: options.executionId || `manual_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+        });
+        if (tipoRpc === 'SAIDA') {
+            await aplicarBaixaFIFOSeSaida(movement, movement.id_interno, movement.quantidade, movement.local_origem);
+        }
+        showToast('Movimento e estoque atualizados com sucesso!', 'success');
+        DataClient.invalidateCache('produtos');
+        DataClient.invalidateCache('movimentos');
+        closeNovaMovimentacaoModal?.();
+        setTimeout(() => renderMovimentacoesSubMenu(), 300);
+    } catch (error) {
+        console.error('[MOVIMENTO_ATOMICO] erro:', error);
+        showToast(error.message || 'Erro ao movimentar estoque.', 'error');
+    } finally {
+        isFinalizing = false;
+    }
+}
+
 async function saveNovaMovimentacao(tipo) {
- console.log('[MOV] salvar clicado - tipo:', tipo);
- 
- if (isFinalizing) {
- console.log('[MOV] Bloqueado: isFinalizing=true');
- return;
- }
- isFinalizing = true;
-
- // ==========================================
- // PASSO 1: LOCALIZAR E VALIDAR O PRODUTO
- // ==========================================
- console.log('========== VALIDACAO DETALHADA ==========');
- 
- // Texto validado em UTF-8.
- const produtosDisponiveis = appData.products || [];
- console.log('[MOV] produtos carregados no appData:', produtosDisponiveis.length);
- 
- // Segundo: tentar encontrar o produto no state
- const searchInput = document.getElementById('mov-search');
- const inputValue = searchInput?.value?.trim() || '';
- console.log('[MOV] valor do input produto:', inputValue);
- console.log('[MOV] selectedProductForMov do state:', selectedProductForMov);
- 
- // Texto validado em UTF-8.
- if (!selectedProductForMov && inputValue) {
- console.log('[MOV] trying to find product by text in appData...');
- 
- // Buscar em appData.products
- const produtoEncontrado = produtosDisponiveis.find(p => {
- const idInterno = p.id_interno || p.col_a || '';
- const ean = p.ean || '';
- return idInterno.toString().trim() === inputValue || 
- idInterno.toString().includes(inputValue) ||
- ean.toString().trim() === inputValue;
- });
- 
- if (produtoEncontrado) {
- selectedProductForMov = produtoEncontrado;
- console.log('[MOV] produto encontrado em appData.products:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
- } else {
- // Texto validado em UTF-8.
- console.log('[INFO] Operacao registrada.');
- try {
- const data = await DataClient.loadModule('produtos', false);
- if (data && data.products && data.products.length > 0) {
- appData.products = data.products;
- const produtoDataClient = data.products.find(p => {
- const idInterno = p.id_interno || p.col_a || '';
- return idInterno.toString().trim() === inputValue || 
- idInterno.toString().includes(inputValue);
- });
- if (produtoDataClient) {
- selectedProductForMov = produtoDataClient;
- console.log('[MOV] produto encontrado via DataClient:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
- }
- }
- } catch (e) {
- console.log('[MOV] erro ao carregar produtos via DataClient:', e);
- }
- }
- }
- 
- // Log final do produto
- console.log('[MOV] produto final para salvar:', selectedProductForMov ? (selectedProductForMov.id_interno || selectedProductForMov.col_a) : 'NULO');
- 
- // ==========================================
- // PASSO 2: VALIDAR PRODUTO
- // ==========================================
- if (!selectedProductForMov) {
- console.log('[MOV] ERRO: produto NAO encontrado');
- console.log('[INFO] Operacao registrada.');
- showToast('Operacao concluida.', 'info');
- isFinalizing = false;
- console.log('=========================================');
- return;
- }
- console.log('[MOV] produto OK:', selectedProductForMov.id_interno || selectedProductForMov.col_a);
-
- // ==========================================
- // PASSO 3: LOCALIZAR E VALIDAR QUANTIDADE
- // ==========================================
- const qtyInput = document.getElementById('mov-qty');
- const qtyRaw = qtyInput?.value;
- console.log('[MOV] elemento quantidade encontrado:', qtyInput ? 'SIM' : 'NAO');
- console.log('[MOV] valor bruto quantidade:', qtyRaw);
- 
- if (!qtyInput) {
- console.log('[MOV] ERRO: campo quantidade NAO encontrado no DOM');
- showToast('Operacao concluida.', 'info');
- isFinalizing = false;
- console.log('=========================================');
- return;
- }
-
- const qty = parseFloat(qtyRaw);
- console.log('[MOV] quantidade parseada:', qty, 'isNaN:', isNaN(qty));
-
- if (isNaN(qty) || qty <= 0) {
- console.log('[MOV] ERRO: quantidade invalida');
- console.log('[MOV] razao: qty <= 0 ou isNaN');
- showToast('Operacao concluida.', 'info');
- isFinalizing = false;
- console.log('=========================================');
- return;
- }
- console.log('[MOV] quantidade OK:', qty);
- 
- console.log('========== FIM VALIDACAO OK ==========');
-
- // ==========================================
- // PASSO 4: MONTAR PAYLOAD
- // ==========================================
- const obsInput = document.getElementById('mov-obs');
- const origemInput = document.getElementById('mov-origem');
- const destinoInput = document.getElementById('mov-destino');
- const localInput = document.getElementById('mov-local');
- const tipoAjusteInput = document.getElementById('mov-tipo-ajuste');
- const motivoInput = document.getElementById('mov-motivo');
-
- let localOrigem = '';
- let localDestino = '';
- let origem = 'MANUAL';
- let observacao = obsInput?.value?.trim() || '';
-
- if (tipo === 'ENTRADA') {
- localDestino = destinoInput?.value || '';
- origem = origemInput?.value || 'MANUAL';
- } else if (tipo === 'SAIDA') {
- localOrigem = localInput?.value || '';
- origem = origemInput?.value || 'MANUAL';
- } else if (tipo === 'TRANSFERENCIA') {
- localOrigem = document.getElementById('mov-origem')?.value || '';
- localDestino = destinoInput?.value || '';
- } else if (tipo === 'AJUSTE') {
- localOrigem = localInput?.value || '';
- const ajusteTipo = tipoAjusteInput?.value || 'positivo';
- const motivo = motivoInput?.value?.trim() || '';
- observacao = motivo ? `Ajuste ${ajusteTipo}: ${motivo}` : `Ajuste ${ajusteTipo}`;
- if (obsInput?.value?.trim()) {
- observacao += ' - ' + obsInput.value.trim();
- }
- }
-
- const movData = {
- tipo: tipo === 'AJUSTE' ? ((tipoAjusteInput?.value || 'positivo') === 'positivo' ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO') : tipo,
- id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
- local_origem: localOrigem,
- local_destino: localDestino,
- quantidade: qty,
- usuario: localStorage.getItem('currentUser'),
- origem: origem,
- observacao: observacao
- };
-
- console.log('[MOV] payload enviado:', JSON.stringify(movData, null, 2));
-
- showToast("Processando...");
-
- try {
- console.log('[MOV] Tentando insert em movimentos...');
- const savedMov = await DataClient.saveMovimentoSupabase(movData);
- 
- if (!savedMov) {
- console.log('[MOV] ERRO: insert movimentos retornou null');
- showToast("Erro ao gravar movimento.");
- isFinalizing = false;
- return;
- }
- 
- console.log('[MOV] insert movimentos sucesso:', savedMov);
-
- let stockSuccess = false;
- const idInterno = movData.id_interno;
-
- console.log(`[MOV] Atualizando estoque: tipo=${tipo} localOrigem=${localOrigem} localDestino=${localDestino}`);
- 
- if (tipo === 'ENTRADA') {
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
- } else if (tipo === 'SAIDA') {
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
- } else if (tipo === 'TRANSFERENCIA') {
- const outOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
- const inOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
- stockSuccess = outOk && inOk;
- } else if (tipo === 'AJUSTE') {
- const ajusteTipo = tipoAjusteInput?.value || 'positivo';
- const operacao = ajusteTipo === 'positivo' ? 'soma' : 'subtrai';
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, operacao, movData.quantidade);
- }
-
- console.log('[MOV] update estoque resultado:', stockSuccess);
-
- if (stockSuccess) {
- if (tipo === 'SAIDA') {
- await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
- }
- console.log('[INFO] Operacao registrada.');
- console.log('[MOV] resposta de sucesso');
- showToast('Operacao concluida.', 'info');
- 
- if (!appData.movimentacoes) appData.movimentacoes = [];
- appData.movimentacoes.unshift({
- ...savedMov,
- data: formatDateTimeBR(savedMov.data_hora)
- });
-
- DataClient.invalidateCache('produtos');
- 
- console.log('[INFO] Operacao registrada.');
- closeNovaMovimentacaoModal();
- 
- // Texto validado em UTF-8.
- setTimeout(() => {
- renderMovimentacoes();
- console.log('[MOV] mensagem exibida - tela atualizada');
- }, 300);
- } else {
- console.log('[INFO] Operacao registrada.');
- console.log('[MOV] resposta de erro');
- showToast('Operacao concluida.', 'info');
- console.log('[MOV] mensagem exibida');
- }
- } catch (e) {
- console.error('[MOV] ERRO fatal:', e);
- showToast("Erro fatal no processamento: " + e.message);
- } finally {
- isFinalizing = false;
- }
+    return saveMovimentacaoAtomica(tipo);
 }
 
 function renderTransferenciaForm() {
@@ -6669,96 +6588,7 @@ function selectProductForMov(id) {
 }
 
 async function saveMovimentacao(tipo) {
- if (isFinalizing) return;
- isFinalizing = true;
-
- const qtyInput = document.getElementById('mov-qty');
- const obsInput = document.getElementById('mov-obs');
- const origemInput = document.getElementById('mov-origem');
- const destinoInput = document.getElementById('mov-destino');
-
- if (!qtyInput || !origemInput) {
- showToast('Operacao concluida.', 'info');
- return;
- }
-
- const qty = parseFloat(qtyInput.value);
- const obs = obsInput ? obsInput.value.trim() : "";
- const localOrigem = origemInput.value;
- const localDestino = destinoInput?.value || '';
-
- if (!selectedProductForMov || isNaN(qty) || qty <= 0) {
- showToast("Selecione o produto e a quantidade.");
- return;
- }
-
- const movData = {
- tipo: normalizeText(tipo).includes('TRANSFERENCIA') ? 'TRANSFERENCIA' : tipo,
- id_interno: selectedProductForMov.id_interno || selectedProductForMov.col_a,
- local_origem: localOrigem,
- local_destino: localDestino,
- quantidade: qty,
- usuario: localStorage.getItem('currentUser'),
- origem: 'MANUAL',
- observacao: obs
- };
-
- showToast("Processando no Supabase...");
-
- try {
- // 1. Gravar registro de movimento
- const savedMov = await DataClient.saveMovimentoSupabase(movData);
- if (!savedMov) {
- showToast("Erro ao gravar movimento no Supabase.");
- isFinalizing = false;
- return;
- }
-
- console.log("[Supabase] Movimento id: " + savedMov.movimento_id + " gravado.");
-
- // Texto validado em UTF-8.
- let stockSuccess = false;
- const idInterno = movData.id_interno;
-
- if (movData.tipo === 'ENTRADA') {
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
- } else if (movData.tipo === 'SAIDA') {
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
- } else if (movData.tipo === 'AJUSTE') {
- stockSuccess = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'ajuste', movData.quantidade);
- } else if (movData.tipo === 'TRANSFERENCIA') {
- const outOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_origem, 'subtrai', movData.quantidade);
- const inOk = await DataClient.updateEstoqueSupabase(idInterno, movData.local_destino, 'soma', movData.quantidade);
- stockSuccess = outOk && inOk;
- }
-
- if (stockSuccess) {
- if (movData.tipo === 'SAIDA') {
- await aplicarBaixaFIFOSeSaida(savedMov, idInterno, movData.quantidade, movData.local_origem);
- }
- showToast("Movimento e estoque atualizados!");
- 
- // Texto validado em UTF-8.
- if (!appData.movimentacoes) appData.movimentacoes = [];
- appData.movimentacoes.unshift({
- ...savedMov,
- data: formatDateTimeBR(savedMov.data_hora)
- });
-
- // Texto validado em UTF-8.
- DataClient.invalidateCache('inventory'); 
- 
- setTimeout(() => renderMovimentacoesSubMenu(), 1500);
- } else {
- console.log('[INFO] Operacao registrada.');
- showToast('Operacao concluida.', 'info');
- }
- } catch (e) {
- console.error("[Supabase] Erro inesperado:", e);
- showToast("Erro fatal no processamento.");
- } finally {
- isFinalizing = false;
- }
+    return saveMovimentacaoAtomica(tipo);
 }
 
 async function renderMovimentacoesHistory() {
@@ -9182,22 +9012,17 @@ async function rollbackStockChange(idInterno, local, operacaoOriginal, quantidad
 }
 
 async function applyStockChangeWithRequiredMovement({ idInterno, local, operacao, quantidade, movPayload, contextLabel }) {
- const existingMov = await findExistingRequiredMovement(movPayload);
- if (existingMov) {
- console.log('[MOV] estoque nao foi alterado novamente porque o movimento ja existia:', existingMov);
- return existingMov;
- }
-
- const ok = await DataClient.updateEstoqueSupabase(idInterno, local, operacao, quantidade);
- if (!ok) throw new Error(`Falha ao atualizar estoque do produto ${idInterno}`);
-
- try {
- const savedMov = await saveRequiredMovimentoSupabase(movPayload, contextLabel);
- return savedMov;
- } catch (error) {
- await rollbackStockChange(idInterno, local, operacao, quantidade, contextLabel);
- throw error;
- }
+    const tipo = operacao === 'soma' ? (movPayload.tipo || 'ENTRADA') : (movPayload.tipo || 'SAIDA');
+    return DataClient.registrarMovimentoEstoqueSupabase({
+        ...movPayload,
+        tipo,
+        id_interno: idInterno,
+        local_origem: movPayload.local_origem || (operacao === 'subtrai' ? local : ''),
+        local_destino: movPayload.local_destino || (operacao === 'soma' ? local : ''),
+        quantidade,
+        executionId: movPayload.executionId ||
+            `required:${contextLabel || tipo}:${idInterno}:${local}`
+    });
 }
 
 async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoFisico, saldoSistema, movPayload, contextLabel }) {
@@ -9218,137 +9043,52 @@ async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoF
 
 
 window.finishInventorySession = async function () {
- if (isFinalizing) return;
- if (!isCurrentInventoryEditable()) { showToast("Apenas quem iniciou a sessao pode finalizar.", "error"); return; }
- showToast('Preparando finalizacao do inventario...', 'info');
-
- const totalProdutos = appData.currentInventory.items.length;
- const totalUnidades = appData.currentInventory.items.reduce((acc, item) => acc + Number(item.qty || item.saldo_fisico || 0), 0);
- const confirmed = await showAppConfirm({
- title: 'Atencao',
- message: 'Revise os dados e tente novamente.',
- detail: 'Confira os campos obrigatorios antes de continuar.',
- summary: `Produtos diferentes: ${totalProdutos}\nQuantidade total contada: ${formatStockNumber(totalUnidades)} UN`,
- confirmLabel: 'Confirmar',
- cancelLabel: 'Cancelar'
- });
- if (!confirmed) return;
-
- isFinalizing = true;
-
- const client = window.supabaseClient;
- showToast('Operacao concluida.', 'info');
-
- const btn = document.getElementById('btn-finish-inv');
- if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.innerHTML = 'PROCESSANDO...'; }
-
- try {
- const sessionId = appData.currentInventory.id;
- const local = appData.currentInventory.local;
- const user = localStorage.getItem('currentUser');
- 
- // TAREFA 2 - Buscar itens reais do banco antes de processar
- console.log('[INV-DIAG] buscando itens reais para finalizar:', sessionId);
- const { data: dbItems, error: fetchErr } = await client
- .from('inventarios_itens')
- .select('*')
- .eq('inventario_id', sessionId);
-
- if (fetchErr || !dbItems || dbItems.length === 0) {
- console.error('[INV-DIAG] erro ou nenhum item encontrado:', fetchErr);
- showToast('Operacao concluida.', 'info');
- isFinalizing = false;
- if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'FINALIZAR INVENTARIO'; }
- return;
- }
-
- const groupedDbItems = groupInventoryItemsByProduct(dbItems);
- console.log('[INV-DIAG] itens para finalizar:', dbItems.length, 'agrupados:', groupedDbItems.length);
-
- let total_skus = groupedDbItems.length;
- let total_itens = 0;
- let total_itens_contados = 0;
- let total_divergencias = 0;
- let valor_ajuste_positivo = 0;
- let valor_ajuste_negativo = 0;
-
- let step = 0;
- for (const item of groupedDbItems) {
- step++;
- if (btn) btn.innerHTML = `PROCESSANDO ${step}/${total_skus}...`;
- 
- const saldo_sistema = parseFloat(item.saldo_sistema || 0);
- const saldo_fisico = parseFloat(item.qty || item.saldo_fisico || 0);
- const diferenca = saldo_fisico - saldo_sistema;
- const valor_unitario = roundMoney(item.valor_unitario || 0);
-
- total_itens += saldo_sistema;
- total_itens_contados += saldo_fisico;
- if (diferenca !== 0) {
- total_divergencias++;
- if (diferenca > 0) valor_ajuste_positivo += (diferenca * valor_unitario);
- else valor_ajuste_negativo += (Math.abs(diferenca) * valor_unitario);
- }
-
- // 1. Refletir saldo fisico em estoque_atual e exigir movimento confirmado.
- const itemLocal = item.local || local;
- const movPayload = {
- tipo: diferenca > 0 ? 'AJUSTE_POSITIVO' : (diferenca < 0 ? 'AJUSTE_NEGATIVO' : 'INVENTÁRIO'),
- id_interno: item.id_interno,
- local_origem: diferenca < 0 ? itemLocal : null,
- local_destino: diferenca >= 0 ? itemLocal : null,
- quantidade: Math.abs(diferenca),
- usuario: user,
- origem: 'APP_INVENTARIO',
- observacao: diferenca === 0 ? `Inventario ${sessionId} conferido sem divergencia` : sessionId
- };
- console.log('[INV-DIAG] estoque/movimento inventario payload:', {
- id_interno: item.id_interno,
- local: itemLocal,
- saldo_sistema,
- saldo_fisico,
- movPayload
- });
- const movResult = await applyInventoryStockWithRequiredMovement({
- item,
- itemLocal,
- saldoFisico: saldo_fisico,
- saldoSistema: saldo_sistema,
- movPayload,
- contextLabel: `movimento do inventario ${sessionId}`
- });
- console.log('[INV-DIAG] estoque/movimento inventario confirmado:', movResult);
- }
-
- // Texto validado em UTF-8.
- console.log('[INV-DIAG] executando fechamento final...');
- const { error: finalErr } = await client.from('inventarios').update({
- status: 'FECHADO',
- data_fim: getDataHoraBrasil(),
- atualizado_em: getDataHoraBrasil(),
- total_skus: total_skus,
- total_itens: total_itens,
- total_itens_contados: total_itens_contados,
- total_divergencias: total_divergencias,
- valor_ajuste_positivo: valor_ajuste_positivo,
- valor_ajuste_negativo: valor_ajuste_negativo
- }).eq('inventario_id', sessionId);
- 
- console.log('[INV-DIAG] fechamento result:', finalErr ? 'ERRO' : 'OK');
-
- if (finalErr) throw finalErr;
-
- showToast('Operacao concluida.', 'info');
- appData.currentInventory = null;
- renderInventorySuccessScreen();
-
- } catch (err) {
- console.log('[INFO] Operacao registrada.');
- showToast('Erro ao finalizar: ' + err.message, 'error');
- if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = '&#10003; Finalizar Inventario'; }
- } finally {
- isFinalizing = false;
- }
+    if (isFinalizing) return;
+    if (!isCurrentInventoryEditable()) {
+        showToast('Apenas quem iniciou a sessao pode finalizar.', 'error');
+        return;
+    }
+    if (!appData.currentInventory?.items?.length) {
+        showToast('Nao e possivel fechar um inventario vazio.', 'error');
+        return;
+    }
+    const sessionId = appData.currentInventory.id;
+    const confirmed = await showAppConfirm({
+        title: 'Confirmar finalizacao do inventario',
+        message: 'A contagem fisica sera aplicada ao estoque em uma unica operacao segura.',
+        detail: 'Se qualquer produto falhar, nenhum saldo sera alterado e o inventario permanecera aberto.',
+        confirmLabel: 'Finalizar inventario',
+        cancelLabel: 'Cancelar'
+    });
+    if (!confirmed) return;
+    isFinalizing = true;
+    const btn = document.getElementById('btn-finish-inv');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.innerHTML = 'PROCESSANDO...';
+    }
+    try {
+        const result = await DataClient.finalizarInventarioEstoqueSupabase(
+            sessionId,
+            localStorage.getItem('currentUser') || 'N/A',
+            `inventario:${sessionId}`
+        );
+        console.log('[INVENTARIO_ATOMICO] finalizado:', result);
+        showToast('Inventario finalizado e estoque atualizado com sucesso!', 'success');
+        appData.currentInventory = null;
+        renderInventorySuccessScreen();
+    } catch (error) {
+        console.error('[INVENTARIO_ATOMICO] erro:', error);
+        showToast('Erro ao finalizar: ' + (error.message || error), 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.innerHTML = 'Finalizar inventario';
+        }
+    } finally {
+        isFinalizing = false;
+    }
 }
 
 async function adjustInventoryQty(index, delta) {
@@ -10012,30 +9752,7 @@ async function saveInventoryLocationCount(item, countedQty) {
  atualizado_em: getDataHoraBrasil()
  };
 
- if (diferencaAtual !== 0) {
- const movPayload = {
- tipo: diferencaAtual > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO',
- id_interno: item.id_interno,
- local_origem: diferencaAtual < 0 ? stockLocal : null,
- local_destino: diferencaAtual > 0 ? stockLocal : null,
- quantidade: Math.abs(diferencaAtual),
- usuario: auditUser.name || localStorage.getItem('currentUser') || 'N/A',
- origem: 'APP_INVENTARIO',
- observacao: `Inventario localizacao ${session.id} | ${item.localizacao_estoque || 'Sem localizacao'} | saldo ${saldoAtual} -> ${saldoFisico}`
- };
-
- await applyInventoryStockWithRequiredMovement({
- item,
- itemLocal: stockLocal,
- saldoFisico,
- saldoSistema: saldoAtual,
- movPayload,
- contextLabel: `ajuste direto do inventario por localizacao ${session.id}`
- });
- } else {
- const stockOk = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, stockLocal, saldoFisico);
- if (!stockOk) throw new Error(`Falha ao confirmar saldo do item ${item.id_interno}`);
- }
+        // A contagem apenas registra a evidencia. O saldo sera aplicado atomicamente na finalizacao.
 
  const { data: existingRows, error: selectError } = await client
  .from('inventarios_itens')
@@ -28529,22 +28246,10 @@ async function renderGarantiaEnvioForm() {
  observacao: `${garantiaData.tipo_operacao}: Enviado de ${selectedSource} para EM_GARANTIA. Motivo: ${garantiaData.motivo}`
  };
 
- const subOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, selectedSource, 'subtrai', qty);
- if (!subOk) throw new Error('Erro ao baixar saldo da origem');
-
- const addOk = await DataClient.updateEstoqueSupabase(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty);
- if (!addOk) {
- await rollbackStockChange(selectedProduct.id_interno, selectedSource, 'subtrai', qty, 'garantia');
- throw new Error('Erro ao creditar saldo em garantia');
- }
-
- try {
- await saveRequiredMovimentoSupabase(movPayload, 'movimento de garantia');
- } catch (movError) {
- await rollbackStockChange(selectedProduct.id_interno, 'EM_GARANTIA', 'soma', qty, 'garantia');
- await rollbackStockChange(selectedProduct.id_interno, selectedSource, 'subtrai', qty, 'garantia');
- throw movError;
- }
+            await DataClient.registrarMovimentoEstoqueSupabase({
+                ...movPayload,
+                executionId: `garantia:${result.id || result.garantia_id || Date.now()}:${selectedProduct.id_interno}`
+            });
 
  showToast('Garantia registrada e estoque movido!', 'success');
  await DataClient.loadModule('produtos', true);

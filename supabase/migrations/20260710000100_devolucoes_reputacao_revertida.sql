@@ -36,7 +36,11 @@ begin
 end;
 $$;
 
+revoke all on function public.atualizar_acompanhamento_devolucao(uuid, boolean, text, numeric, numeric, boolean)
+    from public;
+revoke execute on function public.atualizar_acompanhamento_devolucao(uuid, boolean, text, numeric, numeric, boolean)
+    from anon;
 grant execute on function public.atualizar_acompanhamento_devolucao(uuid, boolean, text, numeric, numeric, boolean)
-    to anon, authenticated, service_role;
+    to authenticated, service_role;
 
 notify pgrst, 'reload schema';

@@ -533,6 +533,53 @@ const DataClient = (function () {
         invalidateCache('movimentos');
         return data;
     }
+    async function registrarMovimentoEstoqueSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const rpcPayload = {
+            p_tipo: normalizeMovimentoTipo(payload.tipo),
+            p_id_interno: String(payload.id_interno || '').trim(),
+            p_local_origem: normalizeLocal(payload.local_origem),
+            p_local_destino: normalizeLocal(payload.local_destino),
+            p_quantidade: Number(payload.quantidade || 0),
+            p_usuario: payload.usuario || 'N/A',
+            p_origem: normalizeMovimentoOrigem(payload.origem),
+            p_observacao: payload.observacao || '',
+            p_permitir_negativo: payload.permitir_negativo === true,
+            p_execution_id: payload.executionId || `movimento_${Date.now()}`
+        };
+        const { data, error } = await client.rpc('registrar_movimento_estoque', rpcPayload);
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('registrar_movimento_estoque');
+            throw new Error(missingRpc
+                ? 'A migracao de estoque transacional ainda nao foi aplicada no Supabase. A operacao foi bloqueada.'
+                : (error.message || 'Erro ao registrar movimento de estoque'));
+        }
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
+
+    async function finalizarInventarioEstoqueSupabase(inventarioId, usuario, executionId = '') {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('finalizar_inventario_estoque', {
+            p_inventario_id: String(inventarioId || '').trim(),
+            p_usuario: usuario || 'N/A',
+            p_execution_id: executionId || `inventario:${inventarioId}`
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('finalizar_inventario_estoque');
+            throw new Error(missingRpc
+                ? 'A migracao de inventario transacional ainda nao foi aplicada no Supabase. A finalizacao foi bloqueada.'
+                : (error.message || 'Erro ao finalizar inventario'));
+        }
+        invalidateCache('inventarios');
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
+
     /**
      * Reflete a contagem fisica do inventario em estoque_atual.
      * O inventario e a fonte de verdade: saldo_disponivel e saldo_total recebem saldo_fisico.
@@ -2143,7 +2190,7 @@ const DataClient = (function () {
         for (const item of itensParaEstoque) {
             const localDestino = item.apto_venda !== false ? 'TERREO' : 'DEFEITO';
             const quantidade = Number(item.quantidade || 0);
-            const movimento = await saveMovimentoSupabase({
+            const movimento = await registrarMovimentoEstoqueSupabase({
                 tipo: 'ENTRADA',
                 id_interno: item.id_interno,
                 local_origem: '',
@@ -2151,12 +2198,9 @@ const DataClient = (function () {
                 quantidade,
                 usuario: devolucao.responsavel || localStorage.getItem('currentUser') || 'N/A',
                 origem: 'MANUAL',
-                observacao: 'Devolucao marketplace pedido ' + (devolucao.pedido || '-') + (item.apto_venda !== false ? ' - produto apto para venda' : ' - produto nao apto enviado para defeito')
+                observacao: 'Devolucao marketplace pedido ' + (devolucao.pedido || '-') + (item.apto_venda !== false ? ' - produto apto para venda' : ' - produto nao apto enviado para defeito'),
+                executionId: `devolucao:${devolucaoId}:${item.id_interno}:${localDestino}`
             });
-            if (!movimento) throw new Error('Erro ao gerar movimento de estoque para ' + item.id_interno);
-
-            const estoqueOk = await updateEstoqueSupabase(item.id_interno, localDestino, 'soma', quantidade);
-            if (!estoqueOk) throw new Error('Movimento criado, mas o estoque nao foi atualizado para ' + item.id_interno);
 
             if (canMarkDevolucaoItems) {
                 const { error: updateItemError } = await client
@@ -2475,6 +2519,8 @@ const DataClient = (function () {
         saveMovimentoSupabase,
         updateEstoqueSupabase,
         registrarAjusteEstoqueSupabase,
+        registrarMovimentoEstoqueSupabase,
+        finalizarInventarioEstoqueSupabase,
         aplicarSaldoFisicoInventarioSupabase,
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,
