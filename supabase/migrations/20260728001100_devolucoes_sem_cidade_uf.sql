@@ -1,6 +1,23 @@
 -- DY Auto Parts - devolucoes sem cidade e UF
 -- Recria o salvamento usando somente os campos presentes no formulario atual.
 
+alter table public.devolucao_itens
+    add column if not exists apto_venda boolean not null default false,
+    add column if not exists estoque_movimentado boolean not null default false,
+    add column if not exists estoque_local text,
+    add column if not exists estoque_movimento_id text;
+
+alter table public.devolucao_itens
+    alter column estoque_movimento_id type text using estoque_movimento_id::text;
+
+comment on column public.devolucao_itens.apto_venda
+    is 'Define se o item devolvido retorna ao estoque de venda.';
+comment on column public.devolucao_itens.estoque_movimentado
+    is 'Impede que a mesma devolucao movimente o estoque mais de uma vez.';
+comment on column public.devolucao_itens.estoque_local
+    is 'Local de entrada do item devolvido: TERREO ou DEFEITO.';
+comment on column public.devolucao_itens.estoque_movimento_id
+    is 'Movimento de estoque vinculado ao item da devolucao.';
 create or replace function public.salvar_devolucao_marketplace(
     p_devolucao jsonb,
     p_itens jsonb

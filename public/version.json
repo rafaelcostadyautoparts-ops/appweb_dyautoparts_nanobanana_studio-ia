@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.52",
-    "build":  "2026.07.29.1",
-    "commit":  "separacao-estoque-negativo",
+    "version":  "2.1.53",
+    "build":  "2026.07.29.2",
+    "commit":  "devolucao-itens-schema-layout",
     "deployDate":  "2026-07-29"
 }
