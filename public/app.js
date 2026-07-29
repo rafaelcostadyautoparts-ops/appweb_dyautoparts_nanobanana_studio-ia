@@ -32814,7 +32814,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <select id="dev-history-channel" onchange="setHistoricoDevolucaoChannel(this.value)"><option value="todos">Todos os canais</option><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select>
  <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
  </section>
- <div id="dev-history-metrics" class="devolucao-history-metrics"></div>
+ <div id="dev-history-metrics" class="devolucao-history-metrics"></div><div class="devolucao-metrics-note"><span class="material-symbols-rounded">info</span><p>Os valores s\u00e3o atualizados automaticamente com base nas devolu\u00e7\u00f5es registradas no per\u00edodo selecionado.</p></div>
  <div id="dev-history-results-heading" class="devolucao-results-heading"><h2>Devolu\u00e7\u00f5es realizadas</h2><span>0 produto(s)</span></div>
  <section id="dev-history-list" class="devolucao-history-list"><div class="devolucao-history-loading"><span class="material-symbols-rounded dev-spin">progress_activity</span> Carregando devolu\u00e7\u00f5es...</div></section>
  <section id="dev-control-metrics" class="devolucao-control-metrics"></section>
@@ -33061,14 +33061,14 @@ function renderHistoricoDevolucaoList() {
  controlMetrics.style.display = 'none';
  const saldoLiquido = periodRecords.reduce((sum, row) => sum + getDevolucaoSaldoLiquido(row), 0);
  metrics.innerHTML = `
- <article class="metric-purple"><span class="material-symbols-rounded">assignment_return</span><div><small>Devolu\u00e7\u00f5es no per\u00edodo</small><strong>${periodRecords.length}</strong></div></article>
- <article class="metric-green"><span class="material-symbols-rounded">inventory</span><div><small>Estoque recuperado</small><strong>${formatCurrency(financialTotals.recuperado)}</strong></div></article>
- <article class="metric-red ${saldoMarketplaceTotal > 0 ? 'is-positive' : ''}"><span class="material-symbols-rounded">swap_horiz</span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></article>
- <article class="metric-green is-positive"><span class="material-symbols-rounded">recycling</span><div><small>Reembolsado ML</small><strong>${formatCurrency(reembolsos)}</strong></div></article>
- <article class="${saldoLiquido < 0 ? 'metric-red is-alert' : 'metric-green is-positive'}"><span class="material-symbols-rounded">sync_alt</span><div><small>Saldo l\u00edquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquido)}</strong></div></article>
- <article class="metric-orange is-warning"><span class="material-symbols-rounded">star</span><div><small>Marketplace acionado</small><strong>${acionados}</strong></div></article>
- <article class="metric-red is-alert"><span class="material-symbols-rounded">shield</span><div><small>Reputa\u00e7\u00e3o afetada</small><strong>${reputacaoAfetada}</strong></div></article>
- <article class="metric-green is-positive"><span class="material-symbols-rounded">check_circle</span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></article>`;
+ <article class="metric-purple"><span class="material-symbols-rounded">manage_search</span><div><small>Devolu\u00e7\u00f5es no per\u00edodo</small><strong>${periodRecords.length}</strong></div></article>
+ <article class="metric-green"><span class="material-symbols-rounded">inventory_2</span><div><small>Estoque recuperado</small><strong>${formatCurrency(financialTotals.recuperado)}</strong></div></article>
+ <article class="metric-red ${saldoMarketplaceTotal > 0 ? 'is-positive' : ''}"><span class="material-symbols-rounded">account_balance_wallet</span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></article>
+ <article class="metric-green is-positive"><span class="material-symbols-rounded">savings</span><div><small>Reembolsado ML</small><strong>${formatCurrency(reembolsos)}</strong></div></article>
+ <article class="${saldoLiquido < 0 ? 'metric-red is-alert' : 'metric-green is-positive'}"><span class="material-symbols-rounded">trending_down</span><div><small>Saldo l\u00edquido</small><strong>${formatSignedMarketplaceSaldo(saldoLiquido)}</strong></div></article>
+ <article class="metric-orange is-warning"><span class="material-symbols-rounded">storefront</span><div><small>Marketplace acionado</small><strong>${acionados}</strong></div></article>
+ <article class="metric-red is-alert"><span class="material-symbols-rounded">warning</span><div><small>Reputa\u00e7\u00e3o afetada</small><strong>${reputacaoAfetada}</strong></div></article>
+ <article class="metric-green is-positive"><span class="material-symbols-rounded">verified_user</span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></article>`;
  if (devolucaoHistoricoState.error) {
  list.innerHTML = `<div class="devolucao-history-error"><span class="material-symbols-rounded">database_off</span><strong>Hist\u00f3rico indispon\u00edvel</strong><p>${escapeDevolucaoHTML(devolucaoHistoricoState.error)}</p></div>`;
  return;
