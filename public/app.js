@@ -33105,11 +33105,10 @@ function renderHistoricoDevolucaoList() {
  </div>` : '';
  return `<article class="devolucao-history-card status-${businessStatus} ${hasDivergence ? 'has-divergence' : ''} ${needsMarketplaceFollowUp ? 'marketplace-follow-up' : ''} ${saldoLiquidoMarketplace < 0 ? 'has-marketplace-loss' : ''}">
  <header class="devolucao-history-mainline">
- <div class="dev-history-cell dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div>
- <div class="dev-history-cell dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}<span class="devolucao-created-at"><span class="material-symbols-rounded">schedule</span> Lan\u00e7ado ${formatDevolucaoCreatedAt(row)}</span></div>
- <div class="dev-history-cell dev-history-name"><small>Nome</small><strong>${escapeDevolucaoHTML(row.remetente || 'Remetente n\u00e3o informado')}</strong></div>
- <div class="dev-history-cell devolucao-history-date"><small>Data</small><strong>${formatDevolucaoDate(row.data_devolucao)}</strong></div>
- <select class="devolucao-status-select status-${businessStatus}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
+ <div class="dev-history-cell dev-history-channel-order"><div class="dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div><div class="dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}</div></div>
+<div class="dev-history-cell dev-history-dates"><div class="devolucao-created-at"><small>Lan\u00e7amento</small><strong><span class="material-symbols-rounded">schedule</span>${formatDevolucaoCreatedAt(row)}</strong></div><div class="devolucao-return-date"><small>Devolu\u00e7\u00e3o</small><strong><span class="material-symbols-rounded">event</span>${formatDevolucaoDate(row.data_devolucao)}</strong></div></div>
+<div class="dev-history-cell dev-history-name"><small>Nome</small><strong>${escapeDevolucaoHTML(row.remetente || 'Remetente n\u00e3o informado')}</strong></div>
+<select class="devolucao-status-select status-${businessStatus}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
  ${getDevolucaoStatusOptions(row)}
  </select>
  <div class="devolucao-record-actions">
