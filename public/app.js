@@ -9013,6 +9013,8 @@ async function rollbackStockChange(idInterno, local, operacaoOriginal, quantidad
 
 async function applyStockChangeWithRequiredMovement({ idInterno, local, operacao, quantidade, movPayload, contextLabel }) {
     const tipo = operacao === 'soma' ? (movPayload.tipo || 'ENTRADA') : (movPayload.tipo || 'SAIDA');
+    const permitirNegativo = movPayload.permitir_negativo === true
+        || (operacao === 'subtrai' && isSaidaEstoqueZeroPermitida());
     return DataClient.registrarMovimentoEstoqueSupabase({
         ...movPayload,
         tipo,
@@ -9020,11 +9022,11 @@ async function applyStockChangeWithRequiredMovement({ idInterno, local, operacao
         local_origem: movPayload.local_origem || (operacao === 'subtrai' ? local : ''),
         local_destino: movPayload.local_destino || (operacao === 'soma' ? local : ''),
         quantidade,
+        permitir_negativo: permitirNegativo,
         executionId: movPayload.executionId ||
             `required:${contextLabel || tipo}:${idInterno}:${local}`
     });
 }
-
 async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoFisico, saldoSistema, movPayload, contextLabel }) {
  const stockResult = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldoFisico);
  if (!stockResult) throw new Error(`Falha ao refletir inventario no estoque do item ${item.id_interno}`);

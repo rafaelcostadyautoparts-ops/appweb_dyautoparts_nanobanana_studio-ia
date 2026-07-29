@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.51",
-    "build":  "2026.07.28.12",
-    "commit":  "devolucao-sem-cidade-uf",
-    "deployDate":  "2026-07-28"
+    "version":  "2.1.52",
+    "build":  "2026.07.29.1",
+    "commit":  "separacao-estoque-negativo",
+    "deployDate":  "2026-07-29"
 }
