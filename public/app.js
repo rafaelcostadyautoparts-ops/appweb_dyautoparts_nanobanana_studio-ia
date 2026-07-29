@@ -32206,6 +32206,16 @@ function applyDevolucaoResultado(item, resultado) {
  item.estoque_local = selected === 'apto' ? 'TERREO' : ['defeito', 'garantia'].includes(selected) ? 'DEFEITO' : '';
 }
 
+function openDevolucaoDatePicker() {
+ const input = document.getElementById('dev-data');
+ if (!input) return;
+ input.focus();
+ if (typeof input.showPicker === 'function') {
+ try { input.showPicker(); } catch (_) { input.click(); }
+ } else {
+ input.click();
+ }
+}
 function setDevolucaoModalValue(id, value) {
  const element = document.getElementById(id);
  if (element) element.value = value ?? '';
@@ -32334,7 +32344,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <label class="dev-field-channel"><span>Canal *</span><select id="dev-canal"><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select></label>
  <label class="dev-field-order"><span>N\u00ba do pedido *</span><input id="dev-pedido" type="text" placeholder="Ex.: 2000016754821096" autocomplete="off"></label>
  <label class="dev-field-sender"><span>Remetente</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">person</span><input id="dev-remetente" type="text" placeholder="Nome do cliente"></span></label>
- <label class="dev-field-date"><span>Data da devolu\u00e7\u00e3o *</span><input id="dev-data" type="date"></label>
+ <label class="dev-field-date"><span>Data da devolu\u00e7\u00e3o *</span><span class="dev-date-picker-wrap"><input id="dev-data" type="date"><button type="button" class="dev-date-picker-button" onclick="event.preventDefault(); event.stopPropagation(); openDevolucaoDatePicker()" title="Abrir calend\u00e1rio" aria-label="Abrir calend\u00e1rio"><span class="material-symbols-rounded">calendar_month</span></button></span></label>
  <label class="dev-field-reason"><span>Motivo da devolu\u00e7\u00e3o *</span><select id="dev-motivo"><option>Devolu\u00e7\u00e3o</option><option>Troca</option><option>Produto n\u00e3o entregue</option><option>Produto errado</option></select></label>
  <label class="dev-field-impact"><span>Afetou reputa\u00e7\u00e3o?</span><select id="dev-reputacao"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
  <label class="dev-field-action"><span>Acionado marketplace?</span><select id="dev-marketplace-acionado"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>

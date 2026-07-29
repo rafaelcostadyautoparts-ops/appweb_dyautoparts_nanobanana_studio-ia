@@ -71262,3 +71262,9 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container {
 .devolucao-history-screen .dev-history-side .devolucao-edit-record-btn { color:#2563eb !important; }
 .devolucao-history-screen .dev-history-side .devolucao-delete-record-btn { color:#dc3941 !important; }
 .devolucao-history-screen .dev-history-side .devolucao-record-actions button:hover { background:#f8fafc !important; transform:none; }
+/* Calendario visivel na nova devolucao v2.1.60 */
+.devolucao-modal-redesign .dev-date-picker-wrap { position:relative; display:flex; width:100%; min-width:0; }
+.devolucao-modal-redesign .dev-date-picker-wrap > input { width:100%; padding-right:54px !important; }
+.devolucao-modal-redesign .dev-date-picker-button { position:absolute; top:50%; right:7px; display:grid; width:38px; height:38px; padding:0; place-items:center; border:0; border-radius:9px; color:#2563eb; background:#eaf2ff; transform:translateY(-50%); cursor:pointer; }
+.devolucao-modal-redesign .dev-date-picker-button:hover { color:#1d4ed8; background:#dbeafe; }
+.devolucao-modal-redesign .dev-date-picker-button .material-symbols-rounded { font-size:21px; }

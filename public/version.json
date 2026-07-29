@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.59",
-    "build":  "2026.07.29.8",
-    "commit":  "devolucao-status-clean",
+    "version":  "2.1.60",
+    "build":  "2026.07.29.9",
+    "commit":  "devolucao-calendario-visivel",
     "deployDate":  "2026-07-29"
 }
