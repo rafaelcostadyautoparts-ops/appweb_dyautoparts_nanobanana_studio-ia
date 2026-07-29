@@ -2263,7 +2263,7 @@ const DataClient = (function () {
             p_observacao: String(observacao || '').trim(),
             p_saldo_marketplace: Number(saldoMarketplace || 0)
         };
-        const expectedReimbursement = Number(tarifaReembolso || 0);
+        const expectedReimbursement = Math.abs(Number(tarifaReembolso || 0));
         let supportsReputation = true;
         let { error } = await client.rpc('atualizar_acompanhamento_devolucao', {
             ...basePayload,

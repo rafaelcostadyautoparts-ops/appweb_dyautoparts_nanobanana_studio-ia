@@ -32273,7 +32273,7 @@ function buildDevolucaoMarketplacePayload(pedido, dataDevolucao) {
  status,
  observacao_acompanhamento: document.getElementById('dev-marketplace-observacao')?.value.trim() || '',
  saldo_marketplace: Number(document.getElementById('dev-saldo-marketplace')?.value || 0),
- tarifa_devolucao_reembolsada: Number(document.getElementById('dev-tarifa-reembolso')?.value || 0),
+ tarifa_devolucao_reembolsada: Math.abs(Number(document.getElementById('dev-tarifa-reembolso')?.value || 0)),
  responsavel: localStorage.getItem('currentUser') || 'N/A'
  },
  itens: devolucaoMarketplaceState.draftItems.map(getDevolucaoItemPayload)
@@ -32340,7 +32340,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <label class="dev-field-action"><span>Acionado marketplace?</span><select id="dev-marketplace-acionado"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
  <label class="dev-saldo-field"><span>Saldo marketplace (R$)</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">paid</span><input id="dev-saldo-marketplace" type="number" inputmode="decimal" step="0.01" value="0.00" oninput="updateDevolucaoSaldoFeedback()"></span><small id="dev-saldo-feedback" class="is-zero">Saldo zerado: opera\u00e7\u00e3o neutra.</small></label>
  <label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace <em>(opcional)</em></span><span class="dev-observation-input"><span class="material-symbols-rounded">chat_bubble</span><input id="dev-marketplace-observacao" type="text" maxlength="500" placeholder="Ex.: Protocolo, resposta recebida ou pr\u00f3xima a\u00e7\u00e3o..." oninput="document.getElementById('dev-observation-count').textContent = this.value.length + '/500'"><small id="dev-observation-count">${String(editRecord?.observacao_acompanhamento || '').length}/500</small></span></label>
- <input id="dev-tarifa-reembolso" type="hidden" value="${Number(editRecord?.tarifa_devolucao_reembolsada || 0).toFixed(2)}">
+ <input id="dev-tarifa-reembolso" type="hidden" value="${Math.abs(Number(editRecord?.tarifa_devolucao_reembolsada || 0)).toFixed(2)}">
  </div></section>
  <section class="devolucao-section-card devolucao-items-section devolucao-items-unified">
  <div class="devolucao-section-title"><span>2</span><div><h2>Itens desta devolu\u00e7\u00e3o</h2><p>Bipe para adicionar diretamente ou use + para preencher os dados manualmente.</p></div><div class="devolucao-scan-count"><small>Produtos adicionados</small><strong id="dev-item-count">0</strong></div></div>
@@ -32364,7 +32364,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  setDevolucaoModalValue('dev-reputacao', editRecord.impactou_reputacao ? 'true' : 'false');
  setDevolucaoModalValue('dev-marketplace-acionado', editRecord.marketplace_acionado ? 'true' : 'false');
  setDevolucaoModalValue('dev-saldo-marketplace', Number(editRecord.saldo_marketplace || 0).toFixed(2));
- setDevolucaoModalValue('dev-tarifa-reembolso', Number(editRecord.tarifa_devolucao_reembolsada || 0).toFixed(2));
+ setDevolucaoModalValue('dev-tarifa-reembolso', Math.abs(Number(editRecord.tarifa_devolucao_reembolsada || 0)).toFixed(2));
  setDevolucaoModalValue('dev-marketplace-observacao', editRecord.observacao_acompanhamento || '');
  updateDevolucaoSaldoFeedback();
  }
@@ -33097,7 +33097,7 @@ function renderHistoricoDevolucaoList() {
  <label class="devolucao-followup-observation"><span>Acompanhamento</span><textarea id="dev-followup-note-${row.id}" rows="3" placeholder="Observa\u00e7\u00e3o do acompanhamento...">${escapeDevolucaoHTML(row.observacao_acompanhamento || '')}</textarea></label>
  <div class="devolucao-followup-financial-stack">
  <label class="devolucao-followup-balance ${saldoMarketplace < 0 ? 'is-negative' : saldoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><span>Saldo marketplace</span><span class="devolucao-money-input"><b>R$</b><input id="dev-followup-saldo-${row.id}" type="number" inputmode="decimal" step="0.01" value="${saldoMarketplace.toFixed(2)}" oninput="updateDevolucaoMoneyTone(this)" aria-label="Saldo do marketplace"></span></label>
- <label class="devolucao-followup-balance ${reembolsoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><span>Valor reembolsado</span><span class="devolucao-money-input"><b>R$</b><input id="dev-followup-reembolso-${row.id}" type="number" inputmode="decimal" min="0" step="0.01" value="${reembolsoMarketplace.toFixed(2)}" oninput="updateDevolucaoMoneyTone(this)" aria-label="Valor reembolsado pelo marketplace"></span></label>
+ <label class="devolucao-followup-balance ${reembolsoMarketplace > 0 ? 'is-positive' : 'is-zero'}"><span>Valor reembolsado</span><span class="devolucao-money-input"><b>R$</b><input id="dev-followup-reembolso-${row.id}" type="number" inputmode="decimal" min="0" step="0.01" value="${reembolsoMarketplace.toFixed(2)}" oninput="updateDevolucaoMoneyTone(this)" onchange="this.value = Math.abs(Number(this.value || 0)).toFixed(2); updateDevolucaoMoneyTone(this)" aria-label="Valor reembolsado pelo marketplace"></span></label>
  </div>
  <button type="button" onclick="saveHistoricoMarketplaceObservation('${row.id}')"><span class="material-symbols-rounded">save</span> Salvar valores</button>
  </div>
@@ -33175,7 +33175,7 @@ async function toggleHistoricoMarketplaceAcionado(id, checked, checkbox) {
  const previous = Boolean(record?.marketplace_acionado);
  const observation = document.getElementById(`dev-followup-note-${id}`)?.value.trim() || '';
  const saldoMarketplace = Number(document.getElementById(`dev-followup-saldo-${id}`)?.value || record?.saldo_marketplace || 0);
- const tarifaReembolso = Number(document.getElementById(`dev-followup-reembolso-${id}`)?.value || record?.tarifa_devolucao_reembolsada || 0);
+ const tarifaReembolso = Math.abs(Number(document.getElementById(`dev-followup-reembolso-${id}`)?.value || record?.tarifa_devolucao_reembolsada || 0));
  const reputacaoRevertida = document.getElementById(`dev-followup-reputacao-${id}`)?.value === 'true';
  if (checkbox) checkbox.disabled = true;
  try {
@@ -33202,7 +33202,7 @@ async function saveHistoricoMarketplaceObservation(id) {
  if (!record) return;
  const observation = document.getElementById(`dev-followup-note-${id}`)?.value.trim() || '';
  const saldoMarketplace = Number(document.getElementById(`dev-followup-saldo-${id}`)?.value || 0);
- const tarifaReembolso = Number(document.getElementById(`dev-followup-reembolso-${id}`)?.value || 0);
+ const tarifaReembolso = Math.abs(Number(document.getElementById(`dev-followup-reembolso-${id}`)?.value || 0));
  const reputationInput = document.getElementById(`dev-followup-reputacao-${id}`);
  const reputacaoRevertida = reputationInput ? reputationInput.value === 'true' : Boolean(record.reputacao_revertida);
  try {
@@ -33247,7 +33247,7 @@ function getDevolucaoRecordProductCost(row) {
 }
 
 function getDevolucaoReembolsoMarketplace(row) {
- return Number(row?.tarifa_devolucao_reembolsada || 0);
+ return Math.abs(Number(row?.tarifa_devolucao_reembolsada || 0));
 }
 
 function getDevolucaoSaldoLiquido(row) {
