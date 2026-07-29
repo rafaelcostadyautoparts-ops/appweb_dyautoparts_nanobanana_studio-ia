@@ -32094,11 +32094,11 @@ function getDevolucaoCreatedTimestamp(row = {}) {
 
 function sortDevolucaoRecordsChronologically(records = []) {
  return [...(records || [])].sort((left, right) => {
- const createdDiff = getDevolucaoCreatedTimestamp(left) - getDevolucaoCreatedTimestamp(right);
+ const createdDiff = getDevolucaoCreatedTimestamp(right) - getDevolucaoCreatedTimestamp(left);
  if (createdDiff) return createdDiff;
- const returnDateDiff = String(left.data_devolucao || '').localeCompare(String(right.data_devolucao || ''));
+ const returnDateDiff = String(right.data_devolucao || '').localeCompare(String(left.data_devolucao || ''));
  if (returnDateDiff) return returnDateDiff;
- return String(left.id || '').localeCompare(String(right.id || ''));
+ return String(right.id || '').localeCompare(String(left.id || ''));
  });
 }
 

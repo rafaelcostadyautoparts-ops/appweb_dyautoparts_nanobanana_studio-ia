@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.54",
-    "build":  "2026.07.29.3",
-    "commit":  "devolucao-itens-sem-atualizado-em",
+    "version":  "2.1.55",
+    "build":  "2026.07.29.4",
+    "commit":  "devolucao-mais-recente-primeiro",
     "deployDate":  "2026-07-29"
 }

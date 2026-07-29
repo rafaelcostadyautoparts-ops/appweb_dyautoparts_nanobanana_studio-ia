@@ -2197,8 +2197,8 @@ const DataClient = (function () {
         const { data, error } = await client
             .from('devolucoes')
             .select('*, devolucao_itens(*)')
-            .order('criado_em', { ascending: true })
-            .order('data_devolucao', { ascending: true });
+            .order('criado_em', { ascending: false })
+            .order('data_devolucao', { ascending: false });
         if (error) {
             console.error('[DEVOLUCOES] erro ao listar:', error);
             const listError = new Error(error.code === '42P01'
