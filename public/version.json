@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.58",
-    "build":  "2026.07.29.7",
-    "commit":  "devolucao-listagem-tres-faixas",
+    "version":  "2.1.59",
+    "build":  "2026.07.29.8",
+    "commit":  "devolucao-status-clean",
     "deployDate":  "2026-07-29"
 }

@@ -71249,3 +71249,16 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container {
 @media (max-width:1250px) { .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:repeat(3,minmax(160px,1fr)) minmax(175px,.8fr) !important; } .devolucao-history-screen .dev-history-side { grid-column:4; grid-row:1 / span 2; align-self:stretch; align-content:center; } }
 @media (max-width:820px) { .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:1fr 1fr !important; } .devolucao-history-screen .dev-history-side { grid-column:2; grid-row:auto; } }
 @media (max-width:520px) { .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:1fr !important; } .devolucao-history-screen .dev-history-side { grid-column:auto; } .devolucao-history-screen .devolucao-history-items > div { grid-template-columns:38px minmax(0,1fr) !important; } .devolucao-history-screen .devolucao-history-items em { grid-column:2; justify-self:start; } }
+/* Status clean da listagem de devolucoes v2.1.59 */
+.devolucao-history-screen .dev-history-side,
+.devolucao-history-screen .dev-history-side.status-em_analise,
+.devolucao-history-screen .dev-history-side.status-concluida_sem_prejuizo,
+.devolucao-history-screen .dev-history-side.status-resolvida,
+.devolucao-history-screen .dev-history-side.status-concluida_com_prejuizo,
+.devolucao-history-screen .dev-history-side.status-cancelada { padding:0; border:0; border-radius:0; background:transparent !important; box-shadow:none; justify-items:center; align-content:center; }
+.devolucao-history-screen .dev-history-side .devolucao-status-select { width:100% !important; min-height:42px; border:1px solid currentColor !important; border-radius:999px !important; text-align:center; text-align-last:center; box-shadow:none !important; }
+.devolucao-history-screen .dev-history-side .devolucao-record-actions { width:100%; justify-content:center; gap:10px; }
+.devolucao-history-screen .dev-history-side .devolucao-record-actions button { width:36px !important; height:32px !important; border:1px solid #e2e8f0 !important; background:#fff !important; box-shadow:none !important; }
+.devolucao-history-screen .dev-history-side .devolucao-edit-record-btn { color:#2563eb !important; }
+.devolucao-history-screen .dev-history-side .devolucao-delete-record-btn { color:#dc3941 !important; }
+.devolucao-history-screen .dev-history-side .devolucao-record-actions button:hover { background:#f8fafc !important; transform:none; }

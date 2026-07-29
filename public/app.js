@@ -32800,7 +32800,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <main class="container">
  <section class="devolucao-history-toolbar">
  <label><span class="material-symbols-rounded">search</span><input id="dev-history-search" type="search" placeholder="Buscar nome, pedido, ID, EAN ou SKU..." oninput="filterHistoricoDevolucoes(this.value)"></label>
- <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Em an\u00e1lise no marketplace</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
+ <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Marketplace acionado</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
  <select id="dev-history-channel" onchange="setHistoricoDevolucaoChannel(this.value)"><option value="todos">Todos os canais</option><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select>
  <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
  </section>
@@ -32908,7 +32908,7 @@ function getDevolucaoBusinessStatus(row = {}) {
 }
 
 function getDevolucaoStatusLabel(status, row = null) {
- if (status === 'em_analise') return 'Em an\u00e1lise no marketplace';
+ if (status === 'em_analise') return 'Marketplace acionado';
  const businessStatus = row ? getDevolucaoBusinessStatus({ ...row, status: 'resolvida' }) : status;
  if (businessStatus === 'concluida_com_prejuizo' || status === 'concluida_com_prejuizo') return 'Conclu\u00edda com preju\u00edzo';
  return 'Conclu\u00edda sem preju\u00edzo';
@@ -32917,7 +32917,7 @@ function getDevolucaoStatusLabel(status, row = null) {
 function getDevolucaoStatusOptions(row) {
  const businessStatus = getDevolucaoBusinessStatus(row);
  const options = [];
- if (row?.marketplace_acionado || businessStatus === 'em_analise') options.push({ value: 'em_analise', label: 'Em an\u00e1lise no marketplace' });
+ if (row?.marketplace_acionado || businessStatus === 'em_analise') options.push({ value: 'em_analise', label: 'Marketplace acionado' });
  options.push({
  value: 'resolvida',
  label: businessStatus === 'concluida_com_prejuizo' ? 'Conclu\u00edda com preju\u00edzo' : 'Conclu\u00edda sem preju\u00edzo'
