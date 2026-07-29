@@ -2134,8 +2134,7 @@ const DataClient = (function () {
                         devolveu_correto: item.devolveu_correto !== false,
                         apto_venda: item.apto_venda === true,
                         destino: item.destino || (item.apto_venda === true ? 'disponivel' : 'quarentena'),
-                        estoque_local: item.estoque_local || null,
-                        atualizado_em: getDataHoraBrasil()
+                        estoque_local: item.estoque_local || null
                     })
                     .eq('devolucao_id', devolucaoId)
                     .eq('id_interno', item.id_interno);
@@ -2168,8 +2167,7 @@ const DataClient = (function () {
                         apto_venda: item.apto_venda !== false,
                         estoque_movimentado: true,
                         estoque_local: localDestino,
-                        estoque_movimento_id: movimento.movimento_id || null,
-                        atualizado_em: getDataHoraBrasil()
+                        estoque_movimento_id: movimento.movimento_id || null
                     })
                     .eq('devolucao_id', devolucaoId)
                     .eq('id_interno', item.id_interno);
