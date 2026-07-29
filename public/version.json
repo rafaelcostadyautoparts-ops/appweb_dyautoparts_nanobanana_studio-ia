@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.57",
-    "build":  "2026.07.29.6",
-    "commit":  "devolucao-reembolso-positivo",
+    "version":  "2.1.58",
+    "build":  "2026.07.29.7",
+    "commit":  "devolucao-listagem-tres-faixas",
     "deployDate":  "2026-07-29"
 }

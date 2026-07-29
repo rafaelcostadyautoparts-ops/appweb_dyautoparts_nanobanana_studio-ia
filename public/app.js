@@ -33105,20 +33105,24 @@ function renderHistoricoDevolucaoList() {
  </div>` : '';
  return `<article class="devolucao-history-card status-${businessStatus} ${hasDivergence ? 'has-divergence' : ''} ${needsMarketplaceFollowUp ? 'marketplace-follow-up' : ''} ${saldoLiquidoMarketplace < 0 ? 'has-marketplace-loss' : ''}">
  <header class="devolucao-history-mainline">
- <div class="dev-history-cell dev-history-channel-order"><div class="dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div><div class="dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}</div></div>
-<div class="dev-history-cell dev-history-dates"><div class="devolucao-created-at"><small>Lan\u00e7amento</small><strong><span class="material-symbols-rounded">schedule</span>${formatDevolucaoCreatedAt(row)}</strong></div><div class="devolucao-return-date"><small>Devolu\u00e7\u00e3o</small><strong><span class="material-symbols-rounded">event</span>${formatDevolucaoDate(row.data_devolucao)}</strong></div></div>
+<div class="dev-history-cell dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div>
+<div class="dev-history-cell dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}</div>
 <div class="dev-history-cell dev-history-name"><small>Nome</small><strong>${escapeDevolucaoHTML(row.remetente || 'Remetente n\u00e3o informado')}</strong></div>
+<div class="dev-history-cell devolucao-return-date"><small>Data da devolu\u00e7\u00e3o</small><strong><span class="material-symbols-rounded">event</span>${formatDevolucaoDate(row.data_devolucao)}</strong></div>
+<div class="dev-history-cell devolucao-created-at"><small>Lan\u00e7amento</small><strong><span class="material-symbols-rounded">schedule</span>${formatDevolucaoCreatedAt(row)}</strong></div>
+<div class="dev-history-side status-${businessStatus}">
 <select class="devolucao-status-select status-${businessStatus}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
- ${getDevolucaoStatusOptions(row)}
- </select>
- <div class="devolucao-record-actions">
- <button type="button" class="devolucao-edit-record-btn" onclick="editHistoricoDevolucao('${row.id}')" title="Editar lan\u00e7amento" aria-label="Editar lan\u00e7amento"><span class="material-symbols-rounded">edit</span></button>
- <button type="button" class="devolucao-delete-record-btn" onclick="confirmDeleteHistoricoDevolucao('${row.id}')" title="Excluir lan\u00e7amento" aria-label="Excluir lan\u00e7amento"><span class="material-symbols-rounded">delete</span></button>
- </div>
- </header>
+${getDevolucaoStatusOptions(row)}
+</select>
+<div class="devolucao-record-actions">
+<button type="button" class="devolucao-edit-record-btn" onclick="editHistoricoDevolucao('${row.id}')" title="Editar lan\u00e7amento" aria-label="Editar lan\u00e7amento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V20h3.5L17.81 9.69l-3.5-3.5L4 16.5Zm16.71-9.96a1 1 0 0 0 0-1.41l-1.84-1.84a1 1 0 0 0-1.41 0l-1.44 1.44 3.5 3.5 1.19-1.19Z"/></svg></button>
+<button type="button" class="devolucao-delete-record-btn" onclick="confirmDeleteHistoricoDevolucao('${row.id}')" title="Excluir lan\u00e7amento" aria-label="Excluir lan\u00e7amento"><span class="material-symbols-rounded">delete</span></button>
+</div>
+</div>
+</header>
  <div class="devolucao-history-items">${items.map(item => `<div>
  ${getDevolucaoItemVisual(item)}
- <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.produto_id ? `ID produto: ${escapeDevolucaoHTML(item.produto_id)} &middot; ` : ''}${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Qtd. ${Number(item.quantidade)} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca n\u00e3o informada')} &middot; ${getDevolucaoItemEstoqueLabel(item)} &middot; Custo do produto: ${formatCurrency(getDevolucaoResultadoCost(item))}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
+ <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Marca: ${escapeDevolucaoHTML(item.marca || item.fornecedor || 'N\u00e3o informada')}${item.cor ? ` &middot; Cor: ${escapeDevolucaoHTML(item.cor)}` : ''} &middot; Qtd. ${Number(item.quantidade)}${item.produto_id ? ` &middot; ID produto: ${escapeDevolucaoHTML(item.produto_id)}` : ''}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
  <em class="resultado-${getDevolucaoItemResultado(item)}">${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</em>
  </div>`).join('')}</div>
  ${followupMarkup}
