@@ -31997,11 +31997,13 @@ const devolucaoMarketplaceState = {
  manualSelectionRequested: false
 };
 
+const DEVOLUCAO_CHANNEL_FILTER_OPTIONS = ['Amazon', 'Magalu Djozu', 'Magalu Kawai', 'Magalu DY', 'ML Djozu', 'ML DY', 'ML Kawai', 'ML PF Ale', 'ML PF Carla', 'ML PF Clécio', 'ML PF Dani', 'ML PF Palo', 'ML PF Pri', 'ML PF Tban', 'ML PF Yugi', 'PDV', 'Shopee Djozu', 'Shopee DY', 'Shopee Kawai', 'Shopee PF Ale', 'Shopee PF Carla', 'Shopee PF Clécio', 'Shopee PF Dani', 'Shopee PF Gu', 'Shopee PF Tban', 'Shopee PF Yugi', 'Site', 'TikTok', 'Via Varejo'];
+
 const devolucaoHistoricoState = {
  records: [],
  search: '',
  status: 'todos',
- channel: 'todos',
+ channels: [],
  month: '',
  error: ''
 };
@@ -32803,7 +32805,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <h1>DEVOLU\u00c7\u00d5ES</h1>
  <div class="devolucao-app-bar-actions">
  <button type="button" class="devolucao-header-btn" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">download</span><span>Exportar CSV</span></button>
- <label class="devolucao-month-filter" onclick="openDevolucaoHistoryCalendar()"><span class="material-symbols-rounded">calendar_month</span><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b><input id="dev-history-month" type="month" value="${devolucaoHistoricoState.month}" aria-label="Per\u00edodo das devolu\u00e7\u00f5es" onfocus="openDevolucaoHistoryCalendar()" onchange="setHistoricoDevolucaoMonth(this.value)"></label>
+ <div class="devolucao-month-filter"><button type="button" class="devolucao-month-filter-trigger" onclick="openDevolucaoHistoryCalendar()" aria-label="Escolher per\u00edodo"><span class="material-symbols-rounded">calendar_month</span><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b></button><input id="dev-history-month" type="month" value="${devolucaoHistoricoState.month}" tabindex="-1" aria-hidden="true" onchange="setHistoricoDevolucaoMonth(this.value)"></div>
  <button type="button" class="devolucao-primary-btn" onclick="openDevolucaoMarketplaceModal()"><span class="material-symbols-rounded">add</span><span>Nova devolu\u00e7\u00e3o</span></button>
  </div>
  </header>
@@ -32811,7 +32813,14 @@ async function renderHistoricoDevolucoes(options = {}) {
  <section class="devolucao-history-toolbar">
  <label><span class="material-symbols-rounded">search</span><input id="dev-history-search" type="search" placeholder="Buscar nome, pedido, ID, EAN ou SKU..." oninput="filterHistoricoDevolucoes(this.value)"></label>
  <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Marketplace acionado</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
- <select id="dev-history-channel" onchange="setHistoricoDevolucaoChannel(this.value)"><option value="todos">Todos os canais</option><option>Amazon</option><option>Magalu Djozu</option><option>Magalu Kawai</option><option>Magalu DY</option><option>ML Djozu</option><option>ML DY</option><option>ML Kawai</option><option>ML PF Ale</option><option>ML PF Carla</option><option>ML PF Cl\u00e9cio</option><option>ML PF Dani</option><option>ML PF Palo</option><option>ML PF Pri</option><option>ML PF Tban</option><option>ML PF Yugi</option><option>PDV</option><option>Shopee Djozu</option><option>Shopee DY</option><option>Shopee Kawai</option><option>Shopee PF Ale</option><option>Shopee PF Carla</option><option>Shopee PF Cl\u00e9cio</option><option>Shopee PF Dani</option><option>Shopee PF Gu</option><option>Shopee PF Tban</option><option>Shopee PF Yugi</option><option>Site</option><option>TikTok</option><option>Via Varejo</option></select>
+ <div id="dev-history-channel-filter" class="devolucao-channel-filter">
+<button type="button" class="devolucao-channel-filter-trigger" onclick="toggleDevolucaoChannelFilter(event)" aria-haspopup="true" aria-expanded="false"><span class="material-symbols-rounded">storefront</span><b id="dev-history-channel-label">Todos os canais</b><span class="material-symbols-rounded">expand_more</span></button>
+<div id="dev-history-channel-menu" class="devolucao-channel-filter-menu" hidden>
+<label class="devolucao-channel-option is-all"><input id="dev-channel-all" type="checkbox" checked onchange="toggleAllHistoricoDevolucaoChannels(this.checked)"><span>Todos os canais</span></label>
+<div class="devolucao-channel-options">${DEVOLUCAO_CHANNEL_FILTER_OPTIONS.map((channel, index) => `<label class="devolucao-channel-option"><input id="dev-channel-${index}" type="checkbox" value="${escapeDevolucaoHTML(channel)}" onchange="toggleHistoricoDevolucaoChannel('${escapeDevolucaoHTML(channel)}', this.checked)"><span>${escapeDevolucaoHTML(channel)}</span></label>`).join('')}</div>
+<button type="button" class="devolucao-channel-filter-done" onclick="closeDevolucaoChannelFilter()">Concluir</button>
+</div>
+</div>
  <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
  </section>
  <div id="dev-history-metrics" class="devolucao-history-metrics"></div><div class="devolucao-metrics-note"><span class="material-symbols-rounded">info</span><p>Os valores s\u00e3o atualizados automaticamente com base nas devolu\u00e7\u00f5es registradas no per\u00edodo selecionado.</p></div>
@@ -32823,7 +32832,7 @@ async function renderHistoricoDevolucoes(options = {}) {
 
  devolucaoHistoricoState.search = '';
  devolucaoHistoricoState.status = 'todos';
- devolucaoHistoricoState.channel = 'todos';
+ devolucaoHistoricoState.channels = [];
  devolucaoHistoricoState.month = options.month || getDevolucaoToday().slice(0, 7);
  const monthFilter = document.getElementById('dev-history-month');
  if (monthFilter) monthFilter.value = devolucaoHistoricoState.month;
@@ -32859,8 +32868,57 @@ function setHistoricoDevolucaoStatus(value) {
  renderHistoricoDevolucaoList();
 }
 
-function setHistoricoDevolucaoChannel(value) {
- devolucaoHistoricoState.channel = value || 'todos';
+function isHistoricoDevolucaoChannelSelected(channel) {
+ const selected = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
+ return selected.length === 0 || selected.includes(channel);
+}
+
+function updateDevolucaoChannelFilterUI() {
+ const selected = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
+ const allInput = document.getElementById('dev-channel-all');
+ if (allInput) allInput.checked = selected.length === 0;
+ DEVOLUCAO_CHANNEL_FILTER_OPTIONS.forEach((channel, index) => {
+ const input = document.getElementById(`dev-channel-${index}`);
+ if (input) input.checked = selected.includes(channel);
+ });
+ const label = document.getElementById('dev-history-channel-label');
+ if (label) label.textContent = selected.length === 0 ? 'Todos os canais' : selected.length === 1 ? selected[0] : `${selected.length} canais selecionados`;
+}
+
+function toggleDevolucaoChannelFilter(event) {
+ event?.preventDefault();
+ event?.stopPropagation();
+ const menu = document.getElementById('dev-history-channel-menu');
+ const trigger = document.querySelector('.devolucao-channel-filter-trigger');
+ if (!menu) return;
+ menu.hidden = !menu.hidden;
+ trigger?.setAttribute('aria-expanded', String(!menu.hidden));
+ if (!menu.hidden) updateDevolucaoChannelFilterUI();
+}
+
+function closeDevolucaoChannelFilter() {
+ const menu = document.getElementById('dev-history-channel-menu');
+ const trigger = document.querySelector('.devolucao-channel-filter-trigger');
+ if (menu) menu.hidden = true;
+ trigger?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleAllHistoricoDevolucaoChannels(checked) {
+ if (!checked && (!devolucaoHistoricoState.channels || devolucaoHistoricoState.channels.length === 0)) {
+ updateDevolucaoChannelFilterUI();
+ return;
+ }
+ devolucaoHistoricoState.channels = [];
+ updateDevolucaoChannelFilterUI();
+ renderHistoricoDevolucaoList();
+}
+
+function toggleHistoricoDevolucaoChannel(channel, checked) {
+ const selected = new Set(Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : []);
+ if (checked) selected.add(channel);
+ else selected.delete(channel);
+ devolucaoHistoricoState.channels = DEVOLUCAO_CHANNEL_FILTER_OPTIONS.filter(option => selected.has(option));
+ updateDevolucaoChannelFilterUI();
  renderHistoricoDevolucaoList();
 }
 
@@ -32893,9 +32951,11 @@ function clearHistoricoDevolucaoMonth() {
 function openDevolucaoHistoryCalendar() {
  const input = document.getElementById('dev-history-month');
  if (!input) return;
+ input.focus();
  if (typeof input.showPicker === 'function') {
- try { input.showPicker(); } catch (_) {}
+ try { input.showPicker(); return; } catch (_) {}
  }
+ input.click();
 }
 
 function formatDevolucaoDate(value) {
@@ -32940,7 +33000,7 @@ function getHistoricoDevolucaoFilteredRecords() {
  const search = devolucaoHistoricoState.search;
  return all.filter(row => {
  if (devolucaoHistoricoState.month && !String(row.data_devolucao || '').startsWith(devolucaoHistoricoState.month)) return false;
- if (devolucaoHistoricoState.channel !== 'todos' && row.canal !== devolucaoHistoricoState.channel) return false;
+ if (!isHistoricoDevolucaoChannelSelected(row.canal)) return false;
  if (devolucaoHistoricoState.status !== 'todos' && getDevolucaoBusinessStatus(row) !== devolucaoHistoricoState.status) return false;
  const itemText = (row.devolucao_itens || []).map(item => [
  item.descricao,
@@ -33024,7 +33084,8 @@ function exportHistoricoDevolucoesCSV() {
  const url = URL.createObjectURL(blob);
  const link = document.createElement('a');
  const month = devolucaoHistoricoState.month || 'todos-os-meses';
- const channel = devolucaoHistoricoState.channel === 'todos' ? 'todos-canais' : String(devolucaoHistoricoState.channel || 'canal').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+ const selectedChannels = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
+ const channel = selectedChannels.length === 0 ? 'todos-canais' : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
  link.href = url;
  link.download = `devolucoes-marketplace-${month}-${channel}.csv`;
  document.body.appendChild(link);
@@ -33041,7 +33102,7 @@ function renderHistoricoDevolucaoList() {
  const all = devolucaoHistoricoState.records || [];
  const periodRecords = all.filter(row =>
  (!devolucaoHistoricoState.month || String(row.data_devolucao || '').startsWith(devolucaoHistoricoState.month))
- && (devolucaoHistoricoState.channel === 'todos' || row.canal === devolucaoHistoricoState.channel)
+ && isHistoricoDevolucaoChannelSelected(row.canal)
  );
  const acionados = periodRecords.filter(row => getDevolucaoBusinessStatus(row) === 'em_analise').length;
  const reputacaoAfetada = periodRecords.filter(row => row.impactou_reputacao).length;
