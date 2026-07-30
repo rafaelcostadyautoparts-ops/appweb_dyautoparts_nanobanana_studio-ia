@@ -20660,6 +20660,7 @@ function quickActionGerarRomaneio() {
 const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetirada';
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
+let romaneioTrackingState = { key: '', codes: [] };
 
 function getRomaneios() {
  try {
@@ -20731,6 +20732,41 @@ function getRomaneioLocalSessionSupplement(session) {
  };
 }
 
+function getRomaneioSessionMovements(session = {}) {
+ const sessionId = String(getPackSeparationSessionId(session) || '').trim();
+ if (!sessionId) return [];
+ const normalizedSessionId = sessionId.toUpperCase();
+ return (appData.movimentacoes || []).filter(movement => {
+ const origin = normalizeOperationalLabel(movement.origem || '');
+ if (!origin.includes('SEPARACAO') && !origin.includes('CONFERENCIA')) return false;
+ const reference = `${movement.observacao || ''} ${movement.execution_id || ''} ${movement.movimento_id || ''}`.toUpperCase();
+ return reference.includes(normalizedSessionId);
+ });
+}
+
+function getRomaneioMovementStats(session = {}) {
+ const movements = getRomaneioSessionMovements(session);
+ if (!movements.length) return { produtos: 0, quantidade: 0, movimentos: 0 };
+ const byProduct = new Map();
+ movements.forEach(movement => {
+ const productId = String(movement.id_interno || '').trim();
+ if (!productId) return;
+ const type = String(movement.tipo || '').trim().toUpperCase();
+ const quantity = Math.abs(Number(movement.quantidade || 0));
+ if (!(quantity > 0)) return;
+ const direction = type.includes('SAIDA') || type.includes('AJUSTE_NEGATIVO') ? 1
+ : type.includes('ENTRADA') || type.includes('AJUSTE_POSITIVO') ? -1
+ : 0;
+ if (!direction) return;
+ byProduct.set(productId, (byProduct.get(productId) || 0) + (quantity * direction));
+ });
+ const validProducts = [...byProduct.entries()].filter(([, quantity]) => quantity > 0.000001);
+ return {
+ produtos: validProducts.length,
+ quantidade: validProducts.reduce((sum, [, quantity]) => sum + quantity, 0),
+ movimentos: movements.length
+ };
+}
 function getRomaneioTodayMetrics(channelNames, withdrawalType = channelNames) {
  const todayIso = getDataBrasilISO();
  const todayBr = formatDateBR(todayIso);
@@ -20754,8 +20790,9 @@ function getRomaneioTodayMetrics(channelNames, withdrawalType = channelNames) {
  const supplement = getRomaneioLocalSessionSupplement(session);
  const mergedSession = { ...session, ...supplement };
  const sessionId = getPackSeparationSessionId(mergedSession) || '-';
- const produtos = getSeparationProductTotal(mergedSession);
- const itens = getSeparationItemTotal(mergedSession);
+ const movementStats = getRomaneioMovementStats(mergedSession);
+ const produtos = movementStats.produtos;
+ const itens = movementStats.quantidade;
  const pacotes = getPickPackageCountFrom(mergedSession);
  acc.produtos += produtos;
  acc.itens += itens;
@@ -20768,7 +20805,8 @@ function getRomaneioTodayMetrics(channelNames, withdrawalType = channelNames) {
  itens,
  pacotes,
  status: session.status || '',
- dataHora: formatPackSeparationDate(session.atualizado_em || session.finalizado_em || session.criado_em || session.data_separacao || session.col_b)
+ dataHora: formatPackSeparationDate(session.atualizado_em || session.finalizado_em || session.criado_em || session.data_separacao || session.col_b),
+ fonteQuantidade: 'movimentos de estoque'
  });
  return acc;
  }, {
@@ -20789,13 +20827,17 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  document.body.classList.remove('menu-active');
 
  try {
- const data = await DataClient.loadModule('separacao', true);
+ const [data, movements] = await Promise.all([
+ DataClient.loadModule('separacao', true),
+ DataClient.fetchMovimentosSupabase()
+ ]);
  if (data) {
  appData.separacao = data.separacao || appData.separacao || [];
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  }
+ appData.movimentacoes = Array.isArray(movements) ? movements : [];
  } catch (error) {
- console.warn('[ROMANEIO] Falha ao atualizar separacoes:', error);
+ console.warn('[ROMANEIO] Falha ao atualizar separações e movimentos:', error);
  }
 
  const availableChannels = getRomaneioAvailableChannels();
@@ -20845,7 +20887,7 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
 
  if (metrics) {
  romaneioPackagePhotoState = { dataUrl: '' };
- setTimeout(() => initRomaneioSignaturePad(), 80);
+ setTimeout(() => { initRomaneioSignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
  }
 }
 
@@ -20865,17 +20907,75 @@ function formatRomaneioShortDate(value) {
  return value || '-';
 }
 
+function ensureRomaneioTrackingState(key) {
+ const normalizedKey = String(key || '');
+ if (romaneioTrackingState.key !== normalizedKey) romaneioTrackingState = { key: normalizedKey, codes: [] };
+}
+
+function normalizeRomaneioTrackingCode(value) {
+ const raw = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+ const correiosCode = raw.match(/[A-Z]{2}\d{9}[A-Z]{2}/)?.[0];
+ return correiosCode || raw.replace(/[^A-Z0-9]/g, '');
+}
+
+function renderRomaneioTrackingCodes() {
+ if (!romaneioTrackingState.codes.length) return '<div class="romaneio-tracking-empty">Nenhum pacote bipado.</div>';
+ return romaneioTrackingState.codes.map((code, index) => `<div class="romaneio-tracking-code"><span>${index + 1}</span><strong>${escapeKitAttribute(code)}</strong><button type="button" onclick="removeRomaneioTrackingCode('${escapeKitAttribute(code)}')" aria-label="Remover rastreio">Remover</button></div>`).join('');
+}
+
+function formatRomaneioTrackingCounter(expected) {
+ const scanned = romaneioTrackingState.codes.length;
+ return Number(expected || 0) > 0 ? `${scanned} de ${Number(expected)} pacote(s)` : `${scanned} pacote(s) bipado(s)`;
+}
+
+function updateRomaneioTrackingUI() {
+ const list = document.getElementById('romaneio-tracking-list');
+ if (list) list.innerHTML = renderRomaneioTrackingCodes();
+ const expected = Number(document.querySelector('.romaneio-tracking-panel')?.dataset.expected || 0);
+ const counter = document.getElementById('romaneio-tracking-counter');
+ if (counter) counter.textContent = formatRomaneioTrackingCounter(expected);
+}
+
+function addRomaneioTrackingCode() {
+ const input = document.getElementById('romaneio-tracking-input');
+ const code = normalizeRomaneioTrackingCode(input?.value || '');
+ if (!code) return showToast('Bipe ou informe o código de rastreio.', 'warning');
+ if (!/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(code)) return showToast('Código de rastreio dos Correios inválido.', 'warning');
+ if (romaneioTrackingState.codes.includes(code)) {
+ if (input) { input.value = ''; input.focus(); }
+ return showToast('Este pacote já foi bipado.', 'warning');
+ }
+ romaneioTrackingState.codes.push(code);
+ if (input) { input.value = ''; input.focus(); }
+ updateRomaneioTrackingUI();
+}
+
+function handleRomaneioTrackingKey(event) {
+ if (event.key !== 'Enter') return;
+ event.preventDefault();
+ addRomaneioTrackingCode();
+}
+
+function removeRomaneioTrackingCode(code) {
+ romaneioTrackingState.codes = romaneioTrackingState.codes.filter(item => item !== code);
+ updateRomaneioTrackingUI();
+ document.getElementById('romaneio-tracking-input')?.focus();
+}
 function renderRomaneioForm(metrics) {
  const selectedKey = serializeRomaneioSelectedChannels(metrics.canais || [metrics.tipo_retirada]);
- const isOther = (metrics.canais || [metrics.tipo_retirada])
+ const selectedChannels = metrics.canais || [metrics.tipo_retirada];
+ const isOther = selectedChannels
  .some(channel => normalizeOperationalLabel(channel) === 'OUTROS');
+ const isCorreios = selectedChannels
+ .some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
+ ensureRomaneioTrackingState(selectedKey);
  return `
  <section class="romaneio-form-card">
  <div class="romaneio-metrics-grid">
  <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
- <div><small>Itens</small><strong>${metrics.itens}</strong><em>bipes/unidades</em><span class="material-symbols-rounded">inventory_2</span></div>
+ <div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saída líquida</em><span class="material-symbols-rounded">inventory_2</span></div>
  <div><small>Pacotes</small><strong>${metrics.pacotes}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
- <div><small>Separacoes</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
+ <div><small>Separações</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
  <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
  </div>
  ${renderRomaneioSeparationBreakdown(metrics)}
@@ -20888,7 +20988,7 @@ function renderRomaneioForm(metrics) {
  </label>
  ` : ''}
  <label>
- <span>Nome do ResaonsAvel *</span>
+ <span>Nome de quem retirou *</span>
  <input name="responsavel" type="text" autocomplete="name" required>
  </label>
  <label>
@@ -20896,9 +20996,20 @@ function renderRomaneioForm(metrics) {
  <input name="documento" type="text" autocomplete="off">
  </label>
  <label class="romaneio-field-full">
- <span>Observacao (opcional)</span>
- <input name="observacao" type="text" autocomplete="off" placeholder="Retirado 16:40, coleta agAAincia central...">
+ <span>Observação (opcional)</span>
+ <input name="observacao" type="text" autocomplete="off" placeholder="Ex.: retirada às 16h40 na agência central">
  </label>
+ ${isCorreios ? `
+ <section class="romaneio-tracking-panel" data-expected="${Number(metrics.pacotes || 0)}">
+ <div class="romaneio-tracking-head"><div><strong>Conferência dos pacotes dos Correios</strong><small>Bipe o código de rastreio de cada pacote antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(metrics.pacotes)}</span></div>
+ <div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o código de rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div>
+ <div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div>
+ </section>
+ <label class="romaneio-field-full">
+ <span>E-mail para envio do romaneio</span>
+ <input name="email_destino" type="email" autocomplete="email" required placeholder="Ex.: expedicao@empresa.com">
+ </label>
+ ` : ''}
 
  <div class="romaneio-photo-box">
  <div>
@@ -20941,7 +21052,7 @@ function renderRomaneioSeparationBreakdown(metrics = {}) {
  return `
  <div class="romaneio-separation-breakdown">
  <div class="romaneio-separation-breakdown-head">
- <strong>Separacoes consideradas</strong>
+ <strong>Separações consideradas</strong>
  <span>${formatStockNumber(metrics.pacotes || 0)} pacote(s) em ${formatStockNumber(metrics.separacoes || sessions.length)} separacao(oes)</span>
  </div>
  <div class="romaneio-separation-breakdown-list">
@@ -20949,10 +21060,10 @@ function renderRomaneioSeparationBreakdown(metrics = {}) {
  <article>
  <div>
  <strong>${escapeKitAttribute(session.sessionId || '-')}</strong>
- <small>${escapeKitAttribute(session.dataHora || '-')} ${session.status ? `| ${escapeKitAttribute(session.status)}` : ''}</small>
+ <small>${escapeKitAttribute(session.dataHora || '-')} ${session.status ? `| ${escapeKitAttribute(session.status)}` : ''} | quantidade pelos movimentos de estoque</small>
  </div>
  <span><b>${formatStockNumber(session.pacotes || 0)}</b><small>pacotes</small></span>
- <span><b>${formatStockNumber(session.itens || 0)}</b><small>itens</small></span>
+ <span><b>${formatStockNumber(session.itens || 0)}</b><small>quantidade líquida</small></span>
  </article>
  `).join('')}
  </div>
@@ -20964,7 +21075,7 @@ function renderRomaneioHistory(romaneios) {
  return `
  <section class="romaneio-history">
  <div class="romaneio-section-title">
- <h2>Hisao de Romaneios</h2>
+ <h2>Histórico de romaneios</h2>
  <span>${romaneios.length}</span>
  </div>
  ${romaneios.length === 0 ? `
@@ -20981,10 +21092,10 @@ function renderRomaneioHistory(romaneios) {
  <small>${escapeKitAttribute(item.data)} ${item.hora ? `- ${escapeKitAttribute(item.hora)}` : ''}</small>
  <strong>${escapeKitAttribute(item.canal || '-')}</strong>
  <span>Produtos diferentes: ${Number(item.produtos || 0)}</span>
- <span>Itens/bipes: ${Number(item.itens || 0)}</span>
+ <span>Quantidade movimentada: ${formatStockNumber(item.itens || 0)}</span>
  <span>Pacotes: ${Number(item.pacotes || 0)}</span>
- <span>Separacoes: ${Number(item.separacoes || 0)}</span>
- <em>ResaonsAvel: ${escapeKitAttribute(item.responsavel || '-')}</em>
+ <span>Separações: ${Number(item.separacoes || 0)}</span>
+ <em>Responsável pela retirada: ${escapeKitAttribute(item.responsavel || '-')}</em>
  </div>
  <button type="button" onclick="renderRomaneioScreen('', '${escapeKitAttribute(item.id)}')">
  <span class="material-symbols-rounded">visibility</span>
@@ -21009,24 +21120,25 @@ function renderRomaneioDetail(item) {
  <div><small>Data/Hora</small><strong>${escapeKitAttribute(item.data)} ${escapeKitAttribute(item.hora)}</strong></div>
  <div><small>Canal</small><strong>${escapeKitAttribute(item.canal)}</strong></div>
  <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
- <div><small>Itens/bipes</small><strong>${Number(item.itens || 0)}</strong></div>
+ <div><small>Quantidade movimentada</small><strong>${formatStockNumber(item.itens || 0)}</strong></div>
  <div><small>Pacotes</small><strong>${Number(item.pacotes || 0)}</strong></div>
- <div><small>Separacoes</small><strong>${Number(item.separacoes || 0)}</strong></div>
- <div><small>ResaonsAvel</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
+ <div><small>Separações</small><strong>${Number(item.separacoes || 0)}</strong></div>
+ <div><small>Responsável pela retirada</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
  <div><small>Documento</small><strong>${escapeKitAttribute(item.documento || '-')}</strong></div>
+ <div><small>E-mail</small><strong>${escapeKitAttribute(item.email_destino || '-')}</strong></div>
  <div><small>Observacao</small><strong>${escapeKitAttribute(item.observacao || '-')}</strong></div>
- <div><small>Usao</small><strong>${escapeKitAttribute(item.usuario || '-')}</strong></div>
- <div><small>PDF</small><strong>${item.pdfDataUrl ? 'DisaonAvel' : 'Ainda nao gerado'}</strong></div>
+ <div><small>Usuário que registrou</small><strong>${escapeKitAttribute(item.usuario || '-')}</strong></div>
+
  </div>
- ${renderRomaneioSeparationBreakdown({
+ ${item.rastreios?.length ? `<section class="romaneio-saved-tracking"><div><strong>Rastreios conferidos</strong><span>${item.rastreios.length} pacote(s)</span></div><ol>${item.rastreios.map(code => `<li>${escapeKitAttribute(code)}</li>`).join('')}</ol></section>` : ''} ${renderRomaneioSeparationBreakdown({
  ...item,
  sessoes: item.sessoes || [],
  separacoes: item.separacoes || 0,
  pacotes: item.pacotes || 0
  })}
- ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura do resaonsAvel">` : ''}
+ ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou">` : ''}
  ${item.foto_pacote ? `<img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto do pacote">` : ''}
- ${item.pdfDataUrl ? `<button class="romaneio-pdf-open-btn" type="button" onclick="openRomaneioPDF('${escapeKitAttribute(item.id)}')">Visualizar PDF</button>` : ''}
+
  ${renderRomaneioPostSaveActions(item)}
  </section>
  `;
@@ -21043,9 +21155,8 @@ function renderRomaneioPostSaveActions(item) {
  }
  return `
  <div class="romaneio-post-actions">
- <button type="button" onclick="generateRomaneioPDF('${escapeKitAttribute(item.id)}')">Gerar PDF</button>
- <button type="button" onclick="shareRomaneioWhatsApp('${escapeKitAttribute(item.id)}')">Compartilhar WhatsApp</button>
- <button type="button" onclick="shareRomaneioEmail('${escapeKitAttribute(item.id)}')">Compartilhar E-mail</button>
+ <button class="romaneio-email-send-btn" type="button" onclick="shareRomaneioEmail('${escapeKitAttribute(item.id)}')">Enviar romaneio por e-mail</button>
+ <button type="button" onclick="renderMenu()">Concluir</button>
  </div>
  `;
 }
@@ -21171,7 +21282,7 @@ function clearRomaneioPackagePhoto() {
 }
 
 function getRomaneioText(item) {
- return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos diferentes: ${item.produtos}\nItens/bipes: ${item.itens || 0}\nPacotes: ${item.pacotes}\nSeparacoes: ${item.separacoes || 0}\nFoto do pacote: ${item.foto_pacote ? 'Anexada' : 'Nao anexada'}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
+ return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos diferentes: ${item.produtos}\nQuantidade movimentada: ${formatStockNumber(item.itens || 0)}\nPacotes: ${item.pacotes}\nRastreios: ${(item.rastreios || []).join(', ') || '-'}\nSeparacoes: ${item.separacoes || 0}\nFoto do pacote: ${item.foto_pacote ? 'Anexada' : 'Nao anexada'}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nE-mail: ${item.email_destino || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
 }
 
 function saveRomaneioFromForm(withdrawalType) {
@@ -21187,6 +21298,7 @@ function saveRomaneioFromForm(withdrawalType) {
  )).filter(Boolean);
  const finalChannel = finalChannels.join(' + ');
  const responsavel = String(data.get('responsavel') || '').trim();
+ const isCorreios = finalChannels.some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
  if (isOther && !customChannel) {
  showToast('Informe o nome do canal.', 'warning');
  return;
@@ -21199,12 +21311,26 @@ function saveRomaneioFromForm(withdrawalType) {
  showToast('Operacao concluida.', 'info');
  return;
  }
+ const metrics = getRomaneioTodayMetrics(finalChannels, finalChannels);
+ if (isCorreios) {
+ const expectedPackages = Number(metrics.pacotes || 0);
+ const scannedPackages = romaneioTrackingState.codes.length;
+ if (!scannedPackages) {
+ showToast('Bipe os códigos de rastreio dos pacotes dos Correios.', 'warning');
+ document.getElementById('romaneio-tracking-input')?.focus();
+ return;
+ }
+ if (expectedPackages > 0 && scannedPackages !== expectedPackages) {
+ showToast(`Confira os pacotes: ${scannedPackages} bipado(s) de ${expectedPackages} esperado(s).`, 'warning');
+ document.getElementById('romaneio-tracking-input')?.focus();
+ return;
+ }
+ }
  if (!romaneioSignatureState.dataUrl) {
  showToast('Colete a assinatura antes de salvar.', 'warning');
  return;
  }
 
- const metrics = getRomaneioTodayMetrics(finalChannels, finalChannels);
  const now = new Date();
  const romaneio = {
  id: `ROM-${normalizeOperationalLabel(finalChannel || type).slice(0, 3)}-${Date.now()}`,
@@ -21215,7 +21341,9 @@ function saveRomaneioFromForm(withdrawalType) {
  tipo_retirada: type,
  produtos: metrics.produtos,
  itens: metrics.itens,
- pacotes: metrics.pacotes,
+ pacotes: isCorreios ? romaneioTrackingState.codes.length : metrics.pacotes,
+ rastreios: isCorreios ? [...romaneioTrackingState.codes] : [],
+ email_destino: isCorreios ? String(data.get('email_destino') || '').trim() : '',
  separacoes: metrics.separacoes,
  sessoes: metrics.sessoes || [],
  responsavel,
@@ -21231,6 +21359,7 @@ function saveRomaneioFromForm(withdrawalType) {
  const romaneios = getRomaneios();
  romaneios.unshift(romaneio);
  saveRomaneios(romaneios);
+ romaneioTrackingState = { key: '', codes: [] };
  showToast('Romaneio salvo.');
  renderRomaneioScreen('', romaneio.id);
 }
@@ -21246,25 +21375,173 @@ function updateRomaneio(item) {
  saveRomaneios(romaneios);
 }
 
-function generateRomaneioPDF(id) {
+function loadRomaneioPDFImage(source) {
+ if (!source) return Promise.resolve('');
+ if (String(source).startsWith('data:image/')) return Promise.resolve(source);
+ return fetch(source)
+ .then(response => {
+ if (!response.ok) throw new Error('Imagem não encontrada');
+ return response.blob();
+ })
+ .then(blob => new Promise((resolve, reject) => {
+ const reader = new FileReader();
+ reader.onload = () => resolve(reader.result);
+ reader.onerror = reject;
+ reader.readAsDataURL(blob);
+ }))
+ .catch(() => '');
+}
+
+function addRomaneioPDFImage(doc, dataUrl, x, y, maxWidth, maxHeight) {
+ if (!dataUrl) return 0;
+ try {
+ const properties = doc.getImageProperties(dataUrl);
+ const ratio = Math.min(maxWidth / properties.width, maxHeight / properties.height);
+ const width = properties.width * ratio;
+ const height = properties.height * ratio;
+ doc.addImage(dataUrl, properties.fileType || 'PNG', x, y, width, height);
+ return height;
+ } catch (error) {
+ console.warn('[ROMANEIO] imagem ignorada no PDF:', error);
+ return 0;
+ }
+}
+
+async function createRomaneioPDF(item) {
+ const { jsPDF } = window.jspdf || {};
+ if (!jsPDF) throw new Error('Gerador de PDF não carregado');
+ const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+ const pageWidth = doc.internal.pageSize.getWidth();
+ const pageHeight = doc.internal.pageSize.getHeight();
+ const margin = 15;
+ const [logo, signature, packagePhoto] = await Promise.all([
+ loadRomaneioPDFImage(LOGO_LIGHT_BG),
+ loadRomaneioPDFImage(item.assinatura),
+ loadRomaneioPDFImage(item.foto_pacote)
+ ]);
+
+ doc.setFillColor(23, 74, 145);
+ doc.rect(0, 0, pageWidth, 7, 'F');
+ doc.setFillColor(255, 211, 0);
+ doc.rect(0, 7, pageWidth, 3, 'F');
+ if (logo) addRomaneioPDFImage(doc, logo, margin, 15, 39, 18);
+ doc.setFont('helvetica', 'bold');
+ doc.setTextColor(28, 39, 58);
+ doc.setFontSize(18);
+ doc.text('ROMANEIO DE RETIRADA - CORREIOS', pageWidth - margin, 20, { align: 'right' });
+ doc.setFontSize(9);
+ doc.setFont('helvetica', 'normal');
+ doc.setTextColor(93, 105, 125);
+ doc.text(`Número: ${item.id}`, pageWidth - margin, 27, { align: 'right' });
+ doc.text(`Data e hora: ${item.data} ${item.hora}`, pageWidth - margin, 32, { align: 'right' });
+ doc.setDrawColor(222, 227, 235);
+ doc.line(margin, 39, pageWidth - margin, 39);
+
+ const summary = [
+ ['Quem retirou', item.responsavel || '-'],
+ ['Documento', item.documento || '-'],
+ ['Quantidade de pacotes', String(item.pacotes || 0)],
+ ['Separações', String(item.separacoes || 0)],
+ ['Registrado por', item.usuario || '-'],
+ ['Observação', item.observacao || '-']
+ ];
+ let y = 47;
+ summary.forEach(([label, value], index) => {
+ const column = index % 2;
+ const row = Math.floor(index / 2);
+ const x = margin + (column * 91);
+ const boxY = y + (row * 17);
+ doc.setFillColor(248, 250, 252);
+ doc.roundedRect(x, boxY, 86, 13, 2, 2, 'F');
+ doc.setFont('helvetica', 'bold');
+ doc.setFontSize(7);
+ doc.setTextColor(105, 117, 137);
+ doc.text(label.toUpperCase(), x + 4, boxY + 4.5);
+ doc.setFont('helvetica', 'normal');
+ doc.setFontSize(9);
+ doc.setTextColor(35, 47, 66);
+ doc.text(doc.splitTextToSize(String(value), 78).slice(0, 2), x + 4, boxY + 9.5);
+ });
+
+ y = 103;
+ doc.setFont('helvetica', 'bold');
+ doc.setFontSize(11);
+ doc.setTextColor(28, 39, 58);
+ doc.text(`Códigos de rastreio (${(item.rastreios || []).length})`, margin, y);
+ const trackingRows = (item.rastreios || []).map((code, index) => [String(index + 1), code]);
+ if (typeof doc.autoTable === 'function') {
+ doc.autoTable({
+ startY: y + 4,
+ head: [['#', 'Código de rastreio']],
+ body: trackingRows,
+ margin: { left: margin, right: margin },
+ styles: { font: 'helvetica', fontSize: 9, cellPadding: 3, textColor: [35, 47, 66] },
+ headStyles: { fillColor: [23, 74, 145], textColor: [255, 255, 255] },
+ columnStyles: { 0: { cellWidth: 14, halign: 'center' }, 1: { font: 'courier', fontStyle: 'bold' } },
+ alternateRowStyles: { fillColor: [247, 249, 252] }
+ });
+ y = doc.lastAutoTable.finalY + 10;
+ } else {
+ y += 10;
+ trackingRows.forEach(row => { doc.text(`${row[0]}. ${row[1]}`, margin, y); y += 6; });
+ }
+
+ const ensureSpace = required => {
+ if (y + required <= pageHeight - 15) return;
+ doc.addPage();
+ y = 18;
+ };
+ ensureSpace(signature ? 52 : 22);
+ doc.setFont('helvetica', 'bold');
+ doc.setFontSize(10);
+ doc.text('Assinatura de quem retirou', margin, y);
+ y += 5;
+ if (signature) {
+ doc.setDrawColor(220, 225, 233);
+ doc.roundedRect(margin, y, 80, 38, 2, 2, 'S');
+ addRomaneioPDFImage(doc, signature, margin + 3, y + 3, 74, 30);
+ y += 43;
+ } else {
+ doc.setFont('helvetica', 'normal');
+ doc.text('Assinatura não informada.', margin, y + 5);
+ y += 14;
+ }
+
+ if (packagePhoto) {
+ ensureSpace(88);
+ doc.setFont('helvetica', 'bold');
+ doc.setFontSize(10);
+ doc.text('Foto dos pacotes', margin, y);
+ y += 5;
+ addRomaneioPDFImage(doc, packagePhoto, margin, y, pageWidth - (margin * 2), 80);
+ }
+
+ const pages = doc.getNumberOfPages();
+ for (let page = 1; page <= pages; page += 1) {
+ doc.setPage(page);
+ doc.setFont('helvetica', 'normal');
+ doc.setFontSize(7);
+ doc.setTextColor(125, 135, 151);
+ doc.text(`DY Auto Parts • Romaneio ${item.id} • Página ${page} de ${pages}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
+ }
+ return doc;
+}
+
+function getRomaneioPDFFileName(item) {
+ return `romaneio-correios-${String(item.id || 'sem-numero').replace(/[^a-z0-9-]+/gi, '-')}.pdf`;
+}
+
+async function generateRomaneioPDF(id) {
  const item = findRomaneioById(id);
  if (!item) return;
- const html = `<html><body><pre>${getRomaneioText(item)}</pre><img style="max-width:420px" src="${item.assinatura || ''}">${item.foto_pacote ? `<img style="display:block;max-width:420px;margin-top:16px" src="${item.foto_pacote}">` : ''}</body></html>`;
- item.pdfDataUrl = `data:text/html;base64,${btoa(unescape(encodeURIComponent(html)))}`;
- updateRomaneio(item);
- showToast('Operacao concluida.', 'info');
- renderRomaneioScreen('', item.id);
-}
-
-function openRomaneioPDF(id) {
- const item = findRomaneioById(id);
- if (!item?.pdfDataUrl) {
- showToast('Operacao concluida.', 'info');
- return;
+ try {
+ const doc = await createRomaneioPDF(item);
+ doc.save(getRomaneioPDFFileName(item));
+ } catch (error) {
+ console.error('[ROMANEIO] PDF:', error);
+ showToast(error.message || 'Não foi possível gerar o PDF.', 'error');
  }
- window.open(item.pdfDataUrl, '_blank');
 }
-
 async function shareRomaneioWhatsApp(id) {
  const item = findRomaneioById(id);
  if (!item) return;
@@ -21276,11 +21553,39 @@ async function shareRomaneioWhatsApp(id) {
  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 }
 
-function shareRomaneioEmail(id) {
+async function shareRomaneioEmail(id) {
  const item = findRomaneioById(id);
  if (!item) return;
- const subject = `Romaneio ${item.id}`;
- window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(getRomaneioText(item))}`;
+ try {
+ showToast('Preparando PDF do romaneio...', 'info');
+ const doc = await createRomaneioPDF(item);
+ const blob = doc.output('blob');
+ const fileName = getRomaneioPDFFileName(item);
+ const file = new File([blob], fileName, { type: 'application/pdf' });
+ const subject = `Romaneio Correios ${item.id}`;
+ const body = `Olá,\n\nSegue o romaneio dos Correios com ${item.pacotes || 0} pacote(s), códigos de rastreio, assinatura e foto da retirada.\n\nRomaneio: ${item.id}\nData: ${item.data} ${item.hora}\nResponsável pela retirada: ${item.responsavel || '-'}\n`;
+
+ if (navigator.share && navigator.canShare?.({ files: [file] })) {
+ await navigator.share({ title: subject, text: body, files: [file] });
+ showToast('PDF compartilhado com sucesso.', 'success');
+ return;
+ }
+
+ const downloadUrl = URL.createObjectURL(blob);
+ const link = document.createElement('a');
+ link.href = downloadUrl;
+ link.download = fileName;
+ document.body.appendChild(link);
+ link.click();
+ link.remove();
+ setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
+ window.location.href = `mailto:${encodeURIComponent(item.email_destino || '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${body}\nO PDF foi baixado no computador para ser anexado a este e-mail.`)}`;
+ showToast('PDF baixado. Anexe o arquivo ao e-mail aberto.', 'info');
+ } catch (error) {
+ if (error?.name === 'AbortError') return;
+ console.error('[ROMANEIO] envio por e-mail:', error);
+ showToast(error.message || 'Não foi possível preparar o e-mail.', 'error');
+ }
 }
 
 let labelTemplateOptions = [];
@@ -31998,12 +32303,13 @@ const devolucaoMarketplaceState = {
 };
 
 const DEVOLUCAO_CHANNEL_FILTER_OPTIONS = ['Amazon', 'Magalu Djozu', 'Magalu Kawai', 'Magalu DY', 'ML Djozu', 'ML DY', 'ML Kawai', 'ML PF Ale', 'ML PF Carla', 'ML PF Clécio', 'ML PF Dani', 'ML PF Palo', 'ML PF Pri', 'ML PF Tban', 'ML PF Yugi', 'PDV', 'Shopee Djozu', 'Shopee DY', 'Shopee Kawai', 'Shopee PF Ale', 'Shopee PF Carla', 'Shopee PF Clécio', 'Shopee PF Dani', 'Shopee PF Gu', 'Shopee PF Tban', 'Shopee PF Yugi', 'Site', 'TikTok', 'Via Varejo'];
+const DEVOLUCAO_MONTH_FILTER_OPTIONS = [['01', 'Janeiro'], ['02', 'Fevereiro'], ['03', 'Março'], ['04', 'Abril'], ['05', 'Maio'], ['06', 'Junho'], ['07', 'Julho'], ['08', 'Agosto'], ['09', 'Setembro'], ['10', 'Outubro'], ['11', 'Novembro'], ['12', 'Dezembro']];
 
 const devolucaoHistoricoState = {
  records: [],
  search: '',
  status: 'todos',
- channels: [],
+ channels: [...DEVOLUCAO_CHANNEL_FILTER_OPTIONS],
  month: '',
  error: ''
 };
@@ -32165,12 +32471,12 @@ function getDevolucaoItemResultado(item = {}) {
 
 function getDevolucaoResultadoLabel(item = {}) {
  const resultado = getDevolucaoItemResultado(item);
- if (resultado === 'apto') return 'Apto para venda';
- if (resultado === 'nao_recebido') return 'Produto n\u00e3o devolvido';
- if (resultado === 'divergencia') return 'Produto diferente recebido';
- if (resultado === 'garantia') return 'Defeito / fornecedor';
- if (resultado === 'descarte') return 'Descarte / sem recupera\u00e7\u00e3o';
- return 'Defeito / em an\u00e1lise';
+ if (resultado === 'apto') return 'Recebido e dispon\u00edvel';
+ if (resultado === 'nao_recebido') return 'Produto n\u00e3o recebido';
+ if (resultado === 'divergencia') return 'Produto divergente recebido';
+ if (resultado === 'garantia') return 'Recebido com defeito';
+ if (resultado === 'descarte') return 'Sem recupera\u00e7\u00e3o / descarte';
+ return 'Recebido com defeito';
 }
 
 function getDevolucaoResultadoCost(item = {}) {
@@ -32232,6 +32538,7 @@ function mapDevolucaoRecordItemToDraft(item = {}) {
  sku: item.sku || '',
  descricao: item.descricao || 'Produto sem descricao',
  categoria: item.categoria || '',
+ cor: item.cor || findDevolucaoProductForItem(item)?.cor || '',
  quantidade: Number(item.quantidade || 1),
  valor_unitario: getDevolucaoItemAutoCost(item),
  fornecedor: item.fornecedor || '',
@@ -32246,7 +32553,7 @@ function mapDevolucaoRecordItemToDraft(item = {}) {
 }
 
 function getDevolucaoItemPayload(item = {}) {
- const { localId, id, devolucao_id, valor_total, criado_em, atualizado_em, ...payload } = item;
+ const { localId, id, devolucao_id, valor_total, criado_em, atualizado_em, cor, ...payload } = item;
  payload.valor_unitario = getDevolucaoItemAutoCost(payload);
  const resultado = getDevolucaoItemResultado(payload);
  payload.destino = resultado === 'apto' ? 'disponivel' : resultado === 'garantia' ? 'garantia' : resultado === 'nao_recebido' ? 'nao_recebido' : resultado === 'divergencia' ? 'divergencia' : resultado === 'descarte' ? 'descarte' : 'quarentena';
@@ -32664,6 +32971,7 @@ function addDevolucaoDraftItem() {
  sku: product.sku_fornecedor || '',
  descricao: product.descricao_completa || product.descricao_base || product.nome || 'Produto sem descri\u00e7\u00e3o',
  categoria: product.categoria || '',
+ cor: product.cor || '',
  quantidade,
  valor_unitario: custoProduto,
  fornecedor: document.getElementById('dev-item-brand')?.value.trim() || getDevolucaoProductBrand(product),
@@ -32723,12 +33031,12 @@ function renderDevolucaoDraftItems() {
  container.innerHTML = `<div class="devolucao-draft-list">${devolucaoMarketplaceState.draftItems.map((item, index) => `
  <article class="devolucao-draft-item ${item.devolveu_correto ? '' : 'is-divergent'}">
  <span class="devolucao-item-number">${index + 1}</span>
- <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p>${escapeDevolucaoHTML(item.id_interno || item.ean || '-')} &middot; ${escapeDevolucaoHTML(item.fornecedor || 'Marca nao informada')}</p></div>
+ <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p><span>ID interno: ${escapeDevolucaoHTML(item.id_interno || item.ean || '-')}</span><span>Marca: ${escapeDevolucaoHTML(item.fornecedor || 'N\u00e3o informada')}</span>${(item.cor || findDevolucaoProductForItem(item)?.cor) ? `<span>Cor: ${escapeDevolucaoHTML(item.cor || findDevolucaoProductForItem(item)?.cor)}</span>` : ''}</p></div>
  <div class="dev-draft-quantity"><small>Quantidade</small><span><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', -1)" aria-label="Diminuir quantidade">−</button><strong>${item.quantidade}</strong><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', 1)" aria-label="Aumentar quantidade">+</button></span></div>
  <div class="dev-draft-correct"><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
  <label class="dev-draft-toggle"><span class="dev-draft-toggle-check"><input type="checkbox" ${item.apto_venda === false ? 'checked' : ''} onchange="toggleDevolucaoDraftItemApto('${item.localId}', this.checked)"><small>Não apto</small></span><strong class="${item.apto_venda !== false ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
- <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Apto para venda</option><option value="defeito" ${getDevolucaoItemResultado(item) === 'defeito' ? 'selected' : ''}>Defeito / em an\u00e1lise</option><option value="garantia" ${getDevolucaoItemResultado(item) === 'garantia' ? 'selected' : ''}>Defeito / fornecedor</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o devolvido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto diferente recebido</option><option value="descarte" ${getDevolucaoItemResultado(item) === 'descarte' ? 'selected' : ''}>Descarte / sem recupera\u00e7\u00e3o</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
- <div class="dev-draft-impact is-${getDevolucaoItemFinancialClass(item)}"><small>Impacto financeiro</small><strong>${escapeDevolucaoHTML(getDevolucaoItemFinancialLabel(item))}</strong><em>Total ${formatCurrency(getDevolucaoResultadoCost(item))}</em><span>Unit. ${formatCurrency(Number(item.valor_unitario || 0))}</span></div>
+ <label class="dev-draft-result"><small>Resultado do item</small><select ${item.estoque_movimentado ? 'disabled title="Estoque j\u00e1 movimentado"' : ''} onchange="setDevolucaoDraftItemResultado('${item.localId}', this.value)"><option value="apto" ${getDevolucaoItemResultado(item) === 'apto' ? 'selected' : ''}>Recebido e dispon\u00edvel</option><option value="defeito" ${['defeito', 'garantia'].includes(getDevolucaoItemResultado(item)) ? 'selected' : ''}>Recebido com defeito</option><option value="nao_recebido" ${getDevolucaoItemResultado(item) === 'nao_recebido' ? 'selected' : ''}>Produto n\u00e3o recebido</option><option value="divergencia" ${getDevolucaoItemResultado(item) === 'divergencia' ? 'selected' : ''}>Produto divergente recebido</option><option value="descarte" ${getDevolucaoItemResultado(item) === 'descarte' ? 'selected' : ''}>Sem recupera\u00e7\u00e3o / descarte</option></select><strong class="${getDevolucaoItemResultado(item) === 'apto' ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
+ <div class="dev-draft-impact is-${getDevolucaoItemFinancialClass(item)}"><small>Resumo financeiro</small><strong>${escapeDevolucaoHTML(getDevolucaoItemFinancialLabel(item))}</strong><em>Valor total: ${formatCurrency(getDevolucaoResultadoCost(item))}</em><span>Valor unit\u00e1rio: ${formatCurrency(Number(item.valor_unitario || 0))}</span></div>
  <div class="dev-draft-cost"><small>Custo</small><strong>${formatCurrency(Number(item.valor_unitario || 0))}</strong></div>
  <button type="button" title="Remover item" onclick="removeDevolucaoDraftItem('${item.localId}')"><span class="material-symbols-rounded">delete</span></button>
  </article>`).join('')}</div>`;
@@ -32804,24 +33112,31 @@ async function renderHistoricoDevolucoes(options = {}) {
  <button type="button" class="devolucao-app-bar-back back-button-standard ds-back-button" onclick="renderDevolucoesSubMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button>
  <h1>DEVOLU\u00c7\u00d5ES</h1>
  <div class="devolucao-app-bar-actions">
- <button type="button" class="devolucao-header-btn" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">download</span><span>Exportar CSV</span></button>
- <div class="devolucao-month-filter"><button type="button" class="devolucao-month-filter-trigger" onclick="openDevolucaoHistoryCalendar()" aria-label="Escolher per\u00edodo"><span class="material-symbols-rounded">calendar_month</span><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b></button><input id="dev-history-month" type="month" value="${devolucaoHistoricoState.month}" tabindex="-1" aria-hidden="true" onchange="setHistoricoDevolucaoMonth(this.value)"></div>
+ <button type="button" class="devolucao-header-btn" onclick="exportHistoricoDevolucoesCSV()"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span>Exportar CSV</span></button>
+ <div class="devolucao-month-filter">
+<button type="button" class="devolucao-month-filter-trigger" onclick="toggleDevolucaoMonthFilter(event)" aria-haspopup="true" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b><svg class="devolucao-filter-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg></button>
+<div id="dev-history-month-menu" class="devolucao-month-filter-menu" hidden>
+<label><span>Ano</span><select id="dev-history-year-select" onchange="applyDevolucaoMonthFilter()">${getDevolucaoYearFilterOptions().map(year => `<option value="${year}" ${getDevolucaoSelectedYear() === String(year) ? 'selected' : ''}>${year}</option>`).join('')}</select></label>
+<label><span>Mês</span><select id="dev-history-month-select" onchange="applyDevolucaoMonthFilter()"><option value="">Ano inteiro</option>${DEVOLUCAO_MONTH_FILTER_OPTIONS.map(([value, label]) => `<option value="${value}" ${getDevolucaoSelectedMonth() === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+<button type="button" class="devolucao-month-clear" onclick="clearHistoricoDevolucaoMonth(); closeDevolucaoMonthFilter()">Todos os períodos</button>
+</div>
+</div>
  <button type="button" class="devolucao-primary-btn" onclick="openDevolucaoMarketplaceModal()"><span class="material-symbols-rounded">add</span><span>Nova devolu\u00e7\u00e3o</span></button>
  </div>
  </header>
  <main class="container">
  <section class="devolucao-history-toolbar">
  <label><span class="material-symbols-rounded">search</span><input id="dev-history-search" type="search" placeholder="Buscar nome, pedido, ID, EAN ou SKU..." oninput="filterHistoricoDevolucoes(this.value)"></label>
- <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Todos os status</option><option value="em_analise">Marketplace acionado</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
+ <select id="dev-history-status" onchange="setHistoricoDevolucaoStatus(this.value)"><option value="todos">Status</option><option value="em_analise">Marketplace acionado</option><option value="concluida_sem_prejuizo">Conclu\u00eddas sem preju\u00edzo</option><option value="concluida_com_prejuizo">Conclu\u00eddas com preju\u00edzo</option></select>
  <div id="dev-history-channel-filter" class="devolucao-channel-filter">
-<button type="button" class="devolucao-channel-filter-trigger" onclick="toggleDevolucaoChannelFilter(event)" aria-haspopup="true" aria-expanded="false"><span class="material-symbols-rounded">storefront</span><b id="dev-history-channel-label">Todos os canais</b><span class="material-symbols-rounded">expand_more</span></button>
+<button type="button" class="devolucao-channel-filter-trigger" onclick="toggleDevolucaoChannelFilter(event)" aria-haspopup="true" aria-expanded="false"><span class="material-symbols-rounded">storefront</span><b id="dev-history-channel-label">Canais</b><span class="material-symbols-rounded">expand_more</span></button>
 <div id="dev-history-channel-menu" class="devolucao-channel-filter-menu" hidden>
-<label class="devolucao-channel-option is-all"><input id="dev-channel-all" type="checkbox" checked onchange="toggleAllHistoricoDevolucaoChannels(this.checked)"><span>Todos os canais</span></label>
+<label class="devolucao-channel-option is-all"><input id="dev-channel-all" type="checkbox" checked onchange="toggleAllHistoricoDevolucaoChannels(this.checked)"><span>Selecionar todos</span></label>
 <div class="devolucao-channel-options">${DEVOLUCAO_CHANNEL_FILTER_OPTIONS.map((channel, index) => `<label class="devolucao-channel-option"><input id="dev-channel-${index}" type="checkbox" value="${escapeDevolucaoHTML(channel)}" onchange="toggleHistoricoDevolucaoChannel('${escapeDevolucaoHTML(channel)}', this.checked)"><span>${escapeDevolucaoHTML(channel)}</span></label>`).join('')}</div>
 <button type="button" class="devolucao-channel-filter-done" onclick="closeDevolucaoChannelFilter()">Concluir</button>
 </div>
 </div>
- <button type="button" class="devolucao-all-months-btn" onclick="clearHistoricoDevolucaoMonth()"><span class="material-symbols-rounded">date_range</span> Todos os meses</button>
+
  </section>
  <div id="dev-history-metrics" class="devolucao-history-metrics"></div><div class="devolucao-metrics-note"><span class="material-symbols-rounded">info</span><p>Os valores s\u00e3o atualizados automaticamente com base nas devolu\u00e7\u00f5es registradas no per\u00edodo selecionado.</p></div>
  <div id="dev-history-results-heading" class="devolucao-results-heading"><h2>Devolu\u00e7\u00f5es realizadas</h2><span>0 produto(s)</span></div>
@@ -32832,7 +33147,7 @@ async function renderHistoricoDevolucoes(options = {}) {
 
  devolucaoHistoricoState.search = '';
  devolucaoHistoricoState.status = 'todos';
- devolucaoHistoricoState.channels = [];
+ devolucaoHistoricoState.channels = [...DEVOLUCAO_CHANNEL_FILTER_OPTIONS];
  devolucaoHistoricoState.month = options.month || getDevolucaoToday().slice(0, 7);
  const monthFilter = document.getElementById('dev-history-month');
  if (monthFilter) monthFilter.value = devolucaoHistoricoState.month;
@@ -32870,19 +33185,22 @@ function setHistoricoDevolucaoStatus(value) {
 
 function isHistoricoDevolucaoChannelSelected(channel) {
  const selected = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
- return selected.length === 0 || selected.includes(channel);
+ return selected.includes(channel);
 }
 
 function updateDevolucaoChannelFilterUI() {
  const selected = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
  const allInput = document.getElementById('dev-channel-all');
- if (allInput) allInput.checked = selected.length === 0;
+ if (allInput) {
+ allInput.checked = selected.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length;
+ allInput.indeterminate = selected.length > 0 && selected.length < DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length;
+ }
  DEVOLUCAO_CHANNEL_FILTER_OPTIONS.forEach((channel, index) => {
  const input = document.getElementById(`dev-channel-${index}`);
  if (input) input.checked = selected.includes(channel);
  });
  const label = document.getElementById('dev-history-channel-label');
- if (label) label.textContent = selected.length === 0 ? 'Todos os canais' : selected.length === 1 ? selected[0] : `${selected.length} canais selecionados`;
+ if (label) label.textContent = selected.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length ? 'Canais' : selected.length === 0 ? 'Nenhum canal' : selected.length === 1 ? selected[0] : `${selected.length} canais selecionados`;
 }
 
 function toggleDevolucaoChannelFilter(event) {
@@ -32904,11 +33222,7 @@ function closeDevolucaoChannelFilter() {
 }
 
 function toggleAllHistoricoDevolucaoChannels(checked) {
- if (!checked && (!devolucaoHistoricoState.channels || devolucaoHistoricoState.channels.length === 0)) {
- updateDevolucaoChannelFilterUI();
- return;
- }
- devolucaoHistoricoState.channels = [];
+ devolucaoHistoricoState.channels = checked ? [...DEVOLUCAO_CHANNEL_FILTER_OPTIONS] : [];
  updateDevolucaoChannelFilterUI();
  renderHistoricoDevolucaoList();
 }
@@ -32922,11 +33236,33 @@ function toggleHistoricoDevolucaoChannel(channel, checked) {
  renderHistoricoDevolucaoList();
 }
 
+function getDevolucaoYearFilterOptions() {
+ const currentYear = Number(getDevolucaoToday().slice(0, 4));
+ const years = new Set([currentYear + 1, currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4, currentYear - 5]);
+ (devolucaoHistoricoState.records || []).forEach(row => {
+ const year = Number(String(row.data_devolucao || '').slice(0, 4));
+ if (Number.isFinite(year) && year > 2000) years.add(year);
+ });
+ return [...years].sort((left, right) => right - left);
+}
+
+function getDevolucaoSelectedYear() {
+ return String(devolucaoHistoricoState.month || '').slice(0, 4) || getDevolucaoToday().slice(0, 4);
+}
+
+function getDevolucaoSelectedMonth() {
+ const value = String(devolucaoHistoricoState.month || '');
+ return /^\d{4}-\d{2}$/.test(value) ? value.slice(5, 7) : '';
+}
+
 function formatDevolucaoMonthShort(value) {
- const match = String(value || '').match(/^(\d{4})-(\d{2})$/);
- if (!match) return 'Todos';
+ const normalized = String(value || '');
+ const match = normalized.match(/^(\d{4})-(\d{2})$/);
+ if (match) {
  const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
  return `${months[Number(match[2]) - 1] || match[2]}/${match[1]}`;
+ }
+ return /^\d{4}$/.test(normalized) ? normalized : 'Todos os períodos';
 }
 
 function updateDevolucaoMonthDisplay(value) {
@@ -32940,22 +33276,47 @@ function setHistoricoDevolucaoMonth(value) {
  updateDevolucaoMonthDisplay(devolucaoHistoricoState.month);
 }
 
-function clearHistoricoDevolucaoMonth() {
- devolucaoHistoricoState.month = '';
- const input = document.getElementById('dev-history-month');
- if (input) input.value = '';
- updateDevolucaoMonthDisplay('');
- renderHistoricoDevolucaoList();
+function applyDevolucaoMonthFilter() {
+ const year = document.getElementById('dev-history-year-select')?.value || getDevolucaoToday().slice(0, 4);
+ const month = document.getElementById('dev-history-month-select')?.value || '';
+ setHistoricoDevolucaoMonth(month ? `${year}-${month}` : year);
 }
 
-function openDevolucaoHistoryCalendar() {
- const input = document.getElementById('dev-history-month');
- if (!input) return;
- input.focus();
- if (typeof input.showPicker === 'function') {
- try { input.showPicker(); return; } catch (_) {}
+function toggleDevolucaoMonthFilter(event) {
+ event?.preventDefault();
+ event?.stopPropagation();
+ const menu = document.getElementById('dev-history-month-menu');
+ const trigger = event?.currentTarget || document.querySelector('.devolucao-month-filter-trigger');
+ if (!menu || !trigger) return;
+ const shouldOpen = menu.hidden;
+ closeDevolucaoChannelFilter();
+ menu.hidden = !shouldOpen;
+ trigger.setAttribute('aria-expanded', String(shouldOpen));
+ if (shouldOpen) {
+ const rect = trigger.getBoundingClientRect();
+ const menuWidth = Math.min(280, Math.max(240, window.innerWidth - 24));
+ menu.style.position = 'fixed';
+ menu.style.width = `${menuWidth}px`;
+ menu.style.top = `${Math.round(rect.bottom + 8)}px`;
+ menu.style.left = `${Math.round(Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12)))}px`;
+ menu.style.right = 'auto';
+ menu.style.zIndex = '2000';
  }
- input.click();
+}
+
+function closeDevolucaoMonthFilter() {
+ const menu = document.getElementById('dev-history-month-menu');
+ const trigger = document.querySelector('.devolucao-month-filter-trigger');
+ if (menu) menu.hidden = true;
+ trigger?.setAttribute('aria-expanded', 'false');
+}
+
+function clearHistoricoDevolucaoMonth() {
+ devolucaoHistoricoState.month = '';
+ const monthSelect = document.getElementById('dev-history-month-select');
+ if (monthSelect) monthSelect.value = '';
+ updateDevolucaoMonthDisplay('');
+ renderHistoricoDevolucaoList();
 }
 
 function formatDevolucaoDate(value) {
@@ -33085,7 +33446,7 @@ function exportHistoricoDevolucoesCSV() {
  const link = document.createElement('a');
  const month = devolucaoHistoricoState.month || 'todos-os-meses';
  const selectedChannels = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
- const channel = selectedChannels.length === 0 ? 'todos-canais' : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
+ const channel = selectedChannels.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length ? 'todos-canais' : selectedChannels.length === 0 ? 'nenhum-canal' : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
  link.href = url;
  link.download = `devolucoes-marketplace-${month}-${channel}.csv`;
  document.body.appendChild(link);
@@ -33179,8 +33540,7 @@ function renderHistoricoDevolucaoList() {
 <div class="dev-history-cell dev-history-channel"><small>Canal</small><strong>${escapeDevolucaoHTML(row.canal)}</strong></div>
 <div class="dev-history-cell dev-history-order"><small>Pedido</small><strong>${escapeDevolucaoHTML(row.pedido)}</strong>${row.id_interno || row.pedido_id_interno ? `<span>ID interno: ${escapeDevolucaoHTML(row.id_interno || row.pedido_id_interno)}</span>` : ''}</div>
 <div class="dev-history-cell dev-history-name"><small>Nome</small><strong>${escapeDevolucaoHTML(row.remetente || 'Remetente n\u00e3o informado')}</strong></div>
-<div class="dev-history-cell devolucao-return-date"><small>Data da devolu\u00e7\u00e3o</small><strong><span class="material-symbols-rounded">event</span>${formatDevolucaoDate(row.data_devolucao)}</strong></div>
-<div class="dev-history-cell devolucao-created-at"><small>Lan\u00e7amento</small><strong><span class="material-symbols-rounded">schedule</span>${formatDevolucaoCreatedAt(row)}</strong></div>
+<div class="dev-history-dates"><div class="dev-history-cell devolucao-return-date"><small>Devolu\u00e7\u00e3o</small><strong><svg class="devolucao-inline-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="13.5" rx="2"/><path d="M6 2.5v3M14 2.5v3M2.5 8h15"/></svg>${formatDevolucaoDate(row.data_devolucao)}</strong></div><div class="dev-history-cell devolucao-created-at"><small>Lan\u00e7amento</small><strong><svg class="devolucao-inline-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4.5l3 2"/></svg>${formatDevolucaoCreatedAt(row)}</strong></div></div>
 <div class="dev-history-side status-${businessStatus}">
 <select class="devolucao-status-select status-${businessStatus}" onchange="updateHistoricoDevolucaoStatus('${row.id}', this.value, this)">
 ${getDevolucaoStatusOptions(row)}
@@ -33193,9 +33553,10 @@ ${getDevolucaoStatusOptions(row)}
 </header>
  <div class="devolucao-history-items">${items.map(item => `<div>
  ${getDevolucaoItemVisual(item)}
- <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Marca: ${escapeDevolucaoHTML(item.marca || item.fornecedor || 'N\u00e3o informada')}${item.cor ? ` &middot; Cor: ${escapeDevolucaoHTML(item.cor)}` : ''} &middot; Qtd. ${Number(item.quantidade)}${item.produto_id ? ` &middot; ID produto: ${escapeDevolucaoHTML(item.produto_id)}` : ''}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
+ <section><strong>${escapeDevolucaoHTML(item.descricao)}</strong><small>${item.id_interno ? `ID interno: ${escapeDevolucaoHTML(item.id_interno)} &middot; ` : ''}Marca: ${escapeDevolucaoHTML(item.marca || item.fornecedor || 'N\u00e3o informada')}${(item.cor || findDevolucaoProductForItem(item)?.cor) ? ` &middot; Cor: ${escapeDevolucaoHTML(item.cor || findDevolucaoProductForItem(item)?.cor)}` : ''} &middot; Qtd. ${Number(item.quantidade)}</small>${item.observacoes ? `<p>${escapeDevolucaoHTML(item.observacoes)}</p>` : ''}</section>
  <em class="resultado-${getDevolucaoItemResultado(item)}">${escapeDevolucaoHTML(getDevolucaoResultadoLabel(item))}</em>
  </div>`).join('')}</div>
+ ${row.observacao_acompanhamento ? `<div class="devolucao-marketplace-observation"><small>Observa\u00e7\u00e3o do marketplace</small><p>${escapeDevolucaoHTML(row.observacao_acompanhamento)}</p></div>` : ''}
  ${followupMarkup}
  <footer><span><b>${escapeDevolucaoHTML(row.motivo)}</b>${row.impactou_reputacao ? ' &middot; Afetou reputa\u00e7\u00e3o' : ''}</span><div class="devolucao-card-finance"><span><small>Custo do produto</small><strong>${formatCurrency(recordFinancial.original)}</strong></span><span class="${saldoMarketplace < 0 ? 'is-negative' : 'is-positive'}"><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplace)}</strong></span><span class="is-positive"><small>Reembolso marketplace</small><strong>${formatCurrency(reembolsoMarketplace)}</strong></span><span class="${saldoLiquidoMarketplace < 0 ? 'is-negative' : 'is-positive'}"><small>Total saldo + reembolso</small><strong>${formatSignedMarketplaceSaldo(saldoLiquidoMarketplace)}</strong></span></div><strong>${itemQuantity} produto(s)</strong></footer>
  ${row.marketplace_acionado ? '' : reputationControlMarkup}

@@ -71334,3 +71334,125 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container { p
 .devolucao-history-screen .devolucao-month-filter-trigger { display:flex; width:100%; height:100%; min-height:56px; padding:0 16px; align-items:center; justify-content:center; gap:10px; border:0; border-radius:inherit; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .devolucao-history-screen .devolucao-month-filter > input { position:absolute !important; width:1px !important; height:1px !important; inset:auto auto 0 0 !important; opacity:0 !important; pointer-events:none; }
 @media (max-width:620px) { .devolucao-history-screen .devolucao-channel-options { grid-template-columns:1fr; } .devolucao-history-screen .devolucao-channel-filter-menu { right:auto; left:0; width:min(360px,calc(100vw - 36px)); } }
+/* Refinamento local dos filtros de devolucao */
+.devolucao-history-screen .devolucao-history-toolbar { grid-template-columns:minmax(330px,1.7fr) minmax(210px,.75fr) minmax(240px,.9fr) !important; }
+.devolucao-history-screen .devolucao-history-toolbar input,
+.devolucao-history-screen .devolucao-history-toolbar select,
+.devolucao-history-screen .devolucao-channel-filter-trigger,
+.devolucao-history-screen .devolucao-month-filter-trigger { font-family:Inter,Segoe UI,Arial,sans-serif !important; font-size:.8rem !important; font-weight:750 !important; letter-spacing:0 !important; }
+.devolucao-history-screen .devolucao-channel-filter-trigger { padding-right:14px !important; padding-left:14px !important; }
+.devolucao-history-screen .devolucao-channel-filter-trigger b,
+.devolucao-history-screen .devolucao-month-filter-trigger b { font:inherit !important; }
+.devolucao-history-screen .devolucao-month-filter { position:relative; overflow:visible !important; }
+.devolucao-history-screen .devolucao-month-filter-trigger { display:grid; grid-template-columns:auto minmax(72px,1fr) auto; justify-content:stretch; text-align:center; }
+.devolucao-history-screen .devolucao-month-filter-menu { position:absolute; z-index:130; top:calc(100% + 9px); right:0; display:grid; width:280px; padding:14px; grid-template-columns:1fr 1.25fr; gap:12px; border:1px solid #e0e4ec; border-radius:14px; background:#fff; box-shadow:0 18px 45px rgba(24,34,57,.2); box-sizing:border-box; }
+.devolucao-history-screen .devolucao-month-filter-menu[hidden] { display:none !important; }
+.devolucao-history-screen .devolucao-month-filter-menu label { display:grid; gap:6px; color:#59657c; font-family:Inter,Segoe UI,Arial,sans-serif; font-size:.68rem; font-weight:800; text-transform:uppercase; }
+.devolucao-history-screen .devolucao-month-filter-menu select { width:100%; min-height:42px; padding:0 10px; border:1px solid #dfe3ec; border-radius:9px; background:#fff; color:#17213b; font-family:Inter,Segoe UI,Arial,sans-serif; font-size:.78rem; font-weight:750; }
+.devolucao-history-screen .devolucao-month-clear { grid-column:1 / -1; min-height:40px; border:0; border-radius:9px; background:#f1edff; color:#5720ce; font-family:Inter,Segoe UI,Arial,sans-serif; font-size:.75rem; font-weight:850; cursor:pointer; }
+.devolucao-history-screen .devolucao-month-clear:hover { background:#e7e0ff; }
+.devolucao-history-screen .devolucao-channel-option,
+.devolucao-history-screen .devolucao-channel-filter-done { font-family:Inter,Segoe UI,Arial,sans-serif !important; }
+@media (max-width:1180px) { .devolucao-history-screen .devolucao-history-toolbar { grid-template-columns:1fr 1fr !important; } .devolucao-history-screen .devolucao-history-toolbar > label:first-child { grid-column:1 / -1; } }
+@media (max-width:620px) { .devolucao-history-screen .devolucao-history-toolbar { grid-template-columns:1fr !important; } .devolucao-history-screen .devolucao-month-filter-menu { right:auto; left:0; width:min(280px,calc(100vw - 32px)); } }
+/* Acabamento local da barra de filtros */
+.devolucao-history-screen .devolucao-history-toolbar { align-items:stretch !important; padding:16px !important; gap:14px !important; }
+.devolucao-history-screen .devolucao-history-toolbar > label:first-child,
+.devolucao-history-screen .devolucao-history-toolbar > select,
+.devolucao-history-screen .devolucao-channel-filter-trigger { height:58px !important; min-height:58px !important; border:1px solid #dfe3ec !important; border-radius:11px !important; background:#fff !important; color:#17213b !important; box-shadow:0 3px 10px rgba(30,40,65,.035) !important; box-sizing:border-box; }
+.devolucao-history-screen .devolucao-history-toolbar > label:first-child { padding:0 15px !important; gap:11px; }
+.devolucao-history-screen .devolucao-history-toolbar > label:first-child .material-symbols-rounded { color:#66728a; font-size:21px; }
+.devolucao-history-screen .devolucao-history-toolbar > label:first-child:focus-within,
+.devolucao-history-screen .devolucao-history-toolbar > select:focus,
+.devolucao-history-screen .devolucao-channel-filter-trigger:focus-visible { border-color:#6d3bea !important; box-shadow:0 0 0 3px rgba(109,59,234,.12) !important; outline:0; }
+.devolucao-history-screen .devolucao-history-toolbar > select { padding:0 42px 0 16px !important; cursor:pointer; }
+.devolucao-history-screen .devolucao-channel-filter { min-height:58px !important; }
+.devolucao-history-screen .devolucao-channel-filter-trigger .material-symbols-rounded:first-child { color:#6d3bea; }
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-header-btn,
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-month-filter-trigger,
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-primary-btn { font-family:Inter,Segoe UI,Arial,sans-serif !important; font-size:.78rem !important; font-weight:800 !important; letter-spacing:0 !important; }
+.devolucao-history-screen .devolucao-month-filter-trigger b { white-space:nowrap; }
+/* Devolucoes - navegacao fixa e leitura compacta da listagem v2.1.64 */
+html body:not(.login-active) #app .devolucao-history-screen > main.container { padding-top:108px !important; }
+.devolucao-history-screen .devolucao-history-toolbar { position:sticky; z-index:90; top:106px; margin-top:0 !important; margin-bottom:18px !important; }
+.devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:minmax(90px,.55fr) minmax(185px,1.2fr) minmax(180px,1fr) minmax(190px,.9fr) minmax(240px,1.05fr) !important; }
+.devolucao-history-screen .dev-history-dates { display:grid; min-width:0; gap:10px; }
+.devolucao-history-screen .dev-history-side { min-width:240px; }
+.devolucao-history-screen .dev-history-side .devolucao-status-select { min-width:240px; padding-right:34px !important; padding-left:18px !important; white-space:nowrap; }
+.devolucao-history-screen .devolucao-marketplace-observation { margin:0 14px 12px; border:1px solid #e5e0f6; border-radius:11px; background:#faf8ff; color:#39445c; }
+.devolucao-history-screen .devolucao-marketplace-observation summary { display:grid; min-height:42px; padding:8px 12px; grid-template-columns:auto auto minmax(0,1fr) auto; align-items:center; gap:8px; cursor:pointer; list-style:none; }
+.devolucao-history-screen .devolucao-marketplace-observation summary::-webkit-details-marker { display:none; }
+.devolucao-history-screen .devolucao-marketplace-observation summary > .material-symbols-rounded:first-child { color:#6d3bea; font-size:19px; }
+.devolucao-history-screen .devolucao-marketplace-observation summary b { font-size:.68rem; white-space:nowrap; }
+.devolucao-history-screen .devolucao-marketplace-observation summary > span:nth-child(3) { overflow:hidden; color:#66728a; font-size:.7rem; text-overflow:ellipsis; white-space:nowrap; }
+.devolucao-history-screen .devolucao-marketplace-observation summary > .material-symbols-rounded:last-child { color:#7a8498; font-size:18px; transition:transform .2s ease; }
+.devolucao-history-screen .devolucao-marketplace-observation[open] summary > .material-symbols-rounded:last-child { transform:rotate(180deg); }
+.devolucao-history-screen .devolucao-marketplace-observation p { margin:0; padding:0 40px 12px; color:#3f4960; font-size:.72rem; line-height:1.55; white-space:pre-wrap; }
+@media (max-width:1250px) { .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:repeat(2,minmax(170px,1fr)) minmax(230px,.9fr) !important; } .devolucao-history-screen .dev-history-dates { grid-column:1; } .devolucao-history-screen .dev-history-side { grid-column:3; grid-row:1 / span 2; } }
+@media (max-width:900px) { html body:not(.login-active) #app .devolucao-history-screen > main.container { padding-top:156px !important; } .devolucao-history-screen .devolucao-history-toolbar { top:154px; } }
+@media (max-width:760px) { .devolucao-history-screen .devolucao-history-toolbar { position:relative; top:auto; } .devolucao-history-screen .devolucao-history-card > header.devolucao-history-mainline { grid-template-columns:1fr !important; } .devolucao-history-screen .dev-history-dates,.devolucao-history-screen .dev-history-side { grid-column:auto; grid-row:auto; } .devolucao-history-screen .dev-history-side,.devolucao-history-screen .dev-history-side .devolucao-status-select { width:100% !important; min-width:0; } .devolucao-history-screen .devolucao-marketplace-observation summary { grid-template-columns:auto minmax(0,1fr) auto; } .devolucao-history-screen .devolucao-marketplace-observation summary b { white-space:normal; } .devolucao-history-screen .devolucao-marketplace-observation summary > span:nth-child(3) { display:none; } .devolucao-history-screen .devolucao-marketplace-observation p { padding:0 12px 12px; } }
+/* Devolucoes - separacao visual e detalhes essenciais v2.1.64 */
+.devolucao-history-screen .dev-history-dates { grid-template-columns:1fr !important; gap:9px !important; }
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card:nth-child(odd) { background:#ffffff !important; }
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card:nth-child(even) { background:#f5f6f8 !important; }
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card > header,
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card > footer,
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card .devolucao-history-items { background:transparent !important; }
+.devolucao-history-screen .devolucao-history-list > .devolucao-history-card { margin-bottom:16px !important; box-shadow:0 5px 16px rgba(35,44,68,.055) !important; }
+.devolucao-history-screen .devolucao-marketplace-observation { display:grid; min-height:44px; margin:0 14px 12px; padding:9px 14px; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:12px; border:1px solid #e2e5eb; border-radius:10px; background:rgba(248,249,251,.9); color:#465169; box-sizing:border-box; }
+.devolucao-history-screen .devolucao-marketplace-observation small { color:#778197; font-size:.62rem; font-weight:850; letter-spacing:.025em; text-transform:uppercase; white-space:nowrap; }
+.devolucao-history-screen .devolucao-marketplace-observation p { min-width:0; margin:0; padding:0; overflow-wrap:anywhere; color:#364158; font-size:.72rem; line-height:1.45; white-space:pre-wrap; }
+@media (max-width:620px) { .devolucao-history-screen .devolucao-marketplace-observation { grid-template-columns:1fr; gap:4px; } }
+/* Devolucoes - icones semanticos e seletor de periodo confiavel */
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-action-icon { width:19px; height:19px; flex:0 0 19px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+.devolucao-history-screen .devolucao-app-bar-actions .devolucao-filter-chevron { width:17px; height:17px; flex:0 0 17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.devolucao-history-screen .devolucao-month-filter-menu { position:fixed !important; z-index:2000 !important; }
+.devolucao-history-screen .devolucao-month-filter-trigger[aria-expanded="true"] .devolucao-filter-chevron { transform:rotate(180deg); }
+.devolucao-history-screen .devolucao-inline-icon { width:16px; height:16px; flex:0 0 16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+
+/* Nova devolucao - card de produto em duas colunas v2.1.64 */
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item { display:grid !important; grid-template-columns:34px minmax(190px,.72fr) minmax(300px,1.28fr) 40px !important; grid-template-rows:auto auto auto !important; gap:10px 14px !important; padding:14px !important; align-items:stretch !important; border-color:#dfe4ec !important; border-radius:13px !important; background:#fbfcfe !important; overflow:visible !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-item-number { grid-column:1 !important; grid-row:1 / 4 !important; align-self:start; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main { grid-column:2 / 4 !important; grid-row:1 !important; padding:0 4px 10px !important; text-align:left !important; border-bottom:1px solid #e6eaf0; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main > small { margin-bottom:4px; color:#7d88a0; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main > strong { display:block; font-size:.9rem; line-height:1.4; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main p { display:flex; margin-top:7px; flex-wrap:wrap; gap:5px 16px; color:#68748b; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main p span { position:relative; white-space:normal !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main p span:not(:last-child)::after { position:absolute; right:-10px; color:#b4bcc9; content:'•'; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item > button { grid-column:4 !important; grid-row:1 !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-quantity { display:flex !important; grid-column:2 !important; grid-row:2 !important; min-height:88px; padding:12px !important; flex-direction:column; align-items:center !important; justify-content:center !important; border:1px solid #e0e5ed; border-radius:10px; background:#fff; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-result { display:grid !important; grid-column:3 / 5 !important; grid-row:2 !important; min-height:88px; padding:12px !important; align-content:center; justify-items:stretch !important; gap:7px; border:1px solid #e0e5ed; border-radius:10px; background:#fff; text-align:left !important; overflow:visible !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-result select { width:100% !important; max-width:none !important; min-height:40px; margin:0 !important; padding:0 42px 0 13px !important; font-size:.76rem; white-space:normal; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-result > strong { text-align:left !important; line-height:1.35; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact { display:grid !important; grid-column:2 / 5 !important; grid-row:3 !important; min-height:58px; padding:10px 14px !important; grid-template-columns:auto minmax(150px,1fr) auto auto; align-items:center; justify-content:stretch; gap:8px 18px; text-align:left !important; overflow:visible !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact > small { flex:auto; text-align:left; white-space:nowrap !important; }
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact strong,
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact em,
+.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact span { white-space:normal !important; overflow-wrap:normal !important; word-break:normal !important; }
+@media (max-width:760px) { .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item { grid-template-columns:30px minmax(0,1fr) 38px !important; } .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-item-number { grid-column:1 !important; grid-row:1 !important; } .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .devolucao-draft-main { grid-column:2 !important; } .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item > button { grid-column:3 !important; } .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-quantity,.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-result,.devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact { grid-column:2 / 4 !important; grid-row:auto !important; } .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact { grid-template-columns:1fr 1fr; } }
+@media (max-width:480px) { .devolucao-modal-redesign .devolucao-items-unified .devolucao-draft-item .dev-draft-impact { grid-template-columns:1fr; gap:5px; } }
+/* Romaneio dos Correios - conferencia por rastreio */
+.romaneio-tracking-panel { grid-column:1 / -1; display:grid; gap:12px; padding:16px; border:1px solid #d9e4f0; border-radius:14px; background:#f8fbff; }
+.romaneio-tracking-head { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.romaneio-tracking-head > div { display:grid; gap:4px; }
+.romaneio-tracking-head strong { color:#172033; font-size:.9rem; }
+.romaneio-tracking-head small { color:#6c7890; font-size:.72rem; }
+.romaneio-tracking-head > span { padding:7px 11px; border-radius:999px; background:#e8f2ff; color:#185aa5; font-size:.72rem; font-weight:900; white-space:nowrap; }
+.romaneio-tracking-scan { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; }
+.romaneio-tracking-scan input { min-width:0; min-height:46px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+.romaneio-tracking-scan button { min-height:46px; padding:0 18px; border:0; border-radius:10px; background:#165cab; color:#fff; font-weight:850; cursor:pointer; }
+.romaneio-tracking-list { display:grid; max-height:220px; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; overflow:auto; }
+.romaneio-tracking-empty { grid-column:1 / -1; padding:14px; border:1px dashed #cbd5e1; border-radius:10px; color:#7b879b; font-size:.75rem; text-align:center; }
+.romaneio-tracking-code { display:grid; min-width:0; min-height:42px; padding:6px 8px; grid-template-columns:26px minmax(0,1fr) auto; align-items:center; gap:8px; border:1px solid #dfe6ef; border-radius:9px; background:#fff; }
+.romaneio-tracking-code > span { display:grid; width:25px; height:25px; place-items:center; border-radius:50%; background:#edf4fc; color:#28629f; font-size:.65rem; font-weight:900; }
+.romaneio-tracking-code strong { min-width:0; overflow-wrap:anywhere; color:#24324b; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.76rem; letter-spacing:.035em; }
+.romaneio-tracking-code button { width:auto; height:30px; padding:0 9px; border:0; border-radius:7px; background:#fff0f1; color:#c8323b; font-size:.66rem; font-weight:800; cursor:pointer; }
+.romaneio-saved-tracking { margin:16px 0; padding:14px; border:1px solid #dfe6ef; border-radius:12px; background:#f8fafc; }
+.romaneio-saved-tracking > div { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.romaneio-saved-tracking > div span { color:#5c6a82; font-size:.72rem; font-weight:800; }
+.romaneio-saved-tracking ol { display:grid; margin:12px 0 0; padding-left:24px; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 18px; }
+.romaneio-saved-tracking li { color:#2c3a52; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.76rem; overflow-wrap:anywhere; }
+@media(max-width:680px) { .romaneio-tracking-head { align-items:flex-start; flex-direction:column; } .romaneio-tracking-scan,.romaneio-tracking-list,.romaneio-saved-tracking ol { grid-template-columns:1fr; } }
+/* Romaneio - acao de e-mail apos a assinatura */
+.romaneio-post-actions .romaneio-email-send-btn { min-height:48px; padding:0 22px; border-color:#166534 !important; background:#16834f !important; color:#fff !important; font-weight:900; box-shadow:0 7px 18px rgba(22,131,79,.18); }
+.romaneio-post-actions .romaneio-email-send-btn:hover { background:#126d42 !important; }
