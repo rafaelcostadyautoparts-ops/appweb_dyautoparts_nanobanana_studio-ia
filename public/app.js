@@ -11647,7 +11647,7 @@ let lastScanTime = 0;
 let isScannerStarting = false;
 let isScannerScanProcessing = false;
 
-async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false, isInventoryLocation = false) {
+async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false, isInventoryLocation = false, isRomaneioTracking = false) {
  if (isScannerStarting) return;
  isScannerStarting = true;
 
@@ -11680,6 +11680,10 @@ async function startScanner(isPicking = false, isConference = false, isInventory
  containerId = 'scanner-container-inv-location';
  readerId = 'reader-inv-location';
  inputId = 'inventory-location-search-input';
+ } else if (isRomaneioTracking) {
+ containerId = 'scanner-container-romaneio';
+ readerId = 'reader-romaneio';
+ inputId = 'romaneio-tracking-input';
  }
 
  const scannerContainer = document.getElementById(containerId);
@@ -11772,9 +11776,20 @@ async function startScanner(isPicking = false, isConference = false, isInventory
  else if (isGarantia) context = 'garantia';
  else if (isEdit) context = 'edit';
  else if (isInventoryLocation) context = 'inventory-location';
+ else if (isRomaneioTracking) context = 'romaneio-tracking';
 
  let product = null;
  try {
+ if (isRomaneioTracking) {
+ const input = document.getElementById('romaneio-tracking-input');
+ if (input) {
+ input.value = decodedText;
+ input.removeAttribute('inputmode');
+ }
+ addRomaneioTrackingCode();
+ await stopScanner();
+ return;
+ }
  if (isInventoryLocation) {
  const input = document.getElementById('inventory-location-search-input');
  if (input) {
@@ -11910,7 +11925,7 @@ async function stopScanner() {
  document.body.classList.remove('scanner-torch-on');
 
  // Restore inputmode
- const inputs = ['search-input', 'pick-ean-input', 'pack-ean-input', 'garantia-search-input', 'edit-search-input', 'inventory-location-search-input'];
+ const inputs = ['search-input', 'pick-ean-input', 'pack-ean-input', 'garantia-search-input', 'edit-search-input', 'inventory-location-search-input', 'romaneio-tracking-input'];
  inputs.forEach(id => {
  const input = document.getElementById(id);
  if (input) input.removeAttribute('inputmode');
@@ -11923,7 +11938,8 @@ async function stopScanner() {
  'scanner-container-pack',
  'scanner-container-garantia',
  'scanner-container-edit',
- 'scanner-container-inv-location'
+ 'scanner-container-inv-location',
+ 'scanner-container-romaneio'
  ];
 
  containers.forEach(id => {
@@ -20661,6 +20677,7 @@ const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetirada';
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
 let romaneioTrackingState = { key: '', codes: [] };
+let romaneioPackageEditState = { key: '', values: {} };
 
 function getRomaneios() {
  try {
@@ -20939,17 +20956,36 @@ function updateRomaneioTrackingUI() {
 function addRomaneioTrackingCode() {
  const input = document.getElementById('romaneio-tracking-input');
  const code = normalizeRomaneioTrackingCode(input?.value || '');
- if (!code) return showToast('Bipe ou informe o código de rastreio.', 'warning');
+ if (!code) return openRomaneioTrackingCamera();
  if (!/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(code)) return showToast('Código de rastreio dos Correios inválido.', 'warning');
  if (romaneioTrackingState.codes.includes(code)) {
  if (input) { input.value = ''; input.focus(); }
  return showToast('Este pacote já foi bipado.', 'warning');
+
  }
  romaneioTrackingState.codes.push(code);
  if (input) { input.value = ''; input.focus(); }
  updateRomaneioTrackingUI();
 }
 
+function startRomaneioTrackingScanner() {
+ startScanner(false, false, false, false, false, false, true);
+}
+
+function openRomaneioTrackingCamera() {
+ const panel = document.querySelector('.romaneio-tracking-panel');
+ if (!panel) return;
+ let camera = document.getElementById('scanner-container-romaneio');
+ if (!camera) {
+ camera = document.createElement('div');
+ camera.id = 'scanner-container-romaneio';
+ camera.className = 'hidden romaneio-tracking-camera';
+ camera.innerHTML = `<div id="reader-romaneio"></div><div class="romaneio-tracking-camera-guide"><span class="material-symbols-rounded">barcode_scanner</span><strong>Aponte para o código de rastreio</strong></div><button type="button" class="romaneio-tracking-camera-close" onclick="stopScanner()" aria-label="Fechar leitor"><span class="material-symbols-rounded">close</span>Fechar</button>`;
+ const list = document.getElementById('romaneio-tracking-list');
+ panel.insertBefore(camera, list || null);
+ }
+ startRomaneioTrackingScanner();
+}
 function handleRomaneioTrackingKey(event) {
  if (event.key !== 'Enter') return;
  event.preventDefault();
@@ -20961,6 +20997,38 @@ function removeRomaneioTrackingCode(code) {
  updateRomaneioTrackingUI();
  document.getElementById('romaneio-tracking-input')?.focus();
 }
+function ensureRomaneioPackageEditState(key, metrics = {}) {
+ const normalizedKey = String(key || '');
+ if (romaneioPackageEditState.key !== normalizedKey) romaneioPackageEditState = { key: normalizedKey, values: {} };
+ (metrics.sessoes || []).forEach(session => {
+ const sessionId = String(session.sessionId || '');
+ if (!sessionId || Object.prototype.hasOwnProperty.call(romaneioPackageEditState.values, sessionId)) return;
+ romaneioPackageEditState.values[sessionId] = normalizePickPackageCount(session.pacotes || 0);
+ });
+}
+
+function applyRomaneioPackageEdits(metrics = {}) {
+ const sessions = (metrics.sessoes || []).map(session => ({
+ ...session,
+ pacotes: normalizePickPackageCount(romaneioPackageEditState.values[String(session.sessionId || '')] ?? session.pacotes ?? 0)
+ }));
+ return { ...metrics, sessoes: sessions, pacotes: sessions.reduce((sum, session) => sum + Number(session.pacotes || 0), 0) };
+}
+
+function setRomaneioSessionPackageCount(sessionId, value) {
+ const cleanId = String(sessionId || '');
+ if (!cleanId) return;
+ romaneioPackageEditState.values[cleanId] = normalizePickPackageCount(value);
+ const total = Object.values(romaneioPackageEditState.values).reduce((sum, count) => sum + normalizePickPackageCount(count), 0);
+ const totalElement = document.getElementById('romaneio-package-total');
+ if (totalElement) totalElement.textContent = formatStockNumber(total);
+ const summaryElement = document.getElementById('romaneio-package-breakdown-total');
+ if (summaryElement) summaryElement.textContent = `${formatStockNumber(total)} pacote(s)`;
+ const trackingPanel = document.querySelector('.romaneio-tracking-panel');
+ if (trackingPanel) trackingPanel.dataset.expected = String(total);
+ const counter = document.getElementById('romaneio-tracking-counter');
+ if (counter) counter.textContent = formatRomaneioTrackingCounter(total);
+}
 function renderRomaneioForm(metrics) {
  const selectedKey = serializeRomaneioSelectedChannels(metrics.canais || [metrics.tipo_retirada]);
  const selectedChannels = metrics.canais || [metrics.tipo_retirada];
@@ -20969,16 +21037,19 @@ function renderRomaneioForm(metrics) {
  const isCorreios = selectedChannels
  .some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
  ensureRomaneioTrackingState(selectedKey);
+ ensureRomaneioPackageEditState(selectedKey, metrics);
+ const adjustedMetrics = applyRomaneioPackageEdits(metrics);
+ const packageTotal = adjustedMetrics.pacotes;
  return `
  <section class="romaneio-form-card">
  <div class="romaneio-metrics-grid">
  <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
  <div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saída líquida</em><span class="material-symbols-rounded">inventory_2</span></div>
- <div><small>Pacotes</small><strong>${metrics.pacotes}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
+ <div><small>Pacotes</small><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
  <div><small>Separações</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
  <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
  </div>
- ${renderRomaneioSeparationBreakdown(metrics)}
+ ${renderRomaneioSeparationBreakdown(adjustedMetrics)}
 
  <form id="romaneio-form" class="romaneio-form" onsubmit="event.preventDefault(); saveRomaneioFromForm(${quotePackInlineArg(selectedKey)})">
  ${isOther ? `
@@ -21000,8 +21071,8 @@ function renderRomaneioForm(metrics) {
  <input name="observacao" type="text" autocomplete="off" placeholder="Ex.: retirada às 16h40 na agência central">
  </label>
  ${isCorreios ? `
- <section class="romaneio-tracking-panel" data-expected="${Number(metrics.pacotes || 0)}">
- <div class="romaneio-tracking-head"><div><strong>Conferência dos pacotes dos Correios</strong><small>Bipe o código de rastreio de cada pacote antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(metrics.pacotes)}</span></div>
+ <section class="romaneio-tracking-panel" data-expected="${Number(packageTotal || 0)}">
+ <div class="romaneio-tracking-head"><div><strong>Conferência dos pacotes dos Correios</strong><small>Bipe o código de rastreio de cada pacote antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(packageTotal)}</span></div>
  <div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o código de rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div>
  <div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div>
  </section>
@@ -21053,7 +21124,7 @@ function renderRomaneioSeparationBreakdown(metrics = {}) {
  <div class="romaneio-separation-breakdown">
  <div class="romaneio-separation-breakdown-head">
  <strong>Separações consideradas</strong>
- <span>${formatStockNumber(metrics.pacotes || 0)} pacote(s) em ${formatStockNumber(metrics.separacoes || sessions.length)} separacao(oes)</span>
+ <span><b id="romaneio-package-breakdown-total">${formatStockNumber(metrics.pacotes || 0)} pacote(s)</b> em ${formatStockNumber(metrics.separacoes || sessions.length)} separação(ões)</span>
  </div>
  <div class="romaneio-separation-breakdown-list">
  ${sessions.map(session => `
@@ -21062,7 +21133,7 @@ function renderRomaneioSeparationBreakdown(metrics = {}) {
  <strong>${escapeKitAttribute(session.sessionId || '-')}</strong>
  <small>${escapeKitAttribute(session.dataHora || '-')} ${session.status ? `| ${escapeKitAttribute(session.status)}` : ''} | quantidade pelos movimentos de estoque</small>
  </div>
- <span><b>${formatStockNumber(session.pacotes || 0)}</b><small>pacotes</small></span>
+ <label class="romaneio-package-editor"><small>Pacotes</small><input type="number" min="0" step="1" value="${normalizePickPackageCount(session.pacotes || 0)}" onchange="setRomaneioSessionPackageCount(${quotePackInlineArg(session.sessionId || '')}, this.value)" aria-label="Quantidade de pacotes da separação ${escapeKitAttribute(session.sessionId || '')}"></label>
  <span><b>${formatStockNumber(session.itens || 0)}</b><small>quantidade líquida</small></span>
  </article>
  `).join('')}
@@ -21311,7 +21382,9 @@ function saveRomaneioFromForm(withdrawalType) {
  showToast('Operacao concluida.', 'info');
  return;
  }
- const metrics = getRomaneioTodayMetrics(finalChannels, finalChannels);
+ let metrics = getRomaneioTodayMetrics(finalChannels, finalChannels);
+ ensureRomaneioPackageEditState(withdrawalType, metrics);
+ metrics = applyRomaneioPackageEdits(metrics);
  if (isCorreios) {
  const expectedPackages = Number(metrics.pacotes || 0);
  const scannedPackages = romaneioTrackingState.codes.length;
@@ -21360,6 +21433,7 @@ function saveRomaneioFromForm(withdrawalType) {
  romaneios.unshift(romaneio);
  saveRomaneios(romaneios);
  romaneioTrackingState = { key: '', codes: [] };
+ romaneioPackageEditState = { key: '', values: {} };
  showToast('Romaneio salvo.');
  renderRomaneioScreen('', romaneio.id);
 }

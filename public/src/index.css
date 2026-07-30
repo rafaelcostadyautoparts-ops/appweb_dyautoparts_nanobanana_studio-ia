@@ -71441,6 +71441,14 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container { p
 .romaneio-tracking-scan { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; }
 .romaneio-tracking-scan input { min-width:0; min-height:46px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .romaneio-tracking-scan button { min-height:46px; padding:0 18px; border:0; border-radius:10px; background:#165cab; color:#fff; font-weight:850; cursor:pointer; }
+.romaneio-tracking-camera { position:relative; min-height:250px; overflow:hidden; border:2px solid #165cab; border-radius:14px; background:#05070a; }
+.romaneio-tracking-camera #reader-romaneio { width:100%; min-height:250px; }
+.romaneio-tracking-camera-guide { position:absolute; left:50%; bottom:18px; display:flex; max-width:calc(100% - 140px); padding:8px 12px; align-items:center; gap:8px; transform:translateX(-50%); border-radius:999px; background:rgba(3,12,24,.78); color:#fff; font-size:.72rem; pointer-events:none; z-index:2; }
+.romaneio-tracking-camera-guide .material-symbols-rounded { font-size:18px; }
+.romaneio-tracking-camera-close { position:absolute; top:12px; right:12px; display:inline-flex; min-height:38px; padding:0 12px; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.35); border-radius:9px; background:rgba(3,12,24,.78); color:#fff; font-weight:850; cursor:pointer; z-index:3; }
+.romaneio-tracking-camera-close .material-symbols-rounded { font-size:18px; }
+@media(max-width:680px) { .romaneio-tracking-camera-guide { max-width:calc(100% - 28px); width:max-content; bottom:12px; } }
+
 .romaneio-tracking-list { display:grid; max-height:220px; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; overflow:auto; }
 .romaneio-tracking-empty { grid-column:1 / -1; padding:14px; border:1px dashed #cbd5e1; border-radius:10px; color:#7b879b; font-size:.75rem; text-align:center; }
 .romaneio-tracking-code { display:grid; min-width:0; min-height:42px; padding:6px 8px; grid-template-columns:26px minmax(0,1fr) auto; align-items:center; gap:8px; border:1px solid #dfe6ef; border-radius:9px; background:#fff; }
@@ -71456,3 +71464,10 @@ html body:not(.login-active) #app .devolucao-history-screen > main.container { p
 /* Romaneio - acao de e-mail apos a assinatura */
 .romaneio-post-actions .romaneio-email-send-btn { min-height:48px; padding:0 22px; border-color:#166534 !important; background:#16834f !important; color:#fff !important; font-weight:900; box-shadow:0 7px 18px rgba(22,131,79,.18); }
 .romaneio-post-actions .romaneio-email-send-btn:hover { background:#126d42 !important; }
+/* Romaneio - edicao temporaria de pacotes por separacao */
+.romaneio-package-editor { display:grid !important; min-width:92px; padding:6px 9px; grid-template-columns:auto 48px; align-items:center; gap:8px; border:1px solid #dbe3ed; border-radius:9px; background:#fff; }
+.romaneio-package-editor small { margin:0 !important; color:#6b7890 !important; font-size:.62rem !important; font-weight:850; text-transform:uppercase; }
+.romaneio-package-editor input { width:48px !important; min-height:32px !important; padding:0 5px !important; border:1px solid #cfd8e5 !important; border-radius:7px !important; background:#f9fbfd !important; color:#1f2d45 !important; font-size:.78rem !important; font-weight:900 !important; text-align:center; }
+.romaneio-package-editor input:focus { border-color:#2563eb !important; outline:3px solid rgba(37,99,235,.12); }
+.romaneio-separation-breakdown-head > span b { color:#1f4f8d; }
+@media(max-width:560px) { .romaneio-package-editor { min-width:0; grid-template-columns:1fr 54px; } }
