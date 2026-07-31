@@ -1027,9 +1027,11 @@ function criarStatusConexao() {
 }
 
 // ==== CONFIGURACAO APP (GLOBAL) ====
+const TEMPORARY_NEGATIVE_STOCK_ALLOWED = true;
+
 const DEFAULT_APP_CONFIG = {
- permitir_saida_estoque_zero: false,
- permitir_estoque_negativo: false,
+ permitir_saida_estoque_zero: true,
+ permitir_estoque_negativo: true,
  quick_qty_after_beeps: 15,
  scan_sound_enabled: true,
  scan_vibration_enabled: true,
@@ -1444,10 +1446,11 @@ function applyDisplayPreferences() {
 
 function isSaidaEstoqueZeroPermitida() {
  const config = getAppConfig();
- const allowed = config.permitir_saida_estoque_zero === true || config.permitir_estoque_negativo === true;
+ const allowed = TEMPORARY_NEGATIVE_STOCK_ALLOWED || config.permitir_saida_estoque_zero === true || config.permitir_estoque_negativo === true;
  console.log('[CONFIG] estoque zero/negativo', {
  permitir_saida_estoque_zero: config.permitir_saida_estoque_zero === true,
  permitir_estoque_negativo: config.permitir_estoque_negativo === true,
+ liberacao_temporaria_global: TEMPORARY_NEGATIVE_STOCK_ALLOWED,
  permitido: allowed
  });
  return allowed;
@@ -2656,10 +2659,10 @@ const MODULE_SIDEBAR_CONFIG = {
  configuracoes: { label: 'CONFIG.', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
 
-function getModuleSidebarHTML(moduleKey) {
+function getModuleSidebarHTML(moduleKey, labelOverride = '', rightHTML = '') {
  const cfg = MODULE_SIDEBAR_CONFIG[moduleKey];
  if (!cfg) return '';
- const moduleLabel = moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label;
+ const moduleLabel = labelOverride || (moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label);
  const topBarBg = `linear-gradient(90deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%)`;
  return `
  <div class="module-top-bar mod-topbar-${moduleKey}${getDesignSystemModuleClass(moduleKey)}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
@@ -2667,6 +2670,7 @@ function getModuleSidebarHTML(moduleKey) {
  <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
  </div>
  <span class="top-bar-label">${moduleLabel}</span>
+ ${rightHTML || ''}
  </div>
  `;
 }
@@ -3075,7 +3079,13 @@ async function getSupabaseAuthSession() {
     return data?.session || null;
 }
 
+// Temporario: mantem a autenticacao Supabase criada, mas nao exige login durante os ajustes do app.
+// Os usuarios locais continuam identificando o responsavel por cada movimentacao.
+const TEMPORARY_SUPABASE_LOGIN_BYPASS = true;
+
 async function ensureSupabaseAuthenticatedAccess() {
+    if (TEMPORARY_SUPABASE_LOGIN_BYPASS) return true;
+
     const existingSession = await getSupabaseAuthSession();
     if (existingSession?.user?.id) {
         localStorage.setItem('dy_supabase_auth_user_id', existingSession.user.id);
@@ -3417,9 +3427,6 @@ function renderLogin(push = true) {
                 <span class="material-symbols-rounded">person</span>
                 <span class="login-user-hint-text">SELECIONE SEU USUARIO</span>
             </div>
-            <button type="button" onclick="disconnectSupabaseSecureAccess()" aria-label="Trocar conta de acesso seguro" style="position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 9px 13px; background: rgba(10,10,12,.72); color: #fff; font: inherit; font-size: .72rem; cursor: pointer; backdrop-filter: blur(10px);">
-                Trocar acesso seguro
-            </button>
             ${getAppVersionBadgeHTML('login')}
         </div>
     `;
@@ -3758,6 +3765,7 @@ function renderMovimentacoesSubMenu() {
  { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
  { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
  { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
+ { id: 'relatorio_saida_devolucao', label: 'RELATORIO SAIDAS X DEVOLUCOES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar produtos separados, devolvidos e o percentual por item.' },
  { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
  { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
  { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
@@ -20675,6 +20683,7 @@ function quickActionGerarRomaneio() {
 
 const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetirada';
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
+let romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
 let romaneioTrackingState = { key: '', codes: [] };
 let romaneioPackageEditState = { key: '', values: {} };
@@ -20904,7 +20913,7 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
 
  if (metrics) {
  romaneioPackagePhotoState = { dataUrl: '' };
- setTimeout(() => { initRomaneioSignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+ setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
  }
 }
 
@@ -21096,15 +21105,27 @@ function renderRomaneioForm(metrics) {
  <img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto do pacote" hidden>
  </div>
 
+ <div class="romaneio-signature-grid">
  <div class="romaneio-signature-box">
  <div class="romaneio-signature-header">
- <strong>Assinatura digital</strong>
+ <strong>Assinatura de quem entrega - Alexandre</strong>
+ <div>
+ <button type="button" onclick="clearRomaneioDeliverySignature()">Limpar assinatura</button>
+ <button type="button" onclick="redoRomaneioDeliverySignature()">Refazer assinatura</button>
+ </div>
+ </div>
+ <canvas id="romaneio-delivery-signature-canvas"></canvas>
+ </div>
+ <div class="romaneio-signature-box">
+ <div class="romaneio-signature-header">
+ <strong>Assinatura de quem retira</strong>
  <div>
  <button type="button" onclick="clearRomaneioSignature()">Limpar assinatura</button>
  <button type="button" onclick="redoRomaneioSignature()">Refazer assinatura</button>
  </div>
  </div>
  <canvas id="romaneio-signature-canvas"></canvas>
+ </div>
  </div>
 
  <button class="romaneio-save-btn" type="submit">
@@ -21189,6 +21210,10 @@ function renderRomaneioDetail(item) {
  </div>
  <div class="romaneio-detail-grid">
  <div><small>Data/Hora</small><strong>${escapeKitAttribute(item.data)} ${escapeKitAttribute(item.hora)}</strong></div>
+ <div><small>Agência</small><strong>${escapeKitAttribute(item.agencia_correios || 'AGF Eng. Armando de Arruda')}</strong></div>
+ <div><small>Cliente</small><strong>${escapeKitAttribute(item.cliente || 'DY Auto Parts')}</strong></div>
+ <div><small>Responsável pela entrega</small><strong>${escapeKitAttribute(item.responsavel_entrega || 'Alexandre')}</strong></div>
+ <div><small>Horário da coleta</small><strong>${escapeKitAttribute(item.horario_coleta || '15:00')}</strong></div>
  <div><small>Canal</small><strong>${escapeKitAttribute(item.canal)}</strong></div>
  <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
  <div><small>Quantidade movimentada</small><strong>${formatStockNumber(item.itens || 0)}</strong></div>
@@ -21207,7 +21232,7 @@ function renderRomaneioDetail(item) {
  separacoes: item.separacoes || 0,
  pacotes: item.pacotes || 0
  })}
- ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou">` : ''}
+ <div class="romaneio-saved-signatures">${item.assinatura_entrega ? `<figure><figcaption>Assinatura de quem entrega - Alexandre</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura_entrega)}" alt="Assinatura de Alexandre"></figure>` : ''}${item.assinatura ? `<figure><figcaption>Assinatura de quem retira</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou"></figure>` : ''}</div>
  ${item.foto_pacote ? `<img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto do pacote">` : ''}
 
  ${renderRomaneioPostSaveActions(item)}
@@ -21287,6 +21312,57 @@ function initRomaneioSignaturePad() {
  canvas.addEventListener('touchend', end);
 }
 
+function initRomaneioDeliverySignaturePad() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas) return;
+ const rect = canvas.getBoundingClientRect();
+ canvas.width = Math.max(320, Math.floor(rect.width * window.devicePixelRatio));
+ canvas.height = Math.max(160, Math.floor(rect.height * window.devicePixelRatio));
+ const ctx = canvas.getContext('2d');
+ ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+ ctx.lineCap = 'round';
+ ctx.lineJoin = 'round';
+ ctx.lineWidth = 2.6;
+ ctx.strokeStyle = '#111827';
+ romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
+ let drawing = false;
+ let hasStroke = false;
+ const getPoint = event => {
+ const bounds = canvas.getBoundingClientRect();
+ const source = event.touches?.[0] || event;
+ return { x: source.clientX - bounds.left, y: source.clientY - bounds.top };
+ };
+ const start = event => { event.preventDefault(); drawing = true; hasStroke = true; const point = getPoint(event); ctx.beginPath(); ctx.moveTo(point.x, point.y); };
+ const move = event => { if (!drawing) return; event.preventDefault(); const point = getPoint(event); ctx.lineTo(point.x, point.y); ctx.stroke(); };
+ const end = () => { if (!drawing) return; drawing = false; if (hasStroke) romaneioDeliverySignatureState.dataUrl = canvas.toDataURL('image/png'); };
+ canvas.addEventListener('mousedown', start);
+ canvas.addEventListener('mousemove', move);
+ window.addEventListener('mouseup', end, { once: false });
+ canvas.addEventListener('touchstart', start, { passive: false });
+ canvas.addEventListener('touchmove', move, { passive: false });
+ canvas.addEventListener('touchend', end);
+}
+
+function clearRomaneioDeliverySignature() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas) return;
+ if (romaneioDeliverySignatureState.dataUrl) romaneioDeliverySignatureState.redoDataUrl = romaneioDeliverySignatureState.dataUrl;
+ canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+ romaneioDeliverySignatureState.dataUrl = '';
+}
+
+function redoRomaneioDeliverySignature() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas || !romaneioDeliverySignatureState.redoDataUrl) return;
+ const ctx = canvas.getContext('2d');
+ const image = new Image();
+ image.onload = () => {
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+ ctx.drawImage(image, 0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio);
+ romaneioDeliverySignatureState.dataUrl = romaneioDeliverySignatureState.redoDataUrl;
+ };
+ image.src = romaneioDeliverySignatureState.redoDataUrl;
+}
 function clearRomaneioSignature() {
  const canvas = document.getElementById('romaneio-signature-canvas');
  if (!canvas) return;
@@ -21399,8 +21475,12 @@ function saveRomaneioFromForm(withdrawalType) {
  return;
  }
  }
+ if (!romaneioDeliverySignatureState.dataUrl) {
+ showToast('Colete a assinatura de quem entrega antes de salvar.', 'warning');
+ return;
+ }
  if (!romaneioSignatureState.dataUrl) {
- showToast('Colete a assinatura antes de salvar.', 'warning');
+ showToast('Colete a assinatura de quem retira antes de salvar.', 'warning');
  return;
  }
 
@@ -21422,6 +21502,11 @@ function saveRomaneioFromForm(withdrawalType) {
  responsavel,
  documento: String(data.get('documento') || '').trim(),
  observacao: String(data.get('observacao') || '').trim(),
+ agencia_correios: 'AGF Eng. Armando de Arruda',
+ cliente: 'DY Auto Parts',
+ responsavel_entrega: 'Alexandre',
+ horario_coleta: '15:00',
+ assinatura_entrega: romaneioDeliverySignatureState.dataUrl,
  assinatura: romaneioSignatureState.dataUrl,
  foto_pacote: romaneioPackagePhotoState.dataUrl || '',
  usuario: localStorage.getItem('currentUser') || '',
@@ -21488,12 +21573,14 @@ async function createRomaneioPDF(item) {
  const pageWidth = doc.internal.pageSize.getWidth();
  const pageHeight = doc.internal.pageSize.getHeight();
  const margin = 15;
- const [logo, signature, packagePhoto] = await Promise.all([
+ const [logo, deliverySignature, pickupSignature, packagePhoto] = await Promise.all([
  loadRomaneioPDFImage(LOGO_LIGHT_BG),
+ loadRomaneioPDFImage(item.assinatura_entrega),
  loadRomaneioPDFImage(item.assinatura),
  loadRomaneioPDFImage(item.foto_pacote)
  ]);
 
+ const drawHeader = () => {
  doc.setFillColor(23, 74, 145);
  doc.rect(0, 0, pageWidth, 7, 'F');
  doc.setFillColor(255, 211, 0);
@@ -21507,17 +21594,21 @@ async function createRomaneioPDF(item) {
  doc.setFont('helvetica', 'normal');
  doc.setTextColor(93, 105, 125);
  doc.text(`Número: ${item.id}`, pageWidth - margin, 27, { align: 'right' });
- doc.text(`Data e hora: ${item.data} ${item.hora}`, pageWidth - margin, 32, { align: 'right' });
+ doc.text(`Data: ${item.data} | Horário da coleta: ${item.horario_coleta || '15:00'}`, pageWidth - margin, 32, { align: 'right' });
  doc.setDrawColor(222, 227, 235);
  doc.line(margin, 39, pageWidth - margin, 39);
+ };
+ drawHeader();
 
  const summary = [
+ ['Agência', item.agencia_correios || 'AGF Eng. Armando de Arruda'],
+ ['Cliente', item.cliente || 'DY Auto Parts'],
+ ['Responsável pela entrega', item.responsavel_entrega || 'Alexandre'],
+ ['Horário da coleta', item.horario_coleta || '15:00'],
  ['Quem retirou', item.responsavel || '-'],
  ['Documento', item.documento || '-'],
  ['Quantidade de pacotes', String(item.pacotes || 0)],
- ['Separações', String(item.separacoes || 0)],
- ['Registrado por', item.usuario || '-'],
- ['Observação', item.observacao || '-']
+ ['Separações', String(item.separacoes || 0)]
  ];
  let y = 47;
  summary.forEach(([label, value], index) => {
@@ -21537,7 +21628,7 @@ async function createRomaneioPDF(item) {
  doc.text(doc.splitTextToSize(String(value), 78).slice(0, 2), x + 4, boxY + 9.5);
  });
 
- y = 103;
+ y = 121;
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(11);
  doc.setTextColor(28, 39, 58);
@@ -21565,29 +21656,28 @@ async function createRomaneioPDF(item) {
  doc.addPage();
  y = 18;
  };
- ensureSpace(signature ? 52 : 22);
+ ensureSpace(54);
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(10);
- doc.text('Assinatura de quem retirou', margin, y);
+ doc.setTextColor(28, 39, 58);
+ doc.text('Assinatura de quem entrega - Alexandre', margin, y);
+ doc.text('Assinatura de quem retira', margin + 92, y);
  y += 5;
- if (signature) {
  doc.setDrawColor(220, 225, 233);
- doc.roundedRect(margin, y, 80, 38, 2, 2, 'S');
- addRomaneioPDFImage(doc, signature, margin + 3, y + 3, 74, 30);
- y += 43;
- } else {
- doc.setFont('helvetica', 'normal');
- doc.text('Assinatura não informada.', margin, y + 5);
- y += 14;
- }
+ doc.roundedRect(margin, y, 86, 38, 2, 2, 'S');
+ doc.roundedRect(margin + 92, y, 86, 38, 2, 2, 'S');
+ if (deliverySignature) addRomaneioPDFImage(doc, deliverySignature, margin + 3, y + 3, 80, 30);
+ if (pickupSignature) addRomaneioPDFImage(doc, pickupSignature, margin + 95, y + 3, 80, 30);
+ y += 45;
 
  if (packagePhoto) {
- ensureSpace(88);
+ ensureSpace(90);
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(10);
  doc.text('Foto dos pacotes', margin, y);
  y += 5;
- addRomaneioPDFImage(doc, packagePhoto, margin, y, pageWidth - (margin * 2), 80);
+ const photoHeight = addRomaneioPDFImage(doc, packagePhoto, margin, y, pageWidth - (margin * 2), 80);
+ y += photoHeight + 5;
  }
 
  const pages = doc.getNumberOfPages();
@@ -21596,7 +21686,7 @@ async function createRomaneioPDF(item) {
  doc.setFont('helvetica', 'normal');
  doc.setFontSize(7);
  doc.setTextColor(125, 135, 151);
- doc.text(`DY Auto Parts • Romaneio ${item.id} • Página ${page} de ${pages}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
+ doc.text(`DY Auto Parts • AGF Eng. Armando de Arruda • Romaneio ${item.id} • Página ${page} de ${pages}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
  }
  return doc;
 }
@@ -22183,7 +22273,24 @@ function quickActionReposicao() {
 function handleReposicaoSearchInput(value) {
  reposicaoState.search = value;
  clearTimeout(reposicaoSearchTimer);
- reposicaoSearchTimer = setTimeout(renderReposicaoList, 220);
+ reposicaoSearchTimer = setTimeout(renderReposicaoListPreservingSearchFocus, 220);
+}
+
+function renderReposicaoListPreservingSearchFocus() {
+ const activeInput = document.getElementById('reposicao-search-input');
+ const shouldRestoreFocus = document.activeElement === activeInput;
+ const selectionStart = activeInput?.selectionStart ?? null;
+ const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
+ renderReposicaoList();
+ if (!shouldRestoreFocus) return;
+ requestAnimationFrame(() => {
+ const nextInput = document.getElementById('reposicao-search-input');
+ if (!nextInput) return;
+ nextInput.focus({ preventScroll: true });
+ const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+ const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+ nextInput.setSelectionRange(start, end);
+ });
 }
 
 function reposicaoEscape(value) {
@@ -22442,7 +22549,7 @@ function renderReposicaoList() {
  <section class="reposicao-filters">
  <div class="reposicao-search">
  <span class="material-symbols-rounded">search</span>
- <input type="search" placeholder="Buscar por cliente, pedido, CPF/CNPJ, rastreio ou produto" value="${reposicaoEscape(reposicaoState.search)}" oninput="handleReposicaoSearchInput(this.value)">
+ <input id="reposicao-search-input" type="search" placeholder="Buscar por cliente, pedido, CPF/CNPJ, rastreio ou produto" value="${reposicaoEscape(reposicaoState.search)}" oninput="handleReposicaoSearchInput(this.value)">
  </div>
  <div class="reposicao-status-tabs">
  ${['Todos', ...REPOSICAO_STATUS_OPTIONS].map(status => `
@@ -31845,7 +31952,7 @@ function renderEntradaNFHistoryFilters() {
  <section class="entrada-nf-history-filters">
  <label class="entrada-nf-history-search">
  <span class="material-symbols-rounded">search</span>
- <input type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
+ <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
  </label>
  <label>
  <span>PerAodo</span>
@@ -31992,7 +32099,20 @@ function renderEntradaNFHistoryDashboard(historico = []) {
 function refreshEntradaNFHistoryDashboard() {
  const container = document.getElementById('entrada-nf-history-content');
  if (!container) return;
+ const activeInput = document.getElementById('entrada-nf-history-search-input');
+ const shouldRestoreFocus = document.activeElement === activeInput;
+ const selectionStart = activeInput?.selectionStart ?? null;
+ const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
  container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
+ if (!shouldRestoreFocus) return;
+ requestAnimationFrame(() => {
+ const nextInput = document.getElementById('entrada-nf-history-search-input');
+ if (!nextInput) return;
+ nextInput.focus({ preventScroll: true });
+ const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+ const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+ nextInput.setSelectionRange(start, end);
+ });
 }
 
 function setEntradaNFHistoryFilter(key, value) {
@@ -33129,7 +33249,7 @@ async function saveDevolucaoMarketplace() {
  const secureAccess = await ensureSupabaseAuthenticatedAccess();
  if (!secureAccess) {
   if (errorBox) {
-   errorBox.textContent = 'Entre com o acesso seguro para salvar a devolucao e movimentar o estoque.';
+   errorBox.textContent = 'Nao foi possivel salvar a devolucao.';
    errorBox.style.display = 'block';
   }
   return;
@@ -33514,7 +33634,7 @@ function exportHistoricoDevolucoesCSV() {
  item.observacoes || ''
  ]);
  });
- const csv = [headers, ...rows].map(row => row.map(escapeDevolucaoCSV).join(';')).join('\\r\\n');
+ const csv = 'sep=;\r\n' + [headers, ...rows].map(row => row.map(escapeDevolucaoCSV).join(';')).join('\r\n');
  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
  const url = URL.createObjectURL(blob);
  const link = document.createElement('a');
@@ -33780,3 +33900,83 @@ function updateDevolucaoSaldoFeedback() {
  feedback.className = net < 0 ? 'is-negative' : net > 0 ? 'is-positive' : 'is-zero';
  feedback.textContent = net ? `Saldo liquido: ${formatSignedMarketplaceSaldo(net)}.` : 'Saldo zerado: operacao neutra.';
 }
+
+/* Interface compacta exclusiva do modulo Romaneio. */
+var romaneioUi = { mes: new Date().toISOString().slice(0,7), status: 'todos', busca: '', canais: [], modal: false };
+
+function romaneioUiStatus(item) {
+ const value = normalizeOperationalLabel(item.status || 'CONCLUIDO');
+ if (value.includes('ANDAMENTO') || value.includes('PENDENTE')) return ['andamento','Em andamento'];
+ if (value.includes('ERRO') || value.includes('CANCEL')) return ['erro', value.includes('CANCEL') ? 'Cancelado' : 'Erro'];
+ return ['concluido','Concluido'];
+}
+function romaneioUiCanais(item) {
+ return (Array.isArray(item.canais) ? item.canais : parseRomaneioSelectedChannels(item.canal || item.tipo_retirada || '')).filter(Boolean);
+}
+function romaneioUiToggleCanal(canal, checked) {
+ romaneioUi.canais = checked ? [...new Set([...romaneioUi.canais, canal])] : romaneioUi.canais.filter(value => value !== canal);
+ const count = document.getElementById('romaneio-ui-channel-count');
+ if (count) count.textContent = romaneioUi.canais.length ? romaneioUi.canais.length + ' selecionado(s)' : 'Selecione os canais';
+}
+function romaneioUiToggleTodos(checked) {
+ const canais = getRomaneioAvailableChannels();
+ romaneioUi.canais = checked ? [...canais] : [];
+ document.querySelectorAll('.romaneio-ui-channel-check').forEach(input => { input.checked = checked; });
+ romaneioUiToggleCanal('', false);
+}
+function romaneioUiFiltro(campo, valor) {
+ romaneioUi[campo] = valor;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+ setTimeout(() => document.querySelector('.romaneio-ui-history-search input')?.focus(), 0);
+}
+function romaneioUiAbrirModal() {
+ romaneioUi.modal = true;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function romaneioUiFecharModal() {
+ romaneioUi.modal = false;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function romaneioUiConfirmar() {
+ if (!romaneioUi.canais.length) return showToast('Selecione pelo menos um canal.', 'warning');
+ romaneioUi.modal = false;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function renderRomaneioUiHistory(records) {
+ const query = normalizeOperationalLabel(romaneioUi.busca);
+ const filtered = records.filter(item => {
+  const status = romaneioUiStatus(item)[0];
+  const month = String(item.createdAt || '').slice(0,7);
+  const text = normalizeOperationalLabel([item.id,item.canal,item.data,item.responsavel].join(' '));
+  return (!month || month === romaneioUi.mes) && (romaneioUi.status === 'todos' || status === romaneioUi.status) && (!query || text.includes(query));
+ });
+ return `<section class="romaneio-ui-history"><header><div><h2>Romaneios realizados</h2><small>${filtered.length} registro(s)</small></div><label class="romaneio-ui-history-search"><span class="material-symbols-rounded">search</span><input value="${escapeKitAttribute(romaneioUi.busca)}" oninput="romaneioUiFiltro('busca',this.value)" placeholder="Buscar romaneio..."></label></header><div class="romaneio-ui-table"><table><thead><tr><th>Romaneio</th><th>Data/hora</th><th>Canais</th><th>Status</th><th>Itens</th><th>Acoes</th></tr></thead><tbody>${filtered.map(item => { const status=romaneioUiStatus(item); return `<tr><td><strong>${escapeKitAttribute(item.id||'-')}</strong></td><td>${escapeKitAttribute(item.data||'-')} ${escapeKitAttribute(item.hora||'')}</td><td><div class="romaneio-ui-badges">${romaneioUiCanais(item).map(canal => `<span>${escapeKitAttribute(canal)}</span>`).join('') || '-'}</div></td><td><span class="romaneio-ui-status ${status[0]}">${status[1]}</span></td><td>${formatStockNumber(item.itens||0)}</td><td><div class="romaneio-ui-actions"><button onclick="renderRomaneioScreen('',${quotePackInlineArg(item.id)})" title="Visualizar"><span class="material-symbols-rounded">visibility</span></button><button onclick="generateRomaneioPDF(${quotePackInlineArg(item.id)})" title="Baixar PDF"><span class="material-symbols-rounded">download</span></button></div></td></tr>`; }).join('') || '<tr><td colspan="6" class="romaneio-ui-empty">Nenhum romaneio encontrado.</td></tr>'}</tbody></table></div></section>`;
+}
+function renderRomaneioUiModal(canais) {
+ if (!romaneioUi.modal) return '';
+ return `<div class="romaneio-ui-modal-bg" onclick="if(event.target===this)romaneioUiFecharModal()"><section class="romaneio-ui-modal" role="dialog" aria-modal="true"><header><h2>Novo romaneio</h2><button onclick="romaneioUiFecharModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="romaneio-ui-modal-grid"><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUi.mes=this.value"></label><fieldset><legend>Canais da separacao</legend><label class="all"><input type="checkbox" onchange="romaneioUiToggleTodos(this.checked)">Selecionar todos</label>${canais.map(canal => `<label><input class="romaneio-ui-channel-check" type="checkbox" ${romaneioUi.canais.includes(canal)?'checked':''} onchange="romaneioUiToggleCanal(${quotePackInlineArg(canal)},this.checked)">${escapeKitAttribute(canal)}</label>`).join('')}</fieldset></div><footer><button onclick="romaneioUiFecharModal()">Cancelar</button><button class="primary" onclick="romaneioUiConfirmar()">Continuar</button></footer></section></div>`;
+}
+renderRomaneioScreen = async function(selectedType='', selectedId='') {
+ const currentUser=localStorage.getItem('currentUser'); document.body.classList.remove('menu-active');
+ try { const [data,movements]=await Promise.all([DataClient.loadModule('separacao',true),DataClient.fetchMovimentosSupabase()]); if(data){appData.separacao=data.separacao||appData.separacao||[];appData.separacao_itens=data.separacao_itens||appData.separacao_itens||[];} appData.movimentacoes=Array.isArray(movements)?movements:[]; } catch(error){console.warn('[ROMANEIO] Falha ao atualizar dados:',error);}
+ const canais=getRomaneioAvailableChannels(), selectedChannels=parseRomaneioSelectedChannels(selectedType); if(selectedChannels.length)romaneioUi.canais=selectedChannels;
+ const records=getRomaneios().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)), selected=selectedId?records.find(item=>item.id===selectedId):null, metrics=selectedChannels.length?getRomaneioTodayMetrics(selectedChannels,selectedChannels):null;
+ app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen romaneio-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container romaneio-shell romaneio-ui-shell"><section class="romaneio-ui-toolbar"><div class="romaneio-ui-title"><strong>Gerar romaneio</strong><small>Controle de retirada e assinaturas</small></div><button class="romaneio-ui-channel-button" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">inventory_2</span><span id="romaneio-ui-channel-count">${romaneioUi.canais.length?romaneioUi.canais.length+' selecionado(s)':'Selecione os canais'}</span><span class="material-symbols-rounded">expand_more</span></button><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUiFiltro('mes',this.value)"></label><label><small>Status</small><select onchange="romaneioUiFiltro('status',this.value)"><option value="todos">Todos</option><option value="concluido" ${romaneioUi.status==='concluido'?'selected':''}>Concluido</option><option value="andamento" ${romaneioUi.status==='andamento'?'selected':''}>Em andamento</option><option value="erro" ${romaneioUi.status==='erro'?'selected':''}>Erro / cancelado</option></select></label><button class="romaneio-ui-generate" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">description</span>Gerar romaneio</button></section>${metrics?renderRomaneioForm(metrics):''}${selected?renderRomaneioDetail(selected):''}${renderRomaneioUiHistory(records)}</main>${renderRomaneioUiModal(canais)}</div>`;
+ if(metrics){romaneioPackagePhotoState={dataUrl:''};setTimeout(()=>{initRomaneioSignaturePad();initRomaneioDeliverySignaturePad();document.getElementById('romaneio-tracking-input')?.focus();},80);}
+};
+
+
+/* Relatorio operacional: saidas da separacao x entradas por devolucao. */
+var saidaDevolucaoReportState={mes:'todos',canal:'todos',busca:'',rows:[],mesesMedia:0};
+function reportDateInRange(value){const month=String(value||'').slice(0,7);return month&&(saidaDevolucaoReportState.mes==='todos'||month===saidaDevolucaoReportState.mes);}
+function reportRollingMonthKeys(){const base=saidaDevolucaoReportState.mes==='todos'?new Date():new Date(saidaDevolucaoReportState.mes+'-01T12:00:00');return Array.from({length:3},(_,i)=>{const d=new Date(base.getFullYear(),base.getMonth()-i,1);return d.toISOString().slice(0,7);});}
+function reportMovementChannel(movement,sessions,devolucoes){const ref=normalizeOperationalLabel([movement.observacao,movement.execution_id,movement.movimento_id].join(' '));const devId=String(movement.execution_id||'').split(':')[1]||'';const dev=devolucoes.find(x=>String(x.id)===devId);if(dev)return dev.canal||'Devolucao';const session=sessions.find(x=>{const id=normalizeOperationalLabel(getPackSeparationSessionId(x)||x.id||'');return id&&ref.includes(id);});return session?.canal_nome||session?.canal||session?.col_c||'Nao identificado';}
+function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),rolling=new Map(),months=reportRollingMonthKeys(),rollingMonths=new Set(),productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0));if(!id||!(qty>0))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' '));const saida=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO'));const retorno=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!saida&&!retorno)return;const canal=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(canal)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const month=String(m.data_hora||m.criado_em||'').slice(0,7);if(saida&&months.includes(month)){rolling.set(id,(rolling.get(id)||0)+qty);rollingMonths.add(month);}if(!reportDateInRange(m.data_hora||m.criado_em))return;const p=productMap.get(id.toUpperCase())||{};const row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',separado:0,devolvido:0,apto:0,defeito:0,canais:new Set()};row.canais.add(canal);if(saida)row.separado+=qty;if(retorno){row.devolvido+=qty;if(normalizeOperationalLabel(m.local_destino).includes('TERREO'))row.apto+=qty;else row.defeito+=qty;}map.set(id,row);});saidaDevolucaoReportState.mesesMedia=rollingMonths.size;return [...map.values()].map(r=>({...r,canais:[...r.canais],media3:(rolling.get(r.id_interno)||0)/3,percentual:r.separado?r.devolvido/r.separado*100:null})).sort((a,b)=>(b.percentual??-1)-(a.percentual??-1)||b.devolvido-a.devolvido);}
+function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca);return saidaDevolucaoReportState.rows.filter(r=>!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor].join(' ')).includes(q));}
+function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),sep=rows.reduce((s,r)=>s+r.separado,0),dev=rows.reduce((s,r)=>s+r.devolvido,0),pct=sep?dev/sep*100:0,mesesMedia=Math.min(3,Number(saidaDevolucaoReportState.mesesMedia||0));return `<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Quantidade enviada</small><strong>${formatStockNumber(sep)}</strong></article><article><small>Quantidade devolvida</small><strong>${formatStockNumber(dev)}</strong></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Percentual de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong></article></section>${mesesMedia<3?`<section class="sd-report-history-note"><strong>Media de saida - 3 meses</strong><span>${mesesMedia} de 3 meses com historico. A coluna sera exibida ao completar tres meses.</span></section>`:''}<section class="sd-report-table-card"><header><div><h2>Produtos no periodo</h2><small>Percentual = quantidade devolvida / quantidade enviada</small></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th><th>Enviado</th><th>Devolvido</th>${mesesMedia>=3?'<th>Media saida 3 meses</th>':''}<th>Percentual</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="sd-product-cell"><strong>${escapeKitAttribute(r.descricao)}</strong><span>ID: ${escapeKitAttribute(r.id_interno)}</span><small><b>Marca:</b> ${escapeKitAttribute(r.marca||'-')} <i></i> <b>SKU:</b> ${escapeKitAttribute(r.sku||'-')} <i></i> <b>Cor:</b> ${escapeKitAttribute(r.cor||'-')}</small></td><td>${formatStockNumber(r.separado)}</td><td>${formatStockNumber(r.devolvido)}</td>${mesesMedia>=3?`<td>${formatStockNumber(r.media3)}</td>`:''}<td><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'Sem saida':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td></tr>`).join('')||`<tr><td colspan="${mesesMedia>=3?5:4}" class="sd-empty">Nenhum movimento encontrado no periodo.</td></tr>`}</tbody></table></div></section>`;}
+async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>`;try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase()]);const sep=await DataClient.loadModule('separacao',true);const products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[];saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);const monthOptions=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(Boolean))].sort().reverse();const channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. SAIDAS X DEVOLUCOES','<button class="sd-report-export" type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">download</span><span>Exportar CSV</span></button>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Mes de referencia</small><select onchange="saidaDevolucaoReportState.mes=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os meses</option>${monthOptions.map(m=>`<option value="${m}" ${saidaDevolucaoReportState.mes===m?'selected':''}>${new Date(m+'-01T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>`).join('')}</select></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos do periodo. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo" title="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
+function getSaidaDevolucaoScrollContainer(){const shell=document.querySelector('.sd-report-shell');if(shell&&shell.scrollHeight>shell.clientHeight+8)return shell;return window;}
+function initializeSaidaDevolucaoScrollTop(){const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
+function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
+function filterSaidaDevolucaoReport(value){saidaDevolucaoReportState.busca=value;const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();document.querySelector('.sd-report-filters .search input')?.focus();}
+function exportSaidaDevolucaoCSV(){const rows=getSaidaDevolucaoFilteredRows(),mostrarMedia=Number(saidaDevolucaoReportState.mesesMedia||0)>=3,header=['ID interno','Nome do produto','Marca','SKU','Cor','Enviado','Devolvido',...(mostrarMedia?['Media saida 3 meses']:[]),'Percentual'];const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const csv='\uFEFF'+[header,...rows.map(r=>[r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.separado,r.devolvido,...(mostrarMedia?[r.media3.toFixed(2)]:[]),r.percentual===null?'':r.percentual.toFixed(2)+'%'])].map(row=>row.map(esc).join(';')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`saidas-devolucoes-${saidaDevolucaoReportState.mes}.csv`;a.click();URL.revokeObjectURL(url);}

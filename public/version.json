@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.66",
-    "build":  "2026.07.30.4",
-    "commit":  "devolucoes-romaneio-correios",
-    "deployDate":  "2026-07-30"
+    "version": "2.1.80",
+    "build": "2026.07.31.14",
+    "commit": "estoque-negativo-global-temporario",
+    "deployDate": "2026-07-31"
 }

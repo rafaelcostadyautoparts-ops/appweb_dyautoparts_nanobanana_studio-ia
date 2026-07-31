@@ -548,11 +548,11 @@ const DataClient = (function () {
             p_permitir_negativo: payload.permitir_negativo === true,
             p_execution_id: payload.executionId || `movimento_${Date.now()}`
         };
-        const { data, error } = await client.rpc('registrar_movimento_estoque', rpcPayload);
+        const { data, error } = await client.rpc('registrar_movimento_estoque_temporario', rpcPayload);
         if (error) {
             const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('registrar_movimento_estoque');
             throw new Error(missingRpc
-                ? 'A migracao de estoque transacional ainda nao foi aplicada no Supabase. A operacao foi bloqueada.'
+                ? 'A liberacao temporaria sem login ainda nao foi aplicada no Supabase. Execute a migracao temporaria no SQL Editor.'
                 : (error.message || 'Erro ao registrar movimento de estoque'));
         }
         invalidateCache('produtos');
@@ -563,7 +563,7 @@ const DataClient = (function () {
     async function finalizarInventarioEstoqueSupabase(inventarioId, usuario, executionId = '') {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('finalizar_inventario_estoque', {
+        const { data, error } = await client.rpc('finalizar_inventario_estoque_temporario', {
             p_inventario_id: String(inventarioId || '').trim(),
             p_usuario: usuario || 'N/A',
             p_execution_id: executionId || `inventario:${inventarioId}`
@@ -2009,7 +2009,7 @@ const DataClient = (function () {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
 
-        const { data, error } = await client.rpc('salvar_devolucao_marketplace_atomica', {
+        const { data, error } = await client.rpc('salvar_devolucao_marketplace_temporaria', {
             p_devolucao: payload.devolucao,
             p_itens: payload.itens
         });
