@@ -17498,7 +17498,12 @@ function showInputFeedback(inputId, type) {
 }
 
 function normalizePickCode(rawValue) {
- return String(rawValue || '').trim().replace(/\s+/g, '');
+ const code = String(rawValue || '').trim().replace(/\s+/g, '');
+
+ // Alguns leitores enviam o identificador de simbologia AIM antes do valor
+ // (por exemplo, ]E0 antes de um EAN-13). Ele descreve o tipo do codigo e
+ // nao faz parte do EAN/SKU que deve ser consultado.
+ return code.replace(/^\][A-Za-z][0-9]/, '');
 }
 
 function getPickScanInputPlaceholder() {
