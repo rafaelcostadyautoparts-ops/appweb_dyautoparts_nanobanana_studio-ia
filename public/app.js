@@ -519,6 +519,7 @@ function renderScreenByName(name, push = true) {
  case 'search': renderSearchScreen(push); break;
  case 'catalogo-produtos': renderCatalogoProdutos(false); break;
  case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
+ case 'central-operacoes': renderCentralOperacoes(false); break;
  case 'login': renderLogin(push); break;
  case 'client-quotes': renderClientQuotesList(false); break;
  case 'comissoes': renderComissoesScreen(null, false); break;
@@ -1027,9 +1028,11 @@ function criarStatusConexao() {
 }
 
 // ==== CONFIGURACAO APP (GLOBAL) ====
+const TEMPORARY_NEGATIVE_STOCK_ALLOWED = true;
+
 const DEFAULT_APP_CONFIG = {
- permitir_saida_estoque_zero: false,
- permitir_estoque_negativo: false,
+ permitir_saida_estoque_zero: true,
+ permitir_estoque_negativo: true,
  quick_qty_after_beeps: 15,
  scan_sound_enabled: true,
  scan_vibration_enabled: true,
@@ -1444,10 +1447,11 @@ function applyDisplayPreferences() {
 
 function isSaidaEstoqueZeroPermitida() {
  const config = getAppConfig();
- const allowed = config.permitir_saida_estoque_zero === true || config.permitir_estoque_negativo === true;
+ const allowed = TEMPORARY_NEGATIVE_STOCK_ALLOWED || config.permitir_saida_estoque_zero === true || config.permitir_estoque_negativo === true;
  console.log('[CONFIG] estoque zero/negativo', {
  permitir_saida_estoque_zero: config.permitir_saida_estoque_zero === true,
  permitir_estoque_negativo: config.permitir_estoque_negativo === true,
+ liberacao_temporaria_global: TEMPORARY_NEGATIVE_STOCK_ALLOWED,
  permitido: allowed
  });
  return allowed;
@@ -2656,10 +2660,10 @@ const MODULE_SIDEBAR_CONFIG = {
  configuracoes: { label: 'CONFIG.', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
 
-function getModuleSidebarHTML(moduleKey) {
+function getModuleSidebarHTML(moduleKey, labelOverride = '', rightHTML = '') {
  const cfg = MODULE_SIDEBAR_CONFIG[moduleKey];
  if (!cfg) return '';
- const moduleLabel = moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label;
+ const moduleLabel = labelOverride || (moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label);
  const topBarBg = `linear-gradient(90deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%)`;
  return `
  <div class="module-top-bar mod-topbar-${moduleKey}${getDesignSystemModuleClass(moduleKey)}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
@@ -2667,6 +2671,7 @@ function getModuleSidebarHTML(moduleKey) {
  <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
  </div>
  <span class="top-bar-label">${moduleLabel}</span>
+ ${rightHTML || ''}
  </div>
  `;
 }
@@ -3075,7 +3080,13 @@ async function getSupabaseAuthSession() {
     return data?.session || null;
 }
 
+// Temporario: mantem a autenticacao Supabase criada, mas nao exige login durante os ajustes do app.
+// Os usuarios locais continuam identificando o responsavel por cada movimentacao.
+const TEMPORARY_SUPABASE_LOGIN_BYPASS = true;
+
 async function ensureSupabaseAuthenticatedAccess() {
+    if (TEMPORARY_SUPABASE_LOGIN_BYPASS) return true;
+
     const existingSession = await getSupabaseAuthSession();
     if (existingSession?.user?.id) {
         localStorage.setItem('dy_supabase_auth_user_id', existingSession.user.id);
@@ -3417,9 +3428,6 @@ function renderLogin(push = true) {
                 <span class="material-symbols-rounded">person</span>
                 <span class="login-user-hint-text">SELECIONE SEU USUARIO</span>
             </div>
-            <button type="button" onclick="disconnectSupabaseSecureAccess()" aria-label="Trocar conta de acesso seguro" style="position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 9px 13px; background: rgba(10,10,12,.72); color: #fff; font: inherit; font-size: .72rem; cursor: pointer; backdrop-filter: blur(10px);">
-                Trocar acesso seguro
-            </button>
             ${getAppVersionBadgeHTML('login')}
         </div>
     `;
@@ -3517,6 +3525,7 @@ const menuModulesConfig = [
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
+ { id: 'central_operacoes', label: 'CENTRAL AO VIVO', icon: 'central_operacoes', order: 7, type: 'principal' },
  { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
@@ -3530,6 +3539,7 @@ const menu3DIcons = {
  pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
  inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><rect x="18" y="41" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/></svg>',
+ central_operacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F172A"/><rect x="14" y="17" width="36" height="26" rx="4" fill="#fff" opacity=".96"/><rect x="18" y="21" width="13" height="8" rx="2" fill="#3B82F6"/><rect x="33" y="21" width="13" height="8" rx="2" fill="#10B981"/><rect x="18" y="31" width="13" height="8" rx="2" fill="#F59E0B"/><rect x="33" y="31" width="13" height="8" rx="2" fill="#8B5CF6"/><path d="M26 49h12M32 43v6" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
  dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
  configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
  nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#475569"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.6"/><rect x="20" y="39" width="12" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/><rect x="20" y="44" width="9" height="2.5" rx="1.25" fill="#fff" opacity="0.35"/></svg>',
@@ -3605,6 +3615,7 @@ const menuRoutes = {
  compras: 'renderComprasSubMenu()',
  movimentacoes: 'renderMovimentacoesSubMenu()',
  inventario: 'renderInventarioSubMenu()',
+ central_operacoes: 'renderCentralOperacoes()',
  nf: 'renderNFSubMenu()',
  financeiro: 'renderFinanceiroSubMenu()',
  configuracoes: 'renderConfigSubMenu()',
@@ -3707,6 +3718,8 @@ function getQuickActionsHTML(modoRapidoAtivo) {
 }
 
 function renderMenu(push = true) {
+ cleanupCentralOperacoesLive?.();
+ document.body.classList.remove('central-live-active');
  stopScanner();
  currentScreen = 'menu';
  document.body.classList.remove('login-active');
@@ -3758,6 +3771,7 @@ function renderMovimentacoesSubMenu() {
  { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
  { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
  { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
+ { id: 'relatorio_saida_devolucao', label: 'RELATORIO SAIDAS X DEVOLUCOES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar produtos separados, devolvidos e o percentual por item.' },
  { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
  { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
  { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
@@ -8798,6 +8812,7 @@ async function addInventoryItem(scannedEan = null) {
  } catch (e) {
  console.error('[INV-DIAG] erro ao incluir item bipado:', e);
  }
+ if (saved) publishCurrentInventoryToCentral(itemToSave);
  if (!saved) {
  showScanFeedback('error', 'Erro ao incluir produto');
  if (existing) {
@@ -18186,6 +18201,7 @@ async function addPickItem(scannedEan = null) {
 
  if (!pickPersistFailed) {
  const scannedItem = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
+ publishCurrentPickToCentral(scannedItem);
  showPickScanCenterToast(scannedItem);
  if (isPickMobileViewport() && !roundCompletedNow && !roundOverflowNow) {
  const addedTotal = Number(scannedItem?.qty || 1);
@@ -20033,6 +20049,7 @@ async function addPackScan(scannedEan = null) {
  });
  }
 
+ publishCurrentPackToCentral(row);
  input.value = '';
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
  showInputFeedback('pack-ean-input', row && row.divergencia !== 'SOBRA' ? 'success' : 'error');
@@ -20680,6 +20697,7 @@ function quickActionGerarRomaneio() {
 
 const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetirada';
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
+let romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
 let romaneioTrackingState = { key: '', codes: [] };
 let romaneioPackageEditState = { key: '', values: {} };
@@ -20909,7 +20927,7 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
 
  if (metrics) {
  romaneioPackagePhotoState = { dataUrl: '' };
- setTimeout(() => { initRomaneioSignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+ setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
  }
 }
 
@@ -21101,15 +21119,27 @@ function renderRomaneioForm(metrics) {
  <img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto do pacote" hidden>
  </div>
 
+ <div class="romaneio-signature-grid">
  <div class="romaneio-signature-box">
  <div class="romaneio-signature-header">
- <strong>Assinatura digital</strong>
+ <strong>Assinatura de quem entrega - Alexandre</strong>
+ <div>
+ <button type="button" onclick="clearRomaneioDeliverySignature()">Limpar assinatura</button>
+ <button type="button" onclick="redoRomaneioDeliverySignature()">Refazer assinatura</button>
+ </div>
+ </div>
+ <canvas id="romaneio-delivery-signature-canvas"></canvas>
+ </div>
+ <div class="romaneio-signature-box">
+ <div class="romaneio-signature-header">
+ <strong>Assinatura de quem retira</strong>
  <div>
  <button type="button" onclick="clearRomaneioSignature()">Limpar assinatura</button>
  <button type="button" onclick="redoRomaneioSignature()">Refazer assinatura</button>
  </div>
  </div>
  <canvas id="romaneio-signature-canvas"></canvas>
+ </div>
  </div>
 
  <button class="romaneio-save-btn" type="submit">
@@ -21194,6 +21224,10 @@ function renderRomaneioDetail(item) {
  </div>
  <div class="romaneio-detail-grid">
  <div><small>Data/Hora</small><strong>${escapeKitAttribute(item.data)} ${escapeKitAttribute(item.hora)}</strong></div>
+ <div><small>Agência</small><strong>${escapeKitAttribute(item.agencia_correios || 'AGF Eng. Armando de Arruda')}</strong></div>
+ <div><small>Cliente</small><strong>${escapeKitAttribute(item.cliente || 'DY Auto Parts')}</strong></div>
+ <div><small>Responsável pela entrega</small><strong>${escapeKitAttribute(item.responsavel_entrega || 'Alexandre')}</strong></div>
+ <div><small>Horário da coleta</small><strong>${escapeKitAttribute(item.horario_coleta || '15:00')}</strong></div>
  <div><small>Canal</small><strong>${escapeKitAttribute(item.canal)}</strong></div>
  <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
  <div><small>Quantidade movimentada</small><strong>${formatStockNumber(item.itens || 0)}</strong></div>
@@ -21212,7 +21246,7 @@ function renderRomaneioDetail(item) {
  separacoes: item.separacoes || 0,
  pacotes: item.pacotes || 0
  })}
- ${item.assinatura ? `<img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou">` : ''}
+ <div class="romaneio-saved-signatures">${item.assinatura_entrega ? `<figure><figcaption>Assinatura de quem entrega - Alexandre</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura_entrega)}" alt="Assinatura de Alexandre"></figure>` : ''}${item.assinatura ? `<figure><figcaption>Assinatura de quem retira</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou"></figure>` : ''}</div>
  ${item.foto_pacote ? `<img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto do pacote">` : ''}
 
  ${renderRomaneioPostSaveActions(item)}
@@ -21292,6 +21326,57 @@ function initRomaneioSignaturePad() {
  canvas.addEventListener('touchend', end);
 }
 
+function initRomaneioDeliverySignaturePad() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas) return;
+ const rect = canvas.getBoundingClientRect();
+ canvas.width = Math.max(320, Math.floor(rect.width * window.devicePixelRatio));
+ canvas.height = Math.max(160, Math.floor(rect.height * window.devicePixelRatio));
+ const ctx = canvas.getContext('2d');
+ ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+ ctx.lineCap = 'round';
+ ctx.lineJoin = 'round';
+ ctx.lineWidth = 2.6;
+ ctx.strokeStyle = '#111827';
+ romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
+ let drawing = false;
+ let hasStroke = false;
+ const getPoint = event => {
+ const bounds = canvas.getBoundingClientRect();
+ const source = event.touches?.[0] || event;
+ return { x: source.clientX - bounds.left, y: source.clientY - bounds.top };
+ };
+ const start = event => { event.preventDefault(); drawing = true; hasStroke = true; const point = getPoint(event); ctx.beginPath(); ctx.moveTo(point.x, point.y); };
+ const move = event => { if (!drawing) return; event.preventDefault(); const point = getPoint(event); ctx.lineTo(point.x, point.y); ctx.stroke(); };
+ const end = () => { if (!drawing) return; drawing = false; if (hasStroke) romaneioDeliverySignatureState.dataUrl = canvas.toDataURL('image/png'); };
+ canvas.addEventListener('mousedown', start);
+ canvas.addEventListener('mousemove', move);
+ window.addEventListener('mouseup', end, { once: false });
+ canvas.addEventListener('touchstart', start, { passive: false });
+ canvas.addEventListener('touchmove', move, { passive: false });
+ canvas.addEventListener('touchend', end);
+}
+
+function clearRomaneioDeliverySignature() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas) return;
+ if (romaneioDeliverySignatureState.dataUrl) romaneioDeliverySignatureState.redoDataUrl = romaneioDeliverySignatureState.dataUrl;
+ canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+ romaneioDeliverySignatureState.dataUrl = '';
+}
+
+function redoRomaneioDeliverySignature() {
+ const canvas = document.getElementById('romaneio-delivery-signature-canvas');
+ if (!canvas || !romaneioDeliverySignatureState.redoDataUrl) return;
+ const ctx = canvas.getContext('2d');
+ const image = new Image();
+ image.onload = () => {
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+ ctx.drawImage(image, 0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio);
+ romaneioDeliverySignatureState.dataUrl = romaneioDeliverySignatureState.redoDataUrl;
+ };
+ image.src = romaneioDeliverySignatureState.redoDataUrl;
+}
 function clearRomaneioSignature() {
  const canvas = document.getElementById('romaneio-signature-canvas');
  if (!canvas) return;
@@ -21404,8 +21489,12 @@ function saveRomaneioFromForm(withdrawalType) {
  return;
  }
  }
+ if (!romaneioDeliverySignatureState.dataUrl) {
+ showToast('Colete a assinatura de quem entrega antes de salvar.', 'warning');
+ return;
+ }
  if (!romaneioSignatureState.dataUrl) {
- showToast('Colete a assinatura antes de salvar.', 'warning');
+ showToast('Colete a assinatura de quem retira antes de salvar.', 'warning');
  return;
  }
 
@@ -21427,6 +21516,11 @@ function saveRomaneioFromForm(withdrawalType) {
  responsavel,
  documento: String(data.get('documento') || '').trim(),
  observacao: String(data.get('observacao') || '').trim(),
+ agencia_correios: 'AGF Eng. Armando de Arruda',
+ cliente: 'DY Auto Parts',
+ responsavel_entrega: 'Alexandre',
+ horario_coleta: '15:00',
+ assinatura_entrega: romaneioDeliverySignatureState.dataUrl,
  assinatura: romaneioSignatureState.dataUrl,
  foto_pacote: romaneioPackagePhotoState.dataUrl || '',
  usuario: localStorage.getItem('currentUser') || '',
@@ -21493,12 +21587,14 @@ async function createRomaneioPDF(item) {
  const pageWidth = doc.internal.pageSize.getWidth();
  const pageHeight = doc.internal.pageSize.getHeight();
  const margin = 15;
- const [logo, signature, packagePhoto] = await Promise.all([
+ const [logo, deliverySignature, pickupSignature, packagePhoto] = await Promise.all([
  loadRomaneioPDFImage(LOGO_LIGHT_BG),
+ loadRomaneioPDFImage(item.assinatura_entrega),
  loadRomaneioPDFImage(item.assinatura),
  loadRomaneioPDFImage(item.foto_pacote)
  ]);
 
+ const drawHeader = () => {
  doc.setFillColor(23, 74, 145);
  doc.rect(0, 0, pageWidth, 7, 'F');
  doc.setFillColor(255, 211, 0);
@@ -21512,17 +21608,21 @@ async function createRomaneioPDF(item) {
  doc.setFont('helvetica', 'normal');
  doc.setTextColor(93, 105, 125);
  doc.text(`Número: ${item.id}`, pageWidth - margin, 27, { align: 'right' });
- doc.text(`Data e hora: ${item.data} ${item.hora}`, pageWidth - margin, 32, { align: 'right' });
+ doc.text(`Data: ${item.data} | Horário da coleta: ${item.horario_coleta || '15:00'}`, pageWidth - margin, 32, { align: 'right' });
  doc.setDrawColor(222, 227, 235);
  doc.line(margin, 39, pageWidth - margin, 39);
+ };
+ drawHeader();
 
  const summary = [
+ ['Agência', item.agencia_correios || 'AGF Eng. Armando de Arruda'],
+ ['Cliente', item.cliente || 'DY Auto Parts'],
+ ['Responsável pela entrega', item.responsavel_entrega || 'Alexandre'],
+ ['Horário da coleta', item.horario_coleta || '15:00'],
  ['Quem retirou', item.responsavel || '-'],
  ['Documento', item.documento || '-'],
  ['Quantidade de pacotes', String(item.pacotes || 0)],
- ['Separações', String(item.separacoes || 0)],
- ['Registrado por', item.usuario || '-'],
- ['Observação', item.observacao || '-']
+ ['Separações', String(item.separacoes || 0)]
  ];
  let y = 47;
  summary.forEach(([label, value], index) => {
@@ -21542,7 +21642,7 @@ async function createRomaneioPDF(item) {
  doc.text(doc.splitTextToSize(String(value), 78).slice(0, 2), x + 4, boxY + 9.5);
  });
 
- y = 103;
+ y = 121;
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(11);
  doc.setTextColor(28, 39, 58);
@@ -21570,29 +21670,28 @@ async function createRomaneioPDF(item) {
  doc.addPage();
  y = 18;
  };
- ensureSpace(signature ? 52 : 22);
+ ensureSpace(54);
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(10);
- doc.text('Assinatura de quem retirou', margin, y);
+ doc.setTextColor(28, 39, 58);
+ doc.text('Assinatura de quem entrega - Alexandre', margin, y);
+ doc.text('Assinatura de quem retira', margin + 92, y);
  y += 5;
- if (signature) {
  doc.setDrawColor(220, 225, 233);
- doc.roundedRect(margin, y, 80, 38, 2, 2, 'S');
- addRomaneioPDFImage(doc, signature, margin + 3, y + 3, 74, 30);
- y += 43;
- } else {
- doc.setFont('helvetica', 'normal');
- doc.text('Assinatura não informada.', margin, y + 5);
- y += 14;
- }
+ doc.roundedRect(margin, y, 86, 38, 2, 2, 'S');
+ doc.roundedRect(margin + 92, y, 86, 38, 2, 2, 'S');
+ if (deliverySignature) addRomaneioPDFImage(doc, deliverySignature, margin + 3, y + 3, 80, 30);
+ if (pickupSignature) addRomaneioPDFImage(doc, pickupSignature, margin + 95, y + 3, 80, 30);
+ y += 45;
 
  if (packagePhoto) {
- ensureSpace(88);
+ ensureSpace(90);
  doc.setFont('helvetica', 'bold');
  doc.setFontSize(10);
  doc.text('Foto dos pacotes', margin, y);
  y += 5;
- addRomaneioPDFImage(doc, packagePhoto, margin, y, pageWidth - (margin * 2), 80);
+ const photoHeight = addRomaneioPDFImage(doc, packagePhoto, margin, y, pageWidth - (margin * 2), 80);
+ y += photoHeight + 5;
  }
 
  const pages = doc.getNumberOfPages();
@@ -21601,7 +21700,7 @@ async function createRomaneioPDF(item) {
  doc.setFont('helvetica', 'normal');
  doc.setFontSize(7);
  doc.setTextColor(125, 135, 151);
- doc.text(`DY Auto Parts • Romaneio ${item.id} • Página ${page} de ${pages}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
+ doc.text(`DY Auto Parts • AGF Eng. Armando de Arruda • Romaneio ${item.id} • Página ${page} de ${pages}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
  }
  return doc;
 }
@@ -22188,7 +22287,24 @@ function quickActionReposicao() {
 function handleReposicaoSearchInput(value) {
  reposicaoState.search = value;
  clearTimeout(reposicaoSearchTimer);
- reposicaoSearchTimer = setTimeout(renderReposicaoList, 220);
+ reposicaoSearchTimer = setTimeout(renderReposicaoListPreservingSearchFocus, 220);
+}
+
+function renderReposicaoListPreservingSearchFocus() {
+ const activeInput = document.getElementById('reposicao-search-input');
+ const shouldRestoreFocus = document.activeElement === activeInput;
+ const selectionStart = activeInput?.selectionStart ?? null;
+ const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
+ renderReposicaoList();
+ if (!shouldRestoreFocus) return;
+ requestAnimationFrame(() => {
+ const nextInput = document.getElementById('reposicao-search-input');
+ if (!nextInput) return;
+ nextInput.focus({ preventScroll: true });
+ const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+ const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+ nextInput.setSelectionRange(start, end);
+ });
 }
 
 function reposicaoEscape(value) {
@@ -22447,7 +22563,7 @@ function renderReposicaoList() {
  <section class="reposicao-filters">
  <div class="reposicao-search">
  <span class="material-symbols-rounded">search</span>
- <input type="search" placeholder="Buscar por cliente, pedido, CPF/CNPJ, rastreio ou produto" value="${reposicaoEscape(reposicaoState.search)}" oninput="handleReposicaoSearchInput(this.value)">
+ <input id="reposicao-search-input" type="search" placeholder="Buscar por cliente, pedido, CPF/CNPJ, rastreio ou produto" value="${reposicaoEscape(reposicaoState.search)}" oninput="handleReposicaoSearchInput(this.value)">
  </div>
  <div class="reposicao-status-tabs">
  ${['Todos', ...REPOSICAO_STATUS_OPTIONS].map(status => `
@@ -31850,7 +31966,7 @@ function renderEntradaNFHistoryFilters() {
  <section class="entrada-nf-history-filters">
  <label class="entrada-nf-history-search">
  <span class="material-symbols-rounded">search</span>
- <input type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
+ <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
  </label>
  <label>
  <span>PerAodo</span>
@@ -31997,7 +32113,20 @@ function renderEntradaNFHistoryDashboard(historico = []) {
 function refreshEntradaNFHistoryDashboard() {
  const container = document.getElementById('entrada-nf-history-content');
  if (!container) return;
+ const activeInput = document.getElementById('entrada-nf-history-search-input');
+ const shouldRestoreFocus = document.activeElement === activeInput;
+ const selectionStart = activeInput?.selectionStart ?? null;
+ const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
  container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
+ if (!shouldRestoreFocus) return;
+ requestAnimationFrame(() => {
+ const nextInput = document.getElementById('entrada-nf-history-search-input');
+ if (!nextInput) return;
+ nextInput.focus({ preventScroll: true });
+ const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+ const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+ nextInput.setSelectionRange(start, end);
+ });
 }
 
 function setEntradaNFHistoryFilter(key, value) {
@@ -33134,7 +33263,7 @@ async function saveDevolucaoMarketplace() {
  const secureAccess = await ensureSupabaseAuthenticatedAccess();
  if (!secureAccess) {
   if (errorBox) {
-   errorBox.textContent = 'Entre com o acesso seguro para salvar a devolucao e movimentar o estoque.';
+   errorBox.textContent = 'Nao foi possivel salvar a devolucao.';
    errorBox.style.display = 'block';
   }
   return;
@@ -33191,7 +33320,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <button type="button" class="devolucao-app-bar-back back-button-standard ds-back-button" onclick="renderDevolucoesSubMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button>
  <h1>DEVOLU\u00c7\u00d5ES</h1>
  <div class="devolucao-app-bar-actions">
- <button type="button" class="devolucao-header-btn" onclick="exportHistoricoDevolucoesCSV()"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span>Exportar CSV</span></button>
+ <details class="app-export-menu devolucao-export-menu"><summary class="devolucao-header-btn"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span class="app-export-label">Exportar</span><span class="material-symbols-rounded app-export-chevron">arrow_drop_down</span></summary><div class="app-export-options"><button type="button" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportHistoricoDevolucoesXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha organizada</small></span></button></div></details>
  <div class="devolucao-month-filter">
 <button type="button" class="devolucao-month-filter-trigger" onclick="toggleDevolucaoMonthFilter(event)" aria-haspopup="true" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b><svg class="devolucao-filter-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg></button>
 <div id="dev-history-month-menu" class="devolucao-month-filter-menu" hidden>
@@ -33472,67 +33601,98 @@ function escapeDevolucaoCSV(value) {
  return /[;"\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
 }
 
-function exportHistoricoDevolucoesCSV() {
- if (devolucaoHistoricoState.error) return showToast('Hist\u00f3rico indispon\u00edvel para exportar.', 'error');
+function getHistoricoDevolucoesExportData() {
+ if (devolucaoHistoricoState.error) {
+  showToast('Historico indisponivel para exportar.', 'error');
+  return null;
+ }
  const records = getHistoricoDevolucaoFilteredRecords();
- if (!records.length) return showToast('Nenhuma devolu\u00e7\u00e3o encontrada no filtro atual.', 'warning');
-
+ if (!records.length) {
+  showToast('Nenhuma devolucao encontrada no filtro atual.', 'warning');
+  return null;
+ }
  const headers = [
- 'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo',
- 'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
- 'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
- 'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Classificacao financeira', 'Valor do impacto', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
+  'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo',
+  'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
+  'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
+  'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Classificacao financeira', 'Valor do impacto', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
  ];
- const rows = records.flatMap(row => {
- const items = row.devolucao_itens?.length ? row.devolucao_itens : [{}];
- return items.map(item => [
- formatDevolucaoDate(row.data_devolucao),
- row.canal || '',
- row.pedido || '',
- row.remetente || '',
- getDevolucaoStatusLabel(row.status, row),
- row.motivo || '',
- row.impactou_reputacao ? 'Sim' : 'Nao',
- row.reputacao_revertida ? 'Sim' : 'Nao',
- row.marketplace_acionado ? 'Sim' : 'Nao',
- row.observacao_acompanhamento || '',
- Number(row.saldo_marketplace || 0).toFixed(2).replace('.', ','),
- getDevolucaoReembolsoMarketplace(row).toFixed(2).replace('.', ','),
- getDevolucaoSaldoLiquido(row).toFixed(2).replace('.', ','),
- item.id_interno || '',
- item.ean || '',
- item.sku || '',
- item.descricao || '',
- item.categoria || '',
- item.quantidade ?? '',
- item.fornecedor || '',
- item.devolveu_correto === false ? 'Nao' : 'Sim',
- item.apto_venda === true ? 'Sim' : 'Nao',
- getDevolucaoResultadoLabel(item),
- getDevolucaoItemFinancialLabel(item),
- getDevolucaoResultadoCost(item).toFixed(2).replace('.', ','),
- item.destino || '',
- item.estoque_movimentado === true ? 'Sim' : 'Nao',
- item.estoque_local || '',
- Number(item.valor_unitario || 0).toFixed(2).replace('.', ','),
- (Number(item.valor_unitario || 0) * Number(item.quantidade || 0)).toFixed(2).replace('.', ','),
- item.observacoes || ''
- ]);
+ const rows = records.flatMap(record => {
+  const items = record.devolucao_itens?.length ? record.devolucao_itens : [{}];
+  return items.map(item => {
+   const rawDate = String(record.data_devolucao || '').slice(0, 10);
+   const parsedDate = rawDate ? new Date(`${rawDate}T12:00:00`) : null;
+   return [
+    parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : rawDate,
+    record.canal || '', record.pedido || '', record.remetente || '', getDevolucaoStatusLabel(record.status, record), record.motivo || '',
+    record.impactou_reputacao ? 'Sim' : 'Nao', record.reputacao_revertida ? 'Sim' : 'Nao', record.marketplace_acionado ? 'Sim' : 'Nao', record.observacao_acompanhamento || '',
+    Number(record.saldo_marketplace || 0), getDevolucaoReembolsoMarketplace(record), getDevolucaoSaldoLiquido(record),
+    item.id_interno || '', item.ean || '', item.sku || '', item.descricao || '', item.categoria || '', Number(item.quantidade || 0), item.fornecedor || '',
+    item.devolveu_correto === false ? 'Nao' : 'Sim', item.apto_venda === true ? 'Sim' : 'Nao', getDevolucaoResultadoLabel(item), getDevolucaoItemFinancialLabel(item),
+    getDevolucaoResultadoCost(item), item.destino || '', item.estoque_movimentado === true ? 'Sim' : 'Nao', item.estoque_local || '',
+    Number(item.valor_unitario || 0), Number(item.valor_unitario || 0) * Number(item.quantidade || 0), item.observacoes || ''
+   ];
+  });
  });
- const csv = [headers, ...rows].map(row => row.map(escapeDevolucaoCSV).join(';')).join('\\r\\n');
- const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
- const url = URL.createObjectURL(blob);
- const link = document.createElement('a');
+ return { headers, rows };
+}
+
+function getHistoricoDevolucoesExportFilename(extension) {
  const month = devolucaoHistoricoState.month || 'todos-os-meses';
  const selectedChannels = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
- const channel = selectedChannels.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length ? 'todos-canais' : selectedChannels.length === 0 ? 'nenhum-canal' : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
- link.href = url;
- link.download = `devolucoes-marketplace-${month}-${channel}.csv`;
- document.body.appendChild(link);
- link.click();
- link.remove();
- URL.revokeObjectURL(url);
+ const channel = selectedChannels.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length
+  ? 'todos-canais'
+  : selectedChannels.length === 0
+   ? 'nenhum-canal'
+   : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
+ return `devolucoes-marketplace-${month}-${channel}.${extension}`;
+}
+
+function closeHistoricoDevolucoesExportMenu() {
+ document.querySelector('.devolucao-export-menu')?.removeAttribute('open');
+}
+
+function exportHistoricoDevolucoesCSV() {
+ const exportData = getHistoricoDevolucoesExportData();
+ if (!exportData) return;
+ closeHistoricoDevolucoesExportMenu();
+ const csvRows = exportData.rows.map(row => row.map((value, column) => {
+  if (value instanceof Date) return value.toLocaleDateString('pt-BR');
+  if ([10, 11, 12, 24, 28, 29].includes(column) && typeof value === 'number') return value.toFixed(2).replace('.', ',');
+  return value;
+ }));
+ const csv = `\ufeffsep=;\r\n${[exportData.headers, ...csvRows].map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
+ downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getHistoricoDevolucoesExportFilename('csv'));
  showToast('CSV exportado com o filtro atual.', 'success');
+}
+
+function exportHistoricoDevolucoesXLSX() {
+ const exportData = getHistoricoDevolucoesExportData();
+ if (!exportData) return;
+ closeHistoricoDevolucoesExportMenu();
+ if (!window.XLSX?.utils) {
+  showToast('A exportacao Excel nao foi carregada. Verifique a conexao.', 'error');
+  return;
+ }
+ const worksheet = XLSX.utils.aoa_to_sheet([exportData.headers, ...exportData.rows], { cellDates: true });
+ const workbook = XLSX.utils.book_new();
+ const lastColumn = XLSX.utils.encode_col(exportData.headers.length - 1);
+ worksheet['!autofilter'] = { ref: `A1:${lastColumn}${exportData.rows.length + 1}` };
+ worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
+ worksheet['!cols'] = exportData.headers.map((header, index) => ({ wch: index === 16 ? 46 : [5, 9, 30].includes(index) ? 34 : [0, 1, 2, 13, 14, 15, 17, 19, 23, 25, 27].includes(index) ? 18 : 15 }));
+ for (let row = 2; row <= exportData.rows.length + 1; row += 1) {
+  const dateCell = worksheet[`A${row}`];
+  if (dateCell) dateCell.z = 'dd/mm/yyyy';
+  [10, 11, 12, 24, 28, 29].forEach(column => {
+   const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
+   if (cell) cell.z = 'R$ #,##0.00';
+  });
+  const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: 18 })];
+  if (quantityCell) quantityCell.z = '#,##0.00';
+ }
+ XLSX.utils.book_append_sheet(workbook, worksheet, 'Historico de Devolucoes');
+ XLSX.writeFile(workbook, getHistoricoDevolucoesExportFilename('xlsx'), { compression: true, cellDates: true });
+ showToast('Excel exportado com o filtro atual.', 'success');
 }
 function renderHistoricoDevolucaoList() {
  const list = document.getElementById('dev-history-list');
@@ -33784,4 +33944,665 @@ function updateDevolucaoSaldoFeedback() {
  const net = value + reimbursement;
  feedback.className = net < 0 ? 'is-negative' : net > 0 ? 'is-positive' : 'is-zero';
  feedback.textContent = net ? `Saldo liquido: ${formatSignedMarketplaceSaldo(net)}.` : 'Saldo zerado: operacao neutra.';
+}
+
+/* Interface compacta exclusiva do modulo Romaneio. */
+var romaneioUi = { mes: new Date().toISOString().slice(0,7), status: 'todos', busca: '', canais: [], modal: false };
+
+function romaneioUiStatus(item) {
+ const value = normalizeOperationalLabel(item.status || 'CONCLUIDO');
+ if (value.includes('ANDAMENTO') || value.includes('PENDENTE')) return ['andamento','Em andamento'];
+ if (value.includes('ERRO') || value.includes('CANCEL')) return ['erro', value.includes('CANCEL') ? 'Cancelado' : 'Erro'];
+ return ['concluido','Concluido'];
+}
+function romaneioUiCanais(item) {
+ return (Array.isArray(item.canais) ? item.canais : parseRomaneioSelectedChannels(item.canal || item.tipo_retirada || '')).filter(Boolean);
+}
+function romaneioUiToggleCanal(canal, checked) {
+ romaneioUi.canais = checked ? [...new Set([...romaneioUi.canais, canal])] : romaneioUi.canais.filter(value => value !== canal);
+ const count = document.getElementById('romaneio-ui-channel-count');
+ if (count) count.textContent = romaneioUi.canais.length ? romaneioUi.canais.length + ' selecionado(s)' : 'Selecione os canais';
+}
+function romaneioUiToggleTodos(checked) {
+ const canais = getRomaneioAvailableChannels();
+ romaneioUi.canais = checked ? [...canais] : [];
+ document.querySelectorAll('.romaneio-ui-channel-check').forEach(input => { input.checked = checked; });
+ romaneioUiToggleCanal('', false);
+}
+function romaneioUiFiltro(campo, valor) {
+ romaneioUi[campo] = valor;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+ setTimeout(() => document.querySelector('.romaneio-ui-history-search input')?.focus(), 0);
+}
+function romaneioUiAbrirModal() {
+ romaneioUi.modal = true;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function romaneioUiFecharModal() {
+ romaneioUi.modal = false;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function romaneioUiConfirmar() {
+ if (!romaneioUi.canais.length) return showToast('Selecione pelo menos um canal.', 'warning');
+ romaneioUi.modal = false;
+ renderRomaneioScreen(serializeRomaneioSelectedChannels(romaneioUi.canais));
+}
+function renderRomaneioUiHistory(records) {
+ const query = normalizeOperationalLabel(romaneioUi.busca);
+ const filtered = records.filter(item => {
+  const status = romaneioUiStatus(item)[0];
+  const month = String(item.createdAt || '').slice(0,7);
+  const text = normalizeOperationalLabel([item.id,item.canal,item.data,item.responsavel].join(' '));
+  return (!month || month === romaneioUi.mes) && (romaneioUi.status === 'todos' || status === romaneioUi.status) && (!query || text.includes(query));
+ });
+ return `<section class="romaneio-ui-history"><header><div><h2>Romaneios realizados</h2><small>${filtered.length} registro(s)</small></div><label class="romaneio-ui-history-search"><span class="material-symbols-rounded">search</span><input value="${escapeKitAttribute(romaneioUi.busca)}" oninput="romaneioUiFiltro('busca',this.value)" placeholder="Buscar romaneio..."></label></header><div class="romaneio-ui-table"><table><thead><tr><th>Romaneio</th><th>Data/hora</th><th>Canais</th><th>Status</th><th>Itens</th><th>Acoes</th></tr></thead><tbody>${filtered.map(item => { const status=romaneioUiStatus(item); return `<tr><td><strong>${escapeKitAttribute(item.id||'-')}</strong></td><td>${escapeKitAttribute(item.data||'-')} ${escapeKitAttribute(item.hora||'')}</td><td><div class="romaneio-ui-badges">${romaneioUiCanais(item).map(canal => `<span>${escapeKitAttribute(canal)}</span>`).join('') || '-'}</div></td><td><span class="romaneio-ui-status ${status[0]}">${status[1]}</span></td><td>${formatStockNumber(item.itens||0)}</td><td><div class="romaneio-ui-actions"><button onclick="renderRomaneioScreen('',${quotePackInlineArg(item.id)})" title="Visualizar"><span class="material-symbols-rounded">visibility</span></button><button onclick="generateRomaneioPDF(${quotePackInlineArg(item.id)})" title="Baixar PDF"><span class="material-symbols-rounded">download</span></button></div></td></tr>`; }).join('') || '<tr><td colspan="6" class="romaneio-ui-empty">Nenhum romaneio encontrado.</td></tr>'}</tbody></table></div></section>`;
+}
+function renderRomaneioUiModal(canais) {
+ if (!romaneioUi.modal) return '';
+ return `<div class="romaneio-ui-modal-bg" onclick="if(event.target===this)romaneioUiFecharModal()"><section class="romaneio-ui-modal" role="dialog" aria-modal="true"><header><h2>Novo romaneio</h2><button onclick="romaneioUiFecharModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="romaneio-ui-modal-grid"><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUi.mes=this.value"></label><fieldset><legend>Canais da separacao</legend><label class="all"><input type="checkbox" onchange="romaneioUiToggleTodos(this.checked)">Selecionar todos</label>${canais.map(canal => `<label><input class="romaneio-ui-channel-check" type="checkbox" ${romaneioUi.canais.includes(canal)?'checked':''} onchange="romaneioUiToggleCanal(${quotePackInlineArg(canal)},this.checked)">${escapeKitAttribute(canal)}</label>`).join('')}</fieldset></div><footer><button onclick="romaneioUiFecharModal()">Cancelar</button><button class="primary" onclick="romaneioUiConfirmar()">Continuar</button></footer></section></div>`;
+}
+renderRomaneioScreen = async function(selectedType='', selectedId='') {
+ const currentUser=localStorage.getItem('currentUser'); document.body.classList.remove('menu-active');
+ try { const [data,movements]=await Promise.all([DataClient.loadModule('separacao',true),DataClient.fetchMovimentosSupabase()]); if(data){appData.separacao=data.separacao||appData.separacao||[];appData.separacao_itens=data.separacao_itens||appData.separacao_itens||[];} appData.movimentacoes=Array.isArray(movements)?movements:[]; } catch(error){console.warn('[ROMANEIO] Falha ao atualizar dados:',error);}
+ const canais=getRomaneioAvailableChannels(), selectedChannels=parseRomaneioSelectedChannels(selectedType); if(selectedChannels.length)romaneioUi.canais=selectedChannels;
+ const records=getRomaneios().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)), selected=selectedId?records.find(item=>item.id===selectedId):null, metrics=selectedChannels.length?getRomaneioTodayMetrics(selectedChannels,selectedChannels):null;
+ app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen romaneio-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container romaneio-shell romaneio-ui-shell"><section class="romaneio-ui-toolbar"><div class="romaneio-ui-title"><strong>Gerar romaneio</strong><small>Controle de retirada e assinaturas</small></div><button class="romaneio-ui-channel-button" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">inventory_2</span><span id="romaneio-ui-channel-count">${romaneioUi.canais.length?romaneioUi.canais.length+' selecionado(s)':'Selecione os canais'}</span><span class="material-symbols-rounded">expand_more</span></button><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUiFiltro('mes',this.value)"></label><label><small>Status</small><select onchange="romaneioUiFiltro('status',this.value)"><option value="todos">Todos</option><option value="concluido" ${romaneioUi.status==='concluido'?'selected':''}>Concluido</option><option value="andamento" ${romaneioUi.status==='andamento'?'selected':''}>Em andamento</option><option value="erro" ${romaneioUi.status==='erro'?'selected':''}>Erro / cancelado</option></select></label><button class="romaneio-ui-generate" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">description</span>Gerar romaneio</button></section>${metrics?renderRomaneioForm(metrics):''}${selected?renderRomaneioDetail(selected):''}${renderRomaneioUiHistory(records)}</main>${renderRomaneioUiModal(canais)}</div>`;
+ if(metrics){romaneioPackagePhotoState={dataUrl:''};setTimeout(()=>{initRomaneioSignaturePad();initRomaneioDeliverySignaturePad();document.getElementById('romaneio-tracking-input')?.focus();},80);}
+};
+
+
+/* Relatorio operacional: saidas da separacao x entradas por devolucao. */
+var saidaDevolucaoReportState={mes:'todos',canal:'todos',busca:'',rows:[],mesesMedia:0};
+function reportDateInRange(value){const month=String(value||'').slice(0,7);return month&&(saidaDevolucaoReportState.mes==='todos'||month===saidaDevolucaoReportState.mes);}
+function reportRollingMonthKeys(){const base=saidaDevolucaoReportState.mes==='todos'?new Date():new Date(saidaDevolucaoReportState.mes+'-01T12:00:00');return Array.from({length:3},(_,i)=>{const d=new Date(base.getFullYear(),base.getMonth()-i,1);return d.toISOString().slice(0,7);});}
+function reportMovementChannel(movement,sessions,devolucoes){const ref=normalizeOperationalLabel([movement.observacao,movement.execution_id,movement.movimento_id].join(' '));const devId=String(movement.execution_id||'').split(':')[1]||'';const dev=devolucoes.find(x=>String(x.id)===devId);if(dev)return dev.canal||'Devolucao';const session=sessions.find(x=>{const id=normalizeOperationalLabel(getPackSeparationSessionId(x)||x.id||'');return id&&ref.includes(id);});return session?.canal_nome||session?.canal||session?.col_c||'Nao identificado';}
+function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),rolling=new Map(),months=reportRollingMonthKeys(),rollingMonths=new Set(),productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0));if(!id||!(qty>0))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' '));const saida=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO'));const retorno=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!saida&&!retorno)return;const canal=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(canal)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const month=String(m.data_hora||m.criado_em||'').slice(0,7);if(saida&&months.includes(month)){rolling.set(id,(rolling.get(id)||0)+qty);rollingMonths.add(month);}if(!reportDateInRange(m.data_hora||m.criado_em))return;const p=productMap.get(id.toUpperCase())||{};const row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',separado:0,devolvido:0,apto:0,defeito:0,canais:new Set()};row.canais.add(canal);if(saida)row.separado+=qty;if(retorno){row.devolvido+=qty;if(normalizeOperationalLabel(m.local_destino).includes('TERREO'))row.apto+=qty;else row.defeito+=qty;}map.set(id,row);});saidaDevolucaoReportState.mesesMedia=rollingMonths.size;return [...map.values()].map(r=>({...r,canais:[...r.canais],media3:(rolling.get(r.id_interno)||0)/3,percentual:r.separado?r.devolvido/r.separado*100:null})).sort((a,b)=>(b.percentual??-1)-(a.percentual??-1)||b.devolvido-a.devolvido);}
+function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca);return saidaDevolucaoReportState.rows.filter(r=>!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor].join(' ')).includes(q));}
+function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),sep=rows.reduce((s,r)=>s+r.separado,0),dev=rows.reduce((s,r)=>s+r.devolvido,0),pct=sep?dev/sep*100:0,mesesMedia=Math.min(3,Number(saidaDevolucaoReportState.mesesMedia||0));return `<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Quantidade enviada</small><strong>${formatStockNumber(sep)}</strong></article><article><small>Quantidade devolvida</small><strong>${formatStockNumber(dev)}</strong></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Percentual de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong></article></section>${mesesMedia<3?`<section class="sd-report-history-note"><strong>Media de saida - 3 meses</strong><span>${mesesMedia} de 3 meses com historico. A coluna sera exibida ao completar tres meses.</span></section>`:''}<section class="sd-report-table-card"><header><div><h2>Produtos no periodo</h2><small>Percentual = quantidade devolvida / quantidade enviada</small></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th><th>Enviado</th><th>Devolvido</th>${mesesMedia>=3?'<th>Media saida 3 meses</th>':''}<th>Percentual</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="sd-product-cell"><strong>${escapeKitAttribute(r.descricao)}</strong><span>ID: ${escapeKitAttribute(r.id_interno)}</span><small><b>Marca:</b> ${escapeKitAttribute(r.marca||'-')} <i></i> <b>SKU:</b> ${escapeKitAttribute(r.sku||'-')} <i></i> <b>Cor:</b> ${escapeKitAttribute(r.cor||'-')}</small></td><td>${formatStockNumber(r.separado)}</td><td>${formatStockNumber(r.devolvido)}</td>${mesesMedia>=3?`<td>${formatStockNumber(r.media3)}</td>`:''}<td><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'Sem saida':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td></tr>`).join('')||`<tr><td colspan="${mesesMedia>=3?5:4}" class="sd-empty">Nenhum movimento encontrado no periodo.</td></tr>`}</tbody></table></div></section>`;}
+async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>`;try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase()]);const sep=await DataClient.loadModule('separacao',true);const products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[];saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);const monthOptions=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(Boolean))].sort().reverse();const channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. SAIDAS X DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Mes de referencia</small><select onchange="saidaDevolucaoReportState.mes=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os meses</option>${monthOptions.map(m=>`<option value="${m}" ${saidaDevolucaoReportState.mes===m?'selected':''}>${new Date(m+'-01T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>`).join('')}</select></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos do periodo. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo" title="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
+function getSaidaDevolucaoScrollContainer(){const shell=document.querySelector('.sd-report-shell');if(shell&&shell.scrollHeight>shell.clientHeight+8)return shell;return window;}
+function initializeSaidaDevolucaoScrollTop(){const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
+function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
+function filterSaidaDevolucaoReport(value){saidaDevolucaoReportState.busca=value;const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();document.querySelector('.sd-report-filters .search input')?.focus();}
+function getSaidaDevolucaoExportData() {
+ const rows = getSaidaDevolucaoFilteredRows();
+ const mostrarMedia = Number(saidaDevolucaoReportState.mesesMedia || 0) >= 3;
+ const header = ['ID interno', 'Nome do produto', 'Marca', 'SKU', 'Cor', 'Enviado', 'Devolvido', ...(mostrarMedia ? ['Media saida 3 meses'] : []), 'Percentual'];
+ const data = rows.map(row => [
+  row.id_interno,
+  row.descricao,
+  row.marca,
+  row.sku,
+  row.cor,
+  Number(row.separado || 0),
+  Number(row.devolvido || 0),
+  ...(mostrarMedia ? [Number(row.media3 || 0)] : []),
+  row.percentual === null ? null : Number(row.percentual) / 100
+ ]);
+ return { header, data, mostrarMedia };
+}
+
+function getSaidaDevolucaoExportFilename(extension) {
+ const periodo = saidaDevolucaoReportState.mes === 'todos' ? 'todos-periodos' : saidaDevolucaoReportState.mes;
+ return `saidas-devolucoes-${periodo}.${extension}`;
+}
+
+function closeSaidaDevolucaoExportMenu() {
+ document.querySelector('.sd-report-export-menu')?.removeAttribute('open');
+}
+
+function downloadSaidaDevolucaoBlob(blob, filename) {
+ closeSaidaDevolucaoExportMenu();
+ const url = URL.createObjectURL(blob);
+ const link = document.createElement('a');
+ link.href = url;
+ link.download = filename;
+ document.body.appendChild(link);
+ link.click();
+ link.remove();
+ setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function escapeSaidaDevolucaoCSV(value) {
+ let text = value === null || value === undefined ? '' : String(value);
+ if (/^[=+\-@]/.test(text)) text = `'${text}`;
+ return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportSaidaDevolucaoCSV() {
+ const { header, data } = getSaidaDevolucaoExportData();
+ const csvRows = [header, ...data.map(row => row.map((value, index) => {
+  if (index === header.length - 1 && typeof value === 'number') return `${(value * 100).toFixed(2).replace('.', ',')}%`;
+  return typeof value === 'number' ? String(value).replace('.', ',') : value;
+ }))];
+ const csv = `\uFEFFsep=;\r\n${csvRows.map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
+ downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getSaidaDevolucaoExportFilename('csv'));
+}
+
+function exportSaidaDevolucaoXLSX() {
+ closeSaidaDevolucaoExportMenu();
+ if (!window.XLSX?.utils) {
+  console.error('[RELATORIO] Biblioteca de exportacao Excel indisponivel.');
+  alert('Nao foi possivel carregar a exportacao Excel. Verifique a conexao e tente novamente.');
+  return;
+ }
+ const { header, data, mostrarMedia } = getSaidaDevolucaoExportData();
+ const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
+ const workbook = XLSX.utils.book_new();
+ const lastColumn = XLSX.utils.encode_col(header.length - 1);
+ worksheet['!autofilter'] = { ref: `A1:${lastColumn}${data.length + 1}` };
+ worksheet['!cols'] = [
+  { wch: 16 }, { wch: 48 }, { wch: 20 }, { wch: 20 }, { wch: 16 },
+  { wch: 12 }, { wch: 12 }, ...(mostrarMedia ? [{ wch: 20 }] : []), { wch: 14 }
+ ];
+ worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
+ const firstDataRow = 2;
+ const lastDataRow = data.length + 1;
+ const numericStartColumn = 5;
+ const percentColumn = header.length - 1;
+ for (let row = firstDataRow; row <= lastDataRow; row += 1) {
+  for (let column = numericStartColumn; column < percentColumn; column += 1) {
+   const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
+   if (cell) cell.z = '#,##0.00';
+  }
+  const percentCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: percentColumn })];
+  if (percentCell) percentCell.z = '0.00%';
+ }
+ XLSX.utils.book_append_sheet(workbook, worksheet, 'Saidas x Devolucoes');
+ XLSX.writeFile(workbook, getSaidaDevolucaoExportFilename('xlsx'), { compression: true });
+}
+
+// ========================================================
+// CENTRAL DE OPERACOES AO VIVO
+// ========================================================
+const centralOperacoesState = {
+ operations: [],
+ filter: 'todas',
+ refreshTimer: null,
+ refreshDebounce: null,
+ realtimeChannel: null,
+ loading: false,
+ lastSync: null,
+ error: '',
+ liveOverrides: new Map()
+};
+
+function cleanupCentralOperacoesLive() {
+ if (centralOperacoesState.refreshTimer) clearInterval(centralOperacoesState.refreshTimer);
+ if (centralOperacoesState.refreshDebounce) clearTimeout(centralOperacoesState.refreshDebounce);
+ centralOperacoesState.refreshTimer = null;
+ centralOperacoesState.refreshDebounce = null;
+ const client = window.supabaseClient;
+ if (client && centralOperacoesState.realtimeChannel) {
+  client.removeChannel(centralOperacoesState.realtimeChannel).catch(() => {});
+ }
+ centralOperacoesState.realtimeChannel = null;
+}
+
+function parseCentralTimestamp(value) {
+ if (!value) return 0;
+ const date = new Date(String(value).replace(' ', 'T'));
+ return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function getCentralRelativeTime(value) {
+ const timestamp = parseCentralTimestamp(value);
+ if (!timestamp) return 'sem registro recente';
+ const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+ if (seconds < 10) return 'agora';
+ if (seconds < 60) return `ha ${seconds} segundos`;
+ const minutes = Math.floor(seconds / 60);
+ if (minutes < 60) return `ha ${minutes} min`;
+ const hours = Math.floor(minutes / 60);
+ if (hours < 24) return `ha ${hours} h`;
+ return new Date(timestamp).toLocaleDateString('pt-BR');
+}
+
+function isCentralOperationActive(status, type) {
+ const normalized = normalizeOperationalLabel(status || '');
+ const closed = ['FINALIZADA', 'FINALIZADO', 'CONCLUIDA', 'CONCLUIDO', 'CONFERIDO', 'CANCELADA', 'CANCELADO', 'ANULADA', 'ANULADO', 'FECHADO'];
+ if (closed.some(value => normalized.includes(value))) return false;
+ if (type === 'inventario') return !normalized || normalized.includes('ABERTO') || normalized.includes('ANDAMENTO');
+ return true;
+}
+
+function getCentralProductDetails(item = {}, productsById = new Map()) {
+ const id = String(item.id_interno || '').trim();
+ const product = productsById.get(id.toUpperCase()) || {};
+ return {
+  id,
+  ean: String(item.ean || product.ean || '').trim(),
+  description: String(item.descricao || product.descricao_completa || product.descricao_base || product.descricao || product.nome || 'Produto sem descricao').trim()
+ };
+}
+
+function buildCentralOperations(payload = {}) {
+ const separacoes = payload.separacoes || [];
+ const separacaoItens = payload.separacaoItens || [];
+ const conferencias = payload.conferencias || [];
+ const conferenciaItens = payload.conferenciaItens || [];
+ const inventarios = payload.inventarios || [];
+ const inventarioItens = payload.inventarioItens || [];
+ const products = payload.products || [];
+ const productsById = new Map(products.map(product => [String(product.id_interno || product.col_a || product.col_A || '').trim().toUpperCase(), product]).filter(([id]) => id));
+ const separacoesById = new Map(separacoes.map(row => [String(row.separacao_id || '').trim(), row]));
+ const operations = [];
+
+ separacoes.filter(row => isCentralOperationActive(row.status, 'separacao')).forEach(session => {
+  const sessionId = String(session.separacao_id || '').trim();
+  if (!sessionId) return;
+  const items = separacaoItens.filter(item => String(item.separacao_id || '').trim() === sessionId);
+  const sorted = [...items].sort((a, b) => parseCentralTimestamp(b.atualizado_em) - parseCentralTimestamp(a.atualizado_em));
+  const lastItem = sorted[0] || {};
+  const processed = items.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0);
+  const expected = items.reduce((sum, item) => sum + Number(item.qtd_solicitada || item.qtd_separada || 0), 0);
+  operations.push({
+   key: `separacao:${sessionId}`,
+   type: 'separacao',
+   typeLabel: 'Separacao',
+   icon: 'inventory_2',
+   user: session.criado_por || 'Operador nao identificado',
+   sessionId,
+   channel: session.canal_nome || session.canal_id || 'Canal nao informado',
+   status: session.status || 'Em separacao',
+   processed,
+   expected,
+   productsProcessed: items.filter(item => Number(item.qtd_separada || 0) > 0).length,
+   productsTotal: items.length,
+   divergence: 0,
+   lastItem: getCentralProductDetails(lastItem, productsById),
+   lastItemQty: Number(lastItem.qtd_separada || 0),
+   lastItemExpected: Number(lastItem.qtd_solicitada || lastItem.qtd_separada || 0),
+   updatedAt: lastItem.atualizado_em || session.atualizado_em || session.criado_em,
+   startedAt: session.criado_em,
+   openArgs: [sessionId]
+  });
+ });
+
+ conferencias.filter(row => isCentralOperationActive(row.status, 'conferencia')).forEach(session => {
+  const conferenceId = String(session.conferencia_id || '').trim();
+  const separationId = String(session.separacao_id || '').trim();
+  if (!conferenceId && !separationId) return;
+  const items = conferenciaItens.filter(item => String(item.conferencia_id || '').trim() === conferenceId || (!conferenceId && String(item.separacao_id || '').trim() === separationId));
+  const lastItem = [...items].sort((a, b) => Number(b.qtd_conferida || 0) - Number(a.qtd_conferida || 0))[0] || {};
+  const processed = items.reduce((sum, item) => sum + Number(item.qtd_conferida || 0), 0);
+  const expected = items.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0);
+  const separation = separacoesById.get(separationId) || {};
+  operations.push({
+   key: `conferencia:${conferenceId || separationId}`,
+   type: 'conferencia',
+   typeLabel: 'Conferencia',
+   icon: 'fact_check',
+   user: session.conferido_por || 'Conferente nao identificado',
+   sessionId: separationId || conferenceId,
+   channel: separation.canal_nome || separation.canal_id || 'Canal nao informado',
+   status: session.status || 'Em conferencia',
+   processed,
+   expected,
+   productsProcessed: items.filter(item => Number(item.qtd_conferida || 0) > 0).length,
+   productsTotal: items.length,
+   divergence: items.filter(item => item.divergencia && normalizeOperationalLabel(item.divergencia) !== 'OK').length,
+   lastItem: getCentralProductDetails(lastItem, productsById),
+   lastItemQty: Number(lastItem.qtd_conferida || 0),
+   lastItemExpected: Number(lastItem.qtd_separada || 0),
+   updatedAt: session.atualizado_em || session.conferido_em || separation.atualizado_em || separation.criado_em,
+   startedAt: session.conferido_em || separation.criado_em,
+   openArgs: [separationId || conferenceId]
+  });
+ });
+
+ inventarios.filter(row => isCentralOperationActive(row.status, 'inventario')).forEach(session => {
+  const sessionId = String(session.inventario_id || '').trim();
+  if (!sessionId) return;
+  const items = inventarioItens.filter(item => String(item.inventario_id || '').trim() === sessionId);
+  const sorted = [...items].sort((a, b) => parseCentralTimestamp(b.atualizado_em || b.auditado_em) - parseCentralTimestamp(a.atualizado_em || a.auditado_em));
+  const lastItem = sorted[0] || {};
+  const divergence = items.filter(item => Number(item.diferenca || 0) !== 0).length;
+  operations.push({
+   key: `inventario:${sessionId}`,
+   type: 'inventario',
+   typeLabel: 'Inventario',
+   icon: 'inventory',
+   user: session.usuario_responsavel || session.criado_por || 'Auditor nao identificado',
+   sessionId,
+   channel: session.local || session.filtro_aplicado || 'Local nao informado',
+   status: session.status || 'Aberto',
+   subtype: String(session.tipo || 'geral').toLowerCase(),
+   processed: items.length,
+   expected: Number(session.total_skus || session.total_itens || 0),
+   productsProcessed: items.length,
+   productsTotal: Number(session.total_skus || session.total_itens || 0),
+   divergence,
+   lastItem: getCentralProductDetails(lastItem, productsById),
+   lastItemQty: Number(lastItem.saldo_fisico || 0),
+   lastItemExpected: Number(lastItem.saldo_sistema || 0),
+   updatedAt: lastItem.atualizado_em || lastItem.auditado_em || session.atualizado_em || session.criado_em,
+   startedAt: session.data_inicio || session.criado_em,
+   openArgs: [sessionId, String(session.tipo || 'geral').toLowerCase()]
+  });
+ });
+
+ const activeWindowMs = 30 * 60 * 1000;
+ const activeCutoff = Date.now() - activeWindowMs;
+ return operations
+  .filter(operation => parseCentralTimestamp(operation.updatedAt || operation.startedAt) >= activeCutoff)
+  .sort((a, b) => parseCentralTimestamp(b.updatedAt) - parseCentralTimestamp(a.updatedAt));
+}
+
+async function fetchCentralTable(table, limit = 500) {
+ const client = window.supabaseClient;
+ if (!client) throw new Error('Supabase nao conectado.');
+ const { data, error } = await client.from(table).select('*').limit(limit);
+ if (error) throw error;
+ return data || [];
+}
+
+async function loadCentralOperacoesData({ silent = false } = {}) {
+ if (centralOperacoesState.loading) return;
+ centralOperacoesState.loading = true;
+ if (!silent) {
+  const grid = document.getElementById('central-live-grid');
+  if (grid && !centralOperacoesState.operations.length) grid.innerHTML = '<div class="central-live-loading"><span class="material-symbols-rounded">sync</span><strong>Conectando as operacoes...</strong></div>';
+ }
+ try {
+  let products = appData.products || appData.produtos || [];
+  if (!products.length) {
+   const productModule = await DataClient.loadModule('produtos', false);
+   products = productModule?.produtos || productModule?.products || [];
+  }
+  const [separacoes, separacaoItens, conferencias, conferenciaItens, inventarios, inventarioItens] = await Promise.all([
+   fetchCentralTable('separacao', 250),
+   fetchCentralTable('separacao_itens', 1200),
+   fetchCentralTable('conferencia', 250),
+   fetchCentralTable('conferencia_itens', 1200),
+   fetchCentralTable('inventarios', 250),
+   fetchCentralTable('inventarios_itens', 1200)
+  ]);
+  const databaseOperations = buildCentralOperations({ separacoes, separacaoItens, conferencias, conferenciaItens, inventarios, inventarioItens, products });
+  centralOperacoesState.operations = databaseOperations.map(operation => {
+   const live = centralOperacoesState.liveOverrides.get(operation.key);
+   return live ? { ...operation, ...live, lastItem: { ...operation.lastItem, ...(live.lastItem || {}) } } : operation;
+  });
+  centralOperacoesState.lastSync = new Date();
+  centralOperacoesState.error = '';
+ } catch (error) {
+  console.error('[CENTRAL AO VIVO] erro ao carregar operacoes:', error);
+  centralOperacoesState.error = error?.message || 'Nao foi possivel consultar as operacoes.';
+ } finally {
+  centralOperacoesState.loading = false;
+  updateCentralOperacoesView();
+ }
+}
+
+function getCentralFilteredOperations() {
+ if (centralOperacoesState.filter === 'todas') return centralOperacoesState.operations;
+ return centralOperacoesState.operations.filter(operation => operation.type === centralOperacoesState.filter);
+}
+
+function getCentralProgress(operation) {
+ if (operation.expected > 0) return Math.max(0, Math.min(100, Math.round((operation.processed / operation.expected) * 100)));
+ return operation.processed > 0 ? 100 : 0;
+}
+
+function renderCentralOperationCard(operation) {
+ const progress = getCentralProgress(operation);
+ const isRecent = Date.now() - parseCentralTimestamp(operation.updatedAt) < 5 * 60 * 1000;
+ const item = operation.lastItem || {};
+ const safeKey = escapeKitAttribute(operation.key);
+ return `
+  <article class="central-live-card central-type-${operation.type} ${isRecent ? 'is-live' : 'is-idle'}" data-operation-key="${safeKey}">
+   <header>
+    <div class="central-live-user"><span class="central-live-avatar">${escapeKitAttribute(String(operation.user || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeKitAttribute(operation.user)}</strong><small>${escapeKitAttribute(operation.sessionId)}</small></div></div>
+    <span class="central-live-type"><span class="material-symbols-rounded">${operation.icon}</span>${operation.typeLabel}</span>
+   </header>
+   <div class="central-live-meta"><span><span class="material-symbols-rounded">storefront</span>${escapeKitAttribute(operation.channel)}</span><span class="central-live-presence"><i></i>${isRecent ? 'Ao vivo' : 'Sem atividade recente'}</span></div>
+   <section class="central-live-last-product">
+    <small>Ultimo produto registrado</small>
+    <strong>${escapeKitAttribute(item.description || 'Aguardando primeira bipagem')}</strong>
+    <span>${item.id ? `ID: ${escapeKitAttribute(item.id)}` : 'Nenhum item processado ainda'}${item.ean ? ` · EAN: ${escapeKitAttribute(item.ean)}` : ''}</span>
+    <b>${operation.lastItemQty}${operation.lastItemExpected > 0 ? ` de ${operation.lastItemExpected}` : ''} unidade(s)</b>
+   </section>
+   <section class="central-live-progress">
+    <div><span>Progresso da operacao</span><strong>${progress}%</strong></div>
+    <div class="central-live-progress-track"><i style="width:${progress}%"></i></div>
+    <div class="central-live-progress-details"><span>${operation.processed} de ${operation.expected || operation.processed} itens</span><span>${operation.productsProcessed} produto(s)</span></div>
+   </section>
+   ${operation.divergence > 0 ? `<div class="central-live-alert"><span class="material-symbols-rounded">warning</span>${operation.divergence} divergencia(s) encontrada(s)</div>` : ''}
+   <footer><span><span class="material-symbols-rounded">schedule</span>Atualizado ${getCentralRelativeTime(operation.updatedAt)}</span><button type="button" onclick="openCentralOperation('${safeKey}')">Abrir atividade</button></footer>
+  </article>`;
+}
+
+function renderCentralOperationsGrid() {
+ const operations = getCentralFilteredOperations();
+ if (centralOperacoesState.error && !centralOperacoesState.operations.length) {
+  return `<div class="central-live-empty central-live-error"><span class="material-symbols-rounded">cloud_off</span><h2>Central temporariamente indisponivel</h2><p>${escapeKitAttribute(centralOperacoesState.error)}</p><button onclick="loadCentralOperacoesData()">Tentar novamente</button></div>`;
+ }
+ if (!operations.length) {
+  return '<div class="central-live-empty"><span class="material-symbols-rounded">desktop_windows</span><h2>Nenhuma operacao ativa</h2><p>As atividades realizadas nos ultimos 30 minutos aparecerao aqui automaticamente.</p></div>';
+ }
+ return operations.map(renderCentralOperationCard).join('');
+}
+
+function updateCentralOperacoesView() {
+ if (currentScreen !== 'central-operacoes') return;
+ const grid = document.getElementById('central-live-grid');
+ if (grid) grid.innerHTML = renderCentralOperationsGrid();
+ const operations = centralOperacoesState.operations;
+ const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+ setText('central-total-count', operations.length);
+ setText('central-pick-count', operations.filter(item => item.type === 'separacao').length);
+ setText('central-pack-count', operations.filter(item => item.type === 'conferencia').length);
+ setText('central-inventory-count', operations.filter(item => item.type === 'inventario').length);
+ setText('central-sync-time', centralOperacoesState.lastSync ? `Atualizado as ${centralOperacoesState.lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Conectando...');
+ document.querySelectorAll('.central-live-filter').forEach(button => button.classList.toggle('active', button.dataset.filter === centralOperacoesState.filter));
+}
+
+function setCentralOperacoesFilter(filter) {
+ centralOperacoesState.filter = filter || 'todas';
+ updateCentralOperacoesView();
+}
+
+function scheduleCentralOperacoesRefresh() {
+ if (centralOperacoesState.refreshDebounce) clearTimeout(centralOperacoesState.refreshDebounce);
+ centralOperacoesState.refreshDebounce = setTimeout(() => loadCentralOperacoesData({ silent: true }), 250);
+}
+
+function subscribeCentralOperacoesRealtime() {
+ const client = window.supabaseClient;
+ if (!client || centralOperacoesState.realtimeChannel) return;
+ let channel = client.channel('central-operacoes-live-board');
+ channel = channel.on('broadcast', { event: 'operation_update' }, ({ payload }) => {
+  if (!payload?.key) return;
+  centralOperacoesState.liveOverrides.set(payload.key, payload);
+  const index = centralOperacoesState.operations.findIndex(operation => operation.key === payload.key);
+  if (index >= 0) {
+   const current = centralOperacoesState.operations[index];
+   centralOperacoesState.operations[index] = { ...current, ...payload, lastItem: { ...current.lastItem, ...(payload.lastItem || {}) } };
+  } else {
+   centralOperacoesState.operations.unshift(payload);
+  }
+  centralOperacoesState.lastSync = new Date();
+  updateCentralOperacoesView();
+ });
+ ['separacao', 'separacao_itens', 'conferencia', 'conferencia_itens', 'inventarios', 'inventarios_itens'].forEach(table => {
+  channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleCentralOperacoesRefresh);
+ });
+ centralOperacoesState.realtimeChannel = channel.subscribe(status => {
+  const badge = document.getElementById('central-connection-status');
+  if (!badge) return;
+  badge.classList.toggle('connected', status === 'SUBSCRIBED');
+  badge.innerHTML = `<i></i>${status === 'SUBSCRIBED' ? 'Tempo real conectado' : 'Conectando tempo real'}`;
+ });
+}
+
+async function openCentralOperation(operationKey) {
+ const operation = centralOperacoesState.operations.find(item => item.key === operationKey);
+ if (!operation) return;
+ const currentUser = localStorage.getItem('currentUser') || '';
+ if (operation.user && currentUser && normalizeOperationalLabel(operation.user) !== normalizeOperationalLabel(currentUser)) {
+  const confirmed = await showAppConfirm({
+   title: 'Abrir atividade de outro usuario?',
+   message: `${operation.user} esta responsavel por esta ${operation.typeLabel.toLowerCase()}.`,
+   detail: 'Continue somente se deseja acompanhar ou assumir a operacao neste dispositivo.',
+   confirmLabel: 'Abrir atividade',
+   cancelLabel: 'Permanecer na Central'
+  });
+  if (!confirmed) return;
+ }
+ cleanupCentralOperacoesLive();
+ if (operation.type === 'separacao') return resumePickingDraftFromServer(operation.sessionId);
+ if (operation.type === 'conferencia') return renderPackSessionDetails(operation.sessionId);
+ if (operation.type === 'inventario') return resumeInventorySession(operation.sessionId, operation.subtype || 'geral');
+}
+
+async function toggleCentralOperacoesFullscreen() {
+ try {
+  if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+  else await document.exitFullscreen();
+ } catch (error) {
+  showToast('O navegador nao permitiu abrir em tela cheia.', 'warning');
+ }
+}
+
+async function renderCentralOperacoes(push = true) {
+ cleanupCentralOperacoesLive();
+ currentScreen = 'central-operacoes';
+ document.body.classList.remove('menu-active');
+ document.body.classList.add('central-live-active');
+ if (push) pushNav('central-operacoes');
+ const currentUser = localStorage.getItem('currentUser');
+ if (!currentUser) return renderLogin();
+ app.innerHTML = `
+  <div class="central-live-screen fade-in">
+   <header class="central-live-header">
+    <button type="button" class="central-live-back" onclick="cleanupCentralOperacoesLive();renderMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button>
+    <div><small>ACOMPANHAMENTO OPERACIONAL</small><h1>Central de Operacoes ao Vivo</h1></div>
+    <div class="central-live-header-actions"><span id="central-connection-status" class="central-live-connection"><i></i>Conectando tempo real</span><button type="button" onclick="loadCentralOperacoesData()" title="Atualizar"><span class="material-symbols-rounded">refresh</span></button><button type="button" onclick="toggleCentralOperacoesFullscreen()" title="Tela cheia"><span class="material-symbols-rounded">fullscreen</span></button></div>
+   </header>
+   <main class="central-live-main">
+    <section class="central-live-summary">
+     <article><span class="material-symbols-rounded">groups</span><div><strong id="central-total-count">0</strong><small>Operacoes ativas</small></div></article>
+     <article class="pick"><span class="material-symbols-rounded">inventory_2</span><div><strong id="central-pick-count">0</strong><small>Separacoes</small></div></article>
+     <article class="pack"><span class="material-symbols-rounded">fact_check</span><div><strong id="central-pack-count">0</strong><small>Conferencias</small></div></article>
+     <article class="inventory"><span class="material-symbols-rounded">inventory</span><div><strong id="central-inventory-count">0</strong><small>Inventarios</small></div></article>
+    </section>
+    <section class="central-live-toolbar">
+     <div class="central-live-filters">
+      <button class="central-live-filter active" data-filter="todas" onclick="setCentralOperacoesFilter('todas')">Todas</button>
+      <button class="central-live-filter" data-filter="separacao" onclick="setCentralOperacoesFilter('separacao')">Separacao</button>
+      <button class="central-live-filter" data-filter="conferencia" onclick="setCentralOperacoesFilter('conferencia')">Conferencia</button>
+      <button class="central-live-filter" data-filter="inventario" onclick="setCentralOperacoesFilter('inventario')">Inventario</button>
+     </div>
+     <span id="central-sync-time">Conectando...</span>
+    </section>
+    <section id="central-live-grid" class="central-live-grid">${renderCentralOperationsGrid()}</section>
+   </main>
+  </div>`;
+ await loadCentralOperacoesData();
+ subscribeCentralOperacoesRealtime();
+ centralOperacoesState.refreshTimer = setInterval(() => loadCentralOperacoesData({ silent: true }), 12000);
+}
+let centralOperationPublisherChannel = null;
+let centralOperationPublisherReady = null;
+
+function ensureCentralOperationPublisher() {
+ const client = window.supabaseClient;
+ if (!client) return Promise.resolve(null);
+ if (centralOperationPublisherChannel && centralOperationPublisherReady) return centralOperationPublisherReady;
+ centralOperationPublisherChannel = client.channel('central-operacoes-live-board');
+ centralOperationPublisherReady = new Promise(resolve => {
+  centralOperationPublisherChannel.subscribe(status => {
+   if (status === 'SUBSCRIBED') resolve(centralOperationPublisherChannel);
+   if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') resolve(null);
+  });
+ });
+ return centralOperationPublisherReady;
+}
+
+async function publishCentralOperationUpdate(payload = {}) {
+ try {
+  const channel = await ensureCentralOperationPublisher();
+  if (!channel || !payload.key) return;
+  await channel.send({ type: 'broadcast', event: 'operation_update', payload: { ...payload, updatedAt: payload.updatedAt || getDataHoraBrasil() } });
+ } catch (error) {
+  console.warn('[CENTRAL AO VIVO] evento em tempo real nao enviado:', error?.message || error);
+ }
+}
+
+function publishCurrentPickToCentral(item = {}) {
+ const context = currentPickingContext || {};
+ const sessionId = String(context.sessionId || currentPickSession?.pickingData?.separacao_id || '').trim();
+ if (!sessionId) return;
+ const stats = getPickingOperationalStats(currentSessionItems || []);
+ publishCentralOperationUpdate({
+  key: `separacao:${sessionId}`, type: 'separacao', typeLabel: 'Separacao', icon: 'inventory_2',
+  user: localStorage.getItem('currentUser') || 'Operador nao identificado', sessionId,
+  channel: context.channelLabel || currentPickSession?.pickingData?.canal_nome || 'Canal nao informado', status: 'Em separacao',
+  processed: Number(stats.total_itens_separados || 0), expected: Number(stats.total_itens_separados || 0),
+  productsProcessed: Number(stats.total_produtos_separados || 0), productsTotal: Number(stats.total_produtos_separados || 0), divergence: 0,
+  lastItem: getCentralProductDetails(item, new Map()), lastItemQty: Number(item.qty || item.qtd_separada || 0),
+  lastItemExpected: Number(item.pick_round_target || item.qty || 0), startedAt: context.createdAt || getDataHoraBrasil(), openArgs: [sessionId]
+ });
+}
+
+function publishCurrentPackToCentral(row = {}) {
+ queueCentralConferenceProgress(row);
+ const sessionId = String(currentPackSession?.pickingData?.separacao_id || currentPackSession?.id || '').trim();
+ if (!sessionId) return;
+ const rows = currentPackSession?.conferenceRows || [];
+ publishCentralOperationUpdate({
+  key: `conferencia:CONF-${sessionId}`, type: 'conferencia', typeLabel: 'Conferencia', icon: 'fact_check',
+  user: localStorage.getItem('currentUser') || 'Conferente nao identificado', sessionId,
+  channel: currentPackSession?.pickingData?.canal_nome || 'Canal nao informado', status: 'Em conferencia',
+  processed: rows.reduce((sum, item) => sum + Number(item.qtd_conferida || 0), 0),
+  expected: rows.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0),
+  productsProcessed: rows.filter(item => Number(item.qtd_conferida || 0) > 0).length, productsTotal: rows.length,
+  divergence: rows.filter(item => item.divergencia && normalizeOperationalLabel(item.divergencia) !== 'OK').length,
+  lastItem: getCentralProductDetails(row, new Map()), lastItemQty: Number(row.qtd_conferida || 0),
+  lastItemExpected: Number(row.qtd_separada || 0), startedAt: getDataHoraBrasil(), openArgs: [sessionId]
+ });
+}
+
+function publishCurrentInventoryToCentral(item = {}) {
+ const inventory = appData.currentInventory || {};
+ const sessionId = String(inventory.id || '').trim();
+ if (!sessionId) return;
+ const items = inventory.items || [];
+ publishCentralOperationUpdate({
+  key: `inventario:${sessionId}`, type: 'inventario', typeLabel: 'Inventario', icon: 'inventory',
+  user: localStorage.getItem('currentUser') || inventory.user || 'Auditor nao identificado', sessionId,
+  channel: inventory.local || 'Local nao informado', status: 'Aberto', subtype: String(inventory.type || 'geral').toLowerCase(),
+  processed: items.length, expected: Number(inventory.total_skus || inventory.total_itens || items.length),
+  productsProcessed: items.length, productsTotal: Number(inventory.total_skus || inventory.total_itens || items.length),
+  divergence: items.filter(current => Number(current.diferenca || 0) !== 0).length,
+  lastItem: getCentralProductDetails(item, new Map()), lastItemQty: Number(item.qty || item.saldo_fisico || 0),
+  lastItemExpected: Number(item.saldo_sistema || 0), startedAt: inventory.date || getDataHoraBrasil(),
+  openArgs: [sessionId, String(inventory.type || 'geral').toLowerCase()]
+ });
+}
+let centralConferenceProgressQueue = Promise.resolve();
+
+function queueCentralConferenceProgress(row = {}) {
+ const client = window.supabaseClient;
+ const sessionId = String(currentPackSession?.pickingData?.separacao_id || currentPackSession?.id || '').trim();
+ const productId = String(row.id_interno || '').trim();
+ if (!client || !sessionId || !productId) return;
+ const snapshot = {
+  sessionId,
+  productId,
+  user: localStorage.getItem('currentUser') || 'N/A',
+  qtd_conferida: Number(row.qtd_conferida || 0),
+  divergencia: row.divergencia || 'FALTA',
+  atualizado_em: getDataHoraBrasil()
+ };
+ centralConferenceProgressQueue = centralConferenceProgressQueue
+  .then(async () => {
+   const [conferenceResult, itemResult] = await Promise.all([
+    client.from('conferencia').update({ conferido_por: snapshot.user, atualizado_em: snapshot.atualizado_em }).eq('separacao_id', snapshot.sessionId),
+    client.from('conferencia_itens').update({ qtd_conferida: snapshot.qtd_conferida, divergencia: snapshot.divergencia }).eq('separacao_id', snapshot.sessionId).eq('id_interno', snapshot.productId)
+   ]);
+   if (conferenceResult.error) throw conferenceResult.error;
+   if (itemResult.error) throw itemResult.error;
+  })
+  .catch(error => console.warn('[CENTRAL AO VIVO] progresso da conferencia nao sincronizado:', error?.message || error));
 }
