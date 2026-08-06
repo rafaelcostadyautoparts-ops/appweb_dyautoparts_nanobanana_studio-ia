@@ -1221,6 +1221,24 @@ const DataClient = (function () {
         }
     }
 
+    async function reservePickingSessionSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('iniciar_separacao_primeiro_item', {
+            p_prefixo: payload.prefixo,
+            p_canal_id: payload.canalId || '',
+            p_canal_nome: payload.canalNome || '',
+            p_criado_por: payload.criadoPor || localStorage.getItem('currentUser') || 'N/A',
+            p_modo_rapido: payload.modoRapido === true,
+            p_id_interno: payload.idInterno,
+            p_ean: payload.ean || null,
+            p_descricao: payload.descricao || ''
+        });
+        if (error) throw error;
+        invalidateCache('separacao');
+        return data;
+    }
+
     async function savePickingDraftSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2465,6 +2483,7 @@ const DataClient = (function () {
         query,
         save,
         saveBatch,
+        reservePickingSessionSupabase,
         savePickingDraftSupabase,
         savePickingDraftItemsBatchSupabase,
         finalizePickingDraftSupabase,

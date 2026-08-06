@@ -8,7 +8,11 @@
             --muted: #94A3B8;
             --danger: #E11D48;
             --transition: all 0.25s ease;
-            --app-font-family: 'Roboto Mono', monospace;
+            /* Local fonts with full Portuguese character coverage. */
+            --font-text: 'PT Sans Narrow', 'Arial Narrow', Arial, sans-serif;
+            --font-display: 'Oswald', 'Arial Narrow', Arial, sans-serif;
+            --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+            --app-font-family: var(--font-text);
             --login-bg-color: #1a1a2e;
             --login-text-color: #ffffff;
             --login-card-color: #EF2B2D;
@@ -219,7 +223,7 @@
         button,
         span,
         div {
-            font-family: 'Roboto Mono', monospace;
+            font-family: var(--app-font-family);
         }
 
         /* Utility Classes */
@@ -67322,6 +67326,7 @@ html body:not(.login-active) #app > .dashboard-screen.internal.product-search-sc
   }
 }
 
+.pick-kit-actions{align-items:center;display:grid;gap:2px 6px;grid-template-columns:auto auto}.pick-kit-toggle{align-items:center;background:transparent;border:1px solid rgba(100,116,139,.45);border-radius:8px;color:#64748b;cursor:pointer;display:inline-flex;font-size:.7rem;font-weight:900;gap:4px;min-height:34px;padding:5px 9px}.pick-kit-toggle .material-symbols-rounded{font-size:17px}.pick-kit-toggle.is-active{background:#fff7ed;border-color:#f59e0b;color:#b45309}.pick-kit-correct{background:transparent;border:0;color:#64748b;cursor:pointer;font-size:.68rem;padding:5px;text-decoration:underline}.pick-kit-status{color:#b45309;font-size:.66rem;font-weight:800;grid-column:1/-1}.pick-package-state{color:#b45309!important;font-weight:850}html[data-theme="dark"] .pick-kit-toggle{border-color:#475569;color:#cbd5e1}html[data-theme="dark"] .pick-kit-toggle.is-active{background:rgba(245,158,11,.14);border-color:#f59e0b;color:#fbbf24}
 /* Separacao mobile: busca inteligente e card de pacotes alinhado aos demais indicadores. */
 .pick-search-status {
   color: #64748b;
@@ -71582,3 +71587,1014 @@ body.central-live-active .central-live-main{min-height:calc(100dvh - 78px);paddi
 @media(max-width:900px){body.central-live-active .central-live-main{min-height:calc(100dvh - 68px);padding-bottom:max(40px,env(safe-area-inset-bottom,0px))!important}}
 /* Menu padrao de exportacao CSV e Excel */
 .app-export-menu{position:relative;display:inline-flex;align-items:center;min-width:0}.app-export-menu>summary{list-style:none;cursor:pointer;user-select:none}.app-export-menu>summary::-webkit-details-marker{display:none}.app-export-menu[open] .app-export-chevron{transform:rotate(180deg)}.app-export-chevron{font-size:19px!important;transition:transform .18s ease}.app-export-options{position:absolute;z-index:2600;top:calc(100% + 8px);right:0;display:grid;width:232px;padding:7px;border:1px solid #ddd6fe;border-radius:12px;background:#fff;box-shadow:0 18px 38px rgba(30,20,60,.24)}.devolucao-history-screen .devolucao-app-bar-actions .app-export-options button,.app-export-options button{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:11px!important;width:100%!important;min-height:52px!important;height:auto!important;margin:0!important;padding:9px 11px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#334155!important;box-shadow:none!important;text-align:left!important;cursor:pointer!important}.app-export-options button:hover{background:#f5f3ff!important;color:#5b21b6!important}.app-export-options button>.material-symbols-rounded{flex:0 0 23px;color:#7c3aed!important;font-size:23px!important}.app-export-options button>span:last-child{display:flex!important;align-items:flex-start!important;flex-direction:column!important;gap:2px!important}.app-export-options strong{font-size:13px}.app-export-options small{color:#64748b;font-size:11px;font-weight:500}.devolucao-export-menu .devolucao-header-btn{height:100%;margin:0}.devolucao-export-menu .app-export-chevron{margin-left:1px}@media(max-width:700px){.devolucao-export-menu .app-export-label,.devolucao-export-menu .app-export-chevron{display:none!important}.devolucao-export-menu .devolucao-header-btn{display:grid!important;place-items:center!important;width:44px!important;min-width:44px!important;padding:0!important}.app-export-options{right:0;width:min(232px,calc(100vw - 24px))}}
+
+/* Product detail 2026: unified commercial hierarchy and readable stock. */
+body:not(.login-active) #app > .dashboard-screen.product-detail {
+  --pd-text-font: 'PT Sans Narrow', 'Arial Narrow', Arial, sans-serif;
+  --pd-display-font: 'Oswald', 'Arial Narrow', Arial, sans-serif;
+  background: #eef2f7 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-card {
+  max-width: 1200px !important;
+  padding: clamp(24px, 3vw, 38px) !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, .10) !important;
+  font-family: var(--pd-text-font) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-header {
+  min-height: 132px !important;
+  margin-bottom: 24px !important;
+  padding: 18px 250px 18px 18px !important;
+  border: 1px solid #e5eaf0 !important;
+  border-radius: 16px !important;
+  background: linear-gradient(120deg, #fff 0%, #f8fafc 100%) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-img {
+  overflow: hidden !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .08) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-title {
+  font-family: var(--pd-display-font) !important;
+  font-weight: 700 !important;
+  font-size: clamp(1.55rem, 2.3vw, 2.2rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: .005em !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-meta-item,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-meta-item strong,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-meta-item span:not(.material-symbols-rounded) {
+  font-family: var(--pd-text-font) !important;
+  font-size: .9rem !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-status-chip {
+  width: auto !important;
+  min-width: auto !important;
+  height: 36px !important;
+  padding: 0 12px !important;
+  gap: 7px !important;
+  border: 1px solid #dbe3ec !important;
+  background: #f8fafc !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-status-text {
+  color: #334155 !important;
+  font-family: var(--pd-text-font) !important;
+  font-size: .78rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-prices {
+  grid-template-columns: 1.08fr .92fr 1.08fr !important;
+  gap: 14px !important;
+  margin-bottom: 30px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card {
+  position: relative !important;
+  min-height: 168px !important;
+  padding: 20px 22px 18px !important;
+  overflow: hidden !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card::before {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 5px !important;
+  content: '' !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-varejo {
+  border-color: #fecaca !important;
+  background: #fff7f7 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-varejo::before {
+  background: #e30613 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-main-card {
+  border-color: #bbf7d0 !important;
+  background: #f3fcf6 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-main-card::before {
+  background: #16a34a !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-atacado {
+  border-color: #bfdbfe !important;
+  background: #f4f8ff !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-card-atacado::before {
+  background: #2563eb !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-label,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-hint {
+  font-family: var(--pd-text-font) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-label {
+  margin-top: 12px !important;
+  color: #475569 !important;
+  font-size: .82rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .055em !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-value,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-location-qty {
+  font-family: var(--pd-display-font) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-main {
+  color: #c80b16 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-value {
+  color: #07863d !important;
+  font-size: clamp(3rem, 4.7vw, 4.35rem) !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-atacado {
+  color: #1d4ed8 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-price-hint {
+  margin-top: auto !important;
+  padding-top: 9px !important;
+  color: #64748b !important;
+  font-size: .72rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .045em !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-locations {
+  padding-top: 22px !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-title,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-group-title,
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-location-name {
+  font-family: var(--pd-text-font) !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-title {
+  margin-bottom: 16px !important;
+  font-family: var(--pd-display-font) !important;
+  font-size: 1.2rem !important;
+  letter-spacing: .02em !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-group {
+  margin-top: 18px !important;
+  padding: 16px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 14px !important;
+  background: #fafcfe !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-group-title {
+  margin-bottom: 4px !important;
+  color: #334155 !important;
+  font-size: .8rem !important;
+  letter-spacing: .065em !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-grid {
+  margin-top: 12px !important;
+}
+
+body:not(.login-active) #app > .dashboard-screen.product-detail .product-stock-location {
+  min-height: 82px !important;
+  padding: 14px 18px !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .04) !important;
+}
+
+/* Separation actions: fixed semantic order and colors on every viewport. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-remove-scan-btn {
+  order: 1 !important;
+  background: #dc2626 !important;
+  border: 1px solid #dc2626 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, .22) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-remove-scan-btn:hover {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-remove-scan-btn.is-active {
+  background: #991b1b !important;
+  border-color: #991b1b !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-pause-btn {
+  order: 2 !important;
+  background: #f59e0b !important;
+  border: 1px solid #d97706 !important;
+  color: #1f2937 !important;
+  box-shadow: 0 10px 22px rgba(245, 158, 11, .22) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-pause-btn:hover {
+  background: #d97706 !important;
+  border-color: #b45309 !important;
+  color: #111827 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-finish-btn {
+  order: 3 !important;
+  background: #16a34a !important;
+  border: 1px solid #15803d !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, .24) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-finish-btn:hover {
+  background: #15803d !important;
+  border-color: #166534 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions :where(.pick-remove-scan-btn, .pick-finish-btn) .material-symbols-rounded {
+  color: #ffffff !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-pause-btn .material-symbols-rounded {
+  color: #1f2937 !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-remove-scan-btn { grid-row: 2 !important; }
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-pause-btn { grid-row: 3 !important; }
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions .pick-finish-btn { grid-row: 4 !important; }
+}
+
+/* Separation 2026: standard module header, compact identity and scan-first flow. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+  gap: 10px !important;
+  padding-top: 10px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(230px, auto) !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-height: 62px !important;
+  padding: 8px 14px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(100deg, #1d4ed8 0%, #2563eb 52%, #1e40af 100%) !important;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, .22) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-inline-back {
+  position: static !important;
+  grid-column: 1 !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border: 1px solid rgba(255, 255, 255, .34) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .14) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-inline-back :where(.material-symbols-rounded, svg) {
+  color: #fff !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title {
+  grid-column: 2 !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title h1 {
+  display: block !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  color: #fff !important;
+  font-family: 'Oswald', 'Arial Narrow', Arial, sans-serif !important;
+  font-size: 1.22rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .025em !important;
+  line-height: 1.15 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title h1 span {
+  color: #dbeafe !important;
+  font-family: inherit !important;
+  font-weight: 600 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title p {
+  margin: 3px 0 0 !important;
+  color: rgba(255, 255, 255, .76) !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .74rem !important;
+  font-weight: 700 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta {
+  grid-column: 3 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta > span {
+  display: grid !important;
+  min-width: 0 !important;
+  padding: 6px 9px !important;
+  border: 1px solid rgba(255, 255, 255, .20) !important;
+  border-radius: 8px !important;
+  background: rgba(15, 23, 42, .16) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta small,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong {
+  overflow: hidden !important;
+  color: #fff !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  line-height: 1.05 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta small {
+  color: #bfdbfe !important;
+  font-size: .58rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .06em !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong {
+  max-width: 150px !important;
+  margin-top: 2px !important;
+  font-size: .72rem !important;
+  font-weight: 800 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-info-grid,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-footer {
+  display: none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-panel {
+  margin: 0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-row {
+  max-width: none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field {
+  grid-template-columns: 44px minmax(0, 1fr) 46px 46px !important;
+  height: 54px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 5px 16px rgba(15, 23, 42, .07) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field:focus-within {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .13) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen :where(.pick-keyboard-btn, .pick-scanner-btn) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border-radius: 9px !important;
+  cursor: pointer !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-keyboard-btn {
+  border: 1px solid #cbd5e1 !important;
+  background: #f8fafc !important;
+  color: #334155 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-keyboard-btn.is-active {
+  border-color: #2563eb !important;
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scanner-btn {
+  border: 1px solid #1d4ed8 !important;
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen :where(.pick-keyboard-btn, .pick-scanner-btn) .material-symbols-rounded {
+  display: inline-flex !important;
+  color: currentColor !important;
+  font-size: 21px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header h2 {
+  font-family: 'Oswald', 'Arial Narrow', Arial, sans-serif !important;
+  letter-spacing: .025em !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+    grid-template-columns: 40px minmax(0, 1fr) minmax(92px, 116px) !important;
+    gap: 7px !important;
+    min-height: 54px !important;
+    height: 54px !important;
+    padding: 6px 8px !important;
+    border-radius: 11px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-inline-back {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title h1 {
+    font-size: clamp(.78rem, 3.6vw, .98rem) !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-title p {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta {
+    display: grid !important;
+    gap: 2px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta > span {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 2px 4px !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta small {
+    flex: 0 0 auto !important;
+    font-size: .48rem !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong {
+    max-width: 75px !important;
+    margin: 0 !important;
+    font-size: .58rem !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field {
+    grid-template-columns: 31px minmax(0, 1fr) 40px 40px !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    padding: 0 4px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field > input {
+    font-size: .78rem !important;
+  }
+}
+
+/* Separation resume checkpoint: automatic, visible and independent from rounds. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-toolbar {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 9px 14px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 145px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary > .material-symbols-rounded {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 9px !important;
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  font-size: 20px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary div {
+  display: grid !important;
+  gap: 1px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary small {
+  color: #64748b !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .62rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .06em !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary strong,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary strong span {
+  padding: 0 !important;
+  background: transparent !important;
+  color: #166534 !important;
+  font-family: 'Oswald', 'Arial Narrow', Arial, sans-serif !important;
+  font-size: .95rem !important;
+  font-weight: 700 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 32px !important;
+  padding: 5px 10px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  color: #475569 !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .68rem !important;
+  font-weight: 850 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters button span {
+  min-width: 19px !important;
+  padding: 2px 5px !important;
+  border-radius: 999px !important;
+  background: #e2e8f0 !important;
+  color: #334155 !important;
+  font-size: .62rem !important;
+  text-align: center !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters button.is-active {
+  border-color: #16a34a !important;
+  background: #ecfdf5 !important;
+  color: #166534 !important;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, .10) !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters button.is-active span {
+  background: #16a34a !important;
+  color: #fff !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-legend {
+  display: grid !important;
+  gap: 3px !important;
+  color: #64748b !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .62rem !important;
+  font-weight: 700 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-legend span {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-legend i {
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 50% !important;
+  background: #94a3b8 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-legend span:last-child i {
+  background: #22c55e !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-table-head,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+  grid-template-columns: minmax(0, 1fr) 120px 185px 56px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 1px 8px !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
+  padding: 7px 9px !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > span {
+  grid-column: 1 / -1 !important;
+  color: #64748b !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .58rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .055em !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > strong {
+  grid-column: 1 !important;
+  grid-row: 2 / span 2 !important;
+  color: #475569 !important;
+  font-family: 'Oswald', 'Arial Narrow', Arial, sans-serif !important;
+  font-size: 1.5rem !important;
+  line-height: 1 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > small,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > em {
+  overflow: hidden !important;
+  color: #64748b !important;
+  font-family: 'PT Sans Narrow', Arial, sans-serif !important;
+  font-size: .62rem !important;
+  font-style: normal !important;
+  font-weight: 750 !important;
+  line-height: 1.1 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-now {
+  border-color: #86efac !important;
+  background: #ecfdf5 !important;
+  box-shadow: inset 4px 0 0 #22c55e !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-now > span,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-now > strong {
+  color: #15803d !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-now > em {
+  color: #166534 !important;
+  font-weight: 850 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.has-resume-scans {
+  border-color: #bbf7d0 !important;
+}
+
+@media (max-width: 900px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-toolbar {
+    grid-template-columns: 1fr !important;
+    gap: 7px !important;
+    padding: 8px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary {
+    justify-content: center !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-filters {
+    justify-content: flex-start !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+    scrollbar-width: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-legend {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-table-head {
+    display: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+    grid-template-columns: 74px minmax(0, 1fr) 42px !important;
+    gap: 8px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-main {
+    grid-column: 1 / -1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-qty {
+    grid-column: 1 !important;
+    min-width: 0 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state {
+    grid-column: 2 !important;
+    min-height: 54px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete {
+    grid-column: 3 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-round-bar,
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-added-now {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+/* Customizacoes para layout dos produtos separados ponta a ponta sem rodadas e sem cabecalho */
+.pick-table-head,
+.pick-round-bar,
+.pick-added-now {
+  display: none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-panel {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-items-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 95px 170px 42px !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 10px 14px !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  margin: 0 !important;
+}
+
+/* Remover destaques verdes dos cards normais */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.has-resume-scans {
+  border-color: #e2e8f0 !important;
+}
+
+/* Destaque verde EXCLUSIVO para o ULTIMO BIPADO */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.is-last-scanned {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22), 0 4px 12px rgba(34, 197, 94, 0.08) !important;
+}
+
+/* Bloco NESTA RETOMADA / TOTAL ANTERIOR - padrao cinza claro */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 1px 8px !important;
+  min-width: 0 !important;
+  min-height: 52px !important;
+  padding: 6px 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > span {
+  grid-column: 1 / -1 !important;
+  color: #64748b !important;
+  font-size: .58rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .05em !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > strong {
+  grid-column: 1 !important;
+  grid-row: 2 / span 2 !important;
+  color: #334155 !important;
+  font-size: 1.4rem !important;
+  line-height: 1 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > small,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state > em {
+  overflow: hidden !important;
+  color: #64748b !important;
+  font-size: .62rem !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Verde SOMENTE se for o ultimo bipado */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.is-last-scanned .pick-resume-product-state,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-last-biped {
+  border-color: #86efac !important;
+  background: #dcfce7 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.is-last-scanned .pick-resume-product-state > span,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row.is-last-scanned .pick-resume-product-state > strong,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-last-biped > span,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state.is-last-biped > strong {
+  color: #15803d !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row {
+    grid-template-columns: minmax(0, 1fr) 68px 40px !important;
+    row-gap: 8px !important;
+    padding: 10px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-main {
+    grid-column: 1 / -1 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-product-state {
+    grid-column: 1 / 2 !important;
+    min-height: 48px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-qty {
+    grid-column: 2 !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete {
+    grid-column: 3 !important;
+  }
+}
+
+/* Ocultar legenda de bipes */
+.pick-resume-legend {
+  display: none !important;
+}
+
+/* Container responsivo ocupando ate 90% da largura da tela no desktop e mobile */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+  width: 90% !important;
+  max-width: 1400px !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  padding: 12px 0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-panel,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-work-area,
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-panel {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 900px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+    width: 95% !important;
+    padding: 8px 0 !important;
+  }
+}
+
+/* Alinhamento do titulo PRODUTOS SEPARADOS com a quantidade de bipes ao lado */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  padding: 10px 14px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-list-title-wrap h2 {
+  margin: 0 !important;
+  color: #1e293b !important;
+  font-family: 'Oswald', sans-serif !important;
+  font-size: 1.15rem !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  background: #ecfdf5 !important;
+  border: 1px solid #86efac !important;
+  color: #166534 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary .material-symbols-rounded {
+  font-size: 1.1rem !important;
+  color: #16a34a !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-resume-summary strong {
+  font-family: 'Oswald', sans-serif !important;
+  font-size: 0.95rem !important;
+  color: #15803d !important;
+}
+
+
+/* Separacao: pacotes automaticos e selecao contextual de kits. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only{display:block!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only .pick-package-count-field{background:#dbeafe!important;border:1px solid #93c5fd!important;border-radius:10px!important;color:#1e40af!important;display:flex!important;justify-content:center!important;min-height:54px!important;width:100%!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only .pick-package-count-field>span{color:#1e40af!important;font-size:.78rem!important;font-weight:900!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only .pick-package-count-field>strong{color:#1d4ed8!important;font-size:1.55rem!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions>:where(button,.pick-kit-toggle){grid-column:auto!important;height:44px!important;min-height:44px!important;width:100%!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-kit-toggle{background:#64748b!important;border:0!important;border-radius:8px!important;color:#fff!important;justify-content:center!important;font-size:.75rem!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-kit-toggle.is-active{background:#2563eb!important;color:#fff!important}
+.pick-kit-status{grid-column:1/-1!important;text-align:center}.pick-kit-selection-bar{align-items:center;background:#eff6ff;border:1px solid #93c5fd;border-radius:9px;color:#1e3a8a;display:flex;gap:10px;justify-content:space-between;margin-bottom:8px;padding:8px 10px}.pick-kit-selection-bar>div{align-items:center;display:flex;gap:7px}.pick-kit-selection-bar button{align-items:center;background:#2563eb;border:0;border-radius:7px;color:#fff;display:inline-flex;font-size:.7rem;font-weight:900;gap:4px;min-height:34px;padding:6px 10px}.pick-kit-selection-bar button.is-remove{background:#dc2626}.pick-kit-selection-bar .pick-kit-selection-cancel{background:transparent;color:#64748b}.pick-product-row.is-kit-selected{border-color:#3b82f6!important;box-shadow:0 0 0 2px rgba(59,130,246,.18)!important}.pick-item-select{background:transparent;border:0;color:#64748b;cursor:pointer;padding:4px}.pick-item-select.is-selected{color:#2563eb}.pick-package-state{background:transparent;border:0;cursor:pointer;padding:0 3px}.pick-package-state.is-kit{color:#2563eb!important}.pick-package-state.is-standalone{color:#64748b!important}
+@media(max-width:768px){html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pick-kit-selection-bar{align-items:stretch;flex-direction:column}.pick-kit-selection-bar>div{display:grid;grid-template-columns:1fr auto}.pick-product-row{grid-template-columns:minmax(0,1fr) auto auto auto!important}}
+
+/* Separacao: refinamento final de pacotes, filtros e acoes do card. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-actions{align-items:stretch!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-kit-toggle,html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn,html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-pause-btn,html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-finish-btn{align-items:center!important;display:flex!important;grid-column:auto!important;height:44px!important;justify-content:center!important;margin:0!important;min-height:44px!important;position:static!important;transform:none!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row{align-items:center!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto auto auto!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-item-select,html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete{align-self:center!important;grid-row:1!important;margin:0!important;position:static!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-delete{grid-column:4!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-item-select{grid-column:3!important}
+.pick-package-filters button[data-pick-resume-filter="kits"].is-active{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important}
+@media(max-width:768px){html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-row{grid-template-columns:minmax(0,1fr) auto auto auto!important}.pick-package-filters{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+
+
+/* Separacao: busca com folga e identificacao compacta. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field > input{justify-self:start!important;max-width:85%!important;width:85%!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-keyboard-btn svg{fill:none!important;height:22px!important;stroke:currentColor!important;stroke-linecap:round!important;stroke-linejoin:round!important;stroke-width:1.8!important;width:22px!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta > span{align-items:center!important;display:flex!important;justify-content:center!important}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong{margin:0!important}
+@media(max-width:768px){html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-scan-field > input{max-width:85%!important;width:85%!important}}
+
+
+/* Separacao: janela dedicada para agrupar produtos em um pacote. */
+.pick-grouping-modal{align-items:center;background:rgba(15,23,42,.62);display:flex;inset:0;justify-content:center;padding:18px;position:fixed;z-index:10050}
+.pick-grouping-dialog{background:#fff;border-radius:18px;box-shadow:0 24px 70px rgba(15,23,42,.32);display:flex;flex-direction:column;max-height:min(760px,calc(100vh - 36px));overflow:hidden;width:min(680px,100%)}
+.pick-grouping-head{align-items:flex-start;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;padding:20px 22px}.pick-grouping-head>div{align-items:center;display:flex;gap:12px}.pick-grouping-head>div>.material-symbols-rounded{align-items:center;background:#dbeafe;border-radius:12px;color:#2563eb;display:flex;font-size:28px;height:48px;justify-content:center;width:48px}.pick-grouping-head h2{color:#0f172a;font-size:1.08rem;margin:0}.pick-grouping-head p{color:#64748b;font-size:.78rem;margin:4px 0 0}.pick-grouping-head>button{background:#f1f5f9;border:0;border-radius:50%;color:#64748b;cursor:pointer;height:36px;width:36px}
+.pick-grouping-scan{align-items:center;border:2px solid #93c5fd;border-radius:11px;display:grid;gap:8px;grid-template-columns:auto minmax(0,1fr) auto;margin:18px 22px 10px;padding:5px 7px}.pick-grouping-scan>.material-symbols-rounded{color:#2563eb}.pick-grouping-scan input{border:0;font-size:1rem;min-height:42px;outline:0;width:100%}.pick-grouping-scan button{background:#2563eb;border:0;border-radius:8px;color:#fff;cursor:pointer;height:38px;width:42px}
+.pick-grouping-summary{align-items:center;background:#eff6ff;color:#1e40af;display:flex;gap:12px;margin:0 22px 10px;padding:10px 12px}.pick-grouping-summary span{font-size:.68rem;font-weight:900}.pick-grouping-summary strong{font-size:.82rem;margin-left:auto}.pick-grouping-summary b{background:#2563eb;border-radius:999px;color:#fff;font-size:.75rem;padding:5px 9px}
+.pick-grouping-list{display:flex;flex:1;flex-direction:column;gap:7px;min-height:150px;overflow:auto;padding:0 22px 14px}.pick-grouping-item{align-items:center;border:1px solid #e2e8f0;border-radius:10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr) auto auto;padding:10px 12px}.pick-grouping-item>div{display:flex;flex-direction:column;min-width:0}.pick-grouping-item strong{color:#0f172a;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pick-grouping-item span{color:#64748b;font-size:.7rem}.pick-grouping-item em{color:#2563eb;font-size:.78rem;font-style:normal;font-weight:900}.pick-grouping-item>button{background:#fee2e2;border:0;border-radius:8px;color:#dc2626;cursor:pointer;height:36px;width:36px}.pick-grouping-empty{align-items:center;color:#64748b;display:flex;flex:1;flex-direction:column;justify-content:center;padding:28px;text-align:center}.pick-grouping-empty>.material-symbols-rounded{color:#93c5fd;font-size:42px}.pick-grouping-empty small{margin-top:4px}
+.pick-grouping-actions{border-top:1px solid #e2e8f0;display:grid;gap:10px;grid-template-columns:auto minmax(220px,1fr);padding:16px 22px}.pick-grouping-actions button{border:0;border-radius:9px;cursor:pointer;font-size:.76rem;font-weight:900;min-height:46px;padding:8px 16px}.pick-grouping-actions .is-cancel{background:#e2e8f0;color:#475569}.pick-grouping-actions .is-finish{align-items:center;background:#16a34a;color:#fff;display:flex;gap:6px;justify-content:center}.pick-grouping-actions .is-finish:disabled{background:#94a3b8;cursor:not-allowed}
+html[data-theme="dark"] .pick-grouping-dialog{background:#0f172a}html[data-theme="dark"] .pick-grouping-head,html[data-theme="dark"] .pick-grouping-actions{border-color:#334155}html[data-theme="dark"] .pick-grouping-head h2,html[data-theme="dark"] .pick-grouping-item strong{color:#f8fafc}html[data-theme="dark"] .pick-grouping-head p,html[data-theme="dark"] .pick-grouping-item span{color:#94a3b8}html[data-theme="dark"] .pick-grouping-scan{background:#111827}html[data-theme="dark"] .pick-grouping-scan input{background:transparent;color:#fff}html[data-theme="dark"] .pick-grouping-item{border-color:#334155}
+@media(max-width:600px){.pick-grouping-modal{align-items:flex-end;padding:0}.pick-grouping-dialog{border-radius:18px 18px 0 0;max-height:94vh;width:100%}.pick-grouping-head{padding:16px}.pick-grouping-scan{margin:14px 16px 8px}.pick-grouping-summary{margin:0 16px 8px}.pick-grouping-list{padding:0 16px 12px}.pick-grouping-actions{grid-template-columns:1fr;padding:12px 16px}.pick-grouping-actions .is-finish{grid-row:1}.pick-grouping-actions .is-cancel{grid-row:2}}
