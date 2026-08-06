@@ -15306,7 +15306,7 @@ function hydratePickItemsFromSavedSession(sessionId) {
  descricao_base: product.descricao_base || item.descricao || item.descricao_base || '',
  descricao_completa: product.descricao_completa || item.descricao || item.descricao_completa || '',
  qty,
- scanTime: formatTimeBR()
+ scanTime: item.pick_resume_last_scan_time || (item.atualizado_em ? formatTimeBR(item.atualizado_em) : formatTimeBR())
  };
  });
 }
@@ -16061,6 +16061,14 @@ function formatPickResumeRecency(item = {}) {
  if (elapsedMinutes === 1) return `Bipado h\u00e1 1 min${exactTime ? `, ${exactTime}` : ''}`;
  if (elapsedMinutes < 60) return `Bipado h\u00e1 ${elapsedMinutes} min${exactTime ? `, ${exactTime}` : ''}`;
  return exactTime ? `\u00daltimo bip \u00e0s ${exactTime}` : '\u00daltimo bip registrado';
+}
+
+function getPickLastScanTime(item = {}) {
+ const directTime = String(item.pick_resume_last_scan_time || item.scanTime || '').trim();
+ if (directTime) return directTime;
+ const savedAt = item.pick_resume_last_scan_at || item.atualizado_em || item.updated_at || '';
+ if (!savedAt) return '';
+ try { return formatTimeBR(savedAt); } catch (error) { return ''; }
 }
 
 function setPickResumeFilter(filter = 'all') {
@@ -18835,6 +18843,7 @@ function updatePickItemsList() {
   const resumeQty = getPickResumeQty(item);
   const resumeBaseline = getPickResumeBaselineQty(item);
   const resumeRecency = formatPickResumeRecency(item);
+  const lastScanTime = getPickLastScanTime(item);
   const packageSummary = getPickKitSummary(item);
   const selection = pickKitSelection.get(getPickSelectionKey(item));
   return `
@@ -18850,6 +18859,7 @@ function updatePickItemsList() {
   <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(item))}</strong></span>
   <span>COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
   ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'kit')">${packageSummary.kitUnits} agrupado(s)</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
+  ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Último bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
   </div>
   </div>
   </div>

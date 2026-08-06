@@ -1,6 +1,6 @@
 {
-  "version": "2.1.81",
-  "build": "2026.08.06.01",
-  "commit": "separacao-agrupamento-produtos",
+  "version": "2.1.82",
+  "build": "2026.08.06.02",
+  "commit": "separacao-horario-ultimo-bip",
   "deployDate": "2026-08-06"
 }
