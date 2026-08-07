@@ -17932,12 +17932,23 @@ function showInputFeedback(inputId, type) {
 }
 
 function normalizePickCode(rawValue) {
- const code = String(rawValue || '').trim().replace(/\s+/g, '');
+ let code = String(rawValue ?? '')
+ .normalize('NFKC')
+ .trim()
+ .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\u2060\uFEFF\s]+/g, '');
 
  // Alguns leitores enviam o identificador de simbologia AIM antes do valor
  // (por exemplo, ]E0 antes de um EAN-13). Ele descreve o tipo do codigo e
  // nao faz parte do EAN/SKU que deve ser consultado.
- return code.replace(/^\][A-Za-z][0-9]/, '');
+ code = code.replace(/^\][A-Za-z][0-9]/, '');
+
+ // Leitores configurados como GS1 podem entregar o mesmo EAN como GTIN-14,
+ // prefixado por zero, ou com o identificador de aplicacao 01.
+ const gs1Match = code.match(/^(?:\(01\)|01)(\d{14})$/);
+ if (gs1Match) code = gs1Match[1];
+ if (/^0\d{13}$/.test(code)) code = code.slice(1);
+
+ return code;
 }
 
 function getPickScanInputPlaceholder() {
@@ -18727,8 +18738,9 @@ async function addPickItem(scannedEan = null) {
  showScanFeedback('warning', 'Produto n\u00e3o cadastrado');
  await showAppModal({
  type: 'warning',
- title: 'Atencao',
- message: 'Revise os dados e tente novamente.',
+ title: 'Produto nao encontrado',
+ message: `Codigo recebido: ${ean || '(vazio)'}`,
+ detail: 'Confira se o numero mostrado e o mesmo impresso abaixo do codigo de barras.',
  confirmText: 'OK'
  });
  }

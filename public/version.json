@@ -1,6 +1,6 @@
 {
-  "version": "2.1.83",
-  "build": "2026.08.07.01",
-  "commit": "corrige-busca-ean-separacao",
+  "version": "2.1.84",
+  "build": "2026.08.07.02",
+  "commit": "normaliza-ean-leitor-separacao",
   "deployDate": "2026-08-07"
 }
