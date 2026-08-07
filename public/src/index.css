@@ -72605,3 +72605,56 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-last-scan-time>.material-symbols-rounded{font-size:14px!important}
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-last-scan-time>strong{color:#475569!important;font-size:inherit!important}
 html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-last-scan-time,html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-last-scan-time>strong{color:#cbd5e1!important}
+
+/* Padronizacao final: canais de separacao e botao voltar. */
+html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-card {
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 24px !important;
+}
+
+html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-card .standard-module-card-copy {
+  align-items: flex-start !important;
+  display: flex !important;
+  justify-content: center !important;
+  min-height: 64px !important;
+}
+
+html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-card .standard-module-card-copy > strong {
+  margin: 0 !important;
+}
+
+html body:not(.login-active) #app .back-button-standard {
+  box-sizing: border-box !important;
+  height: 44px !important;
+  left: 14px !important;
+  margin: 0 !important;
+  max-height: 44px !important;
+  max-width: 44px !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
+  position: fixed !important;
+  right: auto !important;
+  top: 14px !important;
+  transform: none !important;
+  width: 44px !important;
+  z-index: 10020 !important;
+}
+
+html body:not(.login-active) #app .back-button-standard .app-back-icon {
+  display: block !important;
+  height: 26px !important;
+  margin: auto !important;
+  width: 26px !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-card {
+    gap: 14px !important;
+  }
+
+  html body:not(.login-active) #app .back-button-standard {
+    left: 10px !important;
+    top: 10px !important;
+  }
+}

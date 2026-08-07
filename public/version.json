@@ -1,6 +1,6 @@
 {
-  "version": "2.1.85",
-  "build": "2026.08.07.03",
-  "commit": "remove-sep-temp-separacao",
+  "version": "2.1.86",
+  "build": "2026.08.07.04",
+  "commit": "padroniza-canais-e-botao-voltar",
   "deployDate": "2026-08-07"
 }

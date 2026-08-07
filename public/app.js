@@ -15798,7 +15798,7 @@ async function renderPickMenu(selectedMode = null) {
 
  document.body.classList.remove('menu-active');
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen">
+ <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen pick-channel-menu-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('pick')}
 
@@ -15809,7 +15809,6 @@ async function renderPickMenu(selectedMode = null) {
  <span class="standard-module-card-icon">${item.svgIcon || `<span class="material-symbols-rounded">${item.icon}</span>`}</span>
  <span class="standard-module-card-copy">
  <strong>${escapeKitAttribute(item.label)}</strong>
- <small>${escapeKitAttribute(item.description)}</small>
  </span>
  </button>
  `).join('')}
