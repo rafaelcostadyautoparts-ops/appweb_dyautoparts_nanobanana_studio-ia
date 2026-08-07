@@ -3573,9 +3573,9 @@ const menu3DIcons = {
 const channel3DIcons = {
  flex: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M34 16 L22 36 H32 L30 48 L42 28 H32 Z" fill="#fff" opacity="0.95"/></svg>',
  shopee: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EA580C"/><path d="M22 26 C22 18, 42 18, 42 26" stroke="#fff" stroke-width="3" fill="none" opacity="0.9"/><rect x="18" y="26" width="28" height="22" rx="3" fill="#fff" opacity="0.95"/><circle cx="26" cy="34" r="2.5" fill="#EA580C"/><circle cx="38" cy="34" r="2.5" fill="#EA580C"/></svg>',
- ml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M22 30 H42 M22 38 H34" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M24 22 L18 30 V44 H46 V30 L40 22 Z" stroke="#fff" stroke-width="3" fill="none" stroke-linejoin="round"/></svg>',
- magalu: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><rect x="20" y="26" width="24" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M20 26 L32 18 L44 26" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M26 18 V26 M38 18 V26" stroke="#fff" stroke-width="3"/></svg>',
- correios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EAB308"/><rect x="16" y="22" width="32" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M16 22 L32 32 L48 22" stroke="#EAB308" stroke-width="3" fill="none"/></svg>',
+ ml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F5B800"/><path d="M22 30 H42 M22 38 H34" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M24 22 L18 30 V44 H46 V30 L40 22 Z" stroke="#fff" stroke-width="3" fill="none" stroke-linejoin="round"/></svg>',
+ magalu: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#5755D9"/><rect x="20" y="26" width="24" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M20 26 L32 18 L44 26" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M26 18 V26 M38 18 V26" stroke="#fff" stroke-width="3"/></svg>',
+ correios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><rect x="16" y="22" width="32" height="20" rx="2" fill="#fff" opacity="0.95"/><path d="M16 22 L32 32 L48 22" stroke="#2563EB" stroke-width="3" fill="none"/></svg>',
  ultra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M26 44 L38 44 L32 20 Z" fill="#fff" opacity="0.95"/><path d="M32 20 Q44 24 38 44 Q20 24 32 20" fill="#fff" opacity="0.8"/><circle cx="32" cy="34" r="3" fill="#DC2626"/></svg>',
  full: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#16A34A"/><path d="M18 32 H46 M32 18 V46" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.4"/><path d="M34 20 L24 34 H32 L30 44 L40 30 H32 Z" fill="#fff" opacity="0.95"/></svg>',
  pdv: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><path d="M18 24 L22 18 H42 L46 24 V28 H18 Z" fill="#fff" opacity="0.95"/><rect x="20" y="30" width="24" height="16" fill="#fff" opacity="0.8"/><path d="M32 30 V46" stroke="#64748B" stroke-width="2"/></svg>'
@@ -15805,8 +15805,8 @@ async function renderPickMenu(selectedMode = null) {
  <main class="container">
  <div class="standard-module-card-grid operational-card-grid">
  ${channelCards.map(item => `
- <button type="button" class="standard-module-card operational-menu-card" onclick="startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})">
- <span class="standard-module-card-icon">${item.svgIcon || `<span class="material-symbols-rounded">${item.icon}</span>`}</span>
+ <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(item.color)}" onclick="startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})">
+ <span class="standard-module-card-icon">${item.svgIcon}</span>
  <span class="standard-module-card-copy">
  <strong>${escapeKitAttribute(item.label)}</strong>
  </span>
@@ -16174,6 +16174,44 @@ function getPickKitSummary(item = {}) {
  const kitUnits = values.filter(Boolean).length;
  return { kitUnits, standaloneUnits: values.length - kitUnits };
 }
+
+function getPickPackageIds(items = currentSessionItems) {
+ const ids = [];
+ (items || []).forEach(item => {
+ normalizePickPackageAssignments(item).forEach(id => {
+ if (id && !ids.includes(id)) ids.push(id);
+ });
+ });
+ return ids;
+}
+
+function getPickPackageLabel(packageId, items = currentSessionItems) {
+ const cleanId = String(packageId || '');
+ const numbered = cleanId.match(/^PKG-(\d+)-/);
+ if (numbered) return `Pacote ${Number(numbered[1])}`;
+ const index = getPickPackageIds(items).indexOf(cleanId);
+ return index >= 0 ? `Pacote ${index + 1}` : 'Pacote';
+}
+
+function createPickPackageId() {
+ const usedNumbers = getPickPackageIds().map(id => Number(String(id).match(/^PKG-(\d+)-/)?.[1] || 0));
+ const nextNumber = Math.max(0, ...usedNumbers, getPickPackageIds().length) + 1;
+ return `PKG-${String(nextNumber).padStart(3, '0')}-${Date.now()}`;
+}
+
+function getPickItemPackageDetails(item = {}) {
+ const counts = new Map();
+ normalizePickPackageAssignments(item).filter(Boolean).forEach(id => counts.set(id, (counts.get(id) || 0) + 1));
+ return [...counts.entries()].map(([id, qty]) => ({ id, qty, label: getPickPackageLabel(id) }));
+}
+
+function getPickStandaloneUnits(items = currentSessionItems) {
+ return (items || []).reduce((total, item) => total + getPickKitSummary(item).standaloneUnits, 0);
+}
+
+function getPickGroupedUnits(items = currentSessionItems) {
+ return (items || []).reduce((total, item) => total + getPickKitSummary(item).kitUnits, 0);
+}
 function countDifferentPickProducts(items = currentSessionItems) {
  const uniqueProducts = new Set((items || [])
  .map(item => getPickingProductId(item) || normalizePickCode(item?.ean || item?.codigo || item?.descricao || ''))
@@ -16223,6 +16261,8 @@ function syncPickPackageCount(count, persist = true) {
  packagesEl.textContent = String(safeCount);
  }
  }
+ const channelPackagesEl = document.getElementById('pick-summary-channel-packages');
+ if (channelPackagesEl) channelPackagesEl.textContent = String(getPickChannelDailyPackageTotal());
 
  if (persist) {
  const scopedDraft = getScopedDraftPickSession(
@@ -16269,7 +16309,7 @@ function updatePickKitModeUI() {
  const button = document.getElementById('pick-kit-toggle');
  if (!button) return;
  button.classList.remove('is-active');
- button.innerHTML = '<span class="material-symbols-rounded">deployed_code</span><span>AGRUPAR PRODUTOS</span>';
+ button.innerHTML = '<span class="material-symbols-rounded">inventory_2</span><span>AGRUPAMENTOS</span>';
 }
 
 function getActivePickGroupingEntries() {
@@ -16415,22 +16455,51 @@ function getPickKitIds(item = {}) {
  return [...new Set(normalizePickPackageAssignments(item).filter(Boolean))];
 }
 
-function togglePickItemSelection(index, source = 'standalone') {
+async function togglePickItemSelection(index, source = 'standalone') {
  const item = currentSessionItems[index];
  if (!item) return;
  const key = getPickSelectionKey(item);
  const current = pickKitSelection.get(key);
- if (current?.source === source) pickKitSelection.delete(key);
- else {
- const summary = getPickKitSummary(item);
- if (source === 'standalone' && summary.standaloneUnits < 1) { showToast('Este produto nao possui unidade avulsa.', 'warning'); return; }
- const kitId = source === 'kit' ? getPickKitIds(item)[0] : '';
- if (source === 'kit' && !kitId) { showToast('Este produto nao pertence a um kit.', 'warning'); return; }
- pickKitSelection.set(key, { source, kitId, qty: 1 });
+ if (current?.source === source) {
+ pickKitSelection.delete(key);
+ updatePickItemsList();
+ return;
  }
+
+ const summary = getPickKitSummary(item);
+ if (source !== 'standalone') {
+ openPickPackagesOverview();
+ return;
+ }
+ if (summary.standaloneUnits < 1) {
+ showToast('Este produto nao possui unidade avulsa.', 'warning');
+ return;
+ }
+
+ let qty = 1;
+ if (summary.standaloneUnits > 1) {
+ const answer = await showAppPrompt({
+ title: 'Quantidade para agrupar',
+ message: getPickItemTitle(item),
+ detail: `${summary.standaloneUnits} unidade(s) avulsa(s) disponivel(is).`,
+ label: 'Quantas unidades deseja selecionar?',
+ defaultValue: '1',
+ placeholder: `De 1 a ${summary.standaloneUnits}`,
+ confirmLabel: 'Selecionar',
+ cancelLabel: 'Cancelar',
+ inputType: 'number'
+ });
+ if (answer === null) return settlePickScannerInput(60);
+ qty = Math.floor(Number(answer));
+ if (!Number.isFinite(qty) || qty < 1 || qty > summary.standaloneUnits) {
+ await showAppAlert({ title: 'Quantidade invalida', message: `Informe uma quantidade entre 1 e ${summary.standaloneUnits}.`, buttonLabel: 'Entendi', danger: true });
+ return settlePickScannerInput(60);
+ }
+ }
+
+ pickKitSelection.set(key, { source: 'standalone', kitId: '', qty });
  updatePickItemsList();
 }
-
 function clearPickKitSelection() {
  pickKitSelection.clear();
  updatePickItemsList();
@@ -16446,31 +16515,87 @@ function updatePickKitSelectionBar() {
  if (!bar) return;
  const entries = getSelectedPickEntries();
  if (!entries.length) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+ const selectedUnits = entries.reduce((total, entry) => total + Number(entry.selection.qty || 0), 0);
  const allStandalone = entries.every(entry => entry.selection.source === 'standalone');
- const allKit = entries.every(entry => entry.selection.source === 'kit');
- const sameKit = allKit && new Set(entries.map(entry => entry.selection.kitId)).size === 1;
- let action = '<span>Selecione ao menos 2 itens avulsos</span>';
- if (allStandalone && entries.length >= 2) action = '<button type="button" onclick="transformPickSelectionIntoKit()"><span class="material-symbols-rounded">deployed_code</span>AGRUPAR PRODUTOS</button>';
- else if (sameKit) action = '<button type="button" class="is-remove" onclick="removePickSelectionFromKit()"><span class="material-symbols-rounded">link_off</span>RETIRAR DO AGRUPAMENTO</button>';
- else if (!allStandalone) action = '<span>Selecione produtos do mesmo agrupamento</span>';
- bar.innerHTML = `<strong>${entries.length} ITEM(NS) SELECIONADO(S)</strong><div>${action}<button type="button" class="pick-kit-selection-cancel" onclick="clearPickKitSelection()">CANCELAR</button></div>`;
+ let action = '<span>Selecione ao menos 2 unidades avulsas</span>';
+ if (allStandalone && selectedUnits >= 2) action = '<button type="button" onclick="transformPickSelectionIntoKit()"><span class="material-symbols-rounded">inventory_2</span>CRIAR PACOTE</button>';
+ bar.innerHTML = `<strong>${selectedUnits} UNIDADE(S) SELECIONADA(S)</strong><div>${action}<button type="button" class="pick-kit-selection-cancel" onclick="clearPickKitSelection()">CANCELAR</button></div>`;
  bar.classList.remove('hidden');
 }
-
 function transformPickSelectionIntoKit() {
  const entries = getSelectedPickEntries();
- if (entries.length < 2 || entries.some(entry => entry.selection.source !== 'standalone')) return;
- const kitId = `KIT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
- entries.forEach(({ item }) => {
+ const selectedUnits = entries.reduce((total, entry) => total + Number(entry.selection.qty || 0), 0);
+ if (selectedUnits < 2 || entries.some(entry => entry.selection.source !== 'standalone')) return;
+ const kitId = createPickPackageId();
+ entries.forEach(({ item, selection }) => {
  const values = normalizePickPackageAssignments(item);
- const index = values.lastIndexOf(null);
- if (index >= 0) values[index] = kitId;
+ let remaining = Math.max(0, Math.floor(Number(selection.qty || 0)));
+ for (let index = values.length - 1; index >= 0 && remaining > 0; index--) {
+ if (values[index] === null) {
+ values[index] = kitId;
+ remaining--;
+ }
+ }
  });
  pickKitSelection.clear();
  persistPickKitState();
- showToast(`${entries.length} produtos agrupados em 1 pacote.`, 'success');
+ showToast(`${getPickPackageLabel(kitId)} criado com ${selectedUnits} unidade(s).`, 'success');
 }
 
+function getPickPackagesOverview() {
+ return getPickPackageIds().map(id => {
+ const entries = currentSessionItems.map(item => ({
+ item,
+ qty: normalizePickPackageAssignments(item).filter(value => value === id).length
+ })).filter(entry => entry.qty > 0);
+ return { id, label: getPickPackageLabel(id), entries, total: entries.reduce((sum, entry) => sum + entry.qty, 0) };
+ });
+}
+
+function openPickPackagesOverview() {
+ document.getElementById('pick-packages-overview-modal')?.remove();
+ const modal = document.createElement('div');
+ modal.id = 'pick-packages-overview-modal';
+ modal.className = 'pick-grouping-modal';
+ const packages = getPickPackagesOverview();
+ modal.innerHTML = `
+ <div class="pick-grouping-dialog pick-packages-overview" role="dialog" aria-modal="true" aria-labelledby="pick-packages-overview-title">
+ <header class="pick-grouping-head">
+ <div><span class="material-symbols-rounded">inventory_2</span><div><h2 id="pick-packages-overview-title">AGRUPAMENTOS</h2><p>Confira separadamente o conteudo de cada pacote.</p></div></div>
+ <button type="button" onclick="closePickPackagesOverview()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
+ </header>
+ <div class="pick-packages-overview-summary"><span>${packages.length} PACOTE(S)</span><strong>${getPickGroupedUnits()} UNIDADE(S) AGRUPADA(S)</strong></div>
+ <div class="pick-packages-overview-list">
+ ${packages.length ? packages.map(group => `
+ <section class="pick-package-overview-card">
+ <header><div><span class="material-symbols-rounded">package_2</span><strong>${escapeKitAttribute(group.label)}</strong></div><b>${group.total} un.</b></header>
+ <div>${group.entries.map(({ item, qty }) => `<p><span>${escapeKitAttribute(getPickItemTitle(item))}</span><strong>${qty} un.</strong></p>`).join('')}</div>
+ <button type="button" onclick="ungroupPickPackage(${quotePackInlineArg(group.id)})"><span class="material-symbols-rounded">link_off</span>DESAGRUPAR PACOTE</button>
+ </section>`).join('') : '<div class="pick-grouping-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum pacote agrupado</strong><small>Use o botao AGRUPAR em um produto avulso para iniciar.</small></div>'}
+ </div>
+ <footer class="pick-grouping-actions"><button type="button" class="is-finish" onclick="closePickPackagesOverview()">FECHAR</button></footer>
+ </div>`;
+ document.body.appendChild(modal);
+}
+
+function closePickPackagesOverview() {
+ document.getElementById('pick-packages-overview-modal')?.remove();
+ settlePickScannerInput(60);
+}
+
+async function ungroupPickPackage(packageId) {
+ const group = getPickPackagesOverview().find(item => item.id === packageId);
+ if (!group) return;
+ const detail = group.entries.map(entry => `${entry.qty}x ${getPickItemTitle(entry.item)}`).join('\n');
+ const confirmed = await showAppConfirm({ title: `Desagrupar ${group.label}?`, message: `${group.total} unidade(s) voltarao para avulsos.`, detail, confirmLabel: 'Desagrupar', cancelLabel: 'Cancelar' });
+ if (!confirmed) return;
+ currentSessionItems.forEach(item => {
+ item.pick_package_assignments = normalizePickPackageAssignments(item).map(id => id === packageId ? null : id);
+ });
+ persistPickKitState();
+ openPickPackagesOverview();
+ showToast(`${group.label} desagrupado.`, 'success');
+}
 async function removePickSelectionFromKit() {
  const entries = getSelectedPickEntries();
  if (!entries.length) return;
@@ -17653,6 +17778,24 @@ function getPickTotalQuantity() {
  return getPickItemsTotal(currentSessionItems);
 }
 
+function getPickChannelDailyPackageTotal() {
+ const channel = normalizeOperationalLabel(currentPickingContext?.channelLabel || '');
+ if (!channel) return getCurrentPickPackageCount();
+ const dateKey = getPickSessionDateKey(new Date());
+ const currentSessionId = String(currentPickingContext?.sessionId || '').trim();
+ const totalsBySession = new Map();
+ const sources = [...(appData.separacao || []), ...getLocalDraftPickSessionsList()];
+ sources.forEach(session => {
+ const sessionId = String(getPackSeparationSessionId(session) || session.sessionId || '').trim();
+ const sessionChannel = normalizeOperationalLabel(session.canal_nome || session.canal || session.channelLabel || '');
+ if (!sessionId || sessionChannel !== channel || !sessionId.includes(`-${dateKey}-`)) return;
+ totalsBySession.set(sessionId, Math.max(totalsBySession.get(sessionId) || 0, getPickPackageCountFrom(session)));
+ });
+ if (currentSessionId) totalsBySession.set(currentSessionId, getCurrentPickPackageCount());
+ else totalsBySession.set('__current__', getCurrentPickPackageCount());
+ return [...totalsBySession.values()].reduce((sum, value) => sum + normalizePickPackageCount(value), 0);
+}
+
 function updatePickSummaryUI() {
  const differentItems = countDifferentPickProducts(currentSessionItems);
  const totalQuantity = getPickTotalQuantity();
@@ -17661,9 +17804,11 @@ function updatePickSummaryUI() {
  const qtyEl = document.getElementById('pick-summary-qty');
  const packagesEl = document.getElementById('pick-summary-packages');
  const progressEl = document.getElementById('pick-summary-progress');
+ const channelPackagesEl = document.getElementById('pick-summary-channel-packages');
  if (itemsEl) itemsEl.textContent = String(differentItems);
  if (qtyEl) qtyEl.textContent = String(totalQuantity);
  if (packagesEl) packagesEl.textContent = String(totalPackages);
+ if (channelPackagesEl) channelPackagesEl.textContent = String(getPickChannelDailyPackageTotal());
  if (progressEl) progressEl.textContent = differentItems > 0 ? '100%' : '0%';
 }
 
@@ -17855,12 +18000,17 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  <div class="pick-summary-metrics pick-summary-packages-only">
  <div class="pick-package-count-field">
  <span class="material-symbols-rounded">package_2</span>
- <span>PACOTES</span>
+ <span>NESTA SEPARACAO</span>
  <strong id="pick-summary-packages">${packageCount}</strong>
+ </div>
+ <div class="pick-package-count-field pick-channel-package-total">
+ <span class="material-symbols-rounded">summarize</span>
+ <span>TOTAL DO CANAL HOJE</span>
+ <strong id="pick-summary-channel-packages">${getPickChannelDailyPackageTotal()}</strong>
  </div>
  </div>
  <div class="pick-summary-actions">
- <button id="pick-kit-toggle" class="pick-kit-toggle" type="button" onclick="togglePickKitMode()"><span class="material-symbols-rounded">deployed_code</span><span>AGRUPAR PRODUTOS</span></button>
+ <button id="pick-kit-toggle" class="pick-kit-toggle" type="button" onclick="openPickPackagesOverview()"><span class="material-symbols-rounded">inventory_2</span><span>AGRUPAMENTOS</span></button>
  <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
  <span class="material-symbols-rounded">remove_circle</span>
  <span id="pick-remove-scan-label">REMOVER</span>
@@ -18848,9 +18998,9 @@ function updatePickItemsList() {
  const allCountEl = document.getElementById('pick-filter-all-count');
  const standaloneCountEl = document.getElementById('pick-filter-standalone-count');
  const kitCountEl = document.getElementById('pick-filter-kit-count');
- if (allCountEl) allCountEl.textContent = String(currentSessionItems.length);
- if (standaloneCountEl) standaloneCountEl.textContent = String(currentSessionItems.filter(item => getPickKitSummary(item).standaloneUnits > 0).length);
- if (kitCountEl) kitCountEl.textContent = String(currentSessionItems.filter(item => getPickKitSummary(item).kitUnits > 0).length);
+ if (allCountEl) allCountEl.textContent = String(getPickItemsTotal(currentSessionItems));
+ if (standaloneCountEl) standaloneCountEl.textContent = String(getPickStandaloneUnits(currentSessionItems));
+ if (kitCountEl) kitCountEl.textContent = String(getPickGroupedUnits(currentSessionItems));
  updatePickKitSelectionBar();
  document.querySelectorAll('[data-pick-resume-filter]').forEach(button => {
  const active = button.dataset.pickResumeFilter === pickResumeFilter;
@@ -18901,7 +19051,7 @@ function updatePickItemsList() {
   <span>SKU: <strong>${escapeKitAttribute(getPickItemSku(item))}</strong></span>
   <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(item))}</strong></span>
   <span>COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
-  ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'kit')">${packageSummary.kitUnits} agrupado(s)</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
+  ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openPickPackagesOverview()">${getPickItemPackageDetails(item).map(group => `${escapeKitAttribute(group.label)}: ${group.qty}`).join(' | ')}</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
   ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Último bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
   </div>
   </div>
@@ -18910,7 +19060,7 @@ function updatePickItemsList() {
   <span class="pick-qty-number">${Number(item.qty) || 0}</span>
   <span class="pick-qty-unit">total</span>
   </div>
-  <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); togglePickItemSelection(${index}, '${packageSummary.standaloneUnits ? 'standalone' : 'kit'}')" type="button" aria-label="Selecionar item"><span class="material-symbols-rounded">${selection ? 'check_box' : 'check_box_outline_blank'}</span></button>
+  <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span class="material-symbols-rounded">${selection ? 'check_circle' : 'inventory_2'}</span><span>${selection ? `${selection.qty} SELEC.` : (packageSummary.standaloneUnits ? 'AGRUPAR' : 'VER PACOTE')}</span></button>
   <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
   <span class="material-symbols-rounded">delete</span>
   </button>
