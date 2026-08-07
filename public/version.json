@@ -1,6 +1,6 @@
 {
-  "version": "2.1.84",
-  "build": "2026.08.07.02",
-  "commit": "normaliza-ean-leitor-separacao",
+  "version": "2.1.85",
+  "build": "2026.08.07.03",
+  "commit": "remove-sep-temp-separacao",
   "deployDate": "2026-08-07"
 }

@@ -16500,7 +16500,7 @@ function setPickPackageCount(value, persist = true, refocusScanner = false) {
 function normalizeLocalPickDraft(draft = {}) {
  if (!draft || typeof draft !== 'object') return null;
  const sessionId = String(draft.sessionId || draft.separacao_id || draft.codigo_separacao || '').trim();
- if (!sessionId) return null;
+ if (!sessionId || isTemporaryPickSessionId(sessionId)) return null;
  return {
  ...draft,
  sessionId,
@@ -16899,7 +16899,7 @@ function getPickingScreenDataset() {
 }
 
 async function ensureActivePickingContext() {
- if (currentPickingContext?.sessionId && (isValidPickSessionId(currentPickingContext.sessionId) || isTemporaryPickSessionId(currentPickingContext.sessionId)) && currentPickingContext?.channelLabel) {
+ if (currentPickingContext?.channelLabel && (!currentPickingContext.sessionId || isValidPickSessionId(currentPickingContext.sessionId))) {
  return currentPickingContext;
  }
 
@@ -16919,10 +16919,8 @@ async function ensureActivePickingContext() {
  }
 
  if (data.channelLabel) {
- await refreshSeparacoesForPickSequence();
- const sessionId = generatePickSessionId(data.channelLabel);
  currentPickingContext = {
- sessionId,
+ sessionId: '',
  channelId: data.channelId || data.channelLabel,
  channelLabel: data.channelLabel,
  channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
@@ -16931,10 +16929,6 @@ async function ensureActivePickingContext() {
  total_pacotes_montados: 0,
  totalPacotesMontados: 0
  };
- const screen = document.querySelector('.pick-workflow-screen');
- if (screen) screen.dataset.sessionId = sessionId;
- const sessionEl = document.getElementById('pick-session-id-label');
- if (sessionEl) sessionEl.textContent = sessionId;
  return currentPickingContext;
  }
 
@@ -17385,7 +17379,7 @@ async function startPickingSession(channelId, channelLabel, channelColor, select
  channelId, 
  channelLabel, 
  channelColor,
- sessionId: `SEP-TEMP-${Date.now()}`,
+ sessionId: '',
  executionId: generateExecutionId(),
  createdAt: getDataHoraBrasil(),
  isFastMode,
@@ -17761,7 +17755,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  const currentUser = localStorage.getItem('currentUser');
  pickRemovalModeActive = false;
  pickManualInputModeActive = false;
- sessionId = isTemporaryPickSessionId(sessionId) ? sessionId : getSafePickSessionId(sessionId, channelLabel);
+ sessionId = String(sessionId || '').trim();
  const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
  const packageCount = getCurrentPickPackageCount(sessionId, channelId, channelLabel);
  currentPickingContext = {
@@ -17798,7 +17792,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  <h1>SEPARA\u00c7\u00c3O (PICK) <span>\u2022 ${escapeKitAttribute(channelLabel || 'SEM CANAL')}</span></h1>
  </div>
  <div class="pick-header-meta">
- <span><strong id="pick-session-id-label" data-pick-session-id>${isTemporaryPickSessionId(sessionId) ? 'AGUARDANDO PRIMEIRO BIP' : escapeKitAttribute(sessionId)}</strong></span>
+ <span><strong id="pick-session-id-label" data-pick-session-id>${sessionId ? escapeKitAttribute(sessionId) : 'AGUARDANDO PRIMEIRO BIP'}</strong></span>
  <span><strong>${escapeKitAttribute(currentUser || '-')}</strong></span>
  </div>
  </header>
@@ -17885,7 +17879,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  </section>
 
  <footer class="pick-workflow-footer">
- <span>ID separacao: <strong data-pick-session-id>${isTemporaryPickSessionId(sessionId) ? 'Aguardando primeiro bip' : escapeKitAttribute(sessionId)}</strong></span>
+ <span>ID separacao: <strong data-pick-session-id>${sessionId ? escapeKitAttribute(sessionId) : 'Aguardando primeiro bip'}</strong></span>
  <span>Canal: <strong>${escapeKitAttribute(channelLabel || '-')}</strong></span>
  <span>Criado em: <strong>${escapeKitAttribute(createdAtLabel)}</strong></span>
  </footer>
@@ -18443,7 +18437,7 @@ async function removePickItemByScan(cleanCode, input) {
 
 async function addPickItem(scannedEan = null) {
  const activeContext = await ensureActivePickingContext();
- if (!activeContext?.sessionId || !activeContext?.channelLabel) {
+ if (!activeContext?.channelLabel) {
  showScanFeedback('warning', 'Produto nao encontrado');
  await showAppModal({
  type: 'error',
@@ -18983,7 +18977,7 @@ async function pausePickingSession(sessionId, channelId, channelLabel, channelCo
  renderPickMenu();
  return;
  }
- sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId, channelLabel, 'pausar separacao');
+ sessionId = sanitizePickSessionIdForChannel(currentPickingContext?.sessionId || sessionId, channelLabel, 'pausar separacao');
  if (currentPickingContext) currentPickingContext.sessionId = sessionId;
 
  const draft = saveDraftPickSession({
@@ -19030,7 +19024,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
  channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || '';
  channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || '';
  channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
- sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id, channelLabel, 'finalizar separacao');
+ sessionId = sanitizePickSessionIdForChannel(currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id || sessionId, channelLabel, 'finalizar separacao');
  assertValidPickSessionForPersist(sessionId, channelLabel, 'finalizar separacao');
  if (currentPickingContext) currentPickingContext.sessionId = sessionId;
 
@@ -19507,7 +19501,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || '';
  channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '';
  channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
- sessionId = sanitizePickSessionIdForChannel(sessionId || currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id, channelLabel, 'salvar resultado da separacao');
+ sessionId = sanitizePickSessionIdForChannel(currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id || sessionId, channelLabel, 'salvar resultado da separacao');
  assertValidPickSessionForPersist(sessionId, channelLabel, 'salvar resultado da separacao');
  if (currentPickingContext) currentPickingContext.sessionId = sessionId;
  if (currentPickSession?.pickingData) currentPickSession.pickingData.separacao_id = sessionId;
