@@ -1,6 +1,6 @@
 {
-  "version": "2.1.82",
-  "build": "2026.08.06.02",
-  "commit": "separacao-horario-ultimo-bip",
-  "deployDate": "2026-08-06"
+  "version": "2.1.83",
+  "build": "2026.08.07.01",
+  "commit": "corrige-busca-ean-separacao",
+  "deployDate": "2026-08-07"
 }

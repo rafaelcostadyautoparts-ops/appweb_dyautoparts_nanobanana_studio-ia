@@ -18198,7 +18198,10 @@ async function findProductForPicking(cleanCode) {
  if (product) return product;
 
  try {
- const supabaseProduct = await DataClient.findProdutoByCodeSupabase(cleanCode);
+ const findByCode = DataClient?.findProdutoByCodeSupabase;
+ const supabaseProduct = typeof findByCode === 'function'
+ ? await findByCode(cleanCode)
+ : await findProductForPickingDirectly(cleanCode);
  if (supabaseProduct) return upsertProductIntoLocalCache(supabaseProduct);
  } catch (error) {
  console.warn('[SEP] refresh supabase erro', {
@@ -18210,7 +18213,42 @@ async function findProductForPicking(cleanCode) {
  });
  }
 
+ // O catalogo local e paginado e pode nao conter produtos mais recentes. Alem
+ // disso, aparelhos com uma versao antiga de dataClient.js em cache nao dispoem
+ // da busca por codigo. A consulta direta mantem a bipagem independente desses
+ // dois estados e evita informar incorretamente que o produto nao esta cadastrado.
+ try {
+ const supabaseProduct = await findProductForPickingDirectly(cleanCode);
+ if (supabaseProduct) return upsertProductIntoLocalCache(supabaseProduct);
+ } catch (error) {
+ console.warn('[SEP] busca direta supabase erro', {
+ message: error?.message,
+ details: error?.details,
+ hint: error?.hint,
+ code: error?.code,
+ value: cleanCode
+ });
+ }
+
  console.log('[SEP] produto nao encontrado', cleanCode);
+ return null;
+}
+
+async function findProductForPickingDirectly(cleanCode) {
+ const client = window.supabaseClient;
+ const code = normalizePickCode(cleanCode);
+ if (!client || !code) return null;
+
+ for (const field of ['ean', 'id_interno', 'sku_fornecedor']) {
+ const { data, error } = await client
+ .from('produtos')
+ .select('*')
+ .eq(field, code)
+ .limit(1);
+ if (error) throw error;
+ if (data?.[0]) return data[0];
+ }
+
  return null;
 }
 
