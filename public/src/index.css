@@ -72702,12 +72702,12 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
   gap: 8px !important;
   grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) !important;
 }
-html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-channel-package-total {
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only .pick-package-count-field.pick-channel-package-total {
   background: #f3e8ff !important;
   border-color: #d8b4fe !important;
   color: #6b21a8 !important;
 }
-html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-channel-package-total > :where(span,strong) {
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-summary-packages-only .pick-package-count-field.pick-channel-package-total > :where(span,strong) {
   color: #6b21a8 !important;
 }
 
