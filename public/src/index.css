@@ -72624,10 +72624,12 @@ html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-
 }
 
 html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-card .standard-module-card-copy > strong {
-  font-family: 'Oswald', sans-serif !important;
-  font-size: clamp(1.25rem, 2vw, 1.8rem) !important;
-  font-weight: 700 !important;
-  letter-spacing: .02em !important;
+  color: #000000 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: 1.62rem !important;
+  font-weight: 400 !important;
+  letter-spacing: .04em !important;
+  line-height: 1.2 !important;
   margin: 0 !important;
   text-align: center !important;
   text-transform: uppercase !important;
@@ -72701,12 +72703,76 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
   grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) !important;
 }
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-channel-package-total {
-  background: #dcfce7 !important;
-  border-color: #86efac !important;
-  color: #166534 !important;
+  background: #f3e8ff !important;
+  border-color: #d8b4fe !important;
+  color: #6b21a8 !important;
 }
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-channel-package-total > :where(span,strong) {
-  color: #166534 !important;
+  color: #6b21a8 !important;
+}
+
+/* Separacao: o cabecalho acompanha a identidade visual do canal selecionado. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen {
+  --pick-channel-header-start: #1d4ed8;
+  --pick-channel-header-main: #2563eb;
+  --pick-channel-header-end: #1e40af;
+  --pick-channel-header-shadow: rgba(37, 99, 235, .22);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="correios"] {
+  --pick-channel-header-start: #1d4ed8;
+  --pick-channel-header-main: #2563eb;
+  --pick-channel-header-end: #1e40af;
+  --pick-channel-header-shadow: rgba(37, 99, 235, .22);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="flex"] {
+  --pick-channel-header-start: #d97706;
+  --pick-channel-header-main: #f59e0b;
+  --pick-channel-header-end: #b45309;
+  --pick-channel-header-shadow: rgba(245, 158, 11, .26);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="magalu"] {
+  --pick-channel-header-start: #4945c4;
+  --pick-channel-header-main: #5755d9;
+  --pick-channel-header-end: #3730a3;
+  --pick-channel-header-shadow: rgba(87, 85, 217, .24);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="ml"],
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="amazon"],
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="full"] {
+  --pick-channel-header-start: #d99e00;
+  --pick-channel-header-main: #f5b800;
+  --pick-channel-header-end: #b77900;
+  --pick-channel-header-shadow: rgba(245, 184, 0, .26);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="shopee"] {
+  --pick-channel-header-start: #d83d1f;
+  --pick-channel-header-main: #ee4d2d;
+  --pick-channel-header-end: #b82d16;
+  --pick-channel-header-shadow: rgba(238, 77, 45, .24);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="ultra"] {
+  --pick-channel-header-start: #b91c1c;
+  --pick-channel-header-main: #dc2626;
+  --pick-channel-header-end: #991b1b;
+  --pick-channel-header-shadow: rgba(220, 38, 38, .23);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen[data-channel-color="pdv"] {
+  --pick-channel-header-start: #475569;
+  --pick-channel-header-main: #64748b;
+  --pick-channel-header-end: #334155;
+  --pick-channel-header-shadow: rgba(71, 85, 105, .22);
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+  background: linear-gradient(100deg, var(--pick-channel-header-start) 0%, var(--pick-channel-header-main) 52%, var(--pick-channel-header-end) 100%) !important;
+  box-shadow: 0 12px 28px var(--pick-channel-header-shadow) !important;
 }
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-item-select {
   align-items: center !important;

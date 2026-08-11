@@ -900,7 +900,7 @@ function normalizeSheetValue(sheet, field, value) {
 
  // ABA: Separacao
  if (sheet === 'separacao' && field === 'status') {
- const valid = ['rascunho', 'aberta', 'em_separacao', 'separado', 'finalizada', 'cancelada'];
+ const valid = ['rascunho', 'aberta', 'em_separacao', 'aguardando_produto', 'separado', 'finalizada', 'cancelada'];
  if (lower === 'aberto') return 'aberta';
  return valid.includes(lower) ? lower : 'rascunho';
  }
@@ -15422,8 +15422,22 @@ async function confirmDiscardSavedPickingDraft(sessionId) {
 function getSeparationItemsForSession(session) {
  const sessionId = getPackSeparationSessionId(session);
  if (!sessionId) return [];
- return (appData.separacao_itens || [])
- .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId));
+ const uniqueItems = new Map();
+ (appData.separacao_itens || [])
+ .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId))
+ .forEach(item => {
+ const key = getPickingProductId(item) || String(item.id_interno || item.ean || item.descricao || '').trim();
+ if (!key) return;
+ const existing = uniqueItems.get(key);
+ if (!existing) {
+ uniqueItems.set(key, item);
+ return;
+ }
+ const existingQty = Number(existing.qtd_separada ?? existing.quantidade ?? existing.qty ?? 0) || 0;
+ const nextQty = Number(item.qtd_separada ?? item.quantidade ?? item.qty ?? 0) || 0;
+ if (nextQty > existingQty || String(item.atualizado_em || '') > String(existing.atualizado_em || '')) uniqueItems.set(key, item);
+ });
+ return [...uniqueItems.values()];
 }
 
 function getSeparationProductTotal(session) {
@@ -16540,6 +16554,7 @@ function transformPickSelectionIntoKit() {
  pickKitSelection.clear();
  persistPickKitState();
  showToast(`${getPickPackageLabel(kitId)} criado com ${selectedUnits} unidade(s).`, 'success');
+ settlePickScannerInput(80);
 }
 
 function getPickPackagesOverview() {
@@ -17378,6 +17393,25 @@ async function deletePickingDraftItemSupabaseDirect(payload = {}) {
  if (!sessionId) throw new Error('separacao_id nao informado');
  if (!idInterno) throw new Error('id_interno nao informado');
 
+ if (DataClient?.removerItemSeparacaoSupabase) {
+ const result = await DataClient.removerItemSeparacaoSupabase({
+ sessionId,
+ idInterno,
+ usuario: localStorage.getItem('currentUser') || 'N/A'
+ });
+ if (Array.isArray(appData.separacao_itens)) {
+ appData.separacao_itens = appData.separacao_itens.filter(item =>
+ !(String(item.separacao_id || item.codigo_separacao || '') === String(sessionId)
+ && String(item.id_interno || item.col_a || item.col_A || '') === String(idInterno))
+ );
+ }
+ if (result?.status === 'aguardando_produto' && currentPickingContext?.sessionId === sessionId) {
+ currentPickingContext.total_pacotes_montados = 0;
+ currentPickingContext.totalPacotesMontados = 0;
+ }
+ return { deleted: true, sessionId, idInterno, ...result };
+ }
+
  const { error: itemError } = await client
  .from('separacao_itens')
  .delete()
@@ -17507,12 +17541,16 @@ async function startPickingSession(channelId, channelLabel, channelColor, select
  executionId: generateExecutionId(),
  createdAt: getDataHoraBrasil(),
  isFastMode,
- modo_rapido: isFastMode
+ modo_rapido: isFastMode,
+ total_pacotes_montados: 0,
+ totalPacotesMontados: 0
  };
  
  currentSessionItems = [];
  activePickKitId = '';
  activePickKitScanCount = 0;
+ currentPickSession = null;
+ localStorage.removeItem(PICK_CURRENT_DRAFT_STORAGE_KEY);
  pickKitSelection.clear();
  beginPickResumeCheckpoint(currentSessionItems);
  clearPickSearchSuggestions();
@@ -17788,6 +17826,8 @@ function getPickChannelDailyPackageTotal() {
  sources.forEach(session => {
  const sessionId = String(getPackSeparationSessionId(session) || session.sessionId || '').trim();
  const sessionChannel = normalizeOperationalLabel(session.canal_nome || session.canal || session.channelLabel || '');
+ const status = String(session.status || '').trim().toLowerCase();
+ if (['cancelada', 'cancelado', 'aguardando_produto'].includes(status) || getSeparationItemTotal(session) <= 0) return;
  if (!sessionId || sessionChannel !== channel || !sessionId.includes(`-${dateKey}-`)) return;
  totalsBySession.set(sessionId, Math.max(totalsBySession.get(sessionId) || 0, getPickPackageCountFrom(session)));
  });
@@ -17983,7 +18023,6 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  <div class="pick-list-header">
  <div class="pick-list-title-wrap">
  <h2>PRODUTOS SEPARADOS</h2>
- <span id="pick-list-count">${countDifferentPickProducts(currentSessionItems)} PRODUTO(S)</span>
  </div>
  <div class="pick-resume-filters pick-package-filters" role="group" aria-label="Filtrar produtos por pacote">
  <button type="button" data-pick-resume-filter="all" onclick="setPickResumeFilter('all')">TODOS <span id="pick-filter-all-count">0</span></button>
@@ -18992,9 +19031,7 @@ async function startPickItemRound(index) {
 
 function updatePickItemsList() {
  const container = document.getElementById('pick-items-list');
- const countEl = document.getElementById('pick-list-count');
  updatePickSummaryUI();
- const differentProducts = countDifferentPickProducts(currentSessionItems);
  const allCountEl = document.getElementById('pick-filter-all-count');
  const standaloneCountEl = document.getElementById('pick-filter-standalone-count');
  const kitCountEl = document.getElementById('pick-filter-kit-count');
@@ -19008,7 +19045,6 @@ function updatePickItemsList() {
  button.setAttribute('aria-pressed', active ? 'true' : 'false');
  });
  const filteredItems = getPickResumeFilteredItems();
- if (countEl) countEl.textContent = `${differentProducts} ${differentProducts === 1 ? 'PRODUTO' : 'PRODUTOS'}`;
  if (!container) return;
  
  if (currentSessionItems.length === 0) {
@@ -19104,7 +19140,14 @@ async function removePickItem(index) {
  const result = await persistPickingItemRemoval(draft, removedItem, true);
  markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
  if (currentSessionItems.length === 0) {
- await discardPickingDraft(draft.sessionId, { silent: true });
+ syncPickPackageCount(0, true);
+ draft.status = 'aguardando_produto';
+ draft.total_produtos_separados = 0;
+ draft.total_itens_separados = 0;
+ draft.total_pacotes_montados = 0;
+ draft.totalPacotesMontados = 0;
+ saveDraftPickSession(draft);
+ showToast(`Separacao ${draft.sessionId} vazia e reservada para continuar.`, 'info');
  }
  showToast(result?.queued ? 'Remocao salva localmente para sincronizar.' : 'Produto removido da separacao');
  } catch (error) {

@@ -1402,16 +1402,6 @@ const DataClient = (function () {
             throw sepError;
         }
 
-        const { error: deleteError } = await client
-            .from('separacao_itens')
-            .delete()
-            .eq('separacao_id', session.separacao_id);
-
-        if (deleteError) {
-            logSepSupabaseError('erro ao preparar itens em lote', deleteError, { separacao_id: session.separacao_id });
-            throw deleteError;
-        }
-
         const itemRows = items
             .filter(item => item && item.id_interno)
             .map(item => ({
@@ -1425,16 +1415,22 @@ const DataClient = (function () {
             }));
 
         let itemData = [];
+        const { error: replaceError } = await client.rpc('substituir_itens_separacao', {
+            p_session_id: session.separacao_id,
+            p_itens: itemRows,
+            p_usuario: session.criado_por || localStorage.getItem('currentUser') || 'N/A'
+        });
+        if (replaceError) {
+            logSepSupabaseError('erro ao substituir itens em lote', replaceError, { separacao_id: session.separacao_id, total: itemRows.length });
+            throw replaceError;
+        }
+
         if (itemRows.length) {
             const { data, error } = await client
                 .from('separacao_itens')
-                .insert(itemRows)
-                .select();
-
-            if (error) {
-                logSepSupabaseError('erro ao inserir itens em lote', error, { separacao_id: session.separacao_id, total: itemRows.length });
-                throw error;
-            }
+                .select('*')
+                .eq('separacao_id', session.separacao_id);
+            if (error) throw error;
             itemData = data || [];
         }
 
@@ -1442,6 +1438,71 @@ const DataClient = (function () {
         invalidateCache('conferencia');
 
         return { separacao: sepData, items: itemData };
+    }
+
+    async function removerItemSeparacaoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = payload.sessionId || payload.separacao_id;
+        const idInterno = payload.idInterno || payload.id_interno;
+        if (!sessionId || !idInterno) throw new Error('Separacao e produto sao obrigatorios.');
+        let { data, error } = await client.rpc('remover_item_separacao', {
+            p_session_id: sessionId,
+            p_id_interno: idInterno,
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A'
+        });
+        if (error && (error.code === 'PGRST202' || String(error.message || '').includes('remover_item_separacao'))) {
+            const now = getDataHoraBrasil();
+            const zeroed = await client.from('separacao_itens')
+                .update({ qtd_solicitada: 0, qtd_separada: 0, atualizado_em: now })
+                .eq('separacao_id', sessionId)
+                .eq('id_interno', idInterno);
+            if (zeroed.error) throw zeroed.error;
+
+            const remaining = await client.from('separacao_itens')
+                .select('id_interno,qtd_separada')
+                .eq('separacao_id', sessionId)
+                .gt('qtd_separada', 0);
+            if (remaining.error) throw remaining.error;
+            const remainingRows = remaining.data || [];
+            const productTotal = new Set(remainingRows.map(item => String(item.id_interno || '')).filter(Boolean)).size;
+            const itemTotal = remainingRows.reduce((sum, item) => sum + (Number(item.qtd_separada || 0) || 0), 0);
+            const isEmpty = productTotal === 0;
+            const sessionUpdate = {
+                status: isEmpty ? 'aguardando_produto' : 'em_separacao',
+                atualizado_em: now,
+                finalizado_em: null,
+                total_produtos_separados: productTotal,
+                total_itens_separados: itemTotal,
+                ...(isEmpty ? {
+                    total_pacotes_montados: 0,
+                    observacao: `SEPARACAO_VAZIA_REUTILIZAVEL | Ultimo item removido por ${payload.usuario || localStorage.getItem('currentUser') || 'N/A'}`
+                } : {})
+            };
+            const updated = await client.from('separacao').update(sessionUpdate).eq('separacao_id', sessionId);
+            if (updated.error) throw updated.error;
+            data = { ok: true, separacao_id: sessionId, status: sessionUpdate.status, fallback: true };
+            error = null;
+        }
+        if (error) throw error;
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+        return data;
+    }
+
+    async function esvaziarSeparacaoParaReutilizacaoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = payload.sessionId || payload.separacao_id;
+        if (!sessionId) throw new Error('Separacao nao informada.');
+        const { data, error } = await client.rpc('esvaziar_separacao_para_reutilizacao', {
+            p_session_id: sessionId,
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A'
+        });
+        if (error) throw error;
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+        return data;
     }
     async function finalizePickingDraftSupabase(payload) {
         const client = window.supabaseClient;
@@ -2486,6 +2547,8 @@ const DataClient = (function () {
         reservePickingSessionSupabase,
         savePickingDraftSupabase,
         savePickingDraftItemsBatchSupabase,
+        removerItemSeparacaoSupabase,
+        esvaziarSeparacaoParaReutilizacaoSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
         getCachedData,
