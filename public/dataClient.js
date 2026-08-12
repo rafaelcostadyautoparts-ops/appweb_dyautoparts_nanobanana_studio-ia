@@ -1525,6 +1525,30 @@ const DataClient = (function () {
         }));
     }
 
+    async function cancelarSeparacaoAntesDespachoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(payload.sessionId || payload.separacao_id || '').trim();
+        const motivo = String(payload.motivo || '').trim();
+        if (!sessionId) throw new Error('Separacao nao informada.');
+        if (motivo.length < 5) throw new Error('Informe o motivo do cancelamento.');
+        const { data, error } = await client.rpc('cancelar_separacao_antes_despacho', {
+            p_separacao_id: sessionId,
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
+            p_motivo: motivo
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('cancelar_separacao_antes_despacho');
+            throw new Error(missingRpc
+                ? 'A atualizacao de cancelamento ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao cancelar separacao.'));
+        }
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
     async function sincronizarPacotesSeparacaoSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2590,6 +2614,7 @@ const DataClient = (function () {
         esvaziarSeparacaoParaReutilizacaoSupabase,
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
+        cancelarSeparacaoAntesDespachoSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
         getCachedData,

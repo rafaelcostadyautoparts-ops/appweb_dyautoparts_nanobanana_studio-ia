@@ -1,6 +1,6 @@
 {
-  "version": "2.1.88",
-  "build": "2026.08.12.01",
-  "commit": "performance-e-cache",
+  "version": "2.1.89",
+  "build": "2026.08.12.02",
+  "commit": "cancelamento-e-limpeza-acoes",
   "deployDate": "2026-08-12"
 }
