@@ -1,6 +1,6 @@
 {
-  "version": "2.1.87",
-  "build": "2026.08.07.05",
-  "commit": "agrupamento-por-quantidade",
-  "deployDate": "2026-08-07"
+  "version": "2.1.88",
+  "build": "2026.08.12.01",
+  "commit": "performance-e-cache",
+  "deployDate": "2026-08-12"
 }

@@ -1504,6 +1504,45 @@ const DataClient = (function () {
         invalidateCache('conferencia');
         return data;
     }
+    async function listarPacotesSeparacaoSupabase(sessionId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const cleanSessionId = String(sessionId || '').trim();
+        if (!cleanSessionId) return [];
+        const { data: packages, error: packageError } = await client
+            .from('separacao_pacotes').select('*').eq('separacao_id', cleanSessionId).eq('status', 'ATIVO').order('criado_em');
+        if (packageError) {
+            const missingTable = packageError.code === '42P01' || String(packageError.message || '').includes('separacao_pacotes');
+            if (missingTable) return [];
+            throw packageError;
+        }
+        const { data: items, error: itemError } = await client
+            .from('separacao_pacote_itens').select('*').eq('separacao_id', cleanSessionId);
+        if (itemError) throw itemError;
+        return (packages || []).map(row => ({
+            ...row,
+            itens: (items || []).filter(item => String(item.pacote_id) === String(row.pacote_id))
+        }));
+    }
+
+    async function sincronizarPacotesSeparacaoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('sincronizar_pacotes_separacao', {
+            p_separacao_id: String(payload.sessionId || '').trim(),
+            p_pacotes: payload.pacotes || [],
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
+            p_execution_id: payload.executionId || `pacotes:${payload.sessionId}:${Date.now()}`
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('sincronizar_pacotes_separacao');
+            throw new Error(missingRpc
+                ? 'A migration de pacotes sincronizados ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao sincronizar pacotes'));
+        }
+        invalidateCache('separacao');
+        return data;
+    }
     async function finalizePickingDraftSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2549,6 +2588,8 @@ const DataClient = (function () {
         savePickingDraftItemsBatchSupabase,
         removerItemSeparacaoSupabase,
         esvaziarSeparacaoParaReutilizacaoSupabase,
+        listarPacotesSeparacaoSupabase,
+        sincronizarPacotesSeparacaoSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
         getCachedData,

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v223';
+const CACHE_NAME = 'dy-autoparts-v224';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -12,10 +12,10 @@ const ASSETS_TO_CACHE = [
   '/timeUtils.js',
   '/src/index.css',
   '/src/purchasePlanning.css',
-  '/assets/images/login-bg-desktop-claro.png',
-  '/assets/images/login-bg-desktop-escuro.png',
-  '/assets/images/login-bg-mobile-claro.png',
-  '/assets/images/login-bg-mobile-escuro.png',
+  '/assets/images/login-bg-desktop-claro.webp',
+  '/assets/images/login-bg-desktop-escuro.webp',
+  '/assets/images/login-bg-mobile-claro.webp',
+  '/assets/images/login-bg-mobile-escuro.webp',
   '/assets/images/logo/logo_dybranco_app.png',
   '/assets/images/logo/logo_dypreto_app.png',
   '/manifest.json',
@@ -24,10 +24,6 @@ const ASSETS_TO_CACHE = [
   '/assets/images/logo/maskable_icon_preto_x192.png',
   '/assets/images/logo/maskable_icon_preto_x384.png',
   '/assets/images/logo/maskable_icon_preto_x512.png',
-  'https://unpkg.com/html5-qrcode',
-  'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap',
-  'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0'
 ];
 
 self.addEventListener('install', (event) => {
@@ -64,9 +60,25 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
   const requestUrl = new URL(url);
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  const forceRefresh = event.request.cache === 'reload' || event.request.cache === 'no-cache';
+
+  // Ctrl+F5/recarregamento forte deve ignorar inclusive o cache do service worker.
+  if (forceRefresh && isSameOrigin) {
+    event.respondWith(
+      fetch(new Request(event.request, { cache: 'no-store' })).then((response) => {
+        if (response.ok && event.request.method === 'GET') {
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)));
+        }
+        return response;
+      })
+    );
+    return;
+  }
 
   // Bypass total para desenvolvimento local
-  if (requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1') {
+  if (requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1' || requestUrl.hostname === '::1') {
     event.respondWith(fetch(event.request));
     return;
   }
@@ -99,9 +111,17 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
-  // Cache-first para demais recursos (imagens, fontes, libs)
+  // Stale-while-revalidate: exibe imagens rapidamente e atualiza o cache ao fundo.
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((response) => response || fetch(event.request))
+    caches.match(event.request).then((cached) => {
+      const network = fetch(event.request).then((response) => {
+        if (response.ok && event.request.method === 'GET') {
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)));
+        }
+        return response;
+      }).catch(() => cached);
+      return cached || network;
+    })
   );
 });

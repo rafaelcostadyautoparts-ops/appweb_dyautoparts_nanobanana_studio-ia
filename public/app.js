@@ -72,23 +72,30 @@ function sanitizeElementText(root = document) {
 
 function startTextSanitizerObserver() {
  sanitizeElementText(document);
+ const pendingRoots = new Set();
+ let scheduled = false;
+ const flush = () => {
+ scheduled = false;
+ const roots = [...pendingRoots];
+ pendingRoots.clear();
+ roots.forEach(root => sanitizeElementText(root));
+ };
+ const schedule = root => {
+ if (!root) return;
+ pendingRoots.add(root);
+ if (scheduled) return;
+ scheduled = true;
+ requestAnimationFrame(flush);
+ };
  const observer = new MutationObserver(mutations => {
  mutations.forEach(mutation => {
  mutation.addedNodes.forEach(node => {
  if (node.nodeType === Node.TEXT_NODE) sanitizeTextNode(node);
- if (node.nodeType === Node.ELEMENT_NODE) sanitizeElementText(node);
- });
- if (mutation.type === 'characterData') sanitizeTextNode(mutation.target);
- if (mutation.type === 'attributes') sanitizeElementText(mutation.target);
+ if (node.nodeType === Node.ELEMENT_NODE) schedule(node);
  });
  });
- observer.observe(document.body, {
- childList: true,
- subtree: true,
- characterData: true,
- attributes: true,
- attributeFilter: ['title', 'aria-label', 'placeholder', 'alt']
  });
+ observer.observe(document.body, { childList: true, subtree: true });
 }
 
 const MATERIAL_ICON_FALLBACKS = {
@@ -173,20 +180,30 @@ function scheduleMaterialIconFallbacks(root = document) {
 
 function startMaterialIconFallbackObserver() {
  scheduleMaterialIconFallbacks(document);
+ const pendingRoots = new Set();
+ let scheduled = false;
+ const flush = () => {
+ scheduled = false;
+ const roots = [...pendingRoots];
+ pendingRoots.clear();
+ roots.forEach(root => ensureMaterialIconFallbacks(root));
+ };
+ const schedule = root => {
+ if (!root) return;
+ pendingRoots.add(root);
+ if (scheduled) return;
+ scheduled = true;
+ requestAnimationFrame(flush);
+ };
  const observer = new MutationObserver(mutations => {
  mutations.forEach(mutation => {
  mutation.addedNodes.forEach(node => {
  if (node.nodeType !== Node.ELEMENT_NODE) return;
- scheduleMaterialIconFallbacks(node.matches?.('.material-symbols-rounded') ? node.parentElement || node : node);
- });
- if (mutation.type === 'characterData') {
- const parent = mutation.target.parentElement;
- if (parent?.matches?.('.material-symbols-rounded')) scheduleMaterialIconFallbacks(parent);
- }
+ schedule(node.matches?.('.material-symbols-rounded') ? node.parentElement || node : node);
  });
  });
- observer.observe(document.body, { childList: true, characterData: true, subtree: true });
- setInterval(() => ensureMaterialIconFallbacks(document), 1500);
+ });
+ observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // ==== AUXILIARY FUNCTIONS ====
@@ -519,7 +536,6 @@ function renderScreenByName(name, push = true) {
  case 'search': renderSearchScreen(push); break;
  case 'catalogo-produtos': renderCatalogoProdutos(false); break;
  case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
- case 'central-operacoes': renderCentralOperacoes(false); break;
  case 'login': renderLogin(push); break;
  case 'client-quotes': renderClientQuotesList(false); break;
  case 'comissoes': renderComissoesScreen(null, false); break;
@@ -1121,8 +1137,8 @@ function getLoginBackgroundStyleValue() {
  const loginTheme = getResolvedTheme(getStoredTheme());
  const isMobileLogin = window.innerWidth < 768;
  const bg = loginTheme === 'light'
- ? (isMobileLogin ? '/assets/images/login-bg-mobile-claro.png?v=20260524-stable' : '/assets/images/login-bg-desktop-claro.png?v=20260524-stable')
- : (isMobileLogin ? '/assets/images/login-bg-mobile-escuro.png?v=20260524-stable-dark' : '/assets/images/login-bg-desktop-escuro.png?v=20260524-stable-dark');
+ ? (isMobileLogin ? '/assets/images/login-bg-mobile-claro.webp?v=20260524-stable' : '/assets/images/login-bg-desktop-claro.webp?v=20260524-stable')
+ : (isMobileLogin ? '/assets/images/login-bg-mobile-escuro.webp?v=20260524-stable-dark' : '/assets/images/login-bg-desktop-escuro.webp?v=20260524-stable-dark');
  const fixed = isMobileLogin ? '' : ' fixed';
  return loginTheme === 'light'
  ? `linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.18)), url('${bg}') center/cover no-repeat${fixed}, linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)`
@@ -1196,8 +1212,8 @@ function applyPremiumMobileLoginLayout() {
  const horizontalPadding = cardHeight < 74 ? 14 : 20;
  const cardInnerGap = Math.max(14, Math.min(22, Math.round(cardHeight * 0.24)));
  const backgroundUrl = isLightTheme
- ? '/assets/images/login-bg-mobile-claro.png?v=20260527-js-premium'
- : '/assets/images/login-bg-mobile-escuro.png?v=20260527-js-premium';
+ ? '/assets/images/login-bg-mobile-claro.webp?v=20260527-js-premium'
+ : '/assets/images/login-bg-mobile-escuro.webp?v=20260527-js-premium';
  const overlay = isLightTheme
  ? 'linear-gradient(180deg, rgba(255,255,255,.02) 0%, rgba(255,255,255,.02) 52%, rgba(238,244,251,.42) 100%)'
  : 'linear-gradient(180deg, rgba(0,0,0,.03) 0%, rgba(0,0,0,.05) 50%, rgba(0,0,0,.54) 100%)';
@@ -2011,7 +2027,10 @@ async function initApp() {
 
  atualizarStatusConexao();
 
- const deviceStatus = await ensureCurrentDeviceRegistered({ silent: true, source: 'bootstrap', logUpdate: true });
+ const [deviceStatus] = await Promise.all([
+ ensureCurrentDeviceRegistered({ silent: true, source: 'bootstrap', logUpdate: true }),
+ loadUsersWithFallback()
+ ]);
  if (deviceStatus.allowed === false) {
  clearTimeout(totalTimeout);
  bootstrapState.completed = true;
@@ -2020,38 +2039,14 @@ async function initApp() {
  }
  startSecurityDeviceWatch();
 
- // Texto validado em UTF-8.
- console.log('[INFO] Operacao registrada.');
- const usersLoaded = await loadUsersWithFallback();
- 
- if (usersLoaded) {
- console.log('[INFO] Operacao registrada.');
- } else {
- console.log('[INFO] Operacao registrada.');
- }
-
- // Texto validado em UTF-8.
- const currentUser = localStorage.getItem('currentUser');
- if (!currentUser) {
- console.log('[INFO] Operacao registrada.');
- try {
- await withTimeout(
- loadAllData(true, 'initApp'),
- BOOT_CONFIG.TIMEOUT_MS,
- 'loadAllData'
- );
- } catch (e) {
- console.warn('[BOOT] loadAllData falhou:', e.message);
- }
- }
-
- // 8. VERIFICAR ATUALIZACAO ANTES DO USUARIO INICIAR O USO
- console.log('[BOOT] Verificando atualizacao do aplicativo...');
- await runStartupUpdateCheck();
-
- // 9. RENDERIZAR LOGIN SEMPRE
+ // A interface fica disponível assim que segurança e usuários terminam.
+ // Sincronização ampla e atualização não bloqueiam mais o primeiro uso.
  console.log('[BOOT] Renderizando tela de login...');
  renderLogin();
+ setTimeout(() => {
+ loadAllData(true, 'startup_background').catch(error => console.warn('[BOOT] Sincronização em segundo plano falhou:', error));
+ runStartupUpdateCheck().catch(error => console.warn('[BOOT] Verificação de atualização em segundo plano falhou:', error));
+ }, 0);
  
  // 10. CONCLUIR BOOTSTRAP
  clearTimeout(totalTimeout);
@@ -2259,6 +2254,10 @@ async function executeQueuedOperation(operation) {
 
  if (operation.type === 'supabase_pick_draft') {
  return DataClient.savePickingDraftSupabase(operation.payload);
+ }
+
+ if (operation.type === 'supabase_pick_packages') {
+ return DataClient.sincronizarPacotesSeparacaoSupabase(operation.payload);
  }
 
  if (operation.type === 'supabase_pick_draft_item_delete') {
@@ -3525,7 +3524,6 @@ const menuModulesConfig = [
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
- { id: 'central_operacoes', label: 'CENTRAL AO VIVO', icon: 'central_operacoes', order: 7, type: 'principal' },
  { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
@@ -3539,7 +3537,6 @@ const menu3DIcons = {
  pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
  inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><rect x="18" y="41" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/></svg>',
- central_operacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F172A"/><rect x="14" y="17" width="36" height="26" rx="4" fill="#fff" opacity=".96"/><rect x="18" y="21" width="13" height="8" rx="2" fill="#3B82F6"/><rect x="33" y="21" width="13" height="8" rx="2" fill="#10B981"/><rect x="18" y="31" width="13" height="8" rx="2" fill="#F59E0B"/><rect x="33" y="31" width="13" height="8" rx="2" fill="#8B5CF6"/><path d="M26 49h12M32 43v6" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
  dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
  configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
  nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#475569"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.6"/><rect x="20" y="39" width="12" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/><rect x="20" y="44" width="9" height="2.5" rx="1.25" fill="#fff" opacity="0.35"/></svg>',
@@ -3615,7 +3612,6 @@ const menuRoutes = {
  compras: 'renderComprasSubMenu()',
  movimentacoes: 'renderMovimentacoesSubMenu()',
  inventario: 'renderInventarioSubMenu()',
- central_operacoes: 'renderCentralOperacoes()',
  nf: 'renderNFSubMenu()',
  financeiro: 'renderFinanceiroSubMenu()',
  configuracoes: 'renderConfigSubMenu()',
@@ -3657,16 +3653,16 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
  const pendingEntradaNFClass = pendingEntradaNFCount > 0 ? 'has-pending' : '';
  const quickActionImage = modoRapidoAtivo
- ? '/assets/icons/modo-rapido-on.png'
- : '/assets/icons/modo-rapido-off.png';
+ ? '/assets/icons/modo-rapido-on.webp'
+ : '/assets/icons/modo-rapido-off.webp';
  return `
  <div id="quick-actions-overlay" class="quick-actions-overlay hidden" onclick="toggleQuickActions()" aria-hidden="true"></div>
  <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="Acoes rApidas">
  <span class="quick-sheet-grabber" aria-hidden="true"></span>
  <div class="quick-actions-list" role="none">
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="quickActionSeparacoesAndamento()">
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="openQuickActionSeparationMenu(event)">
  <span class="quick-action-icon quick-action-icon-picking-drafts material-symbols-rounded">folder_open</span>
- <span class="quick-action-label">SEPARACAOi</span>
+ <span class="quick-action-label">SEPARA&Ccedil;&Atilde;O</span>
  ${pendingSeparationsBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
@@ -3718,8 +3714,6 @@ function getQuickActionsHTML(modoRapidoAtivo) {
 }
 
 function renderMenu(push = true) {
- cleanupCentralOperacoesLive?.();
- document.body.classList.remove('central-live-active');
  stopScanner();
  currentScreen = 'menu';
  document.body.classList.remove('login-active');
@@ -8815,7 +8809,6 @@ async function addInventoryItem(scannedEan = null) {
  } catch (e) {
  console.error('[INV-DIAG] erro ao incluir item bipado:', e);
  }
- if (saved) publishCurrentInventoryToCentral(itemToSave);
  if (!saved) {
  showScanFeedback('error', 'Erro ao incluir produto');
  if (existing) {
@@ -11660,6 +11653,24 @@ async function renderSearchScreen(push = true) {
 
 
 
+let html5QrLibraryPromise = null;
+function ensureHtml5QrLibrary() {
+ if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) return Promise.resolve();
+ if (html5QrLibraryPromise) return html5QrLibraryPromise;
+ html5QrLibraryPromise = new Promise((resolve, reject) => {
+ const script = document.createElement('script');
+ script.src = 'https://unpkg.com/html5-qrcode';
+ script.async = true;
+ script.onload = () => resolve();
+ script.onerror = () => reject(new Error('Não foi possível carregar o leitor de códigos.'));
+ document.head.appendChild(script);
+ }).catch(error => {
+ html5QrLibraryPromise = null;
+ throw error;
+ });
+ return html5QrLibraryPromise;
+}
+
 let html5QrCode = null;
 let lastScanTime = 0;
 let isScannerStarting = false;
@@ -11668,6 +11679,13 @@ let isScannerScanProcessing = false;
 async function startScanner(isPicking = false, isConference = false, isInventory = false, isGarantia = false, isEdit = false, isInventoryLocation = false, isRomaneioTracking = false) {
  if (isScannerStarting) return;
  isScannerStarting = true;
+ try {
+ await ensureHtml5QrLibrary();
+ } catch (error) {
+ isScannerStarting = false;
+ showToast(error.message || 'Leitor de códigos indisponível.', 'error');
+ return;
+ }
 
  // Use specific IDs based on context to avoid conflicts
  let containerId = 'scanner-container';
@@ -15356,9 +15374,17 @@ async function resumePickingDraftFromServer(sessionId) {
  }
 
  const items = hydratePickItemsFromSavedSession(sessionId);
+ let cloudPackages = [];
+ try {
+  cloudPackages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
+ } catch (error) {
+  console.warn('[SEP] Pacotes compartilhados nao carregados:', error.message || error);
+ }
 
  currentSessionItems = items;
- restorePickPackageState(currentSessionItems, session);
+ if (!restorePickPackagesFromCloud(currentSessionItems, cloudPackages)) {
+  restorePickPackageState(currentSessionItems, session);
+ }
  currentPickingContext = {
  sessionId,
  channelId,
@@ -16311,12 +16337,93 @@ function adjustPickPackageCount(delta) {
  settlePickScannerInput(60);
 }
 
+let pickPackageCloudSyncTimer = null;
+
+function buildPickPackagesSyncPayload(items = currentSessionItems) {
+ const packages = new Map();
+ (items || []).forEach(item => {
+  const productId = String(getPickingProductId(item) || '').trim();
+  if (!productId) return;
+  normalizePickPackageAssignments(item).forEach((groupId, unitIndex) => {
+   const packageId = groupId || `AVL-${productId}-${String(unitIndex + 1).padStart(4, '0')}`;
+   const type = groupId ? 'AGRUPADO' : 'AVULSO';
+   if (!packages.has(packageId)) packages.set(packageId, { pacote_id: packageId, tipo: type, itens: new Map() });
+   const row = packages.get(packageId);
+   row.itens.set(productId, (row.itens.get(productId) || 0) + 1);
+  });
+ });
+ return [...packages.values()].map(row => ({
+  pacote_id: row.pacote_id,
+  tipo: row.tipo,
+  itens: [...row.itens.entries()].map(([id_interno, quantidade]) => ({ id_interno, quantidade }))
+ }));
+}
+
+function restorePickPackagesFromCloud(items = currentSessionItems, packages = []) {
+ if (!Array.isArray(packages) || !packages.length) return false;
+ (items || []).forEach(item => { item.pick_package_assignments = Array(Math.max(0, Number(item.qty || 0))).fill(null); });
+ (packages || []).filter(row => String(row.tipo || '').toUpperCase() === 'AGRUPADO').forEach(row => {
+  (row.itens || []).forEach(savedItem => {
+   const item = (items || []).find(candidate => String(getPickingProductId(candidate) || '') === String(savedItem.id_interno || ''));
+   if (!item) return;
+   const assignments = normalizePickPackageAssignments(item);
+   let remaining = Math.max(0, Number(savedItem.quantidade || 0));
+   for (let index = 0; index < assignments.length && remaining > 0; index++) {
+    if (!assignments[index]) { assignments[index] = String(row.pacote_id); remaining--; }
+   }
+  });
+ });
+ return true;
+}
+
+async function syncPickPackagesWithCloud(options = {}) {
+ const sessionId = String(options.sessionId || currentPickingContext?.sessionId || '').trim();
+ if (!sessionId || isTemporaryPickSessionId(sessionId) || !isValidPickSessionId(sessionId)) return { skipped: true };
+ const payload = {
+  sessionId,
+  pacotes: buildPickPackagesSyncPayload(options.items || currentSessionItems),
+  usuario: localStorage.getItem('currentUser') || 'N/A',
+  executionId: `pacotes:${sessionId}:${Date.now()}`
+ };
+ const statusEl = document.getElementById('pick-package-sync-status');
+ if (statusEl) { statusEl.textContent = navigator.onLine ? 'SALVANDO...' : 'PENDENTE'; statusEl.className = navigator.onLine ? 'is-saving' : 'is-pending'; }
+ if (!navigator.onLine) {
+  await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
+  markDraftPickSaveStatus('queued');
+  return { queued: true };
+ }
+ try {
+  const result = await DataClient.sincronizarPacotesSeparacaoSupabase(payload);
+  if (statusEl) { statusEl.textContent = 'SINCRONIZADO'; statusEl.className = 'is-synced'; }
+  markDraftPickSaveStatus('synced');
+  return result;
+ } catch (error) {
+  if (isRetryableConferenceSyncError(error)) {
+   await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId, lastOnlineError: error.message || String(error) });
+   if (statusEl) { statusEl.textContent = 'PENDENTE'; statusEl.className = 'is-pending'; }
+   markDraftPickSaveStatus('queued', error);
+   return { queued: true, error };
+  }
+  if (statusEl) { statusEl.textContent = 'ERRO AO SALVAR'; statusEl.className = 'is-error'; }
+  markDraftPickSaveStatus('failed', error);
+  throw error;
+ }
+}
+
+function schedulePickPackagesCloudSync(delay = 180) {
+ clearTimeout(pickPackageCloudSyncTimer);
+ pickPackageCloudSyncTimer = setTimeout(() => {
+  syncPickPackagesWithCloud().catch(error => showToast(error.message || 'Erro ao sincronizar pacotes.', 'error'));
+ }, delay);
+}
+
 function persistPickKitState() {
  if (!currentSessionItems.length) { updatePickItemsList(); return; }
  syncAutomaticPickPackageCount(false);
  const draft = getCurrentPickDraftForUpdate('local_only');
  if (draft) saveDraftPickSession({ ...draft, items: currentSessionItems });
  updatePickItemsList();
+ schedulePickPackagesCloudSync();
 }
 
 function updatePickKitModeUI() {
@@ -18035,7 +18142,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  </div>
 
  <aside class="pick-summary-panel">
- <h2>RESUMO DA SEPARA\u00c7\u00c3O</h2>
+ <div class="pick-summary-title-row"><h2>RESUMO DA SEPARA\u00c7\u00c3O</h2><span id="pick-package-sync-status" class="is-synced">SINCRONIZADO</span></div>
  <div class="pick-summary-metrics pick-summary-packages-only">
  <div class="pick-package-count-field">
  <span class="material-symbols-rounded">package_2</span>
@@ -18888,7 +18995,6 @@ async function addPickItem(scannedEan = null) {
 
  if (!pickPersistFailed) {
  const scannedItem = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
- publishCurrentPickToCentral(scannedItem);
  showPickScanCenterToast(scannedItem);
  if (!roundCompletedNow && !roundOverflowNow) {
  const addedTotal = Number(scannedItem?.qty || 1);
@@ -18930,6 +19036,7 @@ async function addPickItem(scannedEan = null) {
  input.value = '';
  updatePickItemsList();
  syncAutomaticPickPackageCount(true);
+ schedulePickPackagesCloudSync();
  updatePickKitModeUI();
  if (activePickKitId) renderPickGroupingModal();
  showInputFeedback('pick-ean-input', product ? 'success' : 'error');
@@ -19721,6 +19828,8 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  if (!confirmed) return;
  }
 
+ clearTimeout(pickPackageCloudSyncTimer);
+ await syncPickPackagesWithCloud({ sessionId, items: currentPickSession.items });
  await ensureProdutosLoaded(true);
  const now = getDataHoraBrasil();
  const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel) || {
@@ -20774,8 +20883,6 @@ async function addPackScan(scannedEan = null) {
  }
  });
  }
-
- publishCurrentPackToCentral(row);
  input.value = '';
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
  showInputFeedback('pack-ean-input', row && row.divergencia !== 'SOBRA' ? 'success' : 'error');
@@ -34839,496 +34946,93 @@ function exportSaidaDevolucaoXLSX() {
 }
 
 // ========================================================
-// CENTRAL DE OPERACOES AO VIVO
-// ========================================================
-const centralOperacoesState = {
- operations: [],
- filter: 'todas',
- refreshTimer: null,
- refreshDebounce: null,
- realtimeChannel: null,
- loading: false,
- lastSync: null,
- error: '',
- liveOverrides: new Map()
-};
-
-function cleanupCentralOperacoesLive() {
- if (centralOperacoesState.refreshTimer) clearInterval(centralOperacoesState.refreshTimer);
- if (centralOperacoesState.refreshDebounce) clearTimeout(centralOperacoesState.refreshDebounce);
- centralOperacoesState.refreshTimer = null;
- centralOperacoesState.refreshDebounce = null;
- const client = window.supabaseClient;
- if (client && centralOperacoesState.realtimeChannel) {
-  client.removeChannel(centralOperacoesState.realtimeChannel).catch(() => {});
- }
- centralOperacoesState.realtimeChannel = null;
+function closeQuickActionSeparationMenu() {
+ const panel = document.getElementById('quick-separation-submenu');
+ if (panel) panel.remove();
 }
 
-function parseCentralTimestamp(value) {
- if (!value) return 0;
- const date = new Date(String(value).replace(' ', 'T'));
- return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+function openQuickActionSeparationMenu(event) {
+ event?.stopPropagation?.();
+ closeQuickActionSeparationMenu();
+ const menu = document.getElementById('quick-actions-menu');
+ if (!menu) return;
+ const pendingDrafts = getDraftPickSessionsWithLocalDraft().length;
+ const pendingConference = (appData.separacao || []).filter(isSeparationPendingConferenceSession).length;
+ const panel = document.createElement('section');
+ panel.id = 'quick-separation-submenu';
+ panel.className = 'quick-separation-submenu';
+ panel.innerHTML = `<header><button type="button" onclick="closeQuickActionSeparationMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button><span><strong>SEPARA&Ccedil;&Atilde;O</strong><small>Acesso operacional rápido</small></span></header><div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><span class="material-symbols-rounded">pending_actions</span><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderPackMenu()"><span class="material-symbols-rounded">fact_check</span><span><strong>PENDENTES DE CONFERÊNCIA</strong><small>Separações aguardando conferência</small></span><b>${pendingConference}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><span class="material-symbols-rounded">task_alt</span><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><span class="material-symbols-rounded">history</span><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ menu.appendChild(panel);
 }
 
-function getCentralRelativeTime(value) {
- const timestamp = parseCentralTimestamp(value);
- if (!timestamp) return 'sem registro recente';
- const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
- if (seconds < 10) return 'agora';
- if (seconds < 60) return `ha ${seconds} segundos`;
- const minutes = Math.floor(seconds / 60);
- if (minutes < 60) return `ha ${minutes} min`;
- const hours = Math.floor(minutes / 60);
- if (hours < 24) return `ha ${hours} h`;
- return new Date(timestamp).toLocaleDateString('pt-BR');
+function getSeparationConference(sessionId) {
+ return (appData.conferencia || []).filter(row => String(row.separacao_id || '') === String(sessionId || '')).sort((a,b) => String(b.conferido_em || b.atualizado_em || '').localeCompare(String(a.conferido_em || a.atualizado_em || '')))[0] || null;
 }
 
-function isCentralOperationActive(status, type) {
- const normalized = normalizeOperationalLabel(status || '');
- const closed = ['FINALIZADA', 'FINALIZADO', 'CONCLUIDA', 'CONCLUIDO', 'CONFERIDO', 'CANCELADA', 'CANCELADO', 'ANULADA', 'ANULADO', 'FECHADO'];
- if (closed.some(value => normalized.includes(value))) return false;
- if (type === 'inventario') return !normalized || normalized.includes('ABERTO') || normalized.includes('ANDAMENTO');
- return true;
+function isFinalizedSeparationForHistory(session = {}) {
+ const sessionId = getPackSeparationSessionId(session);
+ const conference = getSeparationConference(sessionId);
+ return ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(session.status || '').toLowerCase()) || ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(conference?.status || '').toLowerCase());
 }
 
-function getCentralProductDetails(item = {}, productsById = new Map()) {
- const id = String(item.id_interno || '').trim();
- const product = productsById.get(id.toUpperCase()) || {};
- return {
-  id,
-  ean: String(item.ean || product.ean || '').trim(),
-  description: String(item.descricao || product.descricao_completa || product.descricao_base || product.descricao || product.nome || 'Produto sem descricao').trim()
- };
+function getSeparationFinishedAt(session = {}) {
+ const conference = getSeparationConference(getPackSeparationSessionId(session));
+ return conference?.conferido_em || conference?.atualizado_em || session.finalizado_em || session.atualizado_em || session.criado_em || '';
 }
 
-function buildCentralOperations(payload = {}) {
- const separacoes = payload.separacoes || [];
- const separacaoItens = payload.separacaoItens || [];
- const conferencias = payload.conferencias || [];
- const conferenciaItens = payload.conferenciaItens || [];
- const inventarios = payload.inventarios || [];
- const inventarioItens = payload.inventarioItens || [];
- const products = payload.products || [];
- const productsById = new Map(products.map(product => [String(product.id_interno || product.col_a || product.col_A || '').trim().toUpperCase(), product]).filter(([id]) => id));
- const separacoesById = new Map(separacoes.map(row => [String(row.separacao_id || '').trim(), row]));
- const operations = [];
+function isDateTodayBR(value) {
+ if (!value) return false;
+ try { return new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+ catch (error) { return String(value).slice(0,10) === new Date().toISOString().slice(0,10); }
+}
 
- separacoes.filter(row => isCentralOperationActive(row.status, 'separacao')).forEach(session => {
-  const sessionId = String(session.separacao_id || '').trim();
-  if (!sessionId) return;
-  const items = separacaoItens.filter(item => String(item.separacao_id || '').trim() === sessionId);
-  const sorted = [...items].sort((a, b) => parseCentralTimestamp(b.atualizado_em) - parseCentralTimestamp(a.atualizado_em));
-  const lastItem = sorted[0] || {};
-  const processed = items.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0);
-  const expected = items.reduce((sum, item) => sum + Number(item.qtd_solicitada || item.qtd_separada || 0), 0);
-  operations.push({
-   key: `separacao:${sessionId}`,
-   type: 'separacao',
-   typeLabel: 'Separacao',
-   icon: 'inventory_2',
-   user: session.criado_por || 'Operador nao identificado',
-   sessionId,
-   channel: session.canal_nome || session.canal_id || 'Canal nao informado',
-   status: session.status || 'Em separacao',
-   processed,
-   expected,
-   productsProcessed: items.filter(item => Number(item.qtd_separada || 0) > 0).length,
-   productsTotal: items.length,
-   divergence: 0,
-   lastItem: getCentralProductDetails(lastItem, productsById),
-   lastItemQty: Number(lastItem.qtd_separada || 0),
-   lastItemExpected: Number(lastItem.qtd_solicitada || lastItem.qtd_separada || 0),
-   updatedAt: lastItem.atualizado_em || session.atualizado_em || session.criado_em,
-   startedAt: session.criado_em,
-   openArgs: [sessionId]
-  });
+function getFinalizedSeparationViewModel(session) {
+ const sessionId = getPackSeparationSessionId(session);
+ const conference = getSeparationConference(sessionId);
+ const channel = getPickDraftChannelInfo(session);
+ const finishedAt = getSeparationFinishedAt(session);
+ const mode = isPickingFastModeSource(session) ? 'Rápido' : 'Normal';
+ return { session, sessionId, conference, channel, finishedAt, mode, products: getSeparationProductTotal(session), items: getSeparationItemTotal(session), packages: getPickPackageCountFrom(session), operator: session.criado_por || '-', conferenceOperator: conference?.conferido_por || '', searchText: normalizeOperationalLabel([sessionId, channel.label, session.criado_por, mode].join(' ')) };
+}
+
+function applyFinalizedSeparationFilters() {
+ const search = normalizeOperationalLabel(document.getElementById('finalized-separation-search')?.value || '');
+ const channel = normalizeOperationalLabel(document.getElementById('finalized-separation-channel')?.value || '');
+ let visible = 0;
+ document.querySelectorAll('[data-finalized-separation]').forEach(card => {
+  const matchesSearch = !search || String(card.dataset.search || '').includes(search);
+  const matchesChannel = !channel || String(card.dataset.channel || '') === channel;
+  card.hidden = !(matchesSearch && matchesChannel);
+  if (!card.hidden) visible++;
  });
-
- conferencias.filter(row => isCentralOperationActive(row.status, 'conferencia')).forEach(session => {
-  const conferenceId = String(session.conferencia_id || '').trim();
-  const separationId = String(session.separacao_id || '').trim();
-  if (!conferenceId && !separationId) return;
-  const items = conferenciaItens.filter(item => String(item.conferencia_id || '').trim() === conferenceId || (!conferenceId && String(item.separacao_id || '').trim() === separationId));
-  const lastItem = [...items].sort((a, b) => Number(b.qtd_conferida || 0) - Number(a.qtd_conferida || 0))[0] || {};
-  const processed = items.reduce((sum, item) => sum + Number(item.qtd_conferida || 0), 0);
-  const expected = items.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0);
-  const separation = separacoesById.get(separationId) || {};
-  operations.push({
-   key: `conferencia:${conferenceId || separationId}`,
-   type: 'conferencia',
-   typeLabel: 'Conferencia',
-   icon: 'fact_check',
-   user: session.conferido_por || 'Conferente nao identificado',
-   sessionId: separationId || conferenceId,
-   channel: separation.canal_nome || separation.canal_id || 'Canal nao informado',
-   status: session.status || 'Em conferencia',
-   processed,
-   expected,
-   productsProcessed: items.filter(item => Number(item.qtd_conferida || 0) > 0).length,
-   productsTotal: items.length,
-   divergence: items.filter(item => item.divergencia && normalizeOperationalLabel(item.divergencia) !== 'OK').length,
-   lastItem: getCentralProductDetails(lastItem, productsById),
-   lastItemQty: Number(lastItem.qtd_conferida || 0),
-   lastItemExpected: Number(lastItem.qtd_separada || 0),
-   updatedAt: session.atualizado_em || session.conferido_em || separation.atualizado_em || separation.criado_em,
-   startedAt: session.conferido_em || separation.criado_em,
-   openArgs: [separationId || conferenceId]
-  });
- });
-
- inventarios.filter(row => isCentralOperationActive(row.status, 'inventario')).forEach(session => {
-  const sessionId = String(session.inventario_id || '').trim();
-  if (!sessionId) return;
-  const items = inventarioItens.filter(item => String(item.inventario_id || '').trim() === sessionId);
-  const sorted = [...items].sort((a, b) => parseCentralTimestamp(b.atualizado_em || b.auditado_em) - parseCentralTimestamp(a.atualizado_em || a.auditado_em));
-  const lastItem = sorted[0] || {};
-  const divergence = items.filter(item => Number(item.diferenca || 0) !== 0).length;
-  operations.push({
-   key: `inventario:${sessionId}`,
-   type: 'inventario',
-   typeLabel: 'Inventario',
-   icon: 'inventory',
-   user: session.usuario_responsavel || session.criado_por || 'Auditor nao identificado',
-   sessionId,
-   channel: session.local || session.filtro_aplicado || 'Local nao informado',
-   status: session.status || 'Aberto',
-   subtype: String(session.tipo || 'geral').toLowerCase(),
-   processed: items.length,
-   expected: Number(session.total_skus || session.total_itens || 0),
-   productsProcessed: items.length,
-   productsTotal: Number(session.total_skus || session.total_itens || 0),
-   divergence,
-   lastItem: getCentralProductDetails(lastItem, productsById),
-   lastItemQty: Number(lastItem.saldo_fisico || 0),
-   lastItemExpected: Number(lastItem.saldo_sistema || 0),
-   updatedAt: lastItem.atualizado_em || lastItem.auditado_em || session.atualizado_em || session.criado_em,
-   startedAt: session.data_inicio || session.criado_em,
-   openArgs: [sessionId, String(session.tipo || 'geral').toLowerCase()]
-  });
- });
-
- const activeWindowMs = 30 * 60 * 1000;
- const activeCutoff = Date.now() - activeWindowMs;
- return operations
-  .filter(operation => parseCentralTimestamp(operation.updatedAt || operation.startedAt) >= activeCutoff)
-  .sort((a, b) => parseCentralTimestamp(b.updatedAt) - parseCentralTimestamp(a.updatedAt));
+ const counter = document.getElementById('finalized-separation-visible');
+ if (counter) counter.textContent = `${visible} separação(ões)`;
 }
 
-async function fetchCentralTable(table, limit = 500) {
- const client = window.supabaseClient;
- if (!client) throw new Error('Supabase nao conectado.');
- const { data, error } = await client.from(table).select('*').limit(limit);
- if (error) throw error;
- return data || [];
-}
-
-async function loadCentralOperacoesData({ silent = false } = {}) {
- if (centralOperacoesState.loading) return;
- centralOperacoesState.loading = true;
- if (!silent) {
-  const grid = document.getElementById('central-live-grid');
-  if (grid && !centralOperacoesState.operations.length) grid.innerHTML = '<div class="central-live-loading"><span class="material-symbols-rounded">sync</span><strong>Conectando as operacoes...</strong></div>';
- }
- try {
-  let products = appData.products || appData.produtos || [];
-  if (!products.length) {
-   const productModule = await DataClient.loadModule('produtos', false);
-   products = productModule?.produtos || productModule?.products || [];
-  }
-  const [separacoes, separacaoItens, conferencias, conferenciaItens, inventarios, inventarioItens] = await Promise.all([
-   fetchCentralTable('separacao', 250),
-   fetchCentralTable('separacao_itens', 1200),
-   fetchCentralTable('conferencia', 250),
-   fetchCentralTable('conferencia_itens', 1200),
-   fetchCentralTable('inventarios', 250),
-   fetchCentralTable('inventarios_itens', 1200)
-  ]);
-  const databaseOperations = buildCentralOperations({ separacoes, separacaoItens, conferencias, conferenciaItens, inventarios, inventarioItens, products });
-  centralOperacoesState.operations = databaseOperations.map(operation => {
-   const live = centralOperacoesState.liveOverrides.get(operation.key);
-   return live ? { ...operation, ...live, lastItem: { ...operation.lastItem, ...(live.lastItem || {}) } } : operation;
-  });
-  centralOperacoesState.lastSync = new Date();
-  centralOperacoesState.error = '';
- } catch (error) {
-  console.error('[CENTRAL AO VIVO] erro ao carregar operacoes:', error);
-  centralOperacoesState.error = error?.message || 'Nao foi possivel consultar as operacoes.';
- } finally {
-  centralOperacoesState.loading = false;
-  updateCentralOperacoesView();
- }
-}
-
-function getCentralFilteredOperations() {
- if (centralOperacoesState.filter === 'todas') return centralOperacoesState.operations;
- return centralOperacoesState.operations.filter(operation => operation.type === centralOperacoesState.filter);
-}
-
-function getCentralProgress(operation) {
- if (operation.expected > 0) return Math.max(0, Math.min(100, Math.round((operation.processed / operation.expected) * 100)));
- return operation.processed > 0 ? 100 : 0;
-}
-
-function renderCentralOperationCard(operation) {
- const progress = getCentralProgress(operation);
- const isRecent = Date.now() - parseCentralTimestamp(operation.updatedAt) < 5 * 60 * 1000;
- const item = operation.lastItem || {};
- const safeKey = escapeKitAttribute(operation.key);
- return `
-  <article class="central-live-card central-type-${operation.type} ${isRecent ? 'is-live' : 'is-idle'}" data-operation-key="${safeKey}">
-   <header>
-    <div class="central-live-user"><span class="central-live-avatar">${escapeKitAttribute(String(operation.user || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeKitAttribute(operation.user)}</strong><small>${escapeKitAttribute(operation.sessionId)}</small></div></div>
-    <span class="central-live-type"><span class="material-symbols-rounded">${operation.icon}</span>${operation.typeLabel}</span>
-   </header>
-   <div class="central-live-meta"><span><span class="material-symbols-rounded">storefront</span>${escapeKitAttribute(operation.channel)}</span><span class="central-live-presence"><i></i>${isRecent ? 'Ao vivo' : 'Sem atividade recente'}</span></div>
-   <section class="central-live-last-product">
-    <small>Ultimo produto registrado</small>
-    <strong>${escapeKitAttribute(item.description || 'Aguardando primeira bipagem')}</strong>
-    <span>${item.id ? `ID: ${escapeKitAttribute(item.id)}` : 'Nenhum item processado ainda'}${item.ean ? ` · EAN: ${escapeKitAttribute(item.ean)}` : ''}</span>
-    <b>${operation.lastItemQty}${operation.lastItemExpected > 0 ? ` de ${operation.lastItemExpected}` : ''} unidade(s)</b>
-   </section>
-   <section class="central-live-progress">
-    <div><span>Progresso da operacao</span><strong>${progress}%</strong></div>
-    <div class="central-live-progress-track"><i style="width:${progress}%"></i></div>
-    <div class="central-live-progress-details"><span>${operation.processed} de ${operation.expected || operation.processed} itens</span><span>${operation.productsProcessed} produto(s)</span></div>
-   </section>
-   ${operation.divergence > 0 ? `<div class="central-live-alert"><span class="material-symbols-rounded">warning</span>${operation.divergence} divergencia(s) encontrada(s)</div>` : ''}
-   <footer><span><span class="material-symbols-rounded">schedule</span>Atualizado ${getCentralRelativeTime(operation.updatedAt)}</span><button type="button" onclick="openCentralOperation('${safeKey}')">Abrir atividade</button></footer>
-  </article>`;
-}
-
-function renderCentralOperationsGrid() {
- const operations = getCentralFilteredOperations();
- if (centralOperacoesState.error && !centralOperacoesState.operations.length) {
-  return `<div class="central-live-empty central-live-error"><span class="material-symbols-rounded">cloud_off</span><h2>Central temporariamente indisponivel</h2><p>${escapeKitAttribute(centralOperacoesState.error)}</p><button onclick="loadCentralOperacoesData()">Tentar novamente</button></div>`;
- }
- if (!operations.length) {
-  return '<div class="central-live-empty"><span class="material-symbols-rounded">desktop_windows</span><h2>Nenhuma operacao ativa</h2><p>As atividades realizadas nos ultimos 30 minutos aparecerao aqui automaticamente.</p></div>';
- }
- return operations.map(renderCentralOperationCard).join('');
-}
-
-function updateCentralOperacoesView() {
- if (currentScreen !== 'central-operacoes') return;
- const grid = document.getElementById('central-live-grid');
- if (grid) grid.innerHTML = renderCentralOperationsGrid();
- const operations = centralOperacoesState.operations;
- const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
- setText('central-total-count', operations.length);
- setText('central-pick-count', operations.filter(item => item.type === 'separacao').length);
- setText('central-pack-count', operations.filter(item => item.type === 'conferencia').length);
- setText('central-inventory-count', operations.filter(item => item.type === 'inventario').length);
- setText('central-sync-time', centralOperacoesState.lastSync ? `Atualizado as ${centralOperacoesState.lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Conectando...');
- document.querySelectorAll('.central-live-filter').forEach(button => button.classList.toggle('active', button.dataset.filter === centralOperacoesState.filter));
-}
-
-function setCentralOperacoesFilter(filter) {
- centralOperacoesState.filter = filter || 'todas';
- updateCentralOperacoesView();
-}
-
-function scheduleCentralOperacoesRefresh() {
- if (centralOperacoesState.refreshDebounce) clearTimeout(centralOperacoesState.refreshDebounce);
- centralOperacoesState.refreshDebounce = setTimeout(() => loadCentralOperacoesData({ silent: true }), 250);
-}
-
-function subscribeCentralOperacoesRealtime() {
- const client = window.supabaseClient;
- if (!client || centralOperacoesState.realtimeChannel) return;
- let channel = client.channel('central-operacoes-live-board');
- channel = channel.on('broadcast', { event: 'operation_update' }, ({ payload }) => {
-  if (!payload?.key) return;
-  centralOperacoesState.liveOverrides.set(payload.key, payload);
-  const index = centralOperacoesState.operations.findIndex(operation => operation.key === payload.key);
-  if (index >= 0) {
-   const current = centralOperacoesState.operations[index];
-   centralOperacoesState.operations[index] = { ...current, ...payload, lastItem: { ...current.lastItem, ...(payload.lastItem || {}) } };
-  } else {
-   centralOperacoesState.operations.unshift(payload);
-  }
-  centralOperacoesState.lastSync = new Date();
-  updateCentralOperacoesView();
- });
- ['separacao', 'separacao_itens', 'conferencia', 'conferencia_itens', 'inventarios', 'inventarios_itens'].forEach(table => {
-  channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleCentralOperacoesRefresh);
- });
- centralOperacoesState.realtimeChannel = channel.subscribe(status => {
-  const badge = document.getElementById('central-connection-status');
-  if (!badge) return;
-  badge.classList.toggle('connected', status === 'SUBSCRIBED');
-  badge.innerHTML = `<i></i>${status === 'SUBSCRIBED' ? 'Tempo real conectado' : 'Conectando tempo real'}`;
- });
-}
-
-async function openCentralOperation(operationKey) {
- const operation = centralOperacoesState.operations.find(item => item.key === operationKey);
- if (!operation) return;
- const currentUser = localStorage.getItem('currentUser') || '';
- if (operation.user && currentUser && normalizeOperationalLabel(operation.user) !== normalizeOperationalLabel(currentUser)) {
-  const confirmed = await showAppConfirm({
-   title: 'Abrir atividade de outro usuario?',
-   message: `${operation.user} esta responsavel por esta ${operation.typeLabel.toLowerCase()}.`,
-   detail: 'Continue somente se deseja acompanhar ou assumir a operacao neste dispositivo.',
-   confirmLabel: 'Abrir atividade',
-   cancelLabel: 'Permanecer na Central'
-  });
-  if (!confirmed) return;
- }
- cleanupCentralOperacoesLive();
- if (operation.type === 'separacao') return resumePickingDraftFromServer(operation.sessionId);
- if (operation.type === 'conferencia') return renderPackSessionDetails(operation.sessionId);
- if (operation.type === 'inventario') return resumeInventorySession(operation.sessionId, operation.subtype || 'geral');
-}
-
-async function toggleCentralOperacoesFullscreen() {
- try {
-  if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-  else await document.exitFullscreen();
- } catch (error) {
-  showToast('O navegador nao permitiu abrir em tela cheia.', 'warning');
- }
-}
-
-async function renderCentralOperacoes(push = true) {
- cleanupCentralOperacoesLive();
- currentScreen = 'central-operacoes';
- document.body.classList.remove('menu-active');
- document.body.classList.add('central-live-active');
- if (push) pushNav('central-operacoes');
+async function renderFinalizedSeparationsScreen(scope = 'today') {
  const currentUser = localStorage.getItem('currentUser');
- if (!currentUser) return renderLogin();
- app.innerHTML = `
-  <div class="central-live-screen fade-in">
-   <header class="central-live-header">
-    <button type="button" class="central-live-back" onclick="cleanupCentralOperacoesLive();renderMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button>
-    <div><small>ACOMPANHAMENTO OPERACIONAL</small><h1>Central de Operacoes ao Vivo</h1></div>
-    <div class="central-live-header-actions"><span id="central-connection-status" class="central-live-connection"><i></i>Conectando tempo real</span><button type="button" onclick="loadCentralOperacoesData()" title="Atualizar"><span class="material-symbols-rounded">refresh</span></button><button type="button" onclick="toggleCentralOperacoesFullscreen()" title="Tela cheia"><span class="material-symbols-rounded">fullscreen</span></button></div>
-   </header>
-   <main class="central-live-main">
-    <section class="central-live-summary">
-     <article><span class="material-symbols-rounded">groups</span><div><strong id="central-total-count">0</strong><small>Operacoes ativas</small></div></article>
-     <article class="pick"><span class="material-symbols-rounded">inventory_2</span><div><strong id="central-pick-count">0</strong><small>Separacoes</small></div></article>
-     <article class="pack"><span class="material-symbols-rounded">fact_check</span><div><strong id="central-pack-count">0</strong><small>Conferencias</small></div></article>
-     <article class="inventory"><span class="material-symbols-rounded">inventory</span><div><strong id="central-inventory-count">0</strong><small>Inventarios</small></div></article>
-    </section>
-    <section class="central-live-toolbar">
-     <div class="central-live-filters">
-      <button class="central-live-filter active" data-filter="todas" onclick="setCentralOperacoesFilter('todas')">Todas</button>
-      <button class="central-live-filter" data-filter="separacao" onclick="setCentralOperacoesFilter('separacao')">Separacao</button>
-      <button class="central-live-filter" data-filter="conferencia" onclick="setCentralOperacoesFilter('conferencia')">Conferencia</button>
-      <button class="central-live-filter" data-filter="inventario" onclick="setCentralOperacoesFilter('inventario')">Inventario</button>
-     </div>
-     <span id="central-sync-time">Conectando...</span>
-    </section>
-    <section id="central-live-grid" class="central-live-grid">${renderCentralOperationsGrid()}</section>
-   </main>
-  </div>`;
- await loadCentralOperacoesData();
- subscribeCentralOperacoesRealtime();
- centralOperacoesState.refreshTimer = setInterval(() => loadCentralOperacoesData({ silent: true }), 12000);
-}
-let centralOperationPublisherChannel = null;
-let centralOperationPublisherReady = null;
-
-function ensureCentralOperationPublisher() {
- const client = window.supabaseClient;
- if (!client) return Promise.resolve(null);
- if (centralOperationPublisherChannel && centralOperationPublisherReady) return centralOperationPublisherReady;
- centralOperationPublisherChannel = client.channel('central-operacoes-live-board');
- centralOperationPublisherReady = new Promise(resolve => {
-  centralOperationPublisherChannel.subscribe(status => {
-   if (status === 'SUBSCRIBED') resolve(centralOperationPublisherChannel);
-   if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') resolve(null);
-  });
- });
- return centralOperationPublisherReady;
-}
-
-async function publishCentralOperationUpdate(payload = {}) {
+ document.body.classList.remove('menu-active');
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}<main class="container"><div class="finalized-separation-loading">Carregando separações...</div></main></div>`;
  try {
-  const channel = await ensureCentralOperationPublisher();
-  if (!channel || !payload.key) return;
-  await channel.send({ type: 'broadcast', event: 'operation_update', payload: { ...payload, updatedAt: payload.updatedAt || getDataHoraBrasil() } });
- } catch (error) {
-  console.warn('[CENTRAL AO VIVO] evento em tempo real nao enviado:', error?.message || error);
- }
+  const [separationData, conferenceData] = await Promise.all([DataClient.loadModule('separacao', true), DataClient.loadModule('conferencia', true)]);
+  if (separationData) { appData.separacao = separationData.separacao || []; appData.separacao_itens = separationData.separacao_itens || []; }
+  if (conferenceData) { appData.conferencia = conferenceData.conferencia || []; appData.conferencia_itens = conferenceData.conferencia_itens || []; }
+ } catch (error) { console.warn('[SEP HIST] Falha ao atualizar:', error); }
+ const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.finishedAt)).sort((a,b) => String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
+ const channels = [...new Set(rows.map(row => row.channel.label).filter(Boolean))].sort();
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><button type="button" onclick="renderMenu()">VOLTAR</button></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
 }
 
-function publishCurrentPickToCentral(item = {}) {
- const context = currentPickingContext || {};
- const sessionId = String(context.sessionId || currentPickSession?.pickingData?.separacao_id || '').trim();
- if (!sessionId) return;
- const stats = getPickingOperationalStats(currentSessionItems || []);
- publishCentralOperationUpdate({
-  key: `separacao:${sessionId}`, type: 'separacao', typeLabel: 'Separacao', icon: 'inventory_2',
-  user: localStorage.getItem('currentUser') || 'Operador nao identificado', sessionId,
-  channel: context.channelLabel || currentPickSession?.pickingData?.canal_nome || 'Canal nao informado', status: 'Em separacao',
-  processed: Number(stats.total_itens_separados || 0), expected: Number(stats.total_itens_separados || 0),
-  productsProcessed: Number(stats.total_produtos_separados || 0), productsTotal: Number(stats.total_produtos_separados || 0), divergence: 0,
-  lastItem: getCentralProductDetails(item, new Map()), lastItemQty: Number(item.qty || item.qtd_separada || 0),
-  lastItemExpected: Number(item.pick_round_target || item.qty || 0), startedAt: context.createdAt || getDataHoraBrasil(), openArgs: [sessionId]
- });
-}
-
-function publishCurrentPackToCentral(row = {}) {
- queueCentralConferenceProgress(row);
- const sessionId = String(currentPackSession?.pickingData?.separacao_id || currentPackSession?.id || '').trim();
- if (!sessionId) return;
- const rows = currentPackSession?.conferenceRows || [];
- publishCentralOperationUpdate({
-  key: `conferencia:CONF-${sessionId}`, type: 'conferencia', typeLabel: 'Conferencia', icon: 'fact_check',
-  user: localStorage.getItem('currentUser') || 'Conferente nao identificado', sessionId,
-  channel: currentPackSession?.pickingData?.canal_nome || 'Canal nao informado', status: 'Em conferencia',
-  processed: rows.reduce((sum, item) => sum + Number(item.qtd_conferida || 0), 0),
-  expected: rows.reduce((sum, item) => sum + Number(item.qtd_separada || 0), 0),
-  productsProcessed: rows.filter(item => Number(item.qtd_conferida || 0) > 0).length, productsTotal: rows.length,
-  divergence: rows.filter(item => item.divergencia && normalizeOperationalLabel(item.divergencia) !== 'OK').length,
-  lastItem: getCentralProductDetails(row, new Map()), lastItemQty: Number(row.qtd_conferida || 0),
-  lastItemExpected: Number(row.qtd_separada || 0), startedAt: getDataHoraBrasil(), openArgs: [sessionId]
- });
-}
-
-function publishCurrentInventoryToCentral(item = {}) {
- const inventory = appData.currentInventory || {};
- const sessionId = String(inventory.id || '').trim();
- if (!sessionId) return;
- const items = inventory.items || [];
- publishCentralOperationUpdate({
-  key: `inventario:${sessionId}`, type: 'inventario', typeLabel: 'Inventario', icon: 'inventory',
-  user: localStorage.getItem('currentUser') || inventory.user || 'Auditor nao identificado', sessionId,
-  channel: inventory.local || 'Local nao informado', status: 'Aberto', subtype: String(inventory.type || 'geral').toLowerCase(),
-  processed: items.length, expected: Number(inventory.total_skus || inventory.total_itens || items.length),
-  productsProcessed: items.length, productsTotal: Number(inventory.total_skus || inventory.total_itens || items.length),
-  divergence: items.filter(current => Number(current.diferenca || 0) !== 0).length,
-  lastItem: getCentralProductDetails(item, new Map()), lastItemQty: Number(item.qty || item.saldo_fisico || 0),
-  lastItemExpected: Number(item.saldo_sistema || 0), startedAt: inventory.date || getDataHoraBrasil(),
-  openArgs: [sessionId, String(inventory.type || 'geral').toLowerCase()]
- });
-}
-let centralConferenceProgressQueue = Promise.resolve();
-
-function queueCentralConferenceProgress(row = {}) {
- const client = window.supabaseClient;
- const sessionId = String(currentPackSession?.pickingData?.separacao_id || currentPackSession?.id || '').trim();
- const productId = String(row.id_interno || '').trim();
- if (!client || !sessionId || !productId) return;
- const snapshot = {
-  sessionId,
-  productId,
-  user: localStorage.getItem('currentUser') || 'N/A',
-  qtd_conferida: Number(row.qtd_conferida || 0),
-  divergencia: row.divergencia || 'FALTA',
-  atualizado_em: getDataHoraBrasil()
- };
- centralConferenceProgressQueue = centralConferenceProgressQueue
-  .then(async () => {
-   const [conferenceResult, itemResult] = await Promise.all([
-    client.from('conferencia').update({ conferido_por: snapshot.user, atualizado_em: snapshot.atualizado_em }).eq('separacao_id', snapshot.sessionId),
-    client.from('conferencia_itens').update({ qtd_conferida: snapshot.qtd_conferida, divergencia: snapshot.divergencia }).eq('separacao_id', snapshot.sessionId).eq('id_interno', snapshot.productId)
-   ]);
-   if (conferenceResult.error) throw conferenceResult.error;
-   if (itemResult.error) throw itemResult.error;
-  })
-  .catch(error => console.warn('[CENTRAL AO VIVO] progresso da conferencia nao sincronizado:', error?.message || error));
+async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today') {
+ const currentUser = localStorage.getItem('currentUser');
+ let session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
+ if (!session) { await renderFinalizedSeparationsScreen(returnScope); return; }
+ const view = getFinalizedSeparationViewModel(session);
+ let packages = [];
+ try { packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId); } catch (error) { console.warn('[SEP HIST] Pacotes não carregados:', error); }
+ const items = getSeparationItemsForSession(session);
+ const packageByProduct = new Map();
+ packages.forEach(pacote => (pacote.itens || []).forEach(item => { const key=String(item.id_interno||''); if(!packageByProduct.has(key))packageByProduct.set(key,[]); packageByProduct.get(key).push({id:pacote.pacote_id,type:pacote.tipo,qty:Number(item.quantidade||0)}); }));
+ const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO').length;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')"><span class="material-symbols-rounded">arrow_back</span></button><div><span class="finalized-channel tone-${view.channel.tone}">${escapeKitAttribute(view.channel.label)}</span><h1>${escapeKitAttribute(view.sessionId)}</h1><p>${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} · Modo ${view.mode} · Finalizada</p></div></header><section class="finalized-detail-summary"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Avulsos</small><strong>${standalone}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span>Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><h2>PRODUTOS SEPARADOS</h2><span>SOMENTE LEITURA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0;return `<article><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small></div><b>${qty}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
 }
