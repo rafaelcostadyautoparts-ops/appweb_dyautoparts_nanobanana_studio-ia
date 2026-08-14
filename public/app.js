@@ -5552,6 +5552,9 @@ function showAppModal({
  promptValue = '',
  promptPlaceholder = '',
  inputType = 'text',
+ promptMin = null,
+ promptMax = null,
+ quantityStepper = false,
  onConfirm = null,
  onCancel = null,
  closeOnBackdrop = true
@@ -5578,10 +5581,15 @@ function showAppModal({
  const summaryHtml = summary
  ? `<div class="app-confirm-summary">${String(summary).split('\n').filter(Boolean).map(line => `<span>${escapeKitAttribute(line)}</span>`).join('')}</div>`
  : '';
+ const promptInputHtml = `<input id="app-confirm-prompt-input" type="${escapeKitAttribute(inputType)}" value="${escapeKitAttribute(promptValue)}" placeholder="${escapeKitAttribute(promptPlaceholder)}" autocomplete="off"${promptMin !== null ? ` min="${escapeKitAttribute(promptMin)}"` : ''}${promptMax !== null ? ` max="${escapeKitAttribute(promptMax)}"` : ''}>`;
  const promptHtml = prompt
  ? `<label class="app-confirm-prompt">
  ${promptLabel ? `<span>${escapeKitAttribute(promptLabel)}</span>` : ''}
- <input id="app-confirm-prompt-input" type="${escapeKitAttribute(inputType)}" value="${escapeKitAttribute(promptValue)}" placeholder="${escapeKitAttribute(promptPlaceholder)}" autocomplete="off">
+ ${quantityStepper ? `<div class="app-quantity-stepper">
+ <button type="button" data-quantity-step="-1" aria-label="Diminuir quantidade">&minus;</button>
+ ${promptInputHtml}
+ <button type="button" data-quantity-step="1" aria-label="Aumentar quantidade">+</button>
+ </div>` : promptInputHtml}
  </label>`
  : '';
 
@@ -5628,6 +5636,19 @@ function showAppModal({
  };
 
  overlay.addEventListener('click', event => {
+ const stepButton = event.target?.closest?.('[data-quantity-step]');
+ if (stepButton) {
+ const input = overlay.querySelector('#app-confirm-prompt-input');
+ const minimum = Number.isFinite(Number(promptMin)) ? Number(promptMin) : 1;
+ const maximum = Number.isFinite(Number(promptMax)) ? Number(promptMax) : Number.MAX_SAFE_INTEGER;
+ const current = Number.isFinite(Number(input?.value)) ? Number(input.value) : minimum;
+ if (input) {
+ input.value = String(Math.min(maximum, Math.max(minimum, current + Number(stepButton.dataset.quantityStep || 0))));
+ input.focus();
+ input.select();
+ }
+ return;
+ }
  const actionEl = event.target?.closest?.('[data-action]');
  const action = actionEl?.dataset?.action;
  if (event.target === overlay && closeOnBackdrop && !isConfirm) close(false);
@@ -5679,7 +5700,7 @@ function showAppAlert({ title = 'Aviso', message = '', detail = '', summary = ''
  });
 }
 
-function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text' } = {}) {
+function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text', min = null, max = null, quantityStepper = false } = {}) {
  return showAppModal({
  type: 'confirm',
  title,
@@ -5690,6 +5711,9 @@ function showAppPrompt({ title = 'Informar dado', message = '', detail = '', lab
  promptValue: defaultValue,
  promptPlaceholder: placeholder,
  inputType,
+ promptMin: min,
+ promptMax: max,
+ quantityStepper,
  confirmText: confirmLabel,
  cancelText: cancelLabel,
  closeOnBackdrop: false
@@ -9610,6 +9634,7 @@ async function loadOpenInventoryLocationSession() {
  .eq('status', 'ABERTO')
  .eq('usuario_responsavel', currentUser)
  .eq('local', stockLocal)
+ .gte('criado_em', getDataBrasilISO() + 'T00:00:00')
  .order('criado_em', { ascending: false })
  .limit(1);
 
@@ -9629,7 +9654,7 @@ async function loadOpenInventoryLocationSession() {
  if (!id) return;
  items[id] = {
  id_interno: id,
- localizacao_estoque: row.local || '',
+ localizacao_estoque: row.localizacao_fisica || row.local || '',
  adjustLocal: stockLocal,
  qty: toInventoryLocationNumber(row.saldo_fisico),
  saldo_sistema: toInventoryLocationNumber(row.saldo_sistema),
@@ -9731,7 +9756,8 @@ async function saveInventoryLocationCount(item, countedQty) {
  const payload = {
  inventario_id: session.id,
  id_interno: item.id_interno,
- local: countPayload.localizacao_estoque,
+ local: stockLocal,
+ localizacao_fisica: countPayload.localizacao_estoque,
  saldo_sistema: saldoAtual,
  saldo_fisico: saldoFisico,
  diferenca: diferencaAtual,
@@ -9755,14 +9781,6 @@ async function saveInventoryLocationCount(item, countedQty) {
  ? await client.from('inventarios_itens').update(payload).eq('inventario_id', session.id).eq('id_interno', item.id_interno)
  : await client.from('inventarios_itens').insert([payload]);
  if (result.error) throw result.error;
-
- item.saldo_total = saldoFisico;
- item.saldo_disponivel = saldoFisico;
- const stockEntry = (item.locais || []).find(local => normalizeLocal(local.local) === stockLocal);
- if (stockEntry) {
- stockEntry.saldo_total = saldoFisico;
- stockEntry.saldo_disponivel = saldoFisico;
- }
 
  session.items[String(item.id_interno)] = countPayload;
  DataClient.invalidateCache?.('inventarios');
@@ -10376,66 +10394,39 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
  const divergences = entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0);
  const confirmed = await showAppConfirm({
  title: 'Finalizar sessao de contagem?',
- message: 'Os saldos ja foram atualizados ao salvar cada linha. A finalizacao apenas fecha a sessao.',
+ message: 'As contagens serao aplicadas ao estoque em uma unica operacao segura.',
  summary: `Produtos contados: ${entries.length}\nDivergencias: ${divergences.length}`,
+ detail: 'Se qualquer produto falhar, nenhum saldo sera alterado e a sessao permanecera aberta.',
  confirmLabel: 'Finalizar sessao',
  cancelLabel: 'Cancelar',
  danger: false
  });
  if (!confirmed) return;
 
- const client = window.supabaseClient;
- if (!client) {
- showToast('Supabase nao disponivel.', 'error');
- return;
- }
-
  isFinalizing = true;
  try {
  const user = localStorage.getItem('currentUser') || session.user || 'N/A';
- let total_itens = 0;
- let total_itens_contados = 0;
- let total_divergencias = 0;
- let valor_ajuste_positivo = 0;
- let valor_ajuste_negativo = 0;
-
- entries.forEach(entry => {
- const diferenca = toInventoryLocationNumber(entry.diferenca);
- total_itens += toInventoryLocationNumber(entry.saldo_sistema);
- total_itens_contados += toInventoryLocationNumber(entry.saldo_fisico);
- if (diferenca !== 0) total_divergencias++;
- const adjustmentValue = Math.abs(diferenca) * toInventoryLocationNumber(entry.valor_unitario);
- if (diferenca > 0) valor_ajuste_positivo += adjustmentValue;
- if (diferenca < 0) valor_ajuste_negativo += adjustmentValue;
- });
- const { error } = await client.from('inventarios').update({
- status: 'FECHADO',
- data_fim: getDataHoraBrasil(),
- atualizado_em: getDataHoraBrasil(),
- total_skus: entries.length,
- total_itens,
- total_itens_contados,
- total_divergencias,
- valor_ajuste_positivo,
- valor_ajuste_negativo,
- observacao: 'Inventario parcial por localizacao finalizado. Saldos aplicados no salvamento por linha'
- }).eq('inventario_id', session.id);
- if (error) throw error;
+ const result = await DataClient.finalizarInventarioEstoqueSupabase(
+  session.id,
+  user,
+  `inventario-localizacao:${session.id}`
+ );
+ console.log('[INV_LOCALIZACAO] finalizacao atomica:', result);
 
  inventoryLocationState.countSession = null;
  DataClient.invalidateCache?.('inventarios');
+ DataClient.invalidateCache?.('produtos');
  DataClient.invalidateCache?.('movimentos');
  await loadInventoryLocationData(true);
  updateInventoryLocationResults();
- showToast('Sessao finalizada. Os saldos ja foram aplicados ao salvar.', 'success');
+ showToast('Sessao finalizada e estoque atualizado com sucesso.', 'success');
  } catch (error) {
  console.error('[INV_LOCALIZACAO] erro ao finalizar sessao:', error);
- showToast('Erro ao finalizar sessao: ' + (error.message || error), 'error');
+ showToast('Erro ao finalizar: ' + (error.message || error), 'error');
  } finally {
  isFinalizing = false;
  }
 }
-
 function renderInventoryLocationCard(item, nextPendingId = '') {
  const isNegativeStock = toInventoryLocationNumber(item.saldo_total) < 0;
  const locais = Array.isArray(item.locais) ? item.locais : [];
@@ -15883,6 +15874,8 @@ let currentPickingContext = null;
 let lastScannedPickItemKey = null;
 let expandedPickItemKey = null;
 let pickRemovalModeActive = false;
+let pickRemovalSessionEntries = [];
+let pickRemovalUndoInProgress = false;
 let pickManualInputModeActive = false;
 let lastPickScanAction = 'add';
 let pickSearchDebounceTimer = null;
@@ -16199,13 +16192,18 @@ function getPickPackageIds(items = currentSessionItems) {
  if (id && !ids.includes(id)) ids.push(id);
  });
  });
- return ids;
+ return ids.sort((left, right) => {
+ const leftTime = Number(String(left).match(/-(\d{10,})$/)?.[1] || 0);
+ const rightTime = Number(String(right).match(/-(\d{10,})$/)?.[1] || 0);
+ if (leftTime && rightTime && leftTime !== rightTime) return leftTime - rightTime;
+ const leftNumber = Number(String(left).match(/^PKG-(\d+)-/)?.[1] || Number.MAX_SAFE_INTEGER);
+ const rightNumber = Number(String(right).match(/^PKG-(\d+)-/)?.[1] || Number.MAX_SAFE_INTEGER);
+ return leftNumber - rightNumber || String(left).localeCompare(String(right));
+ });
 }
 
 function getPickPackageLabel(packageId, items = currentSessionItems) {
  const cleanId = String(packageId || '');
- const numbered = cleanId.match(/^PKG-(\d+)-/);
- if (numbered) return `Pacote ${Number(numbered[1])}`;
  const index = getPickPackageIds(items).indexOf(cleanId);
  return index >= 0 ? `Pacote ${index + 1}` : 'Pacote';
 }
@@ -16585,7 +16583,10 @@ async function togglePickItemSelection(index, source = 'standalone') {
  placeholder: `De 1 a ${summary.standaloneUnits}`,
  confirmLabel: 'Selecionar',
  cancelLabel: 'Cancelar',
- inputType: 'number'
+ inputType: 'number',
+ min: 1,
+ max: summary.standaloneUnits,
+ quantityStepper: true
  });
  if (answer === null) return settlePickScannerInput(60);
  qty = Math.floor(Number(answer));
@@ -18087,7 +18088,18 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  </div>
  <div id="pick-removal-badge" class="pick-removal-badge hidden">
  <span class="material-symbols-rounded">warning</span>
- MODO REMO\u00c7\u00c3O
+ MODO REMO\u00c7\u00c3O POR BIP
+ </div>
+ <div id="pick-removal-session-panel" class="pick-removal-session-panel hidden" aria-live="polite">
+ <div class="pick-removal-session-copy">
+ <strong>Cada leitura remove 1 unidade</strong>
+ <span>Bipe os produtos que deseja retirar desta separa\u00e7\u00e3o.</span>
+ </div>
+ <div id="pick-removal-session-summary" class="pick-removal-session-summary">Nenhuma unidade removida nesta opera\u00e7\u00e3o.</div>
+ <button id="pick-removal-undo" type="button" onclick="undoLastPickRemovalScan()" disabled>
+ <span class="material-symbols-rounded">undo</span>
+ <span>DESFAZER \u00daLTIMO BIP</span>
+ </button>
  </div>
  </section>
 
@@ -18228,22 +18240,87 @@ function updatePickRemovalModeUI() {
  const button = document.getElementById('pick-remove-scan-toggle');
  const label = document.getElementById('pick-remove-scan-label');
  const badge = document.getElementById('pick-removal-badge');
+ const panel = document.getElementById('pick-removal-session-panel');
 
  screen?.classList.toggle('pick-removal-active', pickRemovalModeActive);
  if (input) input.placeholder = getPickScanInputPlaceholder();
  if (button) button.classList.toggle('is-active', pickRemovalModeActive);
- if (label) label.textContent = pickRemovalModeActive ? 'CANCELAR' : 'REMOVER';
+ if (label) label.textContent = pickRemovalModeActive ? 'FINALIZAR REMO\u00c7\u00c3O' : 'REMOVER';
  badge?.classList.toggle('hidden', !pickRemovalModeActive);
+ panel?.classList.toggle('hidden', !pickRemovalModeActive);
+ renderPickRemovalSessionSummary();
 }
 
-function setPickRemovalMode(active) {
+function setPickRemovalMode(active, options = {}) {
  pickRemovalModeActive = Boolean(active);
+ if (pickRemovalModeActive && options.resetSession !== false) pickRemovalSessionEntries = [];
  updatePickRemovalModeUI();
  settlePickScannerInput(60);
 }
 
 function togglePickRemovalMode() {
- setPickRemovalMode(!pickRemovalModeActive);
+ if (pickRemovalModeActive) {
+ setPickRemovalMode(false, { resetSession: false });
+ showToast('Modo remo\u00e7\u00e3o finalizado.', 'info');
+ return;
+ }
+ setPickRemovalMode(true, { resetSession: true });
+}
+
+function renderPickRemovalSessionSummary() {
+ const summary = document.getElementById('pick-removal-session-summary');
+ const undoButton = document.getElementById('pick-removal-undo');
+ if (!summary) return;
+ const activeEntries = pickRemovalSessionEntries.filter(entry => !entry.undone);
+ const total = activeEntries.reduce((sum, entry) => sum + Number(entry.quantity || 1), 0);
+ const grouped = new Map();
+ activeEntries.forEach(entry => {
+ const key = entry.productKey || entry.title;
+ const current = grouped.get(key) || { title: entry.title, quantity: 0 };
+ current.quantity += Number(entry.quantity || 1);
+ grouped.set(key, current);
+ });
+ if (total) {
+ const details = Array.from(grouped.values()).map(entry => escapeKitAttribute(entry.title) + ': ' + entry.quantity).join(' &bull; ');
+ summary.innerHTML = '<strong>' + total + ' ' + (total === 1 ? 'unidade removida' : 'unidades removidas') + '</strong><span>' + details + '</span>';
+ } else {
+ summary.textContent = 'Nenhuma unidade removida nesta opera\u00e7\u00e3o.';
+ }
+ if (undoButton) undoButton.disabled = !activeEntries.length || pickRemovalUndoInProgress;
+}
+
+async function undoLastPickRemovalScan() {
+ if (pickRemovalUndoInProgress) return;
+ const entry = [...pickRemovalSessionEntries].reverse().find(item => !item.undone);
+ if (!entry?.beforeItem) return;
+ pickRemovalUndoInProgress = true;
+ renderPickRemovalSessionSummary();
+ try {
+ const restoredItem = JSON.parse(JSON.stringify(entry.beforeItem));
+ const currentIndex = currentSessionItems.findIndex(item => getPickingProductId(item) === entry.productKey);
+ if (currentIndex >= 0) currentSessionItems.splice(currentIndex, 1, restoredItem);
+ else currentSessionItems.unshift(restoredItem);
+ entry.undone = true;
+ lastScannedPickItemKey = entry.productKey;
+ lastPickScanAction = 'add';
+ syncAutomaticPickPackageCount(false);
+ const draft = getCurrentPickDraftForUpdate('saving');
+ if (currentPackSession) {
+ currentPackSession.items = currentSessionItems;
+ localStorage.setItem('draft_pack_session', JSON.stringify(currentPackSession));
+ }
+ updatePickItemsList();
+ const result = await persistPickingDraftItem(draft, restoredItem);
+ markDraftPickSaveStatus(result?.queued ? 'queued' : 'synced');
+ showToast('\u00daltimo bip de remo\u00e7\u00e3o desfeito.', 'success');
+ } catch (error) {
+ entry.undone = false;
+ markDraftPickSaveStatus('failed', error);
+ showToast('N\u00e3o foi poss\u00edvel desfazer: ' + (error?.message || error), 'error');
+ } finally {
+ pickRemovalUndoInProgress = false;
+ updatePickRemovalModeUI();
+ }
 }
 
 function pickItemMatchesCode(item, cleanCode) {
@@ -18606,6 +18683,7 @@ async function removePickItemByScan(cleanCode, input) {
  }
 
  const item = currentSessionItems[existingIndex];
+ const itemBeforeRemoval = JSON.parse(JSON.stringify(item));
  if (getPickResumeQty(item) > 0) {
  item.pick_resume_qty = Math.max(0, getPickResumeQty(item) - 1);
  } else {
@@ -18690,6 +18768,13 @@ async function removePickItemByScan(cleanCode, input) {
  const result = await persistPickingItemRemoval(draft, item, removedAll);
  if (result?.queued) showToast('Operacao salva localmente para sincronizar.', 'info');
  showToast('Operacao concluida.', 'info');
+ pickRemovalSessionEntries.push({
+ productKey,
+ title: getPickItemTitle(itemBeforeRemoval),
+ quantity: removedFeedbackQty,
+ beforeItem: itemBeforeRemoval,
+ undone: false
+ });
  showPickRemovalFeedbackToast(item, removedFeedbackQty);
  } catch (error) {
  markDraftPickSaveStatus('failed', error);
@@ -18698,7 +18783,7 @@ async function removePickItemByScan(cleanCode, input) {
  showToast('Operacao concluida.', 'info');
  }
 
- setPickRemovalMode(false);
+ updatePickRemovalModeUI();
  showInputFeedback('pick-ean-input', 'success');
  settlePickScannerInput(80);
  settlePickScannerInput(320);
@@ -19196,12 +19281,12 @@ async function removePickItem(index) {
 
  const totalQty = Number(removedItem.qty || removedItem.qtd_separada || 0);
  const confirmed = await showAppConfirm({
- title: 'Excluir produto da separacao?',
+ title: 'Remover todas as unidades deste produto?',
  message: getPickItemTitle(removedItem),
- detail: `Quantidade total que sera excluida: ${totalQty} unidade(s).`,
- summary: 'Esta acao remove a linha inteira e todo o total bipado deste produto.',
- confirmLabel: 'Sim, excluir tudo',
- cancelLabel: 'Nao excluir',
+ detail: `Quantidade que ser\u00e1 removida: ${totalQty} ${totalQty === 1 ? 'unidade' : 'unidades'}.`,
+ summary: 'Somente este produto ser\u00e1 removido. Os demais continuar\u00e3o na separa\u00e7\u00e3o.',
+ confirmLabel: 'Remover produto',
+ cancelLabel: 'Manter produto',
  danger: true
  });
 
@@ -19506,96 +19591,33 @@ function buildFastPickingFinalRows(items, sessionId) {
 
 async function finalizeFastPickingWithoutConference(payload = {}) {
  const currentUser = payload.user || localStorage.getItem('currentUser') || 'N/A';
- const sessionId = payload.sessionId;
+ const sessionId = String(payload.sessionId || '').trim();
  const channelLabel = payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '';
- const rows = payload.rows || [];
  if (!sessionId) throw new Error('separacao_id nao informado');
  assertValidPickSessionForPersist(sessionId, channelLabel, 'finalizar separacao rapida');
- if (!rows.length) throw new Error('Nenhum item valido para finalizar no modo rapido.');
 
- console.log('[SEPARACAO] fluxo rapido: baixando estoque sem conferencia', {
+ const result = await DataClient.finalizarSeparacaoRapidaAtomicaSupabase({
  sessionId,
- itens: rows.length
- });
-
- let movimentos = 0;
- for (const row of rows) {
- let needed = Number(row.qtd_conferida || row.qtd_separada || 0);
- if (!row.id_interno || needed <= 0) continue;
-
- for (const local of LOCAIS_SAIDA) {
- if (needed <= 0) break;
- const stockRows = getPickStockEntries(row.id_interno)
- .filter(stock => normalizarLocal(stock.local) === local)
- .sort((a, b) => Number(b.saldo_disponivel ?? b.saldo_total ?? 0) - Number(a.saldo_disponivel ?? a.saldo_total ?? 0));
- const available = stockRows.reduce((sum, stock) => sum + Math.max(0, Number(stock.saldo_disponivel ?? stock.saldo_total ?? stock.saldo ?? 0) || 0), 0);
- const take = Math.min(available, needed);
- if (take <= 0) continue;
-
- await applyStockChangeWithRequiredMovement({
- idInterno: row.id_interno,
- local,
- operacao: 'subtrai',
- quantidade: take,
- contextLabel: `movimento da separacao rapida ${sessionId}`,
- movPayload: {
- tipo: 'SAIDA',
- id_interno: row.id_interno,
- local_origem: local,
- local_destino: null,
- quantidade: take,
  usuario: currentUser,
- origem: 'APP_SEPARACAO',
- observacao: `Baixa automatica da separacao rapida ${sessionId}`
- }
- });
- movimentos += 1;
- needed -= take;
- }
-
- if (needed > 0) {
- await applyStockChangeWithRequiredMovement({
- idInterno: row.id_interno,
- local: 'TERREO',
- operacao: 'subtrai',
- quantidade: needed,
- contextLabel: `movimento negativo da separacao rapida ${sessionId}`,
- movPayload: {
- tipo: 'SAIDA',
- id_interno: row.id_interno,
- local_origem: 'TERREO',
- local_destino: null,
- quantidade: needed,
- usuario: currentUser,
- origem: 'APP_SEPARACAO',
- observacao: `Baixa da separacao rapida ${sessionId} com estoque negativo permitido. Produto ficou com saldo negativo.`
- }
- });
- console.log('[INFO] Validacao de estoque na conferencia.', {
- sessionId,
- produto: row.id_interno,
- quantidade_negativa: needed
- });
- movimentos += 1;
- }
- }
-
- await DataClient.finalizePickingDraftSupabase({
- sessionId,
- status: PICK_STATUS_FINISHED,
- total_produtos_separados: Number(payload.total_produtos_separados || 0),
- total_itens_separados: Number(payload.total_itens_separados || 0),
- total_pacotes_montados: Number(payload.total_pacotes_montados || 0),
- executionId: payload.executionId || generateExecutionId()
+ permitirNegativo: isSaidaEstoqueZeroPermitida()
  });
 
- DataClient.invalidateCache?.('produtos');
- DataClient.invalidateCache?.('movimentos');
- DataClient.invalidateCache?.('separacao');
+ await Promise.all([
+  ensureProdutosLoaded(true),
+  DataClient.loadModule('separacao', true).then(data => {
+   if (!data) return;
+   appData.separacao = data.separacao || [];
+   appData.separacao_itens = data.separacao_itens || [];
+  })
+ ]);
 
- return { ok: true, sessionId, movimentos };
+ return {
+  ok: true,
+  sessionId,
+  movimentos: Number(result?.movimentos || 0),
+  idempotente: result?.idempotente === true
+ };
 }
-
 async function createPickingConferenceWithoutStock(payload = {}) {
  const client = window.supabaseClient;
  if (!client) throw new Error('Supabase client nao encontrado');
@@ -19708,7 +19730,7 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
  };
 
  let finalizationResult;
- if (!navigator.onLine) {
+ if (!navigator.onLine || draftPersistenceQueued) {
  await queueOperation('supabase_pick_fast_finalize', fastPayload, {
  module: 'separacao',
  sessionId

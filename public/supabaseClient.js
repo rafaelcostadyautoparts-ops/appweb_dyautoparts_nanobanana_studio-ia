@@ -1,11 +1,63 @@
-// ============================================================
-// CONFIGURAR: Substitua pelos valores do seu projeto Supabase
-// ============================================================
-const SUPABASE_URL = 'https://ccpxhbvmmabrttqsmqaj.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjcHhoYnZtbWFicnR0cXNtcWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjU5ODIsImV4cCI6MjA5MjA0MTk4Mn0.0cAmazh1Yv_Nj5ISxBPHrdDq7Gk2R29BJIGI8PXji7A';
-// ============================================================
+const PRODUCTION_SUPABASE_URL = 'https://ccpxhbvmmabrttqsmqaj.supabase.co';
+const PRODUCTION_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjcHhoYnZtbWFicnR0cXNtcWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjU5ODIsImV4cCI6MjA5MjA0MTk4Mn0.0cAmazh1Yv_Nj5ISxBPHrdDq7Gk2R29BJIGI8PXji7A';
+const HOMOLOGATION_PROJECT_REF = 'doklsgduslimidfbyngj';
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
+function getConfiguredValue(value) {
+    const normalized = String(value || '').trim();
+    return normalized && !normalized.includes('%VITE_') ? normalized : '';
+}
+
+const runtimeConfig = window.__DY_APP_CONFIG__ || {};
+const isLocalEnvironment = LOCAL_HOSTNAMES.has(window.location.hostname);
+const configuredEnvironment = getConfiguredValue(runtimeConfig.appEnvironment).toLowerCase();
+const configuredSupabaseUrl = getConfiguredValue(runtimeConfig.supabaseUrl).replace(/\/rest\/v1\/?$/, '');
+const configuredSupabaseAnonKey = getConfiguredValue(runtimeConfig.supabaseAnonKey);
+const SUPABASE_URL = configuredSupabaseUrl || PRODUCTION_SUPABASE_URL;
+const SUPABASE_ANON_KEY = configuredSupabaseAnonKey || PRODUCTION_SUPABASE_ANON_KEY;
+const isHomologation = configuredEnvironment === 'homologation' || configuredEnvironment === 'homologacao';
+const localConfigurationIsSafe = !isLocalEnvironment || (
+    isHomologation
+    && SUPABASE_URL.includes(`${HOMOLOGATION_PROJECT_REF}.supabase.co`)
+    && Boolean(configuredSupabaseAnonKey)
+);
+
+function showEnvironmentIdentity() {
+    if (!isLocalEnvironment) return;
+    document.documentElement.classList.add('app-environment-homologation');
+    document.title = `[HML] ${document.title}`;
+    const banner = document.getElementById('app-environment-banner');
+    if (banner) {
+        banner.textContent = 'HOMOLOGAÇÃO • DADOS DE TESTE • LOCALHOST';
+        banner.hidden = false;
+    }
+}
+
+function showUnsafeEnvironmentBlock() {
+    document.documentElement.classList.add('app-environment-blocked');
+    document.title = '[BLOQUEADO] Configuração de ambiente';
+    const app = document.getElementById('app');
+    if (app) {
+        app.innerHTML = `
+            <main class="environment-block-screen">
+                <section class="environment-block-card">
+                    <span class="material-symbols-rounded">security</span>
+                    <h1>Acesso local bloqueado</h1>
+                    <p>O localhost não está configurado com o banco de homologação. Nenhum dado foi acessado.</p>
+                    <small>Confira o arquivo .env.local antes de continuar.</small>
+                </section>
+            </main>`;
+    }
+}
+
+showEnvironmentIdentity();
 window.supabaseClientReady = new Promise((resolve, reject) => {
+    if (!localConfigurationIsSafe) {
+        const error = new Error('Localhost sem configuração segura de homologação');
+        showUnsafeEnvironmentBlock();
+        reject(error);
+        return;
+    }
     const startedAt = Date.now();
     const timeoutMs = 6000;
 

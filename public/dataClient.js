@@ -580,6 +580,28 @@ const DataClient = (function () {
         return data;
     }
 
+    async function finalizarSeparacaoRapidaAtomicaSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(payload.sessionId || payload.separacao_id || '').trim();
+        if (!sessionId) throw new Error('Separacao nao informada');
+        const { data, error } = await client.rpc('finalizar_separacao_rapida_atomica_temporario', {
+            p_separacao_id: sessionId,
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
+            p_permitir_negativo: payload.permitirNegativo === true
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('finalizar_separacao_rapida_atomica');
+            throw new Error(missingRpc
+                ? 'A finalizacao atomica da separacao rapida ainda nao foi aplicada no Supabase.'
+                : (error.message || 'Erro ao finalizar separacao rapida'));
+        }
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
     /**
      * Reflete a contagem fisica do inventario em estoque_atual.
      * O inventario e a fonte de verdade: saldo_disponivel e saldo_total recebem saldo_fisico.
@@ -2626,6 +2648,7 @@ const DataClient = (function () {
         registrarAjusteEstoqueSupabase,
         registrarMovimentoEstoqueSupabase,
         finalizarInventarioEstoqueSupabase,
+        finalizarSeparacaoRapidaAtomicaSupabase,
         aplicarSaldoFisicoInventarioSupabase,
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,

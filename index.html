@@ -22,6 +22,13 @@
     </script>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        window.__DY_APP_CONFIG__ = {
+            appEnvironment: '%VITE_APP_ENV%',
+            supabaseUrl: '%VITE_SUPABASE_URL%',
+            supabaseAnonKey: '%VITE_SUPABASE_ANON_KEY%'
+        };
+    </script>
     <title>appweb_dyautoparts</title>
     <link rel="manifest" href="/manifest.json?v=1.0.1">
     <meta name="theme-color" content="#E30613">
@@ -111,6 +118,7 @@
 </head>
 
 <body>
+    <div id="app-environment-banner" aria-live="polite"></div>
     <div id="app">
         <!-- APP SHELL / SPLASH NATIVO (IMUNE A ERROS DE JS) -->
         <div class="splash-preloader">
