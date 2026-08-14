@@ -7,7 +7,9 @@ let html = fs.readFileSync(indexPath, 'utf8');
 
 const replacements = [
   ['dy-app-version', String(versionInfo.version || '')],
-  ['dy-app-build', String(versionInfo.build || '')]
+  ['dy-app-build', String(versionInfo.build || '')],
+  ['dy-app-commit', String(versionInfo.commit || '')],
+  ['dy-app-deploy-date', String(versionInfo.deployDate || '')]
 ];
 
 for (const [name, value] of replacements) {

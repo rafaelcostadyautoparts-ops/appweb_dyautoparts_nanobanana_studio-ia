@@ -1062,8 +1062,8 @@ const DY_THEME_STORAGE_KEY = 'dyTheme';
 const DY_THEME_OPTIONS = ['light'];
 const DY_APP_VERSION = document.querySelector('meta[name="dy-app-version"]')?.content || '0.0.0';
 const DY_APP_BUILD = document.querySelector('meta[name="dy-app-build"]')?.content || '';
-const DY_APP_COMMIT = 'local';
-const DY_APP_DEPLOY_DATE = '';
+const DY_APP_COMMIT = document.querySelector('meta[name="dy-app-commit"]')?.content || 'local';
+const DY_APP_DEPLOY_DATE = document.querySelector('meta[name="dy-app-deploy-date"]')?.content || '';
 const LOGO_LIGHT_BG = '/assets/images/logo/logo_dypreto_app.png';
 const LOGO_DARK_BG = '/assets/images/logo/logo_dybranco_app.png';
 const LOGO_MOBILE_LIGHT_BG = LOGO_LIGHT_BG;
@@ -25388,10 +25388,13 @@ function formatConfigDate(value) {
 }
 
 function getAppVersionBadgeHTML(context = 'footer') {
+ const updatedAt = DY_APP_DEPLOY_DATE
+  ? new Date(DY_APP_DEPLOY_DATE).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  : '';
  return `
  <div class="app-version-badge app-version-badge-${escapeKitAttribute(context)}" aria-label="Versao atual do aplicativo">
  <span>v${escapeKitAttribute(DY_APP_VERSION)}</span>
- <small>${escapeKitAttribute(DY_APP_BUILD || DY_APP_COMMIT || getUpdateStatusLabel())}</small>
+ <small>${escapeKitAttribute(updatedAt || DY_APP_BUILD || DY_APP_COMMIT || getUpdateStatusLabel())}</small>
  </div>
  `;
 }
