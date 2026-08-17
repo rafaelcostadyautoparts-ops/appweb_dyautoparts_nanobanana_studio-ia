@@ -1,6 +1,6 @@
 {
-  "version": "2.1.89",
-  "build": "2026.08.14.01",
-  "commit": "integridade-separacao-inventario",
-  "deployDate": "2026-08-14T15:39:07-03:00"
+  "version": "2.1.90",
+  "build": "2026.08.17.01",
+  "commit": "mercado-livre-modos-separacao",
+  "deployDate": "2026-08-17T16:44:18-03:00"
 }

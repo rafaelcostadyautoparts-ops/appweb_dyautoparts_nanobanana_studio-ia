@@ -63558,6 +63558,33 @@ html body:not(.login-active) #app > .dashboard-screen.inventory-location-screen 
   white-space: nowrap !important;
 }
 
+.invloc-save-status.is-pending,
+.invloc-save-status.is-dirty {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  color: #fbbf24 !important;
+}
+
+.invloc-save-status.is-saving .material-symbols-rounded {
+  animation: invloc-saving-spin 0.8s linear infinite;
+}
+
+.invloc-save-status.is-error {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  color: #f87171 !important;
+}
+
+.inventory-location-autosave-note {
+  display: block !important;
+  margin-top: 8px !important;
+  color: #94a3b8 !important;
+  font-size: 0.76rem !important;
+  font-weight: 750 !important;
+}
+
+@keyframes invloc-saving-spin { to { transform: rotate(360deg); } }
+
 .invloc-save-status .material-symbols-rounded {
   font-size: 16px !important;
 }
@@ -70606,6 +70633,94 @@ html body:not(.login-active) #app > .pick-channel-menu-screen .operational-menu-
 
 html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card { --pick-channel-color: #64748b; }
 html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-ml { --pick-channel-color: #f5b800; }
+html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-ml-coleta { --pick-channel-color: #facc15; }
+html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-ml-agencia { --pick-channel-color: #a16207; }
+
+.ml-pick-modal {
+  align-items: center;
+  background: rgba(2, 6, 23, .72);
+  backdrop-filter: blur(7px);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 28px;
+  position: fixed;
+  z-index: 10020;
+}
+
+.ml-pick-modal > section {
+  max-width: 1220px;
+  padding-top: 54px;
+  position: relative;
+  width: 100%;
+}
+
+.ml-pick-modal-close {
+  align-items: center;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 12px;
+  color: #111827;
+  cursor: pointer;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 42px;
+}
+
+.ml-pick-modal-grid {
+  display: grid;
+  gap: 42px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ml-pick-modal .pick-channel-card {
+  --pick-channel-color: #f5b800;
+  background: rgba(255, 255, 255, .98) !important;
+  border-radius: 14px !important;
+  min-height: 265px !important;
+  width: 100% !important;
+}
+
+.ml-pick-modal .pick-channel-card.channel-ml-coleta { --pick-channel-color: #facc15; }
+.ml-pick-modal .pick-channel-card.channel-ml-agencia { --pick-channel-color: #a16207; }
+.ml-pick-modal .pick-channel-card .standard-module-card-icon { align-items: center; display: flex; height: 64px; justify-content: center; margin: 0 auto; width: 64px; }
+.ml-pick-modal .pick-channel-card .standard-module-card-icon svg { height: 64px; width: 64px; }
+.ml-pick-modal .operational-menu-card {
+  align-items: center !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+.ml-pick-modal .operational-menu-card .standard-module-card-copy {
+  align-items: center !important;
+  display: flex !important;
+  justify-content: center !important;
+  min-height: 0 !important;
+  text-align: center !important;
+}
+.ml-pick-modal .operational-menu-card .standard-module-card-copy > strong {
+  color: #000000 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: 1.62rem !important;
+  font-weight: 400 !important;
+  letter-spacing: .04em !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+}
+
+@media (max-width: 700px) {
+  .ml-pick-modal { padding: 18px; }
+  .ml-pick-modal > section { max-width: 420px; }
+  .ml-pick-modal-grid { gap: 16px; grid-template-columns: 1fr; }
+  .ml-pick-modal .pick-channel-card { min-height: 190px !important; }
+}
 html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-correios { --pick-channel-color: #2563eb; }
 html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-shopee { --pick-channel-color: #ee4d2d; }
 html body:not(.login-active) #app > .pick-channel-menu-screen .pick-channel-card.channel-magalu { --pick-channel-color: #5755d9; }
@@ -71050,3 +71165,243 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-remove-scan-btn.is-active #pick-remove-scan-label {
   font-size: .62rem !important;
 }
+/* Escolha de modo: dois cards diretos, no mesmo padrao visual dos canais. */
+.pick-mode-clean-overlay .app-pick-mode-dialog {
+  max-width: 1040px !important;
+  padding: 28px !important;
+}
+.pick-mode-clean-overlay #pick-mode-title {
+  color: #111827 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: 1.55rem !important;
+  font-weight: 400 !important;
+  letter-spacing: .02em !important;
+  margin: 0 48px 22px 0 !important;
+  text-transform: uppercase !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice-grid {
+  display: grid !important;
+  gap: 24px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice {
+  align-items: center !important;
+  border-radius: 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  justify-content: center !important;
+  min-height: 270px !important;
+  padding: 28px 34px !important;
+  text-align: center !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice > .material-symbols-rounded:first-child {
+  align-items: center !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  font-size: 28px !important;
+  height: 60px !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  position: static !important;
+  width: 60px !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice > strong {
+  color: #000 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: 1.62rem !important;
+  font-weight: 400 !important;
+  letter-spacing: .04em !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  text-transform: uppercase !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice > small {
+  color: #475569 !important;
+  font-family: 'PT Sans Narrow', sans-serif !important;
+  font-size: .96rem !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+  max-width: 390px !important;
+  text-align: center !important;
+}
+.pick-mode-clean-overlay .pick-mode-normal { background: #fff !important; border: 2px solid #2563eb !important; }
+.pick-mode-clean-overlay .pick-mode-normal > .material-symbols-rounded:first-child { background: #dbeafe !important; color: #2563eb !important; }
+.pick-mode-clean-overlay .pick-mode-fast { background: #fff !important; border: 2px solid #d97706 !important; }
+.pick-mode-clean-overlay .pick-mode-fast > .material-symbols-rounded:first-child { background: #ffedd5 !important; color: #d97706 !important; }
+.pick-mode-clean-overlay .pick-mode-choice:hover { box-shadow: 0 14px 30px rgba(15, 23, 42, .14) !important; transform: translateY(-2px) !important; }
+
+@media (max-width: 700px) {
+  .pick-mode-clean-overlay .app-pick-mode-dialog { max-height: calc(100vh - 24px) !important; overflow: auto !important; padding: 20px 16px !important; }
+  .pick-mode-clean-overlay #pick-mode-title { font-size: 1.28rem !important; margin-bottom: 16px !important; }
+  .pick-mode-clean-overlay .pick-mode-choice-grid { gap: 14px !important; grid-template-columns: 1fr !important; }
+  .pick-mode-clean-overlay .pick-mode-choice { min-height: 210px !important; padding: 22px 20px !important; }
+  .pick-mode-clean-overlay .pick-mode-choice > strong { font-size: 1.3rem !important; }
+  .pick-mode-clean-overlay .pick-mode-choice > small { font-size: .86rem !important; }
+}
+/* Ajuste final: cards de modo com o mesmo formato dos cards de canal. */
+.pick-mode-clean-overlay .pick-mode-choice.standard-module-card {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .08) !important;
+  box-sizing: border-box !important;
+  gap: 18px !important;
+  min-height: 265px !important;
+  padding: 28px 34px !important;
+  width: 100% !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice.standard-module-card:focus-visible {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .2), 0 12px 28px rgba(15, 23, 42, .08) !important;
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice .standard-module-card-copy {
+  align-items: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  justify-content: center !important;
+  min-height: 0 !important;
+  text-align: center !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice .standard-module-card-copy > strong {
+  color: #000000 !important;
+  font-family: 'Fjalla One', sans-serif !important;
+  font-size: 1.62rem !important;
+  font-weight: 400 !important;
+  letter-spacing: .04em !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice .standard-module-card-copy > small {
+  color: #475569 !important;
+  font-family: 'PT Sans Narrow', sans-serif !important;
+  font-size: .96rem !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+  max-width: 390px !important;
+  text-align: center !important;
+}
+.pick-mode-clean-overlay .pick-mode-normal,
+.pick-mode-clean-overlay .pick-mode-fast { border: 0 !important; }
+
+@media (max-width: 700px) {
+  .pick-mode-clean-overlay .pick-mode-choice.standard-module-card { min-height: 210px !important; padding: 22px 20px !important; }
+  .pick-mode-clean-overlay .pick-mode-choice .standard-module-card-copy > strong { font-size: 1.3rem !important; }
+  .pick-mode-clean-overlay .pick-mode-choice .standard-module-card-copy > small { font-size: .86rem !important; }
+}
+/* Proporcao horizontal dos cards de modo, igual aos cards desktop de canais. */
+.pick-mode-clean-overlay .app-pick-mode-dialog {
+  max-width: 1220px !important;
+  width: min(1220px, calc(100vw - 56px)) !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice-grid { gap: 42px !important; }
+.pick-mode-clean-overlay .pick-mode-choice.standard-module-card {
+  height: 265px !important;
+  max-height: 265px !important;
+  min-height: 265px !important;
+}
+.pick-mode-clean-overlay .pick-mode-choice > .standard-module-card-icon:first-child {
+  border-radius: 50% !important;
+  flex: 0 0 60px !important;
+  height: 60px !important;
+  max-height: 60px !important;
+  max-width: 60px !important;
+  min-height: 60px !important;
+  min-width: 60px !important;
+  width: 60px !important;
+}
+
+/* Mercado Livre: cards preenchidos e contraste proprio por modalidade. */
+.ml-pick-modal .pick-channel-card.channel-ml-coleta {
+  background: #facc15 !important;
+  color: #111827 !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-coleta .standard-module-card-copy > strong { color: #111827 !important; }
+.ml-pick-modal .pick-channel-card.channel-ml-coleta svg circle { fill: #111827 !important; }
+.ml-pick-modal .pick-channel-card.channel-ml-coleta svg path { stroke: #ffffff !important; }
+.ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: #9a6700 !important;
+  color: #ffffff !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-agencia .standard-module-card-copy > strong { color: #ffffff !important; }
+.ml-pick-modal .pick-channel-card.channel-ml-agencia svg circle { fill: #ffffff !important; }
+.ml-pick-modal .pick-channel-card.channel-ml-agencia svg path { stroke: #9a6700 !important; }
+
+@media (max-width: 700px) {
+  .pick-mode-clean-overlay .app-pick-mode-dialog { width: min(420px, calc(100vw - 24px)) !important; }
+  .pick-mode-clean-overlay .pick-mode-choice-grid { gap: 14px !important; }
+  .pick-mode-clean-overlay .pick-mode-choice.standard-module-card { height: auto !important; max-height: none !important; min-height: 210px !important; }
+}
+/* Mercado Livre final: amarelos claros, texto preto e icones distintos. */
+.ml-pick-modal .pick-channel-card.channel-ml-coleta {
+  background: #fde68a !important;
+  color: #111827 !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: #fbbf24 !important;
+  color: #111827 !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-coleta .standard-module-card-copy > strong,
+.ml-pick-modal .pick-channel-card.channel-ml-agencia .standard-module-card-copy > strong {
+  color: #111827 !important;
+}
+.ml-pick-modal .pick-channel-card > .standard-module-card-icon.material-symbols-rounded {
+  align-items: center !important;
+  background: rgba(255, 255, 255, .48) !important;
+  border: 1px solid rgba(17, 24, 39, .12) !important;
+  border-radius: 50% !important;
+  color: #111827 !important;
+  display: flex !important;
+  font-size: 34px !important;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 40 !important;
+  height: 64px !important;
+  justify-content: center !important;
+  min-height: 64px !important;
+  min-width: 64px !important;
+  width: 64px !important;
+}
+/* Mercado Livre: diferenciacao final suave, sem alterar os icones circulares. */
+.ml-pick-modal .pick-channel-card.channel-ml-coleta {
+  background: rgba(254, 249, 195, .94) !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: rgba(254, 240, 138, .88) !important;
+}
+/* Mercado Livre: 25% de tonalidade e icones circulares no padrao dos canais. */
+.ml-pick-modal .pick-channel-card.channel-ml-coleta {
+  background: linear-gradient(rgba(250, 204, 21, .25), rgba(250, 204, 21, .25)), #ffffff !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: linear-gradient(rgba(245, 158, 11, .25), rgba(245, 158, 11, .25)), #ffffff !important;
+}
+.ml-pick-modal .pick-channel-card > .standard-module-card-icon.material-symbols-rounded {
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, .22) !important;
+  box-sizing: border-box !important;
+  color: #ffffff !important;
+  flex: 0 0 60px !important;
+  font-size: 32px !important;
+  height: 60px !important;
+  line-height: 60px !important;
+  margin: 0 auto !important;
+  max-height: 60px !important;
+  max-width: 60px !important;
+  min-height: 60px !important;
+  min-width: 60px !important;
+  padding: 0 !important;
+  width: 60px !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-coleta > .standard-module-card-icon.material-symbols-rounded {
+  background: #eab308 !important;
+}
+.ml-pick-modal .pick-channel-card.channel-ml-agencia > .standard-module-card-icon.material-symbols-rounded {
+  background: #f59e0b !important;
+}
+

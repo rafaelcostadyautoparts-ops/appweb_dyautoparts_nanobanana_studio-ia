@@ -5722,129 +5722,55 @@ function showAppPrompt({ title = 'Informar dado', message = '', detail = '', lab
 
 function showPickModeChoiceModal() {
  return new Promise(resolve => {
- const existing = document.getElementById('app-confirm-modal');
- if (existing) existing.remove();
+  document.getElementById('app-confirm-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'app-confirm-modal';
+  overlay.className = 'app-confirm-overlay app-standard-modal app-pick-mode-overlay pick-mode-clean-overlay modal-info';
+  overlay.innerHTML = `
+  <div class="app-confirm-dialog app-pick-mode-dialog" role="dialog" aria-modal="true" aria-labelledby="pick-mode-title">
+   <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
+   <h3 id="pick-mode-title">Escolha o modo</h3>
+   <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da separacao">
+    <button type="button" class="pick-mode-choice pick-mode-normal standard-module-card operational-menu-card" data-pick-mode="normal">
+     <span class="standard-module-card-icon material-symbols-rounded">verified</span>
+     <span class="standard-module-card-copy">
+      <strong>Modo padr&atilde;o</strong>
+      <small>Indicado para a opera&ccedil;&atilde;o normal. Ap&oacute;s a separa&ccedil;&atilde;o, o pedido passa pela confer&ecirc;ncia. A baixa do estoque acontece somente ao finalizar a confer&ecirc;ncia.</small>
+     </span>
+    </button>
+    <button type="button" class="pick-mode-choice pick-mode-fast standard-module-card operational-menu-card" data-pick-mode="fast">
+     <span class="standard-module-card-icon material-symbols-rounded">bolt</span>
+     <span class="standard-module-card-copy">
+      <strong>Modo r&aacute;pido</strong>
+      <small>Indicado quando n&atilde;o houver conferente. N&atilde;o possui etapa de confer&ecirc;ncia. A baixa do estoque acontece imediatamente ao finalizar a separa&ccedil;&atilde;o.</small>
+     </span>
+    </button>
+   </div>
+  </div>`;
 
- const overlay = document.createElement('div');
- overlay.id = 'app-confirm-modal';
- overlay.className = 'app-confirm-overlay app-standard-modal app-pick-mode-overlay modal-info';
- overlay.innerHTML = `
- <div class="app-confirm-dialog app-pick-mode-dialog" role="dialog" aria-modal="true" aria-labelledby="pick-mode-title">
- <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
- <span class="material-symbols-rounded">close</span>
- </button>
- <h3 id="pick-mode-title">Como deseja fazer a sao?</h3>
- <p>Escolha o fluxo que serA utilizado nesta sao. Essa escolha evita baixa de estoque no momento errado.</p>
- <div class="pick-mode-choice-grid" role="group" aria-label="Escolher modo da sao">
- <button type="button" class="pick-mode-choice pick-mode-fast" data-pick-mode="fast" aria-pressed="false">
- <span class="material-symbols-rounded">bolt</span>
- <strong>Modo rapido</strong>
- <small>Para quando tem somente 1 operador. Finaliza a sao e jA baixa o estoque, sem conferencia.</small>
- <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
- </button>
- <button type="button" class="pick-mode-choice pick-mode-normal" data-pick-mode="normal" aria-pressed="false">
- <span class="material-symbols-rounded">verified</span>
- <strong>Modo normal</strong>
- <small>Para separador + conferente. A baixa do estoque acontece sA depois da conferencia.</small>
- <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
- </button>
- </div>
- <div class="app-confirm-actions">
- <button type="button" class="app-confirm-btn cancel" data-action="cancel">Cancelar</button>
- <button type="button" class="app-confirm-btn confirm info" data-action="confirm" disabled>Continuar</button>
- </div>
- </div>
- `;
-
- if (typeof sanitizeElementText === 'function') sanitizeElementText(overlay);
-
- let settled = false;
- let selectedMode = 'normal';
- const close = (choice = null) => {
- if (settled) return;
- settled = true;
- document.removeEventListener('keydown', onKeyDown);
- overlay.classList.add('closing');
- setTimeout(() => overlay.remove(), 160);
- resolve(choice);
- };
-
- overlay.addEventListener('click', event => {
- const actionEl = event.target?.closest?.('[data-action]');
- if (actionEl?.dataset?.action === 'cancel') close(null);
- if (actionEl?.dataset?.action === 'confirm' && selectedMode) close(selectedMode);
-
- const modeEl = event.target?.closest?.('[data-pick-mode]');
- if (modeEl?.dataset?.pickMode) {
- selectedMode = modeEl.dataset.pickMode;
- overlay.querySelectorAll('.pick-mode-choice').forEach(card => {
- const selected = card === modeEl;
- card.classList.toggle('is-selected', selected);
- card.setAttribute('aria-pressed', selected ? 'true' : 'false');
- });
- overlay.classList.toggle('is-fast-selected', selectedMode === 'fast');
- const confirmButton = overlay.querySelector('[data-action="confirm"]');
- if (confirmButton) confirmButton.disabled = false;
- }
- });
-
- const onKeyDown = event => {
- if (!document.body.contains(overlay)) {
- document.removeEventListener('keydown', onKeyDown);
- return;
- }
- if (event.key === 'Escape') close(null);
- if (event.key === 'Enter' && selectedMode) close(selectedMode);
- };
- document.addEventListener('keydown', onKeyDown);
-
- const modeGrid = overlay.querySelector('.pick-mode-choice-grid');
- const normalCard = overlay.querySelector('[data-pick-mode="normal"]');
- const fastCard = overlay.querySelector('[data-pick-mode="fast"]');
- const confirmButton = overlay.querySelector('[data-action="confirm"]');
- const titleEl = overlay.querySelector('#pick-mode-title');
- const introEl = overlay.querySelector('#pick-mode-title + p');
- if (titleEl) titleEl.innerHTML = 'Como deseja fazer a separa&ccedil;&atilde;o?';
- if (introEl) introEl.innerHTML = 'Escolha o fluxo que ser&aacute; utilizado nesta separa&ccedil;&atilde;o. Essa escolha evita baixa de estoque no momento errado.';
- if (normalCard && fastCard && modeGrid) {
- normalCard.classList.add('is-selected');
- normalCard.setAttribute('aria-pressed', 'true');
- fastCard.classList.remove('is-selected');
- fastCard.setAttribute('aria-pressed', 'false');
- normalCard.innerHTML = `
- <span class="material-symbols-rounded">verified</span>
- <strong>Modo normal</strong>
- <small>Para separador + conferente.<br>A baixa do estoque acontece somente ap&oacute;s a confer&ecirc;ncia.</small>
- <em class="pick-mode-note"><span class="material-symbols-rounded">shield</span>Fluxo padr&atilde;o da opera&ccedil;&atilde;o.</em>
- <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
- `;
- fastCard.innerHTML = `
- <span class="material-symbols-rounded">bolt</span>
- <strong>Modo r&aacute;pido</strong>
- <small>Para quando houver apenas 1 operador.<br>A baixa do estoque acontece imediatamente ao finalizar a separa&ccedil;&atilde;o.</small>
- <em class="pick-mode-note"><span class="material-symbols-rounded">warning</span>Use apenas em finais de semana, feriados ou quando n&atilde;o houver conferente dispon&iacute;vel.</em>
- <span class="pick-mode-check material-symbols-rounded" aria-hidden="true">check_circle</span>
- `;
- modeGrid.prepend(normalCard);
- const fastWarning = document.createElement('div');
- fastWarning.className = 'pick-mode-fast-warning';
- fastWarning.setAttribute('aria-live', 'polite');
- fastWarning.innerHTML = `
- <span class="material-symbols-rounded">warning</span>
- <div>
- <strong>Aten&ccedil;&atilde;o</strong>
- <p>Neste modo n&atilde;o haver&aacute; confer&ecirc;ncia.<br>A baixa do estoque ocorrer&aacute; imediatamente ao finalizar a separa&ccedil;&atilde;o.</p>
- </div>
- `;
- modeGrid.insertAdjacentElement('afterend', fastWarning);
- }
- if (confirmButton) confirmButton.disabled = false;
-
- document.body.appendChild(overlay);
- requestAnimationFrame(() => overlay.classList.add('open'));
+  let settled = false;
+  const close = (choice = null) => {
+   if (settled) return;
+   settled = true;
+   document.removeEventListener('keydown', onKeyDown);
+   overlay.classList.add('closing');
+   setTimeout(() => overlay.remove(), 160);
+   resolve(choice);
+  };
+  const onKeyDown = event => { if (event.key === 'Escape') close(null); };
+  overlay.addEventListener('click', event => {
+   const mode = event.target?.closest?.('[data-pick-mode]')?.dataset?.pickMode;
+   if (mode) close(mode);
+   if (event.target === overlay || event.target?.closest?.('[data-action="cancel"]')) close(null);
+  });
+  document.addEventListener('keydown', onKeyDown);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => {
+   overlay.classList.add('open');
+   overlay.querySelector('[data-pick-mode="normal"]')?.focus();
+  });
  });
 }
-
 let pendingPickModeChoice = null;
 
 async function openPickModeChoice() {
@@ -9390,7 +9316,9 @@ const inventoryLocationState = {
  view: 'table',
  collapsedLocations: {},
  countSession: null,
- adjustmentLocals: {}
+ adjustmentLocals: {},
+ saveTimers: {},
+ saveStates: {}
 };
 
 function normalizeInventoryLocationText(value) {
@@ -9793,20 +9721,85 @@ async function saveInventoryLocationCount(item, countedQty) {
  return false;
  }
 }
-async function setInventoryLocationPhysicalCount(idInterno, value) {
+async function setInventoryLocationPhysicalCount(idInterno, value, options = {}) {
  const item = inventoryLocationState.items.find(row => String(row.id_interno) === String(idInterno));
- if (!item) return;
+ if (!item) return false;
  if (!inventoryLocationState.countSession) {
  showToast('Inicie uma sessao de contagem primeiro.', 'warning');
- return;
+ return false;
  }
 
  const count = Math.max(0, Math.floor(toInventoryLocationNumber(value)));
+ inventoryLocationState.saveStates[String(idInterno)] = 'saving';
+ updateInventoryLocationSaveStatus(idInterno);
  const saved = await saveInventoryLocationCount(item, count);
  if (saved) {
- updateInventoryLocationResults();
- showToast('Contagem salva.', 'success');
+ inventoryLocationState.saveStates[String(idInterno)] = 'saved';
+ if (options.refresh !== false) updateInventoryLocationResults();
+ else {
+  updateInventoryLocationSaveStatus(idInterno);
+  const sessionPanel = document.getElementById('inventory-location-session-panel');
+  if (sessionPanel) sessionPanel.innerHTML = renderInventoryLocationSessionPanel();
  }
+ if (!options.silent) showToast('Contagem salva.', 'success');
+ return true;
+ }
+ inventoryLocationState.saveStates[String(idInterno)] = 'error';
+ updateInventoryLocationSaveStatus(idInterno);
+ return false;
+}
+
+function updateInventoryLocationSaveStatus(idInterno) {
+ const status = inventoryLocationState.saveStates[String(idInterno)] || '';
+ const target = document.querySelector(`[data-invloc-save-status="${CSS.escape(String(idInterno))}"]`);
+ if (!target) return;
+ const labels = {
+  dirty: ['edit', 'Alterado'],
+  saving: ['sync', 'Salvando...'],
+  saved: ['check_circle', 'Salvo automaticamente'],
+  error: ['error', 'Erro ao salvar']
+ };
+ const [icon, label] = labels[status] || ['radio_button_unchecked', 'Pendente'];
+ target.className = `invloc-save-status is-${status || 'pending'}`;
+ target.innerHTML = `<span class="material-symbols-rounded">${icon}</span>${label}`;
+}
+
+function queueInventoryLocationAutoSave(idInterno, value) {
+ const key = String(idInterno || '');
+ clearTimeout(inventoryLocationState.saveTimers[key]);
+ inventoryLocationState.saveStates[key] = 'dirty';
+ updateInventoryLocationSaveStatus(key);
+ inventoryLocationState.saveTimers[key] = setTimeout(async () => {
+  delete inventoryLocationState.saveTimers[key];
+  await setInventoryLocationPhysicalCount(key, value, { silent: true, refresh: false });
+ }, 650);
+}
+
+async function flushInventoryLocationAutoSave(idInterno, value, focusNext = false) {
+ const key = String(idInterno || '');
+ clearTimeout(inventoryLocationState.saveTimers[key]);
+ delete inventoryLocationState.saveTimers[key];
+ await setInventoryLocationPhysicalCount(key, value, { silent: true, refresh: false });
+ if (focusNext) focusNextInventoryLocationInput(key);
+}
+
+async function flushAllInventoryLocationAutoSaves() {
+ const pendingIds = Object.keys(inventoryLocationState.saveTimers);
+ if (!pendingIds.length) return;
+ const inputs = Array.from(document.querySelectorAll('[data-inventory-location-count-input]'));
+ await Promise.all(pendingIds.map(id => {
+  const input = inputs.find(field => String(field.dataset.inventoryLocationCountInput || '') === id);
+  return flushInventoryLocationAutoSave(id, input?.value ?? 0);
+ }));
+}
+
+function focusNextInventoryLocationInput(idInterno) {
+ setTimeout(() => {
+  const inputs = Array.from(document.querySelectorAll('[data-invloc-count-order]'));
+  const current = document.querySelector(`[data-inventory-location-count-input="${CSS.escape(String(idInterno))}"]`);
+  const nextInput = inputs[inputs.indexOf(current) + 1];
+  if (nextInput) { nextInput.focus(); nextInput.select?.(); }
+ }, 80);
 }
 
 function adjustInventoryLocationPhysicalCount(idInterno, delta) {
@@ -9915,8 +9908,8 @@ function getInventoryLocationStatusLabel(item) {
 function getInventoryLocationFilterLabel(value) {
  const text = String(value || '').trim();
  if (!text || normalizeInventoryLocationText(text) === 'TODOS') return 'Todos';
- if (/^\d+\.\*\.\*$/.test(text)) return `${text} (Grupo ${text.split('.')[0]})`;
- if (/^\d+\.\d+\.\*$/.test(text)) return `${text} (Grupo ${text.split('.').slice(0, 2).join('.')})`;
+ if (/^\d+\.\*\.\*$/.test(text)) return `Setor ${text.split('.')[0]} (todas as posicoes)`;
+ if (/^\d+\.\d+\.\*$/.test(text)) return `Setor ${text.split('.').slice(0, 2).join('.')} (A, B, C...)`;
  return text;
 }
 
@@ -10071,19 +10064,7 @@ function openInventoryLocationProductDetails(idInterno) {
 }
 
 async function saveInventoryLocationRow(idInterno, value, focusNext = false) {
- await setInventoryLocationPhysicalCount(idInterno, value);
- if (!focusNext) return;
-
- setTimeout(() => {
- const inputs = Array.from(document.querySelectorAll('[data-invloc-count-order]'));
- const current = document.querySelector(`[data-inventory-location-count-input="${CSS.escape(String(idInterno))}"]`);
- const currentIndex = inputs.indexOf(current);
- const nextInput = currentIndex >= 0 ? inputs[currentIndex + 1] : null;
- if (nextInput) {
- nextInput.focus();
- nextInput.select?.();
- }
- }, 80);
+ await flushInventoryLocationAutoSave(idInterno, value, focusNext);
 }
 
 function toggleInventoryLocationGroup(location) {
@@ -10098,7 +10079,8 @@ function renderInventoryLocationTableRow(item, orderIndex = 0) {
  const statusKey = getInventoryLocationStatusKey(item);
  const escapedId = escapeKitAttribute(String(item.id_interno || '').replace(/'/g, "\\'"));
  const inputId = `invloc-count-${String(item.id_interno || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
- const actionLabel = countEntry ? 'Atualizar' : 'Salvar';
+ const saveState = inventoryLocationState.saveStates[String(item.id_interno)] || (countEntry ? 'saved' : 'pending');
+ const saveLabel = saveState === 'saving' ? 'Salvando...' : saveState === 'error' ? 'Erro ao salvar' : saveState === 'dirty' ? 'Alterado' : countEntry ? 'Salvo automaticamente' : 'Pendente';
 
  return `
  <tr class="invloc-row invloc-row-${statusKey}">
@@ -10124,22 +10106,19 @@ function renderInventoryLocationTableRow(item, orderIndex = 0) {
  placeholder="0"
  data-inventory-location-count-input="${escapeKitAttribute(item.id_interno || '')}"
  data-invloc-count-order="${orderIndex}"
- onkeydown="if(event.key === 'Enter'){ event.preventDefault(); saveInventoryLocationRow('${escapedId}', this.value, true); }"
+ ${inventoryLocationState.countSession ? '' : 'disabled title="Crie uma sessao de contagem para comecar"'}
+ oninput="queueInventoryLocationAutoSave('${escapedId}', this.value)"
+ onchange="flushInventoryLocationAutoSave('${escapedId}', this.value)"
+ onkeydown="if(event.key === 'Enter'){ event.preventDefault(); flushInventoryLocationAutoSave('${escapedId}', this.value, true); }"
  >
  <span>unid.</span>
  </td>
  <td class="invloc-actions-cell">
  <div class="invloc-action-stack">
- ${countEntry ? `
- <em class="invloc-save-status">
- <span class="material-symbols-rounded">check_circle</span>
- Atualizado
+ <em class="invloc-save-status is-${escapeKitAttribute(saveState)}" data-invloc-save-status="${escapeKitAttribute(item.id_interno || '')}">
+ <span class="material-symbols-rounded">${saveState === 'saving' ? 'sync' : saveState === 'error' ? 'error' : saveState === 'dirty' ? 'edit' : countEntry ? 'check_circle' : 'radio_button_unchecked'}</span>
+ ${escapeKitAttribute(saveLabel)}
  </em>
- ` : ''}
- <button type="button" class="invloc-row-primary" onclick="saveInventoryLocationRow('${escapedId}', document.getElementById('${escapeKitAttribute(inputId)}')?.value || 0)">
- <span class="material-symbols-rounded">save</span>
- ${actionLabel}
- </button>
  </div>
  </td>
  </tr>
@@ -10259,7 +10238,7 @@ function renderInventoryLocationGroups() {
  <th>Produto</th>
  <th>Identifica\u00e7\u00e3o</th>
  <th>Contagem f\u00edsica</th>
- <th>A\u00e7\u00e3o</th>
+ <th>Salvamento</th>
  </tr>
  </thead>
  <tbody>${rows}</tbody>
@@ -10315,6 +10294,7 @@ function renderInventoryLocationSessionPanel() {
  <div class="inventory-location-progress" aria-label="Progresso ${progress}%">
  <span style="width: ${progress}%"></span>
  </div>
+ <small class="inventory-location-autosave-note">As contagens sao salvas automaticamente. Finalize a sessao para aplicar os valores ao estoque.</small>
  </div>
  <div class="inventory-location-session-actions">
  <button type="button" onclick="finishInventoryLocationCountSession(false)">
@@ -10385,6 +10365,7 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
  return;
  }
 
+ await flushAllInventoryLocationAutoSaves();
  const entries = Object.values(getInventoryLocationSessionItems());
  if (!entries.length) {
  showToast('Informe ao menos uma contagem fisica.', 'warning');
@@ -10808,6 +10789,9 @@ async function renderInventarioLocalizacao(push = true) {
  if (push) pushNav('inventario-localizacao');
  inventoryLocationState.countSession = null;
  inventoryLocationState.adjustmentLocals = {};
+ Object.values(inventoryLocationState.saveTimers).forEach(clearTimeout);
+ inventoryLocationState.saveTimers = {};
+ inventoryLocationState.saveStates = {};
  document.body.style.overflow = '';
  document.body.style.overflowY = 'auto';
  document.documentElement.style.overflowY = 'auto';
@@ -15193,10 +15177,18 @@ const PICK_CHANNEL_CARD_BLUEPRINTS = [
  aliases: ['MAGALU']
  },
  {
- key: 'ml',
- label: 'Mercado Livre Coleta',
- description: 'Pedidos Mercado Livre Coleta.',
- aliases: ['MERCADO LIVRE COLETA', 'MERCADO LIVRE', 'ML COLETA', 'ML']
+ key: 'ml_coleta',
+ label: 'ML Coleta',
+ description: 'Pedidos Mercado Livre retirados pela coleta.',
+ aliases: ['ML COLETA', 'MERCADO LIVRE COLETA', 'MERCADO LIVRE', 'ML'],
+ exactMatch: true
+ },
+ {
+ key: 'ml_agencia',
+ label: 'ML Ag\u00eancia',
+ description: 'Pedidos Mercado Livre destinados \u00e0 ag\u00eancia.',
+ aliases: ['ML AGENCIA', 'MERCADO LIVRE AGENCIA'],
+ exactMatch: true
  },
  {
  key: 'pdv',
@@ -15231,7 +15223,7 @@ function findPickChannelForBlueprint(channels, blueprint) {
  const aliases = (blueprint.aliases || [blueprint.label]).map(normalizeOperationalLabel);
  return (channels || []).find(channel => {
  const label = normalizeOperationalLabel(channel.label || channel.nome || channel.canal_nome || '');
- return aliases.some(alias => label === alias || label.includes(alias) || alias.includes(label));
+ return aliases.some(alias => label === alias || (!blueprint.exactMatch && (label.includes(alias) || alias.includes(label))));
  });
 }
 
@@ -15241,6 +15233,7 @@ function buildPickChannelCards(channels = []) {
  const label = matched?.label || matched?.nome || blueprint.label;
  const config = getChannelConfig(label);
  return {
+ key: blueprint.key,
  id: matched?.id || matched?.canal_id || blueprint.key,
  label: blueprint.label,
  actualLabel: label,
@@ -15769,8 +15762,7 @@ async function renderPickMenu(selectedMode = null) {
  const effectiveMode = ['fast', 'normal'].includes(pendingPickModeChoice)
  ? pendingPickModeChoice
  : (['fast', 'normal'].includes(storedMode) ? storedMode : null);
- 
- // Garantir carregamento real do Supabase
+
  await ensureCanaisLoaded();
  try {
  const data = await DataClient.loadModule('separacao', true);
@@ -15782,50 +15774,64 @@ async function renderPickMenu(selectedMode = null) {
  } catch (error) {
  console.warn('[SEP] Falha ao atualizar separacoes do Supabase:', error);
  }
- 
- console.log(`[CANAIS DEBUG] renderizando canais: ${(appData.channels || []).length} registros`);
 
+ console.log(`[CANAIS DEBUG] renderizando canais: ${(appData.channels || []).length} registros`);
  let channels = (appData.channels || []).map(c => {
  const label = c.nome || c.col_B || '';
  const id = c.canal_id || c.id || c.col_A || '';
  const type = c.tipo || c.col_C || '';
  const config = getChannelConfig(label);
- return {
- ...config,
- id: id,
- label: label,
- type: type
- };
+ return { ...config, id, label, type };
  });
-
-
- // Texto validado em UTF-8.
  channels = channels.filter(c => !String(c.label).toUpperCase().includes('FULL'));
 
- const channelCards = buildPickChannelCards(channels);
+ const allChannelCards = buildPickChannelCards(channels);
+ const channelCards = allChannelCards.filter(item => item.key !== 'ml_agencia');
 
  document.body.classList.remove('menu-active');
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen pick-channel-menu-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('pick')}
-
  <main class="container">
  <div class="standard-module-card-grid operational-card-grid">
  ${channelCards.map(item => `
- <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(item.color)}" onclick="startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})">
+ <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(item.color)}" ${item.key === 'ml_coleta' ? 'aria-haspopup="dialog"' : ''} onclick="${item.key === 'ml_coleta' ? `openMercadoLivrePickModal(${quotePackInlineArg(effectiveMode)})` : `startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})`}">
  <span class="standard-module-card-icon">${item.svgIcon}</span>
- <span class="standard-module-card-copy">
- <strong>${escapeKitAttribute(item.label)}</strong>
- </span>
+ <span class="standard-module-card-copy"><strong>${escapeKitAttribute(item.key === 'ml_coleta' ? 'Mercado Livre' : item.label)}</strong></span>
  </button>
  `).join('')}
  </div>
  </main>
- </div>
- `;
+ </div>`;
 }
 
+function closeMercadoLivrePickModal() {
+ document.getElementById('ml-pick-modal')?.remove();
+}
+
+function openMercadoLivrePickModal(selectedMode = null) {
+ closeMercadoLivrePickModal();
+ const channels = (appData.channels || []).map(channel => ({
+  id: channel.canal_id || channel.id || channel.col_A || '',
+  label: channel.nome || channel.col_B || ''
+ }));
+ const options = buildPickChannelCards(channels).filter(item => ['ml_coleta', 'ml_agencia'].includes(item.key));
+ const modal = document.createElement('div');
+ modal.id = 'ml-pick-modal';
+ modal.className = 'ml-pick-modal';
+ modal.onclick = event => { if (event.target === modal) closeMercadoLivrePickModal(); };
+ modal.innerHTML = `<section role="dialog" aria-modal="true" aria-label="Escolha a modalidade do Mercado Livre">
+ <button type="button" class="ml-pick-modal-close" onclick="closeMercadoLivrePickModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
+ <div class="ml-pick-modal-grid">${options.map(option => `
+ <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(option.key.replace('_', '-'))}" onclick="closeMercadoLivrePickModal(); startPickingSession(${quotePackInlineArg(option.id)}, ${quotePackInlineArg(option.actualLabel)}, ${quotePackInlineArg(option.color)}, ${quotePackInlineArg(selectedMode)})">
+ <span class="standard-module-card-icon material-symbols-rounded">${option.key === 'ml_coleta' ? 'local_shipping' : 'storefront'}</span>
+ <span class="standard-module-card-copy"><strong>${escapeKitAttribute(option.label)}</strong></span>
+ </button>`).join('')}</div>
+ </section>`;
+ document.body.appendChild(modal);
+ requestAnimationFrame(() => modal.querySelector('.ml-pick-modal-grid button')?.focus());
+}
 function renderPickHistory() {
  const currentUser = localStorage.getItem('currentUser');
  const history = (appData.separacao || []).sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
@@ -32395,3 +32401,8 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO').length;
  app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')"><span class="material-symbols-rounded">arrow_back</span></button><div><span class="finalized-channel tone-${view.channel.tone}">${escapeKitAttribute(view.channel.label)}</span><h1>${escapeKitAttribute(view.sessionId)}</h1><p>${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} · Modo ${view.mode} · Finalizada</p></div></header><section class="finalized-detail-summary"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Avulsos</small><strong>${standalone}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span>Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-cancel"><div><span class="material-symbols-rounded">cancel</span><div><strong>Pedido cancelado antes do despacho?</strong><small>Retire esta separacao, seus pacotes e eventual baixa de estoque da contagem operacional.</small></div></div><button type="button" onclick="openCancelSeparationModal(${quotePackInlineArg(view.sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR SEPARACAO</button></section><section class="finalized-detail-products"><header><h2>PRODUTOS SEPARADOS</h2><span>SOMENTE LEITURA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0;return `<article><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small></div><b>${qty}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
 }
+
+
+
+
+
