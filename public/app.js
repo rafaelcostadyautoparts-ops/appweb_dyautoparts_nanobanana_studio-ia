@@ -2625,7 +2625,7 @@ function getInventoryModuleHeaderHTML(title, backAction = 'renderInventarioSubMe
 
 function getOperationalIdentityHTML(type = 'PICKING') {
  const isPick = type === 'PICKING';
- const label = isPick ? 'SEPARAiiO (PICK)' : 'CONFERENCIA NCIA (PACK)';
+ const label = isPick ? 'SEPARAÇÃO (PICK)' : 'CONFERENCIA NCIA (PACK)';
  const icon = isPick ? 'inventory_2' : 'verified';
  const mobileGradient = isPick
  ? 'linear-gradient(90deg, #EF4444 0%, #B91C1C 100%)'
@@ -3317,6 +3317,10 @@ function removeLegacyLoginFullscreenControls() {
 }
 
 function renderLogin(push = true) {
+ const configuredEnvironment = String(window.__DY_APP_CONFIG__?.appEnvironment || '').trim().toLowerCase();
+ const isHomologationFront = document.documentElement.classList.contains('app-environment-homologation')
+ || configuredEnvironment === 'homologation'
+ || configuredEnvironment === 'homologacao';
  currentScreen = 'login';
  document.body.classList.add('login-active');
  removeLegacyLoginFullscreenControls();
@@ -3343,6 +3347,23 @@ function renderLogin(push = true) {
 
  if (usersToRender.length === 0) {
  usersToRender = fallbackUsers;
+ }
+
+ if (isHomologationFront) {
+ usersToRender = usersToRender
+ .filter(user => {
+ const normalizedId = String(user.id || '').trim().toLowerCase();
+ const normalizedProfile = String(user.perfil || '').trim().toUpperCase();
+ const normalizedName = String(user.nome || '')
+ .normalize('NFD')
+ .replace(/[\u0300-\u036f]/g, '')
+ .trim()
+ .toUpperCase();
+ return normalizedId === 'homolog_admin'
+ || normalizedProfile === 'ADMIN'
+ || normalizedName === 'ADMINISTRADOR HOMOLOGACAO';
+ })
+ .map(user => ({ ...user, nome: 'ADM' }));
  }
 
  // Texto validado em UTF-8.
@@ -3500,11 +3521,100 @@ function getNextInternalId() {
 
 async function renderAlerts() {
  const currentUser = localStorage.getItem('currentUser');
+ const configuredEnvironment = String(window.__DY_APP_CONFIG__?.appEnvironment || '').trim().toLowerCase();
+ const isHomologationDashboard = document.documentElement.classList.contains('app-environment-homologation')
+ || configuredEnvironment === 'homologation'
+ || configuredEnvironment === 'homologacao';
+
+ if (!isHomologationDashboard) {
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen dashboard-empty-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('dashboard')}
  <main class="container dashboard-empty-container"></main>
+ </div>
+ `;
+ return;
+ }
+
+ app.innerHTML = `
+ <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+ ${getTopBarHTML(currentUser, 'renderMenu()')}
+ ${getModuleSidebarHTML('dashboard')}
+ <main class="container operations-dashboard-shell">
+ <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
+ </main>
+ </div>
+ `;
+
+ try {
+ const [separationData, conferenceData] = await Promise.all([
+ DataClient.loadModule('separacao', true),
+ DataClient.loadModule('conferencia', true)
+ ]);
+ if (separationData) {
+ appData.separacao = separationData.separacao || [];
+ appData.separacao_itens = separationData.separacao_itens || [];
+ }
+ if (conferenceData) {
+ appData.conferencia = conferenceData.conferencia || [];
+ appData.conferencia_itens = conferenceData.conferencia_itens || [];
+ }
+ } catch (error) {
+ console.warn('[DASHBOARD] Falha ao atualizar pacotes:', error);
+ }
+
+ const normalizeDashboardChannel = (rawLabel) => {
+ const original = String(rawLabel || 'Outros').trim() || 'Outros';
+ const normalized = normalizeOperationalLabel(original);
+ if (normalized.includes('ML AGENCIA') || normalized.includes('MERCADO LIVRE AGENCIA')) return { key: 'ml-agencia', label: 'ML Agência', icon: 'storefront', tone: 'ml-agencia' };
+ if (normalized.includes('ML COLETA') || normalized.includes('MERCADO LIVRE COLETA') || normalized === 'ML' || normalized === 'MERCADO LIVRE') return { key: 'ml-coleta', label: 'ML Coleta', icon: 'local_shipping', tone: 'ml-coleta' };
+ if (normalized.includes('MAGALU')) return { key: 'magalu', label: 'Magalu', icon: 'inventory_2', tone: 'magalu' };
+ if (normalized.includes('SHOPEE')) return { key: 'shopee', label: 'Shopee', icon: 'shopping_bag', tone: 'shopee' };
+ if (normalized.includes('FLEX')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'flex' };
+ if (normalized.includes('CORREIOS')) return { key: 'correios', label: 'Correios', icon: 'mail', tone: 'correios' };
+ if (normalized.includes('AMAZON')) return { key: 'amazon', label: 'Amazon', icon: 'shopping_cart', tone: 'amazon' };
+ if (normalized.includes('ULTRA') || normalized.includes('TURBO')) return { key: 'ultra', label: 'Ultra rápido', icon: 'speed', tone: 'ultra' };
+ if (normalized.includes('PDV') || normalized.includes('BALCAO')) return { key: 'pdv', label: 'PDV / Balcão', icon: 'store', tone: 'pdv' };
+ return { key: normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'outros', label: original, icon: 'storefront', tone: 'outros' };
+ };
+
+ const channelTotals = new Map();
+ (appData.separacao || [])
+ .filter(isFinalizedSeparationForHistory)
+ .filter(session => isDateTodayBR(getSeparationFinishedAt(session)))
+ .forEach(session => {
+ const packageCount = getPickPackageCountFrom(session);
+ if (packageCount <= 0) return;
+ const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
+ const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
+ current.packages += packageCount;
+ channelTotals.set(channel.key, current);
+ });
+
+ const channels = [...channelTotals.values()].filter(item => item.packages > 0).sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
+ const totalPackages = channels.reduce((sum, item) => sum + item.packages, 0);
+ const todayLabel = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date());
+
+ app.innerHTML = `
+ <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+ ${getTopBarHTML(currentUser, 'renderMenu()')}
+ ${getModuleSidebarHTML('dashboard')}
+ <main class="container operations-dashboard-shell">
+ <header class="operations-dashboard-header">
+ <div><span class="material-symbols-rounded">monitoring</span><div><h1>DASHBOARD OPERACIONAL</h1><p>Visão rápida para acompanhar a operação e tomar decisões.</p></div></div>
+ <time>${escapeKitAttribute(todayLabel)}</time>
+ </header>
+ <section class="dashboard-packages-panel">
+ <header><div><small>OPERAÇÃO DE HOJE</small><h2>PACOTES REALIZADOS</h2><p>Somente canais com pacotes finalizados.</p></div><div class="dashboard-packages-total"><span>Total</span><strong>${totalPackages}</strong><small>${totalPackages === 1 ? 'pacote' : 'pacotes'}</small></div></header>
+ ${channels.length ? `<div class="dashboard-channel-grid">${channels.map(channel => `
+ <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
+ <span class="dashboard-channel-icon material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>
+ <div><small>CANAL</small><h3>${escapeKitAttribute(channel.label)}</h3></div>
+ <strong>${channel.packages}</strong><em>${channel.packages === 1 ? 'pacote' : 'pacotes'}</em>
+ </article>`).join('')}</div>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum pacote realizado hoje</strong><p>Os canais aparecerão aqui assim que houver pacotes finalizados.</p></div>`}
+ </section>
+ </main>
  </div>
  `;
 }
@@ -5555,6 +5665,7 @@ function showAppModal({
  promptMin = null,
  promptMax = null,
  quantityStepper = false,
+ selectPromptOnStep = true,
  onConfirm = null,
  onCancel = null,
  closeOnBackdrop = true
@@ -5645,7 +5756,7 @@ function showAppModal({
  if (input) {
  input.value = String(Math.min(maximum, Math.max(minimum, current + Number(stepButton.dataset.quantityStep || 0))));
  input.focus();
- input.select();
+ if (selectPromptOnStep) input.select();
  }
  return;
  }
@@ -5700,7 +5811,7 @@ function showAppAlert({ title = 'Aviso', message = '', detail = '', summary = ''
  });
 }
 
-function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text', min = null, max = null, quantityStepper = false } = {}) {
+function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text', min = null, max = null, quantityStepper = false, selectPromptOnStep = true } = {}) {
  return showAppModal({
  type: 'confirm',
  title,
@@ -5714,6 +5825,7 @@ function showAppPrompt({ title = 'Informar dado', message = '', detail = '', lab
  promptMin: min,
  promptMax: max,
  quantityStepper,
+ selectPromptOnStep,
  confirmText: confirmLabel,
  cancelText: cancelLabel,
  closeOnBackdrop: false
@@ -15592,6 +15704,7 @@ function setPickDraftFilter(filter) {
 async function renderSeparacoesAndamentoScreen() {
  const currentUser = localStorage.getItem('currentUser');
  document.body.classList.remove('menu-active');
+ app.innerHTML = `<div class="dashboard-screen internal fade-in pick-drafts-screen">${getTopBarHTML(currentUser, 'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container pick-drafts-shell"><header class="pick-drafts-header"><div><h1>SEPARAÇÕES EM ANDAMENTO</h1><p>Carregando separações pendentes...</p></div></header><section class="pick-drafts-loading"><span class="material-symbols-rounded">progress_activity</span><strong>ATUALIZANDO DADOS</strong></section></main></div>`;
 
  try {
  const data = await DataClient.loadModule('separacao', true);
@@ -15620,8 +15733,8 @@ async function renderSeparacoesAndamentoScreen() {
  <main class="container pick-drafts-shell">
  <header class="pick-drafts-header">
  <div>
- <h1>SEPARACAOi</h1>
- <p>Visualize e gerencie todas as separacoes que ainda nao foram finalizadas.</p>
+ <h1>SEPARAÇÕES EM ANDAMENTO</h1>
+ <p>Continue ou consulte separações que ainda não foram finalizadas.</p>
  </div>
  <aside class="pick-drafts-header-actions">
  <button type="button" class="pick-drafts-refresh" onclick="renderSeparacoesAndamentoScreen()">
@@ -15635,8 +15748,8 @@ async function renderSeparacoesAndamentoScreen() {
  ${sessions.length === 0 ? `
  <section class="pick-drafts-empty-state">
  <span class="material-symbols-rounded">folder_open</span>
- <strong>Nenhuma sao em andamento</strong>
- <p>Quando uma sao for iniciada, ela aparecerA aqui.</p>
+ <strong>Nenhuma separação em andamento</strong>
+ <p>Quando uma separação for iniciada, ela aparecerá aqui.</p>
  <button type="button" onclick="renderSeparacoesAndamentoScreen()">Atualizar</button>
  </section>
  ` : `
@@ -15675,7 +15788,7 @@ async function renderSeparacoesAndamentoScreen() {
 
  <section class="pick-drafts-empty-filter hidden">
  <span class="material-symbols-rounded">search_off</span>
- <strong>Nenhuma sao encontrada</strong>
+ <strong>Nenhuma separação encontrada</strong>
  <p>Ajuste os filtros ou a busca para ver mais resultados.</p>
  </section>
 
@@ -15710,7 +15823,7 @@ async function renderSeparacoesAndamentoScreen() {
  <div class="pick-drafts-actions">
  <button type="button" class="secondary" onclick="showPickDraftDetails(${quotePackInlineArg(item.sessionId)})">Ver detalhes</button>
  <button type="button" class="primary" onclick="resumePickingDraftFromServer(${quotePackInlineArg(item.sessionId)})">Continuar</button>
- <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir sao">
+ <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separação">
  <span class="material-symbols-rounded">delete</span>
  </button>
  </div>
@@ -15739,7 +15852,7 @@ async function renderSeparacoesAndamentoScreen() {
  <div class="pick-drafts-actions">
  <button type="button" class="secondary" onclick="showPickDraftDetails(${quotePackInlineArg(item.sessionId)})">Ver detalhes</button>
  <button type="button" class="primary" onclick="resumePickingDraftFromServer(${quotePackInlineArg(item.sessionId)})">Continuar</button>
- <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir sao">
+ <button type="button" class="danger-icon" onclick="confirmDiscardSavedPickingDraft(${quotePackInlineArg(item.sessionId)})" aria-label="Excluir separação">
  <span class="material-symbols-rounded">delete</span>
  </button>
  </div>
@@ -15849,7 +15962,7 @@ function renderPickHistory() {
  ${history.length === 0 ? `
  <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
  <span class="material-symbols-rounded" style="font-size: 48px; color: var(--muted); margin-bottom: 16px;">history</span>
- <p style="color: var(--muted);">Nenhuma sao encontrada.</p>
+ <p style="color: var(--muted);">Nenhuma separação encontrada.</p>
  </div>
  ` : `
  <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
@@ -16565,6 +16678,7 @@ async function togglePickItemSelection(index, source = 'standalone') {
  if (current?.source === source) {
  pickKitSelection.delete(key);
  updatePickItemsList();
+ settlePickScannerInput(60);
  return;
  }
 
@@ -16592,7 +16706,8 @@ async function togglePickItemSelection(index, source = 'standalone') {
  inputType: 'number',
  min: 1,
  max: summary.standaloneUnits,
- quantityStepper: true
+ quantityStepper: true,
+ selectPromptOnStep: false
  });
  if (answer === null) return settlePickScannerInput(60);
  qty = Math.floor(Number(answer));
@@ -16604,6 +16719,7 @@ async function togglePickItemSelection(index, source = 'standalone') {
 
  pickKitSelection.set(key, { source: 'standalone', kitId: '', qty });
  updatePickItemsList();
+ settlePickScannerInput(60);
 }
 function clearPickKitSelection() {
  pickKitSelection.clear();
@@ -17735,7 +17851,10 @@ function focusFlowScanInput(flow) {
  const input = document.getElementById(inputId);
  if (!input) return;
  input.value = '';
- setTimeout(() => input.focus(), 80);
+ setTimeout(() => {
+ input.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+ input.focus({ preventScroll: true });
+ }, 80);
 }
 
 function closeHighQtyModal() {
@@ -18022,6 +18141,8 @@ function settlePickScannerInput(delay = 60) {
  const input = document.getElementById('pick-ean-input');
  if (!input) return;
  input.value = '';
+ const workArea = input.closest('.pick-scan-panel') || input;
+ workArea.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
  preparePickScannerInput({ focus: true });
  }, delay);
 }
@@ -18326,6 +18447,7 @@ async function undoLastPickRemovalScan() {
  } finally {
  pickRemovalUndoInProgress = false;
  updatePickRemovalModeUI();
+ settlePickScannerInput(60);
  }
 }
 
@@ -32341,13 +32463,80 @@ async function renderFinalizedSeparationsScreen(scope = 'today') {
  } catch (error) { console.warn('[SEP HIST] Falha ao atualizar:', error); }
  const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.finishedAt)).sort((a,b) => String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
  const channels = [...new Set(rows.map(row => row.channel.label).filter(Boolean))].sort();
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><button type="button" onclick="renderMenu()">VOLTAR</button></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">CANCELAR ITEM</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
 }
 
 function closeCancelSeparationModal() {
  document.getElementById('cancel-separation-modal')?.remove();
 }
 
+let finalizedCancellationLookup = { scope: 'today', code: '', candidates: [], selected: null };
+
+function openGlobalFinalizedItemCancellation(scope = 'today') {
+ closeCancelSeparationModal();
+ finalizedCancellationLookup = { scope, code: '', candidates: [], selected: null };
+ const modal = document.createElement('div');
+ modal.id = 'cancel-separation-modal'; modal.className = 'cancel-separation-modal global-item-cancel-modal';
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>LOCALIZAR ITEM FINALIZADO</h2><p>Leia o produto e escolha o canal correto</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><label><span>Motivo obrigatório</span><textarea id="cancel-separation-reason" rows="3" maxlength="300" placeholder="Ex.: item cancelado pelo cliente"></textarea></label><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
+ document.body.appendChild(modal);
+ const input=document.getElementById('global-cancel-code'); input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchFinalizedItemCancellation();}}); setTimeout(()=>input?.focus(),50);
+}
+
+async function searchFinalizedItemCancellation() {
+ const code=String(document.getElementById('global-cancel-code')?.value||'').trim(); if(!code){showToast('Bipe o produto.','warning');return;}
+ const box=document.getElementById('global-cancel-results'); if(box) box.innerHTML='<p>Consultando canais e separações...</p>';
+ const candidates=[];
+ for(const session of (appData.separacao||[]).filter(isFinalizedSeparationForHistory)){
+  const sessionId=getPackSeparationSessionId(session); const item=getSeparationItemsForSession(session).find(row=>String(row.ean||'')===code||String(row.id_interno||'')===code); if(!item)continue;
+  const productId=getPickingProductId(item)||item.id_interno||''; const original=Number(item.qtd_separada??item.qtd_solicitada??0)||0;
+  const cancelResponse=await window.supabaseClient.from('separacao_item_cancelamentos').select('quantidade').eq('separacao_id',sessionId).eq('id_interno',productId); if(cancelResponse.error)throw cancelResponse.error;
+  const cancelled=(cancelResponse.data||[]).reduce((sum,row)=>sum+Number(row.quantidade||1),0); const remaining=Math.max(original-cancelled,0); if(!remaining)continue;
+  const packages=await DataClient.listarPacotesSeparacaoSupabase(sessionId); const links=packages.filter(pkg=>String(pkg.status).toUpperCase()!=='CANCELADO'&&(pkg.itens||[]).some(pi=>String(pi.id_interno)===String(productId)));
+  const chosen=links.sort((a,b)=>(String(a.tipo)==='AVULSO'?-1:1)-(String(b.tipo)==='AVULSO'?-1:1))[0]; const view=getFinalizedSeparationViewModel(session);
+  candidates.push({sessionId,productId,code,channel:view.channel.label,finishedAt:view.finishedAt,remaining,packageId:chosen?.pacote_id||'-',packageType:chosen?.tipo||'SEM PACOTE'});
+ }
+ finalizedCancellationLookup={...finalizedCancellationLookup,code,candidates,selected:null}; renderFinalizedCancellationCandidates();
+}
+
+function renderFinalizedCancellationCandidates(){
+ const box=document.getElementById('global-cancel-results'); const rows=finalizedCancellationLookup.candidates||[]; if(!box)return;
+ box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação finalizada possui unidade disponível deste produto.</p>';
+ document.getElementById('global-cancel-confirm')?.classList.add('hidden');
+}
+function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-reason')?.focus();}
+async function confirmGlobalFinalizedItemCancellation(){const selected=finalizedCancellationLookup.selected;const motivo=String(document.getElementById('cancel-separation-reason')?.value||'').trim();if(!selected){showToast('Selecione o canal e a separação.','warning');return;}if(motivo.length<5){showToast('Informe o motivo.','warning');return;}const button=document.getElementById('cancel-separation-submit');if(button)button.disabled=true;try{await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code,motivo});closeCancelSeparationModal();showToast(`1 unidade cancelada em ${selected.channel}.`,'success');await renderFinalizedSeparationsScreen(finalizedCancellationLookup.scope);}catch(error){showToast(error.message||'Não foi possível cancelar o item.','error');if(button)button.disabled=false;}}
+function openCancelItemSeparationModal(sessionId, returnScope = 'today') {
+ closeCancelSeparationModal();
+ const modal = document.createElement('div');
+ modal.id = 'cancel-separation-modal';
+ modal.className = 'cancel-separation-modal cancel-item-separation-modal';
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>CANCELAR ITEM POR BIP</h2><p>${escapeKitAttribute(sessionId)} · 1 unidade por leitura</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><p class="cancel-separation-warning">O produto continuara no historico, marcado em vermelho. Cada confirmacao devolve somente 1 unidade ao estoque.</p><label><span>Bipe ou digite EAN / ID interno</span><input id="cancel-item-code" autocomplete="off" inputmode="none" placeholder="Aguardando produto"></label><label><span>Motivo obrigatorio</span><textarea id="cancel-separation-reason" rows="3" maxlength="300" placeholder="Ex.: item cancelado pelo cliente"></textarea></label><footer><button type="button" onclick="closeCancelSeparationModal()">VOLTAR</button><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmCancelSeparationItem(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR 1 UNIDADE</button></footer></section>`;
+ document.body.appendChild(modal);
+ const input = document.getElementById('cancel-item-code');
+ input?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); confirmCancelSeparationItem(sessionId, returnScope); } });
+ setTimeout(() => input?.focus(), 50);
+}
+
+async function confirmCancelSeparationItem(sessionId, returnScope = 'today') {
+ const codigo = String(document.getElementById('cancel-item-code')?.value || '').trim();
+ const motivo = String(document.getElementById('cancel-separation-reason')?.value || '').trim();
+ if (!codigo) { showToast('Bipe o produto que deseja cancelar.', 'warning'); return; }
+ if (motivo.length < 5) { showToast('Informe o motivo do cancelamento.', 'warning'); return; }
+ const button = document.getElementById('cancel-separation-submit');
+ if (button) { button.disabled = true; button.textContent = 'CANCELANDO...'; }
+ try {
+  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({ sessionId, codigo, motivo });
+  closeCancelSeparationModal();
+  showToast(`1 unidade cancelada. Restam ${result?.restante ?? 0}.`, 'success');
+  const fresh = await DataClient.loadModule('conferencia', true);
+  if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; appData.conferencia = fresh.conferencia || appData.conferencia; }
+  await renderFinalizedSeparationDetails(sessionId, returnScope);
+ } catch (error) {
+  showToast(error.message || 'Nao foi possivel cancelar o item.', 'error');
+  if (button) { button.disabled = false; button.textContent = 'CANCELAR 1 UNIDADE'; }
+  document.getElementById('cancel-item-code')?.focus();
+ }
+}
 function openCancelSeparationModal(sessionId, returnScope = 'today') {
  closeCancelSeparationModal();
  const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
@@ -32396,13 +32585,13 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  let packages = [];
  try { packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId); } catch (error) { console.warn('[SEP HIST] Pacotes não carregados:', error); }
  const items = getSeparationItemsForSession(session);
+ let itemCancellations = [];
+ try { const response = await window.supabaseClient.from('separacao_item_cancelamentos').select('*').eq('separacao_id', sessionId).order('cancelado_em', { ascending: true }); if (response.error) throw response.error; itemCancellations = response.data || []; } catch (error) { console.warn('[SEP HIST] Cancelamentos nao carregados:', error); }
+ const cancelledByProduct = new Map();
+ itemCancellations.forEach(row => cancelledByProduct.set(String(row.id_interno || ''), (cancelledByProduct.get(String(row.id_interno || '')) || 0) + Number(row.quantidade || 1)));
  const packageByProduct = new Map();
  packages.forEach(pacote => (pacote.itens || []).forEach(item => { const key=String(item.id_interno||''); if(!packageByProduct.has(key))packageByProduct.set(key,[]); packageByProduct.get(key).push({id:pacote.pacote_id,type:pacote.tipo,qty:Number(item.quantidade||0)}); }));
- const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO').length;
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')"><span class="material-symbols-rounded">arrow_back</span></button><div><span class="finalized-channel tone-${view.channel.tone}">${escapeKitAttribute(view.channel.label)}</span><h1>${escapeKitAttribute(view.sessionId)}</h1><p>${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} · Modo ${view.mode} · Finalizada</p></div></header><section class="finalized-detail-summary"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Avulsos</small><strong>${standalone}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span>Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-cancel"><div><span class="material-symbols-rounded">cancel</span><div><strong>Pedido cancelado antes do despacho?</strong><small>Retire esta separacao, seus pacotes e eventual baixa de estoque da contagem operacional.</small></div></div><button type="button" onclick="openCancelSeparationModal(${quotePackInlineArg(view.sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR SEPARACAO</button></section><section class="finalized-detail-products"><header><h2>PRODUTOS SEPARADOS</h2><span>SOMENTE LEITURA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0;return `<article><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small></div><b>${qty}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
+ const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO' && String(row.status).toUpperCase()!=='CANCELADO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO' && String(row.status).toUpperCase()!=='CANCELADO').length;
+ const cancelledProducts = cancelledByProduct.size;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')"><span class="material-symbols-rounded">arrow_back</span></button><div><span class="finalized-channel tone-${view.channel.tone}">${escapeKitAttribute(view.channel.label)}</span><h1>${escapeKitAttribute(view.sessionId)}</h1><p>${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} · Modo ${view.mode} · Finalizada</p></div></header><section class="finalized-detail-summary"><article><small>Produtos ativos</small><strong>${view.products}</strong></article><article><small>Unidades ativas</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span>Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><h2>PRODUTOS DA SEPARAÇÃO</h2><span>HISTÓRICO · SOMENTE LEITURA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
 }
-
-
-
-
-

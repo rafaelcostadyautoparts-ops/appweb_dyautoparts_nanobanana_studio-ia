@@ -1,6 +1,6 @@
 {
-  "version": "2.1.90",
-  "build": "2026.08.17.01",
-  "commit": "mercado-livre-modos-separacao",
-  "deployDate": "2026-08-17T16:44:18-03:00"
+  "version": "2.1.91",
+  "build": "2026.08.18.01",
+  "commit": "dashboard-pacotes-cancelamento-item",
+  "deployDate": "2026-08-18T00:00:00-03:00"
 }

@@ -1571,6 +1571,23 @@ const DataClient = (function () {
         invalidateCache('movimentos');
         return data;
     }
+    async function cancelarItemSeparacaoFinalizadaSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(payload.sessionId || '').trim();
+        const codigo = String(payload.codigo || '').trim();
+        const motivo = String(payload.motivo || '').trim();
+        if (!sessionId || !codigo) throw new Error('Separacao e produto sao obrigatorios.');
+        const { data, error } = await client.rpc('cancelar_item_separacao_finalizada', {
+            p_separacao_id: sessionId, p_codigo: codigo,
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
+            p_motivo: motivo,
+            p_execution_id: payload.executionId || `cancel-item:${sessionId}:${Date.now()}`
+        });
+        if (error) throw new Error(error.message || 'Erro ao cancelar item da separacao.');
+        ['separacao', 'conferencia', 'produtos', 'movimentos'].forEach(invalidateCache);
+        return data;
+    }
     async function sincronizarPacotesSeparacaoSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2637,6 +2654,7 @@ const DataClient = (function () {
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
         cancelarSeparacaoAntesDespachoSupabase,
+        cancelarItemSeparacaoFinalizadaSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
         getCachedData,
@@ -2730,4 +2748,3 @@ async function testeSupabase() {
 
 // Expor globalmente
 window.testeSupabase = testeSupabase;
-

@@ -645,7 +645,7 @@
             padding-top: 0;
             /* Zerado para aproximar do grid */
             margin-bottom: -10px;
-            /* Margem negativa estratｽｩgica */
+            /* Layout */
             width: 100%;
         }
 
@@ -773,7 +773,7 @@
         }
 
         /* =====================================================
-           INVENTﾃヽIO 窶 LAYOUT PREMIUM 3 COLUNAS
+   Layout
            ===================================================== */
 
         .inventory-scanning-screen {
@@ -828,7 +828,7 @@
             background: rgba(255, 255, 255, 0.055);
         }
 
-        /* ---- Coluna ESQUERDA: Informaﾃｧﾃｵes ---- */
+        /* ---- Coluna ESQUERDA: Informacoes ---- */
         .inv-col-info {
             display: flex;
             flex-direction: column;
@@ -982,7 +982,7 @@
             transform: translateY(-50%) scale(0.95);
         }
 
-        /* ---- Rodapﾃｩ fixo ---- */
+        /* Layout */
         .inv-footer-bar {
             position: fixed;
             bottom: 0;
@@ -1095,7 +1095,7 @@
             white-space: nowrap;
         }
 
-        /* ---- Responsivo: tablet (竕､ 767px) ---- */
+        /* Layout */
         @media (max-width: 767px) {
             .inventory-item {
                 grid-template-columns: 140px 1fr auto;
@@ -1112,7 +1112,7 @@
             }
         }
 
-        /* ---- Responsivo: mobile (竕､ 480px) ---- */
+        /* Layout */
         @media (max-width: 480px) {
             .inventory-item {
                 grid-template-columns: 1fr;
@@ -3171,7 +3171,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             background: #E30613;
         }
 
-        /* Todo fundo de usuｽ｡rio em Vermelho Dyer */
+        /* Layout */
 
         .user-card .name {
             display: none;
@@ -3192,7 +3192,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             z-index: 9999 !important;
         }
 
-        /* Esconder logo, status e badge de usuﾃ｡rio */
+        /* Layout */
         .top-bar-left img,
         .top-bar-logo-img,
         .connection-status-center,
@@ -3202,7 +3202,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             display: none !important;
         }
 
-        /* Botﾃｵes Flutuantes Padrﾃ｣o */
+        /* Layout */
         .btn-back-top,
         .btn-action[title="Tela Cheia"],
         .btn-action[title="Sair do Sistema"],
@@ -3244,13 +3244,13 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             filter: none !important;
         }
 
-        /* Posiﾃｧﾃｵes */
+        /* Layout */
         .btn-back-top {
             left: 18px !important;
         }
 
         .btn-action[title="Tela Cheia"] {
-            right: 80px !important; /* Dﾃ｡ espaﾃｧo para o botﾃ｣o Sair */
+            right: 80px !important; /* Layout */
         }
 
         .btn-action[title="Sair do Sistema"],
@@ -3258,7 +3258,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             right: 18px !important;
         }
 
-        /* Hover Effect para Botﾃ｣o Sair (Desktop apenas) */
+        /* Layout */
         @media (min-width: 1024px) {
             .menu-top-bar .btn-action[title="Sair do Sistema"],
             .menu-top-bar .btn-action[onclick="logout()"] {
@@ -3267,7 +3267,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 transform: translateY(-10px) !important;
             }
 
-            /* Zona de hover invisﾃｭvel no topo direito */
+            /* Layout */
             .menu-top-bar::before {
                 content: '';
                 position: fixed;
@@ -3292,7 +3292,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             }
         }
 
-        /* Ajuste para topo fixo removido - Garantindo que o conteｽｺdo ocupe melhor a tela */
+        /* Layout */
         .dashboard-screen {
             padding-top: 0 !important; /* Removido 70px */
             box-sizing: border-box;
@@ -3308,7 +3308,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             display: flex;
             flex-direction: column;
             min-height: 0;
-            overflow: auto; /* Permite scroll no container se necessﾃ｡rio */
+            overflow: auto; /* Layout */
             width: 100%;
             max-width: none;
             padding: 20px !important; /* Adicionado respiro de 20px */
@@ -3317,7 +3317,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
         @media (max-width: 767px) {
             .dashboard-screen .container {
-                padding-top: 70px !important; /* Evita sobreposiﾃｧﾃ｣o com os botﾃｵes no mobile */
+                padding-top: 70px !important; /* Layout */
                 padding-bottom: 20px !important;
             }
         }
@@ -3573,7 +3573,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             color: rgba(255, 255, 255, 0.7);
         }
 
-        /* OPERATIONAL UTILITIES (PRODUTOS & SEPARAｿｽ繧ｰ) */
+        /* Layout */
         .op-card {
             background: #18181B !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
@@ -3736,7 +3736,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         .kit-detail-modal {
             width: min(520px, calc(100vw - 32px));
             background: #101018;
-            /* Tema escuro padrｽ｣o */
+            /* Layout */
             color: #ffffff;
             border-radius: 32px;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3926,7 +3926,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
 
-        /* KIT LｿｽPADA - TELA CHEIA E POSICIONAMENTO */
+        /* Layout */
         .kit-lampada-screen {
             min-height: 100vh !important;
             width: 100% !important;
@@ -3948,7 +3948,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             box-sizing: border-box;
         }
 
-        /* KIT LｿｽPADA - BUSCA PADRONIZADA (VAZADA / GLOW STYLE) */
+        /* Layout */
         .kit-search-container {
             width: min(70vw, 900px);
             min-width: 750px;
@@ -3998,7 +3998,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
 
 
-        /* KIT LｿｽPADA - CARDS DE ALTO CONTRASTE */
+        /* Layout */
         .kit-lamp-card {
             background: #ffffff !important;
             color: #111111 !important;
@@ -4030,7 +4030,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
         .kit-lamp-card .marca {
             color: #e11d48 !important;
-            /* vermelho padrｽ｣o */
+            /* Layout */
             font-size: 0.65rem;
             font-weight: 800;
             text-transform: uppercase;
@@ -4191,7 +4191,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             }
 
             .product-result-list {
-                gap: 8px !important; /* Separaｽｧｽ｣o elegante e compacta entre cards */
+                gap: 8px !important; /* Layout */
                 width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
@@ -4856,7 +4856,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        /* HEADER MINIMALISTA & DINｿｽICA DE VISIBILIDADE */
+        /* Layout */
         .top-bar-minimal {
             position: fixed;
             top: 0;
@@ -4865,7 +4865,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             height: 50px;
             background: #000;
             display: none;
-            /* Escondido por padrｽ｣o */
+            /* Layout */
             align-items: center;
             justify-content: space-between;
             padding: 0 16px;
@@ -4912,7 +4912,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* Menu principal - App Shell Layout */
-        /* Lｽｳgica flutuante do topo e rodapｽｩ no Menu - REMOVIDO PARA CONSOLIDAｿｽ繧ｰ NO FINAL DO ARQUIVO */
+        /* Layout */
         .dashboard-screen.menu-screen .top-bar {
             position: fixed !important;
             top: 0 !important;
@@ -5023,10 +5023,10 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
 
 
-        /* Ajuste do grid quando o footer estｽ｡ visｽｭvel/escondido */
+        /* Layout */
         .dashboard-screen.menu-screen.menu-footer-visible {
             padding-bottom: 70px;
-            /* Espaｽｧo para o footer fixo */
+            /* Layout */
         }
 
 
@@ -5961,19 +5961,19 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             font-size: 0.85rem;
         }
 
-        /* MODO TELA LIMPA (ESTILOS PERMANENTES) - ALTERNｿｽCIA VIA CSS */
+        /* Layout */
 
         /* 1. Em tela normal: o topo minimalista deve sumir */
         body:not(.fullscreen-mode) .top-bar-minimal {
             display: none !important;
         }
 
-        /* 2. Em tela normal: o topo padrｽ｣o deve aparecer */
+        /* Layout */
         body:not(.fullscreen-mode) .top-bar {
             display: flex !important;
         }
 
-        /* 3. Em tela cheia: o topo padrｽ｣o deve sumir */
+        /* Layout */
         body.fullscreen-mode .top-bar {
             display: none !important;
         }
@@ -6009,7 +6009,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             padding: 0 16px;
             height: 50px;
             display: none;
-            /* Alterado: escondido por padrｽ｣o */
+            /* Layout */
             justify-content: space-between;
             align-items: center;
             width: 100%;
@@ -6055,12 +6055,12 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             background: rgba(255, 255, 255, 0.1);
         }
 
-        /* Blindagem: Botｽ｣o de Fullscreen desativado globalmente */
+        /* Layout */
         .btn-fullscreen-toggle {
             display: none !important;
         }
 
-        /* Ativaｽｧｽ｣o exclusiva por contexto: Tela de Login */
+        /* Layout */
         .login-screen .btn-fullscreen-toggle {
             background: rgba(255, 255, 255, 0.05);
             color: white;
@@ -6305,7 +6305,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
 
 
-        /* KIT LｿｽPADA - INTERATIVIDADE */
+        /* Layout */
         .bulb-info-card {
             background: rgba(255, 255, 255, 0.02) !important;
             padding: 28px !important;
@@ -7452,7 +7452,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             }
         }
 
-        /* OTIMIZAｿｽ繧ｰ DE TELAS INTERNAS - FOCO NO CONTE直O */
+        /* Layout */
         .dashboard-screen.internal,
         .dashboard-screen.product-detail {
             height: 100dvh;
@@ -7503,7 +7503,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             padding: 16px 20px !important;
         }
 
-        /* Ocultar rodapｽｩ em telas internas para maximizar espaｽｧo */
+        /* Layout */
         .dashboard-screen.internal .menu-footer,
         .dashboard-screen.product-detail .menu-footer {
             display: none !important;
@@ -7518,7 +7518,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             padding-bottom: 0 !important;
         }
 
-        /* ESTILIZAｿｽ繧ｰ DOS CARDS DE CANAIS (SEPARAｿｽ繧ｰ) */
+        /* Layout */
         .channel-card {
             background: rgba(255, 255, 255, 0.03) !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -7599,11 +7599,11 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* ===================================================
-   PADRONIZAｿｽ繧ｰ GLOBAL DE CARDS 遯ｶｽ FJALLA ONE + UPPERCASE
+   Layout
    Aplica a: menu-item, menu-card, channel-card
    =================================================== */
 
-        /* Tｽｭtulos dos cards (sub-menus internos) com Fjalla One */
+        /* Layout */
         .menu-card .label,
         .dashboard-screen.internal .menu-card .label {
             font-family: 'Fjalla One', sans-serif !important;
@@ -7650,7 +7650,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             transition: transform 0.25s ease-in-out !important;
         }
 
-        /* channel-card label (Separaｽｧｽ｣o/Picking) */
+        /* Layout */
         .channel-card .op-label,
         .channel-card .label {
             font-family: 'Fjalla One', sans-serif !important;
@@ -7678,7 +7678,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             outline: none !important;
         }
 
-        /* Hover for channel-card (Separaｽｧｽ｣o) */
+        /* Layout */
         .dashboard-screen.internal .channel-card:hover {
             transform: none !important;
             box-shadow: none !important;
@@ -7711,7 +7711,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
         /*
    FIX: Remover faixa/topo escuro das telas operacionais
-   Garante que o conteｽｺdo comece exatamente no topo (Fullscreen Real)
+   Layout
 */
         
 
@@ -7887,13 +7887,13 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
 
 
 
-        /* TELA DE DETALHES - CENTRALIZAｿｽ繧ｰ E LAYOUT */
+        /* Layout */
         .product-detail-screen {
             min-height: 100dvh !important;
             width: 100% !important;
             display: flex !important;
             flex-direction: column !important;
-            /* Coluna para empilhar conteｽｺdo e centralizar horizontalmente */
+            /* Layout */
             align-items: center !important;
             /* Centraliza horizontalmente no eixo cruzado do flex-direction column */
             justify-content: flex-start !important;
@@ -7906,7 +7906,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             margin-right: auto !important;
         }
 
-        /* Container que ocupa melhor a tela - Forｽｧando centralizaｽｧｽ｣o no desktop */
+        /* Layout */
         .product-detail-screen .container,
         .product-detail-card {
             width: 100% !important;
@@ -8326,7 +8326,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
     
 }
 
-        /* Identificaｽｧｽ｣o */
+        /* Layout */
         .product-detail-id-section {
             display: flex !important;
             flex-direction: column !important;
@@ -8383,7 +8383,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             color: #111827 !important;
         }
 
-        /* Ajuste nos textos secundｽ｡rios e observaｽｧｽｵes */
+        /* Layout */
         .product-obs-text {
             color: #475569 !important;
             font-size: 0.9rem !important;
@@ -8417,11 +8417,11 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* ===================================================
-   REFINAMENTOS MENU E CARDS DE NAVEGAげ DESKTOP
+   Layout
    =================================================== */
         @media (min-width: 1024px) {
 
-            /* Cards de Navegaｽｧｽ｣o e Canais */
+            /* Layout */
             .menu-card,
             .channel-card,
             .dashboard-screen.internal .menu-card,
@@ -8435,7 +8435,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 /* Fundo branco para contraste */
             }
 
-            /* Labels de Navegaｽｧｽ｣o - COR PRETA OBRIGATｿｭIA */
+            /* Layout */
             .menu-card .label,
             .channel-card .label,
             .channel-card .op-label,
@@ -8446,7 +8446,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 font-weight: 700 !important;
             }
 
-            /* 嚊ones 3D, Imagens e Containers de 嚊one */
+            /* Layout */
             .menu-icon-3d,
             .channel-card .menu-icon-3d,
             .channel-card img,
@@ -8465,15 +8465,15 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 flex-shrink: 0 !important;
             }
 
-            /* Ajuste de tamanho para Material Icons dentro dos cards de navegaｽｧｽ｣o */
+            /* Layout */
             .menu-card .icon,
             .channel-card .icon-box .material-symbols-rounded,
             .channel-card .icon-box .icon {
                 font-size: 40px !important;
             }
 
-            /* REMOVER TOPBAR EM TODAS AS TELAS INTERNAS - FULLSCREEN OBRIGATｿｭIO */
-            /* Seletor especｽｭfico para o header/top-bar principal */
+            /* Layout */
+            /* Layout */
             .dashboard-screen.internal header.top-bar,
             .dashboard-screen.internal .top-bar-container .top-bar,
             .inventory-screen header.top-bar,
@@ -8481,36 +8481,36 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 display: none !important;
             }
 
-            /* Garantir que Nげ haja padding-top nas telas internas para ocupar 100% da altura */
+            /* Layout */
             
         }
 
         /* ===================================================
-   NAVEGAげ FLUTUANTE (HOVER TRIGGER)
+   Layout
    =================================================== */
 
         /* ===================================================
-   NAVEGAげ FLUTUANTE (HOVER TRIGGER) - GLOBAL
+   Layout
    =================================================== */
 
-        /* 影a de Hover no Topo (Desktop) */
+        /* Layout */
         .menu-top-trigger-area {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 60px;
-            /* Faixa invisｽｭvel de gatilho no topo */
+            /* Layout */
             z-index: 99998;
             background: transparent;
             pointer-events: auto;
         }
 
-        /* Container das Aｽｧｽｵes Flutuantes */
+        /* Layout */
         .menu-floating-top-actions {
             position: fixed;
             top: 15px;
-            /* Posiｽｧｽ｣o left/right injetada via app.js */
+            /* Layout */
             z-index: 99999;
             display: flex;
             gap: 15px;
@@ -8523,7 +8523,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Ativar ao passar o mouse na ｽ｡rea de trigger ou sobre o prｽｳprio botｽ｣o */
+        /* Layout */
         .menu-top-trigger-area:hover~.menu-floating-top-actions,
         .menu-floating-top-actions:hover {
             opacity: 1;
@@ -8532,7 +8532,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             transform: translateY(0);
         }
 
-        /* Estilo do Botｽ｣o Flutuante */
+        /* Layout */
         .btn-exit-floating {
             width: 48px;
             height: 48px;
@@ -8561,7 +8561,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             font-weight: 700;
         }
 
-        /* AJUSTE PARA MOBILE (Sempre Visｽｭvel e Discreto) */
+        /* Layout */
         @media (max-width: 768px) {
             .menu-floating-top-actions {
                 opacity: 0.7 !important;
@@ -8642,7 +8642,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 opacity: 1;
             }
 
-            /* Garantir que o conteｽｺdo fique acima do brilho */
+            /* Layout */
             .menu-card>*,
             .channel-card>* {
                 position: relative;
@@ -8651,7 +8651,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 /* Deixa o evento passar para o card */
             }
 
-            /* Reativar eventos para botｽｵes internos se houver */
+            /* Layout */
             .menu-card button,
             .channel-card button,
             .menu-card a,
@@ -8659,7 +8659,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 pointer-events: auto;
             }
 
-            /* Mobile - Reduｽｧｽ｣o de intensidade */
+            /* Layout */
             @media (max-width: 768px) {
 
                 .menu-card::before,
@@ -8677,7 +8677,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             }
         }
 
-        /* Cores Dinｽ｢micas para a Tela de Conferｽｪncia (Accent) */
+        /* Layout */
         .dashboard-screen.internal.shopee {
             --channel-accent: #FFCCBC;
         }
@@ -8703,11 +8703,11 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* ===================================================
-   PADRONIZAげ CARDS MOBILE (MODO CIR阜GICO)
+   Layout
    =================================================== */
         @media (max-width: 768px) {
 
-            /* Grid com 2 colunas para TODAS as telas que usam cards de seleｽｧｽ｣o */
+            /* Layout */
             .dashboard-screen .menu-grid {
                 grid-template-columns: repeat(2, 1fr) !important;
                 gap: 12px !important;
@@ -8717,8 +8717,8 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 display: grid !important;
             }
 
-            /* Card Layout Global Mobile: 嚊one acima, Texto abaixo, Totalmente Centralizado */
-            /* Aplicado especificamente em cards de seleｽｧｽ｣o (dentro de menu-grid) */
+            /* Layout */
+            /* Layout */
             .menu-card,
             .channel-card {
                 display: flex !important;
@@ -8736,7 +8736,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
             }
 
-            /* Tamanho Padronizado de 嚊ones (Global Mobile) */
+            /* Layout */
             .dashboard-screen .menu-card .menu-icon-3d,
             .dashboard-screen .channel-card .menu-icon-3d,
             .dashboard-screen .channel-card .icon-box {
@@ -8754,13 +8754,13 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 box-shadow: none !important;
             }
 
-            /* 嚊ones Material dentro dos cards */
+            /* Layout */
             .dashboard-screen .menu-card .icon,
             .dashboard-screen .channel-card .icon-box .material-symbols-rounded {
                 font-size: 32px !important;
             }
 
-            /* Ajuste do texto (Labels): Centralizado, Mｽ｡ximo 2 linhas, Cor preta #101018 */
+            /* Layout */
             .dashboard-screen .menu-card .label,
             .dashboard-screen .channel-card .op-label,
             .dashboard-screen .channel-card .label {
@@ -8793,7 +8793,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* ===================================================
-   PADRONIZAげ CARDS MOBILE - OBRIGATｿｭIO (CIR阜GICO)
+   Layout
    =================================================== */
         @media (max-width: 768px) {
 
@@ -8817,7 +8817,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 height: auto !important;
             }
 
-            /* FOR贈 QUALQUER WRAPPER DE 椶ONE (Aumentado para 85px igual ao menu principal) */
+            /* Layout */
             .menu-card .menu-icon-3d,
             .channel-card .menu-icon-3d,
             .submenu-card .menu-icon-3d,
@@ -8884,7 +8884,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 display: block !important;
             }
 
-            /* FOR贈 TEXTO (0.95rem e 700 weight igual ao menu principal) */
+            /* Layout */
             .menu-card span,
             .channel-card span,
             .submenu-card span,
@@ -8935,7 +8935,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 width: 100% !important;
             }
 
-            /* Garantir que o texto apareｽｧa em branco se for fundo escuro ou preto se for fundo claro */
+            /* Layout */
             .menu-screen .label {
                 color: #ffffff !important;
             }
@@ -8945,7 +8945,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 color: #101018 !important;
             }
 
-            /* Se houver uma div que engloba o texto, forｽｧa-la a alinhar tambｽｩm */
+            /* Layout */
             .menu-card>div:not([class*="icon"]):not(img),
             .channel-card>div:not([class*="icon"]):not(img),
             .submenu-card>div:not([class*="icon"]):not(img),
@@ -10845,7 +10845,7 @@ body.search-signal-error::after {
 
 /* Grid Desktop standardization for Minimal Picking */
 /* ===================================================
-   MENU PRINCIPAL - AJUSTE CIRﾃ啌GICO PREMIUM (FIX)
+   Layout
    =================================================== */
 
 /* Ajuste Geral da Tela de Menu - TEMA DARK PREMIUM */
@@ -10863,11 +10863,11 @@ body.search-signal-error::after {
 
 @media (max-width: 1023px) {
     .dashboard-screen.menu-screen {
-        padding-top: 76px !important; /* Espaﾃｧo para o topo no Mobile */
+        padding-top: 76px !important; /* Layout */
     }
 }
 
-/* ﾃ〉ea Central de Conteﾃｺdo */
+/* Layout */
 .dashboard-screen.menu-screen .container {
     flex: 1 !important;
     width: 100% !important;
@@ -10879,7 +10879,7 @@ body.search-signal-error::after {
     z-index: 1 !important;
 }
 
-/* Garante que o grid tenha espaﾃｧo no final no mobile */
+/* Layout */
 @media (max-width: 1023px) {
     .dashboard-screen.menu-screen .menu-grid {
         padding-bottom: 90px !important;
@@ -10910,7 +10910,7 @@ body.search-signal-error::after {
     }
 }
 
-/* Status Conexﾃ｣o */
+/* Layout */
 .menu-screen .connection-status-center {
     position: absolute;
     left: 50%;
@@ -10924,7 +10924,7 @@ body.search-signal-error::after {
     border-radius: 20px;
 }
 
-/* RODAPﾃ MENU PRINCIPAL */
+/* Layout */
 .menu-screen .menu-footer {
     position: fixed !important;
     bottom: 0 !important;
@@ -10941,7 +10941,7 @@ body.search-signal-error::after {
     border-top-right-radius: 24px !important;
 }
 
-/* REMOVIDO CONFORME SOLICITADO: Rodapﾃｩ e Menu-footer */
+/* Layout */
 .menu-footer,
 .menu-footer-visible,
 .menu-footer-hover-zone,
@@ -10949,7 +10949,7 @@ body.search-signal-error::after {
     display: none !important;
 }
 
-/* Conteﾃｺdo do Rodapﾃｩ: 5 ﾃヽEAS IGUAIS */
+/* Layout */
 .menu-screen .menu-footer-content {
     display: none !important;
     justify-content: space-around !important;
@@ -10961,7 +10961,7 @@ body.search-signal-error::after {
 }
 
 .menu-screen .menu-footer-item {
-    flex: 1 !important; /* 5 ﾃ｡reas iguais */
+    flex: 1 !important; /* Layout */
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -10987,9 +10987,9 @@ body.search-signal-error::after {
     color: #ffffff !important;
 }
 
-/* Botﾃ｣o Central Elevado */
+/* Layout */
 .menu-screen .menu-footer-action {
-    flex: 1 !important; /* Parte do 5 ﾃ｡reas iguais */
+    flex: 1 !important; /* Layout */
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
@@ -11025,7 +11025,7 @@ body.search-signal-error::after {
     transform: scale(0.9) !important;
 }
 
-/* Recorte suave (Vale) no rodapﾃｩ */
+/* Layout */
 .menu-screen .menu-footer::before {
     content: '' !important;
     position: absolute !important;
@@ -11055,7 +11055,7 @@ body.search-signal-error::after {
     padding-top: 70px !important;
 }
 
-/* Garantir que o texto apareﾃｧa em preto nas telas internas (fundo claro) */
+/* Layout */
 .internal .label,
 .internal-screen .label {
     color: #101018 !important;
@@ -11080,7 +11080,7 @@ body.search-signal-error::after {
     pointer-events: auto !important;
 }
 
-/* Cﾃ泥IGO OBRIGATﾃ迭IO DE REMOﾃグ DE TARJAS */
+/* Layout */
 .top-bar,
 .app-header,
 header.top-bar,
@@ -11152,7 +11152,7 @@ body::after,
   background: linear-gradient(180deg, #05070d 0%, #0a0f1c 100%) !important;
 }
 
-/* NOVO PADRﾃグ DE BOTﾃ髭S FLUTUANTES CIRCULARES PRETOS */
+/* Layout */
 .btn-floating-app {
   position: fixed !important;
   top: 56px !important;
@@ -11199,7 +11199,7 @@ body.fullscreen-mode .btn-tela-cheia {
   display: none !important;
 }
 
-/* ZONA INVISﾃ昂EL DE HOVER PARA BOTﾃ髭S FLUTUANTES */
+/* Layout */
 .top-hover-zone {
   position: fixed !important;
   top: 0 !important;
@@ -11230,7 +11230,7 @@ body.fullscreen-mode .btn-tela-cheia {
   }
 }
 
-/* DESTRUIﾃグ DE REGRAS DUPLICADAS ANTIGAS */
+/* Layout */
 .btn-back-top,
 .btn-action,
 .btn-exit-floating,
@@ -11249,7 +11249,7 @@ body.fullscreen-mode .btn-tela-cheia {
   background: #f04444 !important;
 }
 
-/* Identificaﾃｧﾃ｣o Visual de Telas Internas (Mini Title) */
+/* Layout */
 .screen-mini-title {
     display: flex;
     align-items: center;
@@ -11303,7 +11303,7 @@ body.fullscreen-mode .btn-tela-cheia {
 
 
 
-/* Blocos de Formulﾃ｡rio (NF e outros) */
+/* Layout */
 .form-section-block {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -11325,13 +11325,13 @@ body.fullscreen-mode .btn-tela-cheia {
 }
 
 /* ===================================================
-   PADRONIZAﾃグ TIPOGRﾃ：ICA Mﾃ泥ULO PRODUTOS
+   Layout
    Objetivo: Unificar a identidade visual com o Menu
    =================================================== */
 
 
 
-/* Tﾃｭtulos e Labels que seguem o padrﾃ｣o Fjalla One do Menu Principal */
+/* Layout */
 .product-detail-title,
 .product-stock-title,
 .product-related-title,
@@ -11345,7 +11345,7 @@ body.fullscreen-mode .btn-tela-cheia {
     letter-spacing: 0.04em !important;
 }
 
-/* Ajuste fino para inputs de ediﾃｧﾃ｣o herdarem a fonte do sistema */
+/* Layout */
 .product-form-screen input,
 .product-form-screen select,
 .product-form-screen textarea {
@@ -15000,7 +15000,7 @@ button.quick-action-item {
     cursor: pointer !important;
 }
 
-/* 1. Botﾃ｣o Principal (+) */
+/* Layout */
 .quick-action-fab {
     width: 44px !important;
     height: 44px !important;
@@ -15022,7 +15022,7 @@ button.quick-action-item {
     font-weight: 600 !important;
 }
 
-/* 2. Botﾃ｣o Config (Engrenagem) */
+/* Layout */
 .menu-config-fab {
     width: 36px !important;
     height: 36px !important;
@@ -15044,7 +15044,7 @@ button.quick-action-item {
     font-size: 18px !important;
 }
 
-/* 3. Botﾃ｣o Sair (Power) */
+/* Layout */
 .btn-floating-app.btn-sair {
     width: 36px !important;
     height: 36px !important;
@@ -15070,7 +15070,7 @@ button.quick-action-item {
     color: inherit !important;
 }
 
-/* Ajuste de Posiﾃｧﾃ｣o no Tema Claro (Sombra dos Cards) */
+/* Layout */
 .picking-screen .fab-container-group,
 .pack-screen .fab-container-group {
     bottom: 24px !important;
@@ -15096,8 +15096,8 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   FAB CIRCULAR ICONS - PADRﾃグ UNIFICADO (Topo Direito)
-   Funﾃｧﾃｵes Rﾃ｡pidas (+) | Configuraﾃｧﾃｵes (gear) | Desligar (power)
+   Layout
+   Layout
    =================================================== */
 
 .fab-icon-btn {
@@ -15128,7 +15128,7 @@ button.quick-action-item {
     transition: box-shadow 0.18s ease !important;
 }
 
-/* Hover: ﾃｭcones vermelhos escurecem */
+/* Layout */
 .fab-funcoes:hover svg,
 .fab-config:hover svg,
 .fab-fullscreen:hover svg {
@@ -15136,7 +15136,7 @@ button.quick-action-item {
     box-shadow: 0 6px 18px rgba(239, 43, 45, 0.32) !important;
 }
 
-/* Hover: ﾃｭcone branco (desligar) 窶 sﾃｭmbolo fica vermelho mais escuro */
+/* Layout */
 .fab-desligar:hover svg circle {
     fill: #f0f0f0 !important;
 }
@@ -15149,7 +15149,7 @@ button.quick-action-item {
     transform: scale(0.93) !important;
 }
 
-/* Modo rﾃ｡pido ativo: botﾃ｣o (+) escurecido */
+/* Layout */
 .fab-funcoes.fast-mode svg circle:first-child {
     fill: #1a1a1a !important;
 }
@@ -15166,7 +15166,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   TOP-ACTION-GROUP 窶 3 ﾃｭcones de aﾃｧﾃ｣o no topo direito
+   Layout
    Presente em TODAS as telas via getTopBarHTML()
    =================================================== */
 
@@ -15489,7 +15489,7 @@ button.quick-action-item {
     stroke: #B91C1C !important;
 }
 
-/* Esconder FAB inferior nas telas internas (jﾃ｡ estﾃ｣o no topo) */
+/* Layout */
 .dashboard-screen.internal .fab-container-group {
     display: none !important;
 }
@@ -15505,8 +15505,8 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   MODULE SIDEBAR 窶 Barra lateral vertical dos mﾃｳdulos
-   Replicando padrﾃ｣o Pick/Pack para todos os mﾃｳdulos
+   Layout
+   Layout
    =================================================== */
 
 .module-sidebar {
@@ -15551,7 +15551,7 @@ button.quick-action-item {
     font-family: 'Fjalla One', sans-serif !important;
 }
 
-/* Mobile top bar horizontal dos mﾃｳdulos */
+/* Layout */
 .module-top-bar {
     display: none;
     position: fixed;
@@ -15583,7 +15583,7 @@ button.quick-action-item {
     font-family: 'Fjalla One', sans-serif !important;
 }
 
-/* Responsividade: desktop 竊 barra lateral; mobile 竊 barra horizontal */
+/* Layout */
 @media (min-width: 1025px) {
     .module-screen {
         padding-right: 54px !important;
@@ -15611,7 +15611,7 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   TIPOGRAFIA GLOBAL 窶 Fonte premium em todos os textos
+   Layout
    =================================================== */
 
 .dashboard-screen,
@@ -15664,10 +15664,10 @@ button.quick-action-item {
 }
 
 /* ===================================================
-   CONSISTﾃ劾CIA VISUAL 窶 Menu principal sem modificaﾃｧﾃ｣o
+   Layout
    =================================================== */
 
-/* Garantir que o menu principal nﾃ｣o tenha sidebar */
+/* Layout */
 .menu-screen .module-sidebar,
 .menu-screen .module-top-bar {
     display: none !important;
@@ -15828,11 +15828,11 @@ button.quick-action-item {
   }
 }
 
-/* top-action-group no menu screen nﾃ｣o ﾃｩ mais hidden (agora ﾃｩ nativo) */
+/* Layout */
 
 /* ===================================================
    FINAL CARD ICON/TEXT STANDARDIZATION
-   ﾃ皇one menor ﾃ esquerda, texto forte ﾃ direita, hover comum.
+   Layout
    =================================================== */
 
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d {
@@ -16845,7 +16845,7 @@ body:not(.login-active) #btn-fullscreen-login {
 }
 
 /* =====================================================
-   GLOBAL MOBILE REFINEMENT 窶 PREMIUM NATIVE LOOK
+   Layout
    ===================================================== */
 
 @media (max-width: 1023px) {
@@ -16876,7 +16876,7 @@ body:not(.login-active) #btn-fullscreen-login {
         display: none !important;
     }
 
-    /* Cores especﾃｭficas por mﾃｳdulo mantidas via gradiente mas padronizadas */
+    /* Layout */
     .mod-topbar-produtos { background: linear-gradient(180deg, #DC2626 0%, #991B1B 100%) !important; }
     .mod-topbar-kit_lampada { background: linear-gradient(180deg, #F59E0B 0%, #B45309 100%) !important; }
     .mod-topbar-movimentos { background: linear-gradient(180deg, #8B5CF6 0%, #6D28D9 100%) !important; }
@@ -16914,7 +16914,7 @@ body:not(.login-active) #btn-fullscreen-login {
         padding: 0 !important;
     }
 
-    /* Botﾃ｣o Voltar Integrado */
+    /* Layout */
     .top-action-group {
         position: fixed !important;
         top: 0 !important;
@@ -16944,10 +16944,10 @@ body:not(.login-active) #btn-fullscreen-login {
 
     .top-action-group .fab-config {
         margin-left: auto !important; /* Empurra config para a direita se estiver no topo */
-        display: none !important; /* Normalmente oculto no topo operacional para nﾃ｣o poluir */
+        display: none !important; /* Layout */
     }
 
-    /* Conteﾃｺdo Principal */
+    /* Layout */
     .dashboard-screen.internal main.container,
     .module-screen main.container {
         padding-top: calc(var(--header-height) + 16px) !important;
@@ -16992,7 +16992,7 @@ body:not(.login-active) #btn-fullscreen-login {
         flex: 1 !important;
     }
 
-    /* Adicionar seta ﾃ direita nos cards (via pseudo) */
+    /* Layout */
     .menu-card.mobile-nav-card::after {
         content: 'chevron_right' !important;
         font-family: 'Material Symbols Rounded' !important;
@@ -22815,7 +22815,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   KIT LAMPADAS V2 窶 PREMIUM DARK AUTOMOTIVE THEME
+   Layout
    ================================================================ */
 
 /* SCREEN BASE */
@@ -23201,7 +23201,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 }
 
 /* ================================================================
-   KIT V2 窶 MOBILE RESPONSIVE
+   Layout
    ================================================================ */
 @media (max-width: 767px) {
     .kit-v2-container {
@@ -23294,7 +23294,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   KIT V2 窶 SIDEBAR DIREITA (TEXTO VERTICAL)
+   Layout
    ================================================================ */
 .kit-v2-sidebar-right {
     position: fixed;
@@ -23361,7 +23361,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
     display: none !important;
 }
 
-/* Card refinement 窶 closer to reference */
+/* Layout */
 .kit-v2-result-card {
     background: rgba(12,12,20,.85) !important;
     border: 1px solid rgba(255,255,255,.05) !important;
@@ -23373,7 +23373,7 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
     border-color: rgba(255,255,255,.1) !important;
 }
 
-/* Detail button 窶 white outline style like reference */
+/* Layout */
 .kit-v2-detail-btn-wrap {
     border-color: rgba(255,255,255,.3) !important;
     color: rgba(255,255,255,.8) !important;
@@ -23987,23 +23987,23 @@ html[data-theme="light"] #inventory-setup-content .inv-setup-safe-note {
 
 
 /* ================================================================
-   PADRONIZACAO GLOBAL 窶 SIDEBAR LATERAL (TRACO VERTICAL + FJALLA ONE)
+   Layout
    ================================================================ */
 
 
 
 /* ================================================================
-   PADRONIZACAO GLOBAL 窶 SIDEBARS (FJALLA ONE, TRACO VERTICAL & ESPACAMENTO)
+   Layout
    ================================================================ */
 
-/* 1. Traﾃｧo vertical padronizado (border-left) para todas as barras laterais */
+/* Layout */
 .module-sidebar,
 .operational-sidebar,
 .kit-v2-sidebar-right {
     border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-/* 2. Fonte Fjalla One, tamanho, peso e espaﾃｧamento padronizado para as escritas verticais */
+/* Layout */
 .module-sidebar .sidebar-label,
 .operational-sidebar .sidebar-label,
 .kit-v2-sidebar-right span {
@@ -24508,7 +24508,7 @@ body.login-active #login-screen .top-hover-zone {
 body.login-active #login-screen .login-logo {
   position: absolute !important;
   top: clamp(32px, 5vh, 48px) !important; /* Descido um pouco / Descended slightly */
-  left: clamp(24px, 4vw, 56px) !important; /* Alinhado ﾃ esquerda / Aligned to left */
+  left: clamp(24px, 4vw, 56px) !important; /* Layout */
   width: clamp(202px, 18.4vw, 304px) !important; /* Made 15% larger */
   max-width: 35% !important;
   max-height: 20vh !important;
@@ -24606,7 +24606,7 @@ html body.login-active.fullscreen-mode #login-screen .top-hover-zone .btn-floati
   pointer-events: auto !important;
 }
 
-/* Premium Red Degradﾃｪ Cards (Slightly more compact / Levemente menor) */
+/* Layout */
 body.login-active #login-screen .login-user-card {
   width: 144px !important;
   height: 192px !important;
@@ -25094,7 +25094,7 @@ html body.login-active.fullscreen-mode #login-screen #btn-fullscreen-login.btn-t
    TEMA DARK - MENU PRINCIPAL (Final)
    =================================================== */
 
-/* Sobrescrever variﾃ｡vel --bg para tema dark (PRETO) */
+/* Layout */
 body.menu-active {
   --bg: #000000 !important;
   background-color: #000000 !important;
@@ -25115,7 +25115,7 @@ body.menu-active {
   background: transparent !important;
 }
 
-/* Cards do menu - apenas fundo preto, sem traﾃｧos */
+/* Layout */
 .dashboard-screen.menu-screen .menu-card,
 .dashboard-screen.menu-screen .menu-card *,
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d,
@@ -25146,7 +25146,7 @@ body.menu-active {
   color: #FFFFFF !important;
 }
 
-/* ﾃ皇ones sem sombra */
+/* Layout */
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d,
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d svg,
 .dashboard-screen.menu-screen .menu-card .menu-icon-3d img {
@@ -25162,7 +25162,7 @@ body.menu-active {
 }
 
 .dashboard-screen.menu-screen .menu-card::after {
-  content: '窶ｺ' !important;
+  content: 'çª¶ï½º' !important;
   position: absolute !important;
   right: 16px !important;
   top: 50% !important;
@@ -25180,7 +25180,7 @@ body.menu-active {
   transform: translateY(-50%) translateX(4px) !important;
 }
 
-/* Ajuste da ﾃ｡rea do label para nﾃ｣o sobrepor a seta */
+/* Layout */
 .dashboard-screen.menu-screen .menu-card .label {
   padding-right: 28px !important;
 }
@@ -27020,7 +27020,7 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .menu-card sma
     gap: 12px !important;
   }
 }
-/* Padrão visual claro para submenus de Inventário e Entrada NF */
+/* Layout */
 .standard-card-menu-screen {
   background: #f3f4f6 !important;
   min-height: 100vh;
@@ -31306,7 +31306,7 @@ body:not(.login-active) #app > .product-submenu-screen > main.container {
   }
 }
 
-/* Compras: usa o mesmo padrão visual dos submenus padrão do app. */
+/* Layout */
 #app > .dashboard-screen.compras-standard-screen {
   background: #f3f4f6 !important;
   color: #111827 !important;
@@ -32593,7 +32593,7 @@ body:not(.login-active) #app > .product-submenu-screen > main.container {
   }
 }
 
-/* Histórico de Movimentos - dark grouped operations */
+/* Layout */
 .mov-history-screen {
   background:
     radial-gradient(circle at 18% 0%, rgba(227, 6, 19, 0.12), transparent 28%),
@@ -36974,7 +36974,7 @@ html body:not(.login-active) #app > .dashboard-screen.mov-history-screen {
   }
 }
 
-/* Transferência - central operacional scanner-first */
+/* Layout */
 .transfer-ops-screen {
   background:
     radial-gradient(circle at 14% 0%, rgba(126, 34, 206, 0.18), transparent 27%),
@@ -70918,7 +70918,7 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen #pick
   background: #fee2e2;
   color: #b91c1c;
 }
-/* Consulta operacional de separações pela ação rápida. */
+/* Layout */
 .quick-separation-submenu{background:var(--surface,#fff);border-radius:14px;inset:8px;overflow:auto;position:absolute;z-index:4}.quick-separation-submenu>header{align-items:center;border-bottom:1px solid rgba(100,116,139,.2);display:flex;gap:10px;padding:12px}.quick-separation-submenu>header button{align-items:center;background:transparent;border:0;color:var(--text,#111827);display:flex;justify-content:center;min-height:44px;min-width:44px}.quick-separation-submenu>header>span{display:flex;flex-direction:column}.quick-separation-submenu>header strong{font:400 1rem 'Fjalla One',sans-serif}.quick-separation-submenu>header small{color:#64748b}.quick-separation-submenu>div{display:flex;flex-direction:column;gap:7px;padding:10px}.quick-separation-submenu>div>button{align-items:center;background:var(--bg,#f8fafc);border:1px solid rgba(100,116,139,.18);border-radius:10px;color:var(--text,#111827);display:grid;gap:10px;grid-template-columns:auto 1fr auto;min-height:58px;padding:8px 11px;text-align:left}.quick-separation-submenu>div>button>span:nth-child(2){display:flex;flex-direction:column}.quick-separation-submenu>div>button>span:first-child{color:#7e22ce;font-size:1.55rem}.quick-separation-submenu>div>button small{color:#64748b;font-size:.72rem}.quick-separation-submenu>div>button b{background:#ede9fe;border-radius:999px;color:#6d28d9;min-width:28px;padding:4px 7px;text-align:center}.finalized-separations-shell,.finalized-detail-shell{padding-bottom:40px}.finalized-separations-header{align-items:center;background:linear-gradient(105deg,#0f172a,#334155);border-radius:15px;color:#fff;display:flex;justify-content:space-between;margin-bottom:12px;padding:16px}.finalized-separations-header>div{align-items:center;display:flex;gap:11px}.finalized-separations-header>div>.material-symbols-rounded{font-size:2rem}.finalized-separations-header h1{font:400 1.35rem 'Fjalla One',sans-serif;margin:0}.finalized-separations-header p{font:.8rem 'PT Sans Narrow',sans-serif;margin:2px 0 0;opacity:.8}.finalized-separations-header button{background:#fff;border:0;border-radius:8px;color:#0f172a;font-weight:900;min-height:44px;padding:0 14px}.finalized-separations-controls{align-items:center;background:var(--surface,#fff);border:1px solid rgba(100,116,139,.18);border-radius:12px;display:grid;gap:10px;grid-template-columns:1fr auto auto;margin-bottom:12px;padding:10px}.finalized-separations-controls label{align-items:center;display:flex}.finalized-separations-controls input,.finalized-separations-controls select{background:var(--bg,#fff);border:1px solid rgba(100,116,139,.25);border-radius:8px;color:var(--text,#111827);min-height:44px;padding:0 10px}.finalized-separations-controls label input{padding-left:34px;width:100%}.finalized-separations-controls label .material-symbols-rounded{margin-right:-28px;position:relative;z-index:1}.finalized-separations-list{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}.finalized-separations-list>article{background:var(--surface,#fff);border:1px solid rgba(100,116,139,.18);border-radius:13px;overflow:hidden;padding:12px}.finalized-separations-list>article>header{align-items:center;display:flex;justify-content:space-between}.finalized-channel{border-radius:999px;display:inline-flex;font-size:.68rem;font-weight:900;padding:4px 8px;text-transform:uppercase}.finalized-channel.tone-purple{background:#f3e8ff;color:#7e22ce}.finalized-channel.tone-green{background:#dcfce7;color:#166534}.finalized-channel.tone-orange{background:#ffedd5;color:#9a3412}.finalized-channel.tone-yellow{background:#fef3c7;color:#92400e}.finalized-channel.tone-slate{background:#e2e8f0;color:#334155}.finalized-separations-list mark{background:#dcfce7;border-radius:5px;color:#166534;font-size:.65rem;font-weight:900;padding:4px 6px}.finalized-separation-main{align-items:end;display:grid;gap:12px;grid-template-columns:1fr auto;margin:12px 0}.finalized-separation-main>div{display:flex;flex-direction:column}.finalized-separation-main>div>strong{font:400 1.1rem 'Fjalla One',sans-serif}.finalized-separation-main small,.finalized-separation-main em{color:#64748b;font-size:.72rem;font-style:normal}.finalized-separation-main dl{display:flex;gap:6px;margin:0}.finalized-separation-main dl>div{background:var(--bg,#f8fafc);border-radius:7px;display:flex;flex-direction:column;min-width:58px;padding:6px;text-align:center}.finalized-separation-main dt{color:#64748b;font-size:.62rem}.finalized-separation-main dd{font-weight:900;margin:0}.finalized-separations-list>article>button{align-items:center;background:#2563eb;border:0;border-radius:8px;color:#fff;display:flex;font-weight:900;justify-content:center;min-height:42px;width:100%}.finalized-separations-empty,.finalized-separation-loading{align-items:center;background:var(--surface,#fff);border-radius:12px;color:#64748b;display:flex;flex-direction:column;gap:8px;justify-content:center;min-height:180px}.finalized-detail-header{align-items:center;background:linear-gradient(105deg,#1d4ed8,#1e40af);border-radius:15px;color:#fff;display:flex;gap:12px;padding:15px}.finalized-detail-header>button{align-items:center;background:rgba(255,255,255,.16);border:0;border-radius:9px;color:#fff;display:flex;justify-content:center;min-height:44px;min-width:44px}.finalized-detail-header h1{font:400 1.35rem 'Fjalla One',sans-serif;margin:5px 0 0}.finalized-detail-header p{font:.78rem 'PT Sans Narrow',sans-serif;margin:2px 0 0;opacity:.82}.finalized-detail-summary{display:grid;gap:8px;grid-template-columns:repeat(5,1fr);margin:10px 0}.finalized-detail-summary article{background:var(--surface,#fff);border:1px solid rgba(100,116,139,.18);border-radius:10px;display:flex;flex-direction:column;padding:10px;text-align:center}.finalized-detail-summary small{color:#64748b}.finalized-detail-summary strong{font:400 1.35rem 'Fjalla One',sans-serif}.finalized-detail-meta{background:var(--surface,#fff);border-radius:10px;display:flex;gap:18px;margin-bottom:10px;padding:10px 12px}.finalized-detail-products{background:var(--surface,#fff);border:1px solid rgba(100,116,139,.18);border-radius:13px;overflow:hidden}.finalized-detail-products>header{align-items:center;border-bottom:1px solid rgba(100,116,139,.18);display:flex;justify-content:space-between;padding:12px}.finalized-detail-products h2{font:400 1.05rem 'Fjalla One',sans-serif;margin:0}.finalized-detail-products>header span{background:#e2e8f0;border-radius:5px;color:#475569;font-size:.65rem;font-weight:900;padding:4px 6px}.finalized-detail-products>article{align-items:center;border-bottom:1px solid rgba(100,116,139,.14);display:grid;gap:12px;grid-template-columns:1fr auto;padding:12px}.finalized-detail-products>article:last-child{border-bottom:0}.finalized-detail-products>article>div{display:flex;flex-direction:column}.finalized-detail-products>article span,.finalized-detail-products>article small{color:#64748b;font-size:.74rem}.finalized-detail-products>article>b{display:flex;flex-direction:column;font:400 1.3rem 'Fjalla One',sans-serif;text-align:center}.finalized-detail-products>article>b small{font:.65rem 'PT Sans Narrow',sans-serif}html[data-theme="dark"] .quick-separation-submenu,html[data-theme="dark"] .finalized-separations-controls,html[data-theme="dark"] .finalized-separations-list>article,html[data-theme="dark"] .finalized-detail-summary article,html[data-theme="dark"] .finalized-detail-meta,html[data-theme="dark"] .finalized-detail-products{background:#151922;border-color:rgba(255,255,255,.1)}html[data-theme="dark"] .quick-separation-submenu>div>button,html[data-theme="dark"] .finalized-separation-main dl>div{background:#0f172a}html[data-theme="dark"] .finalized-channel.tone-slate{background:#334155;color:#e2e8f0}
 @media(max-width:768px){.quick-separation-submenu{inset:5px}.finalized-separations-header{align-items:flex-start}.finalized-separations-header p{max-width:220px}.finalized-separations-controls{grid-template-columns:1fr}.finalized-separations-controls select{width:100%}.finalized-separations-list{grid-template-columns:1fr}.finalized-separation-main{grid-template-columns:1fr}.finalized-separation-main dl{justify-content:space-between}.finalized-separation-main dl>div{flex:1}.finalized-detail-summary{grid-template-columns:repeat(3,1fr)}.finalized-detail-meta{flex-direction:column;gap:4px}.finalized-detail-products>article{align-items:start}}
 
@@ -71404,4 +71404,286 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
 .ml-pick-modal .pick-channel-card.channel-ml-agencia > .standard-module-card-icon.material-symbols-rounded {
   background: #f59e0b !important;
 }
+/* Frente exclusiva da homologacao: sem logo e somente o card administrativo. */
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .login-logo,
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .login-logo-img,
+html.app-environment-homologation body.login-active #app .login-logo-container,
+html.app-environment-homologation body.login-active #app .splash-logo {
+  display: none !important;
+}
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .login-user-grid,
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .user-grid {
+  gap: 0 !important;
+  grid-template-columns: 150px !important;
+  margin: auto !important;
+  max-width: 150px !important;
+  width: 150px !important;
+}
 
+
+/* Homologacao: faixa de ambiente como topo real, sem sobrepor a area de login. */
+html.app-environment-homologation {
+  --environment-banner-height: 48px;
+}
+html.app-environment-homologation #app-environment-banner {
+  height: var(--environment-banner-height);
+  min-height: var(--environment-banner-height);
+  padding: 0 18px;
+  box-sizing: border-box;
+  background: linear-gradient(90deg, #b45309 0%, #d97706 50%, #b45309 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.24);
+}
+html.app-environment-homologation body.login-active {
+  padding-top: 0 !important;
+  overflow: hidden !important;
+}
+html.app-environment-homologation body.login-active #app {
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+}
+html.app-environment-homologation body.login-active #app #login-screen.login-screen,
+html.app-environment-homologation body.login-active #app #login-screen.login-screen#login-screen {
+  position: fixed !important;
+  inset: var(--environment-banner-height) 0 0 0 !important;
+  width: 100% !important;
+  height: calc(100dvh - var(--environment-banner-height)) !important;
+  min-height: calc(100dvh - var(--environment-banner-height)) !important;
+  max-height: calc(100dvh - var(--environment-banner-height)) !important;
+  margin: 0 !important;
+}
+
+/* Homologacao: reserva o topo tambem nas telas internas. */
+html.app-environment-homologation body:not(.login-active) {
+  padding-top: 0 !important;
+  overflow: hidden !important;
+}
+html.app-environment-homologation body:not(.login-active) #app {
+  position: fixed !important;
+  inset: var(--environment-banner-height) 0 0 0 !important;
+  width: 100% !important;
+  height: calc(100dvh - var(--environment-banner-height)) !important;
+  min-height: calc(100dvh - var(--environment-banner-height)) !important;
+  overflow: auto !important;
+  transform: translateZ(0);
+}
+/* Homologacao: centraliza o unico usuario disponivel. */
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .login-user-grid,
+html.app-environment-homologation body.login-active #app #login-screen.login-screen .user-grid {
+  position: absolute !important;
+  inset: 50% auto auto 50% !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* Ajustes em validacao: somente na homologacao. */
+html.app-environment-homologation .pick-mode-clean-overlay .pick-mode-normal.standard-module-card {
+  background: #dbeafe !important;
+}
+html.app-environment-homologation .pick-mode-clean-overlay .pick-mode-fast.standard-module-card {
+  background: rgba(255, 237, 213, 0.5) !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+  align-self: center !important;
+  flex: 0 0 auto !important;
+  width: 106.6667% !important;
+  min-width: 106.6667% !important;
+  max-width: 1500px !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+}
+@media (max-width: 768px) {
+  html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+    width: calc(100vw - 8px) !important;
+    min-width: calc(100vw - 8px) !important;
+  }
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: rgba(248, 113, 113, 0.38) !important;
+}
+
+
+
+/* Homologacao: topo e rodape em 96%, mantendo busca e area central em 90%. */
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+  width: 96% !important;
+  max-width: 1500px !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen :where(.pick-scan-panel, .pick-work-area) {
+  align-self: center !important;
+  width: 93.75% !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-agencia .standard-module-card-copy > strong,
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-agencia > .standard-module-card-icon {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-agencia > .standard-module-card-icon svg :where(path, circle, rect, line, polyline) {
+  stroke: #ffffff !important;
+}
+@media (max-width: 768px) {
+  html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-shell {
+    width: calc(100% - 8px) !important;
+  }
+  html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen :where(.pick-scan-panel, .pick-work-area) {
+    width: calc(100% - 8px) !important;
+  }
+}
+
+/* Homologacao: ML Coleta com texto e simbolo pretos. */
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-coleta .standard-module-card-copy > strong,
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-coleta > .standard-module-card-icon {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-coleta > .standard-module-card-icon svg :where(path, circle, rect, line, polyline) {
+  stroke: #000000 !important;
+}
+
+/* Homologacao: paleta discreta final das opcoes Mercado Livre. */
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-coleta {
+  background: #fff4cc !important;
+  border: 1px solid #f2d675 !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card.channel-ml-agencia {
+  background: #f6e2b8 !important;
+  border: 1px solid #d9b96e !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card:is(.channel-ml-coleta, .channel-ml-agencia) .standard-module-card-copy > strong,
+html.app-environment-homologation .ml-pick-modal .pick-channel-card:is(.channel-ml-coleta, .channel-ml-agencia) > .standard-module-card-icon {
+  color: #1f2937 !important;
+  -webkit-text-fill-color: #1f2937 !important;
+}
+html.app-environment-homologation .ml-pick-modal .pick-channel-card:is(.channel-ml-coleta, .channel-ml-agencia) > .standard-module-card-icon svg :where(path, circle, rect, line, polyline) {
+  stroke: #1f2937 !important;
+}
+
+/* Cancelamento unitario no historico da separacao. */
+.finalized-detail-products article.has-cancelled-item { border-color: #fca5a5 !important; background: #fff7f7 !important; }
+.finalized-detail-products article.has-cancelled-item strong { color: #b91c1c !important; text-decoration: line-through; text-decoration-thickness: 2px; }
+.finalized-detail-products article.is-fully-cancelled { background: #fee2e2 !important; opacity: .82; }
+.finalized-item-cancelled-note { display: block; margin-top: 5px; color: #dc2626; font-size: .72rem; font-style: normal; font-weight: 800; }
+.cancel-item-separation-modal #cancel-item-code { border: 2px solid #2563eb; font-size: 1.05rem; font-weight: 800; }
+
+/* Homologacao: produtos finalizados como historico visual. */
+html.app-environment-homologation .finalized-detail-products{overflow:hidden;border:1px solid #dbe3ee;border-radius:16px;background:rgba(255,255,255,.92);box-shadow:0 12px 30px rgba(15,23,42,.08)}
+html.app-environment-homologation .finalized-detail-products>header{padding:15px 18px;border-bottom:1px solid #dbe3ee;background:linear-gradient(90deg,#f8fafc,#eff6ff)}
+html.app-environment-homologation .finalized-detail-products>header>span{padding:5px 9px;border:1px solid #cbd5e1;border-radius:999px;background:#fff;color:#64748b;font-size:.68rem;font-weight:800}
+html.app-environment-homologation .finalized-detail-products>article{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;margin:10px 14px;padding:15px 16px 15px 20px;border:1px solid #dbe3ee;border-radius:13px;background:#fff;box-shadow:0 5px 14px rgba(15,23,42,.05)}
+html.app-environment-homologation .finalized-detail-products>article::before{content:"";position:absolute;inset:10px auto 10px 0;width:4px;border-radius:0 999px 999px 0;background:#3b82f6}
+html.app-environment-homologation .finalized-detail-products>article>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+html.app-environment-homologation .finalized-detail-products>article>div>strong{color:#0f172a;font-size:1rem;line-height:1.25}
+html.app-environment-homologation .finalized-detail-products>article>div>span{color:#64748b;font-size:.75rem}
+html.app-environment-homologation .finalized-detail-products>article>div>small{width:fit-content;padding:4px 8px;border-radius:7px;background:#eff6ff;color:#1d4ed8;font-size:.72rem;font-weight:800}
+html.app-environment-homologation .finalized-detail-products>article>b{display:flex;align-items:baseline;justify-content:center;gap:3px;min-width:64px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:11px;background:#dbeafe;color:#1d4ed8;font-size:1.35rem}
+html.app-environment-homologation .finalized-detail-products>article.has-cancelled-item::before{background:#ef4444}
+html.app-environment-homologation .finalized-detail-products>article.has-cancelled-item>div>small{background:#fff1f2;color:#be123c}
+html.app-environment-homologation .finalized-detail-products>article.has-cancelled-item>b{border-color:#fecaca;background:#fee2e2;color:#b91c1c}
+@media(max-width:700px){html.app-environment-homologation .finalized-detail-products>article{margin:8px;padding:13px 12px 13px 17px;gap:10px}html.app-environment-homologation .finalized-detail-products>article>b{min-width:54px;padding:8px}}
+
+/* Homologacao: finalizadas no ritmo visual da separacao. */
+html.app-environment-homologation :is(.finalized-separations-shell,.finalized-detail-shell){box-sizing:border-box;width:96%!important;max-width:1500px!important;margin:0 auto!important;padding-top:10px!important}
+html.app-environment-homologation :is(.finalized-separations-header,.finalized-detail-header){box-sizing:border-box;width:100%!important;min-height:62px!important;height:62px!important;margin:0 0 10px!important;padding:8px 14px!important;border-radius:14px!important;background:linear-gradient(100deg,#1d4ed8 0%,#2563eb 52%,#1e40af 100%)!important;box-shadow:0 12px 28px rgba(37,99,235,.22)!important}
+html.app-environment-homologation .finalized-separations-header>div>.material-symbols-rounded{display:none!important}
+html.app-environment-homologation :is(.finalized-separations-header,.finalized-detail-header) h1{font:700 1.18rem 'Oswald',sans-serif!important;letter-spacing:.025em!important}
+html.app-environment-homologation :is(.finalized-separations-header,.finalized-detail-header) p{margin:2px 0 0!important;color:#dbeafe!important;font-size:.72rem!important;white-space:nowrap!important}
+html.app-environment-homologation .finalized-separations-header>button{min-height:42px!important;height:42px!important;border:1px solid rgba(255,255,255,.28)!important;background:rgba(255,255,255,.14)!important;color:#fff!important}
+html.app-environment-homologation .finalized-separations-controls{width:93.75%!important;margin:0 auto 10px!important;padding:8px 10px!important;border-radius:11px!important;box-shadow:none!important}
+html.app-environment-homologation .finalized-separations-list{width:93.75%!important;margin:0 auto!important;grid-template-columns:1fr!important;gap:9px!important}
+html.app-environment-homologation .finalized-separations-list>article{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:12px!important;align-items:center!important;padding:12px 14px!important;border-radius:12px!important;box-shadow:0 5px 15px rgba(15,23,42,.05)!important}
+html.app-environment-homologation .finalized-separations-list>article>header{grid-column:1/-1!important}
+html.app-environment-homologation .finalized-separation-main{align-items:center!important;margin:0!important;grid-template-columns:minmax(230px,1fr) auto!important}
+html.app-environment-homologation .finalized-separations-list>article>button{width:auto!important;min-width:150px!important;padding:0 14px!important}
+html.app-environment-homologation .finalized-detail-summary{margin:0 0 10px!important;gap:8px!important}
+html.app-environment-homologation .finalized-detail-summary article{min-height:64px!important;justify-content:center!important;padding:8px!important;border-radius:10px!important}
+html.app-environment-homologation .finalized-detail-summary article.is-cancelled-total{border-color:#fecaca!important;background:#fff1f2!important;color:#b91c1c!important}
+html.app-environment-homologation .finalized-detail-summary article.is-cancelled-total small{color:#dc2626!important}
+html.app-environment-homologation .finalized-detail-meta{margin-bottom:10px!important;padding:9px 12px!important;border:1px solid #e2e8f0!important}
+@media(max-width:768px){html.app-environment-homologation :is(.finalized-separations-shell,.finalized-detail-shell){width:calc(100% - 8px)!important}html.app-environment-homologation :is(.finalized-separations-header,.finalized-detail-header){height:auto!important;min-height:58px!important}html.app-environment-homologation :is(.finalized-separations-header,.finalized-detail-header) p{white-space:normal!important}html.app-environment-homologation .finalized-separations-controls,html.app-environment-homologation .finalized-separations-list{width:100%!important}html.app-environment-homologation .finalized-separations-list>article{grid-template-columns:1fr!important}html.app-environment-homologation .finalized-separation-main{grid-template-columns:1fr!important}html.app-environment-homologation .finalized-separations-list>article>button{width:100%!important}.finalized-detail-summary{grid-template-columns:repeat(2,1fr)!important}}
+
+/* Homologacao: cancelamento global por produto e canal. */
+html.app-environment-homologation .finalized-header-actions{display:flex;align-items:center;gap:8px}
+html.app-environment-homologation .finalized-header-actions>button{min-height:42px;height:42px;padding:0 14px;border-radius:9px;font-weight:900}
+html.app-environment-homologation .finalized-header-actions>.cancel-item-global{border:1px solid #fecaca!important;background:#fff!important;color:#b91c1c!important}
+.global-item-cancel-modal>section{width:min(680px,100%)}
+.global-cancel-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;padding:16px}
+.global-cancel-search label{display:flex;flex-direction:column;gap:6px}.global-cancel-search label span,.global-cancel-confirm label span{color:#334155;font-size:.76rem;font-weight:900;text-transform:uppercase}
+.global-cancel-search input{box-sizing:border-box;width:100%;min-height:46px;padding:0 12px;border:2px solid #2563eb;border-radius:9px;font-size:1rem;font-weight:800}
+.global-cancel-search>button{min-height:46px;padding:0 16px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-weight:900}
+.global-cancel-results{display:flex;flex-direction:column;gap:8px;max-height:310px;overflow:auto;padding:0 16px 14px}
+.global-cancel-results>p{margin:0;padding:22px;border:1px dashed #cbd5e1;border-radius:11px;color:#64748b;text-align:center}
+.global-cancel-results>button{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid #dbe3ee;border-radius:11px;background:#fff;color:#0f172a;text-align:left}
+.global-cancel-results>button strong{font:600 1rem 'Oswald',sans-serif}.global-cancel-results>button span{color:#475569;font-size:.78rem}.global-cancel-results>button small{color:#1d4ed8;font-size:.72rem;font-weight:800}
+.global-cancel-results>button.is-selected{border-color:#2563eb;background:#eff6ff;box-shadow:0 0 0 2px rgba(37,99,235,.16)}
+.global-cancel-confirm{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;padding:14px 16px;border-top:1px solid #e2e8f0;background:#f8fafc}.global-cancel-confirm.hidden{display:none!important}.global-cancel-confirm label{display:flex;flex-direction:column;gap:6px}.global-cancel-confirm textarea{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.global-cancel-confirm>button{min-height:46px;padding:0 16px;border:0;border-radius:9px;background:#dc2626;color:#fff;font-weight:900}
+@media(max-width:650px){html.app-environment-homologation .finalized-header-actions{gap:5px}html.app-environment-homologation .finalized-header-actions>button{padding:0 9px;font-size:.68rem}.global-cancel-search,.global-cancel-confirm{grid-template-columns:1fr}.global-cancel-search>button,.global-cancel-confirm>button{width:100%}}
+
+/* Homologacao: pendentes no padrao visual da separacao. */
+html.app-environment-homologation .pick-drafts-shell{box-sizing:border-box;width:96%!important;max-width:1500px!important;margin:0 auto!important;padding-top:10px!important;padding-bottom:30px!important}
+html.app-environment-homologation .pick-drafts-header{box-sizing:border-box;display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;min-height:62px!important;height:62px!important;margin:0 0 10px!important;padding:8px 14px!important;border:0!important;border-radius:14px!important;background:linear-gradient(100deg,#1d4ed8 0%,#2563eb 52%,#1e40af 100%)!important;color:#fff!important;box-shadow:0 12px 28px rgba(37,99,235,.22)!important}
+html.app-environment-homologation .pick-drafts-header h1{margin:0!important;color:#fff!important;font:700 1.18rem 'Oswald',sans-serif!important;letter-spacing:.025em!important}
+html.app-environment-homologation .pick-drafts-header p{margin:2px 0 0!important;color:#dbeafe!important;font-size:.72rem!important}
+html.app-environment-homologation .pick-drafts-header-actions{display:flex!important;align-items:center!important;gap:8px!important}
+html.app-environment-homologation .pick-drafts-refresh{min-height:42px!important;height:42px!important;border:1px solid rgba(255,255,255,.28)!important;background:rgba(255,255,255,.14)!important;color:#fff!important;box-shadow:none!important}
+html.app-environment-homologation .pick-drafts-counter{display:grid!important;place-items:center!important;min-height:34px!important;padding:0 10px!important;border:1px solid rgba(255,255,255,.24)!important;border-radius:8px!important;background:rgba(15,23,42,.16)!important;color:#fff!important}
+html.app-environment-homologation .pick-drafts-loading{display:flex;align-items:center;justify-content:center;gap:9px;min-height:190px;border:1px solid #dbe3ee;border-radius:14px;background:#fff;color:#64748b}
+html.app-environment-homologation .pick-drafts-loading>.material-symbols-rounded{animation:spin 1s linear infinite;color:#2563eb}
+html.app-environment-homologation .pick-drafts-summary-grid{width:93.75%!important;margin:0 auto 10px!important;gap:8px!important}
+html.app-environment-homologation .pick-drafts-summary-card{min-height:68px!important;padding:9px 12px!important;border-radius:11px!important;box-shadow:none!important}
+html.app-environment-homologation .pick-drafts-summary-card>.material-symbols-rounded,html.app-environment-homologation .pick-drafts-summary-card em{display:none!important}
+html.app-environment-homologation .pick-drafts-summary-card>div{display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;gap:8px!important}
+html.app-environment-homologation .pick-drafts-summary-card strong{font-size:1.45rem!important}.pick-drafts-summary-card small{font-weight:800!important}
+html.app-environment-homologation .pick-drafts-controls{width:93.75%!important;margin:0 auto 10px!important;padding:10px!important;border-radius:12px!important;box-shadow:none!important}
+html.app-environment-homologation .pick-drafts-future-filter{display:none!important}
+html.app-environment-homologation .pick-drafts-table-wrap{display:none!important}
+html.app-environment-homologation .pick-drafts-mobile-list{display:grid!important;width:93.75%!important;margin:0 auto!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+html.app-environment-homologation .pick-draft-mobile-card{display:flex!important;flex-direction:column!important;gap:9px!important;padding:14px!important;border:1px solid #dbe3ee!important;border-radius:13px!important;background:#fff!important;box-shadow:0 6px 16px rgba(15,23,42,.06)!important}
+html.app-environment-homologation .pick-draft-mobile-top{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important}
+html.app-environment-homologation .pick-draft-mobile-grid{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:7px!important}
+html.app-environment-homologation .pick-draft-mobile-grid>div{display:flex!important;flex-direction:column!important;padding:7px!important;border-radius:8px!important;background:#f8fafc!important;text-align:center!important}
+html.app-environment-homologation .pick-drafts-actions{display:grid!important;grid-template-columns:1fr 1fr auto!important;gap:7px!important;margin-top:auto!important}
+@media(max-width:900px){html.app-environment-homologation .pick-drafts-mobile-list{grid-template-columns:1fr!important}}
+@media(max-width:768px){html.app-environment-homologation .pick-drafts-shell{width:calc(100% - 8px)!important}html.app-environment-homologation .pick-drafts-header{height:auto!important;min-height:58px!important}html.app-environment-homologation .pick-drafts-header p{display:none!important}html.app-environment-homologation .pick-drafts-summary-grid,html.app-environment-homologation .pick-drafts-controls,html.app-environment-homologation .pick-drafts-mobile-list{width:100%!important}html.app-environment-homologation .pick-drafts-filter-bar{overflow-x:auto!important;flex-wrap:nowrap!important}html.app-environment-homologation .pick-draft-mobile-grid{grid-template-columns:repeat(2,1fr)!important}}
+
+/* Dashboard operacional - somente homologacao */
+html.app-environment-homologation body:not(.login-active) #app>.operations-dashboard-screen{min-height:100vh;background:radial-gradient(circle at 88% 8%,rgba(37,99,235,.08),transparent 28%),#f3f6fb}
+html.app-environment-homologation .operations-dashboard-shell{width:min(94%,1500px);margin:18px auto 40px;display:grid;gap:18px}
+html.app-environment-homologation .operations-dashboard-header{min-height:78px;padding:14px 20px;border-radius:16px;background:linear-gradient(135deg,#172554,#1d4ed8);color:#fff;display:flex;align-items:center;justify-content:space-between;box-shadow:0 12px 28px rgba(30,64,175,.18)}
+html.app-environment-homologation .operations-dashboard-header>div{display:flex;align-items:center;gap:14px}
+html.app-environment-homologation .operations-dashboard-header>div>span{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.15);font-size:27px}
+html.app-environment-homologation .operations-dashboard-header h1,html.app-environment-homologation .operations-dashboard-header p{margin:0}
+html.app-environment-homologation .operations-dashboard-header h1{font-size:clamp(1.15rem,2vw,1.55rem);letter-spacing:.03em}
+html.app-environment-homologation .operations-dashboard-header p{margin-top:3px;color:rgba(255,255,255,.76);font-size:.82rem}
+html.app-environment-homologation .operations-dashboard-header time{padding:9px 13px;border:1px solid rgba(255,255,255,.25);border-radius:999px;color:rgba(255,255,255,.9);font-size:.76rem;text-transform:capitalize}
+html.app-environment-homologation .dashboard-packages-panel{padding:22px;border:1px solid #dce3ee;border-radius:18px;background:rgba(255,255,255,.94);box-shadow:0 10px 30px rgba(15,23,42,.06)}
+html.app-environment-homologation .dashboard-packages-panel>header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid #e7ecf3}
+html.app-environment-homologation .dashboard-packages-panel h2,html.app-environment-homologation .dashboard-packages-panel p{margin:0}
+html.app-environment-homologation .dashboard-packages-panel header>div:first-child>small{color:#2563eb;font-size:.68rem;font-weight:800;letter-spacing:.13em}
+html.app-environment-homologation .dashboard-packages-panel h2{margin-top:4px;color:#172033;font-size:clamp(1.18rem,2vw,1.55rem)}
+html.app-environment-homologation .dashboard-packages-panel header p{margin-top:3px;color:#64748b;font-size:.82rem}
+html.app-environment-homologation .dashboard-packages-total{min-width:130px;padding:9px 16px;border-radius:14px;background:#eff6ff;color:#1d4ed8;display:grid;grid-template-columns:auto auto;align-items:end;justify-content:center;column-gap:7px}
+html.app-environment-homologation .dashboard-packages-total span{grid-column:1/-1;font-size:.62rem;font-weight:800;letter-spacing:.12em}
+html.app-environment-homologation .dashboard-packages-total strong{font-size:1.65rem;line-height:1}
+html.app-environment-homologation .dashboard-packages-total small{padding-bottom:2px;color:#64748b;font-size:.68rem}
+html.app-environment-homologation .dashboard-channel-grid{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+html.app-environment-homologation .dashboard-channel-card{--c:#64748b;min-height:132px;padding:18px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;display:grid;grid-template-columns:48px 1fr auto;grid-template-rows:1fr auto;align-items:center;column-gap:14px;overflow:hidden;position:relative}
+html.app-environment-homologation .dashboard-channel-card:after{content:"";position:absolute;inset:auto 0 0;height:4px;background:var(--c)}
+html.app-environment-homologation .dashboard-channel-card.tone-magalu{--c:#5b5ce2;background:#f4f3ff}.dashboard-channel-card.tone-ml-coleta{--c:#eab308;background:#fffbea}.dashboard-channel-card.tone-ml-agencia{--c:#d97706;background:#fff7ed}
+html.app-environment-homologation .dashboard-channel-card.tone-shopee{--c:#ea580c;background:#fff7ed}.dashboard-channel-card.tone-flex{--c:#f59e0b;background:#fffbeb}
+html.app-environment-homologation .dashboard-channel-card.tone-correios{--c:#2563eb;background:#eff6ff}.dashboard-channel-card.tone-amazon{--c:#111827}
+html.app-environment-homologation .dashboard-channel-card.tone-ultra{--c:#7c3aed;background:#f5f3ff}.dashboard-channel-card.tone-pdv{--c:#059669;background:#ecfdf5}
+html.app-environment-homologation .dashboard-channel-icon{grid-row:1/-1;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:#fff;font-size:25px;box-shadow:0 8px 18px rgba(15,23,42,.16)}
+html.app-environment-homologation .dashboard-channel-card div small{color:#64748b;font-size:.62rem;font-weight:800;letter-spacing:.12em}
+html.app-environment-homologation .dashboard-channel-card h3{margin:3px 0 0;color:#172033;font-size:1.05rem}
+html.app-environment-homologation .dashboard-channel-card>strong{grid-row:1;color:#172033;font-size:2.3rem;line-height:1}
+html.app-environment-homologation .dashboard-channel-card>em{grid-column:3;color:#64748b;font-size:.68rem;font-style:normal;text-align:right}
+html.app-environment-homologation .dashboard-packages-empty,html.app-environment-homologation .operations-dashboard-loading{min-height:230px;display:grid;place-items:center;align-content:center;gap:7px;color:#64748b;text-align:center}
+html.app-environment-homologation .dashboard-packages-empty>span,html.app-environment-homologation .operations-dashboard-loading>span{font-size:38px;color:#94a3b8}
+html.app-environment-homologation .dashboard-packages-empty p{color:#94a3b8;font-size:.8rem}
+@media(max-width:720px){html.app-environment-homologation .operations-dashboard-shell{width:calc(100% - 20px);margin-top:10px}html.app-environment-homologation .operations-dashboard-header p,html.app-environment-homologation .operations-dashboard-header time{display:none}html.app-environment-homologation .dashboard-packages-panel{padding:15px}html.app-environment-homologation .dashboard-channel-grid{grid-template-columns:1fr}}
