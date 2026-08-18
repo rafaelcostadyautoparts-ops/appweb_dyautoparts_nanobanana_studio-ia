@@ -1,6 +1,6 @@
 {
-  "version": "2.1.91",
-  "build": "2026.08.18.01",
-  "commit": "dashboard-pacotes-cancelamento-item",
-  "deployDate": "2026-08-18T00:00:00-03:00"
+    "version":  "2.1.92",
+    "build":  "2026.08.18.02",
+    "commit":  "corrige-dashboard-cancelamento-sem-motivo",
+    "deployDate":  "2026-08-18T00:00:00-03:00"
 }

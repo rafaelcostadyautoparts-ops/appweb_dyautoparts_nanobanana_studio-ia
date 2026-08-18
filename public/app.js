@@ -3521,22 +3521,6 @@ function getNextInternalId() {
 
 async function renderAlerts() {
  const currentUser = localStorage.getItem('currentUser');
- const configuredEnvironment = String(window.__DY_APP_CONFIG__?.appEnvironment || '').trim().toLowerCase();
- const isHomologationDashboard = document.documentElement.classList.contains('app-environment-homologation')
- || configuredEnvironment === 'homologation'
- || configuredEnvironment === 'homologacao';
-
- if (!isHomologationDashboard) {
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen dashboard-empty-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('dashboard')}
- <main class="container dashboard-empty-container"></main>
- </div>
- `;
- return;
- }
-
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -32477,7 +32461,7 @@ function openGlobalFinalizedItemCancellation(scope = 'today') {
  finalizedCancellationLookup = { scope, code: '', candidates: [], selected: null };
  const modal = document.createElement('div');
  modal.id = 'cancel-separation-modal'; modal.className = 'cancel-separation-modal global-item-cancel-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>LOCALIZAR ITEM FINALIZADO</h2><p>Leia o produto e escolha o canal correto</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><label><span>Motivo obrigatório</span><textarea id="cancel-separation-reason" rows="3" maxlength="300" placeholder="Ex.: item cancelado pelo cliente"></textarea></label><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>LOCALIZAR ITEM FINALIZADO</h2><p>Leia o produto e escolha o canal correto</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
  document.body.appendChild(modal);
  const input=document.getElementById('global-cancel-code'); input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchFinalizedItemCancellation();}}); setTimeout(()=>input?.focus(),50);
 }
@@ -32503,14 +32487,14 @@ function renderFinalizedCancellationCandidates(){
  box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação finalizada possui unidade disponível deste produto.</p>';
  document.getElementById('global-cancel-confirm')?.classList.add('hidden');
 }
-function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-reason')?.focus();}
-async function confirmGlobalFinalizedItemCancellation(){const selected=finalizedCancellationLookup.selected;const motivo=String(document.getElementById('cancel-separation-reason')?.value||'').trim();if(!selected){showToast('Selecione o canal e a separação.','warning');return;}if(motivo.length<5){showToast('Informe o motivo.','warning');return;}const button=document.getElementById('cancel-separation-submit');if(button)button.disabled=true;try{await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code,motivo});closeCancelSeparationModal();showToast(`1 unidade cancelada em ${selected.channel}.`,'success');await renderFinalizedSeparationsScreen(finalizedCancellationLookup.scope);}catch(error){showToast(error.message||'Não foi possível cancelar o item.','error');if(button)button.disabled=false;}}
+function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-submit')?.focus();}
+async function confirmGlobalFinalizedItemCancellation(){const selected=finalizedCancellationLookup.selected;if(!selected){showToast('Selecione o canal e a separação.','warning');return;}const button=document.getElementById('cancel-separation-submit');if(button)button.disabled=true;try{await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code});closeCancelSeparationModal();showToast(`1 unidade cancelada em ${selected.channel}.`,'success');await renderFinalizedSeparationsScreen(finalizedCancellationLookup.scope);}catch(error){showToast(error.message||'Não foi possível cancelar o item.','error');if(button)button.disabled=false;}}
 function openCancelItemSeparationModal(sessionId, returnScope = 'today') {
  closeCancelSeparationModal();
  const modal = document.createElement('div');
  modal.id = 'cancel-separation-modal';
  modal.className = 'cancel-separation-modal cancel-item-separation-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>CANCELAR ITEM POR BIP</h2><p>${escapeKitAttribute(sessionId)} · 1 unidade por leitura</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><p class="cancel-separation-warning">O produto continuara no historico, marcado em vermelho. Cada confirmacao devolve somente 1 unidade ao estoque.</p><label><span>Bipe ou digite EAN / ID interno</span><input id="cancel-item-code" autocomplete="off" inputmode="none" placeholder="Aguardando produto"></label><label><span>Motivo obrigatorio</span><textarea id="cancel-separation-reason" rows="3" maxlength="300" placeholder="Ex.: item cancelado pelo cliente"></textarea></label><footer><button type="button" onclick="closeCancelSeparationModal()">VOLTAR</button><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmCancelSeparationItem(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR 1 UNIDADE</button></footer></section>`;
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>CANCELAR ITEM POR BIP</h2><p>${escapeKitAttribute(sessionId)} · 1 unidade por leitura</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><p class="cancel-separation-warning">O produto continuara no historico, marcado em vermelho. Cada confirmacao devolve somente 1 unidade ao estoque.</p><label><span>Bipe ou digite EAN / ID interno</span><input id="cancel-item-code" autocomplete="off" inputmode="none" placeholder="Aguardando produto"></label><footer><button type="button" onclick="closeCancelSeparationModal()">VOLTAR</button><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmCancelSeparationItem(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR 1 UNIDADE</button></footer></section>`;
  document.body.appendChild(modal);
  const input = document.getElementById('cancel-item-code');
  input?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); confirmCancelSeparationItem(sessionId, returnScope); } });
@@ -32519,13 +32503,11 @@ function openCancelItemSeparationModal(sessionId, returnScope = 'today') {
 
 async function confirmCancelSeparationItem(sessionId, returnScope = 'today') {
  const codigo = String(document.getElementById('cancel-item-code')?.value || '').trim();
- const motivo = String(document.getElementById('cancel-separation-reason')?.value || '').trim();
  if (!codigo) { showToast('Bipe o produto que deseja cancelar.', 'warning'); return; }
- if (motivo.length < 5) { showToast('Informe o motivo do cancelamento.', 'warning'); return; }
  const button = document.getElementById('cancel-separation-submit');
  if (button) { button.disabled = true; button.textContent = 'CANCELANDO...'; }
  try {
-  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({ sessionId, codigo, motivo });
+  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({ sessionId, codigo });
   closeCancelSeparationModal();
   showToast(`1 unidade cancelada. Restam ${result?.restante ?? 0}.`, 'success');
   const fresh = await DataClient.loadModule('conferencia', true);
