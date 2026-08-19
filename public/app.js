@@ -20137,7 +20137,9 @@ async function renderPackMenu() {
   const { channelName, sessions } = group;
   const config = getChannelConfig(channelName);
   const separationsCount = sessions.length;
-  const clickAction = `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
+  const clickAction = sessions.length === 1
+   ? `renderPackSessionDetails(${quotePackInlineArg(getPackSeparationUniqueId(sessions[0]))})`
+   : `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
   return `
   <button type="button" class="standard-module-card operational-menu-card pick-channel-card pack-pending-channel-card channel-${escapeKitAttribute(config.color)}" onclick="${clickAction}">
   <span class="standard-module-card-icon pack-pending-channel-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
