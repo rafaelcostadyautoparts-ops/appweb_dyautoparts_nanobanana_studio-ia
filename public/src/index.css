@@ -71483,6 +71483,14 @@ html.app-environment-homologation .pick-mode-clean-overlay .pick-mode-normal.sta
 html.app-environment-homologation .pick-mode-clean-overlay .pick-mode-fast.standard-module-card {
   background: rgba(255, 237, 213, 0.5) !important;
 }
+
+/* Mantem a identificacao visual dos modos tambem em producao. */
+.pick-mode-clean-overlay .pick-mode-normal.standard-module-card {
+  background: #dbeafe !important;
+}
+.pick-mode-clean-overlay .pick-mode-fast.standard-module-card {
+  background: rgba(255, 237, 213, 0.5) !important;
+}
 html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
   align-self: center !important;
   flex: 0 0 auto !important;
