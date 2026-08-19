@@ -3757,6 +3757,11 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  ${pendingSeparationsBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-conferences" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
+ <span class="quick-action-icon quick-action-icon-conferences material-symbols-rounded">fact_check</span>
+ <span class="quick-action-label">CONFER&Ecirc;NCIA</span>
+ <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ </button>
  <button class="quick-action-item quick-action-card quick-action-priority quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
  <span class="quick-action-icon quick-action-icon-nf-drafts material-symbols-rounded">receipt_long</span>
  <span class="quick-action-label">ENTRADA NF</span>
@@ -5353,6 +5358,7 @@ function renderMovHistoryShell(loading = false) {
  ${!loading ? renderMovHistoryPagination(totalPages, filtered.length) : ''}
  </section>
  </main>
+ ${getQuickActionsHTML(false)}
  </div>
  `;
 }
@@ -5368,68 +5374,38 @@ function renderMovHistoryLoadingHTML() {
 
 function renderMovHistoryRows(items) {
  if (!items.length) {
- return `
- <div class="mov-history-empty">
- <span class="material-symbols-rounded">history</span>
- <strong>Nenhuma operacao encontrada</strong>
- <small>Ajuste os filtros ou confira se hA movimentos gravados no Supabase.</small>
- </div>
- `;
+  return '<div class="mov-history-empty"><span class="material-symbols-rounded">history</span><strong>Nenhuma operacao encontrada</strong><small>Ajuste os filtros ou confira se ha movimentos gravados no Supabase.</small></div>';
  }
-
  return items.map(op => {
- const cfg = getMovHistoryTypeConfig(op.type);
- const expanded = movementHistoryState.expanded.has(op.id);
- return `
- <article class="mov-history-row ${expanded ? 'expanded' : ''}" style="--tone:${cfg.color}">
- <button type="button" class="mov-history-row-main" onclick="toggleMovHistoryOperation(${quoteKitInlineArg(op.id)})">
- <span class="mov-history-op">
- <span class="mov-history-type-icon material-symbols-rounded">${cfg.icon}</span>
- <span><strong>${cfg.label}</strong><small>${escapeKitAttribute(op.subtitle || '-')}</small></span>
- </span>
- <span class="mov-history-id" data-label="Idenao">${escapeKitAttribute(op.identification || '-')}</span>
- <span data-label="Data/Hora">${formatMovHistoryDate(op.date)}</span>
- <span data-label="Usao">${escapeKitAttribute(op.user || '-')}</span>
- <span data-label="Produtos">${formatStockNumber(op.productsCount || 0)}</span>
- <span data-label="Qtde total">${formatStockNumber(op.quantityTotal || 0)}</span>
- <span data-label="Pacotes">${formatStockNumber(op.packageCount || 0)}</span>
- <span class="mov-history-action material-symbols-rounded">${expanded ? 'expand_less' : 'expand_more'}</span>
- </button>
- ${expanded ? renderMovHistoryDetails(op) : ''}
- </article>
- `;
+  const cfg=getMovHistoryTypeConfig(op.type);
+  const expanded=movementHistoryState.expanded.has(op.id);
+  const viewLabel='Consultar '+String(cfg.label||'movimento');
+  return '<article class="mov-history-row '+(expanded?'expanded':'')+'" style="--tone:'+cfg.color+'">'
+   +'<div class="mov-history-row-main">'
+   +'<span class="mov-history-op"><span class="mov-history-type-icon material-symbols-rounded">'+cfg.icon+'</span><span><strong>'+escapeKitAttribute(cfg.label)+'</strong><small>'+escapeKitAttribute(op.subtitle||'-')+'</small></span></span>'
+   +'<span class="mov-history-id" data-label="Identificacao">'+escapeKitAttribute(op.identification||'-')+'</span>'
+   +'<span data-label="Data/Hora">'+formatMovHistoryDate(op.date)+'</span>'
+   +'<span data-label="Usuario">'+escapeKitAttribute(op.user||'-')+'</span>'
+   +'<span data-label="Produtos">'+formatStockNumber(op.productsCount||0)+'</span>'
+   +'<span data-label="Qtde total">'+formatStockNumber(op.quantityTotal||0)+'</span>'
+   +'<span data-label="Pacotes">'+formatStockNumber(op.packageCount||0)+'</span>'
+   +'<button type="button" class="mov-history-view-button" onclick="viewMovHistoryOperation('+quoteKitInlineArg(op.id)+')" aria-label="'+escapeKitAttribute(viewLabel)+'" title="Consultar"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg></button>'
+   +'</div>'+(expanded?renderMovHistoryDetails(op):'')+'</article>';
  }).join('');
+}
+
+function viewMovHistoryOperation(operationId) {
+ const op=(movementHistoryState.operations||[]).find(item=>String(item.id)===String(operationId));
+ if(!op){showToast('Movimento nao encontrado.','warning');return;}
+ const isFinalizedSeparation=op.operational?.kind==='separacao'&&isFinalizedSeparationForHistory(op.raw||{});
+ const isFinishedConference=op.operational?.kind==='conferencia';
+ if(isFinalizedSeparation||isFinishedConference){renderMovHistoryOperationalConsultation(operationId);return;}
+ toggleMovHistoryOperation(operationId);
 }
 
 function renderMovHistoryDetails(op) {
  return `
  <div class="mov-history-details">
- ${op.operational ? `
- <div class="mov-history-operational-actions">
- <button type="button" onclick="showMovHistoryOperationalSummary(${quoteKitInlineArg(op.id)})">
- <span class="material-symbols-rounded">info</span>
- Ver resumo operacional
- </button>
- ${op.operational.kind === 'separacao' && isDraftPickStatus(op.operational.status) ? `
- <button type="button" onclick="resumePickingDraftFromServer(${quoteKitInlineArg(op.operational.sessionId)})">
- <span class="material-symbols-rounded">play_arrow</span>
- Retomar separacao
- </button>
- ` : ''}
- ${op.operational.kind === 'separacao' && !isDraftPickStatus(op.operational.status) ? `
- <button type="button" onclick="renderPackSessionDetails(${quoteKitInlineArg(op.operational.sessionId)})">
- <span class="material-symbols-rounded">fact_check</span>
- Abrir conferencia
- </button>
- ` : ''}
- ${op.operational.kind === 'conferencia' && op.operational.sessionId ? `
- <button type="button" onclick="renderPackSessionDetails(${quoteKitInlineArg(op.operational.sessionId)})">
- <span class="material-symbols-rounded">fact_check</span>
- Ver no Pack
- </button>
- ` : ''}
- </div>
- ` : ''}
  <div class="mov-history-detail-meta">
  ${op.supplier ? `<span><b>Fornecedor</b>${escapeKitAttribute(op.supplier)}</span>` : ''}
  ${op.packageCount ? `<span><b>Pacotes/volumes</b>${formatStockNumber(op.packageCount)}</span>` : ''}
@@ -5483,6 +5459,24 @@ function showMovHistoryOperationalSummary(operationId) {
  message: details,
  buttonLabel: 'OK'
  });
+}
+
+function renderMovHistoryOperationalConsultation(operationId) {
+ const op=(movementHistoryState.operations||[]).find(item=>String(item.id)===String(operationId));
+ if(!op?.operational){showToast('Operacao finalizada nao encontrada.','warning');return;}
+ const isConference=op.operational.kind==='conferencia';
+ const title=isConference?'CONFERENCIA':'SEPARACAO (PICK)';
+ const productsTitle=isConference?'PRODUTOS CONFERIDOS':'PRODUTOS SEPARADOS';
+ const channel=op.operational.channel||'CANAL NAO INFORMADO';
+ const items=op.items||[];
+ const status=normalizeOperationalLabel(op.operational.status||'FINALIZADA').includes('CANCEL')?'CANCELADA':'FINALIZADA';
+ const rows=items.length?items.map(item=>{const detail=[prettyLocal(item.origem),prettyLocal(item.destino)].filter(Boolean).join(' ')||item.observacao||(isConference?'Conferencia concluida':'Separacao concluida');return '<article><span class="mov-operation-consult-product-icon material-symbols-rounded">inventory_2</span><div class="mov-operation-consult-product-copy"><strong>'+escapeKitAttribute(item.descricao||item.idInterno||'Produto')+'</strong><span><b>ID:</b> '+escapeKitAttribute(item.idInterno||'-')+'</span><small>'+escapeKitAttribute(detail)+'</small></div><b class="mov-operation-consult-qty">'+formatStockNumber(item.quantidade||0)+'</b></article>';}).join(''):'<div class="mov-operation-consult-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum item detalhado foi gravado nesta operacao.</strong></div>';
+ document.body.classList.remove('menu-active');
+ app.innerHTML='<div class="dashboard-screen internal fade-in mov-operation-consult-screen '+(isConference?'is-conference':'is-separation')+'"><main class="mov-operation-consult-shell">'
+ +'<header class="mov-operation-consult-header"><button type="button" onclick="renderMovimentacoesHistory()" aria-label="Voltar">'+getBackButtonStandardIconHTML()+'</button><div><h1>'+title+' <span>&bull; '+escapeKitAttribute(channel)+'</span></h1><small>'+escapeKitAttribute(op.identification||'-')+'</small></div><aside><strong>'+status+'</strong><span>SOMENTE CONSULTA</span></aside></header>'
+ +'<section class="mov-operation-consult-lockbar"><span class="material-symbols-rounded">search</span><div><strong>Operacao finalizada</strong><small>Leitura e alteracoes desativadas</small></div><span class="material-symbols-rounded">lock</span></section>'
+ +'<section class="mov-operation-consult-products"><header><h2>'+productsTitle+'</h2><div><span>PRODUTOS <b>'+formatStockNumber(op.productsCount||items.length||0)+'</b></span><span>UNIDADES <b>'+formatStockNumber(op.quantityTotal||0)+'</b></span><span>PACOTES <b>'+formatStockNumber(op.packageCount||0)+'</b></span></div></header><div class="mov-operation-consult-list">'+rows+'</div></section>'
+ +'</main></div>';
 }
 
 function renderMovHistoryPagination(totalPages, totalItems) {
@@ -18334,7 +18328,7 @@ function normalizePickCode(rawValue) {
  if (gs1Match) code = gs1Match[1];
  if (/^0\d{13}$/.test(code)) code = code.slice(1);
 
- return code;
+ return code.toUpperCase();
 }
 
 function getPickScanInputPlaceholder() {
@@ -18440,7 +18434,9 @@ function pickItemMatchesCode(item, cleanCode) {
  if (!code) return false;
  const possibleCodes = [
  getPickingProductId(item),
- item?.id_interno,
+  item?.id_interno,
+  item?.produto_id_interno,
+  item?.codigo_interno,
  item?.col_a,
  item?.col_A,
  item?.ean,
@@ -19372,9 +19368,8 @@ function updatePickItemsList() {
   </div>
   <div class="pick-product-qty" data-label="Quantidade bipada">
   <span class="pick-qty-number">${Number(item.qty) || 0}</span>
-  <span class="pick-qty-unit">total</span>
   </div>
-  <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span class="material-symbols-rounded">${selection ? 'check_circle' : 'inventory_2'}</span><span>${selection ? `${selection.qty} SELEC.` : (packageSummary.standaloneUnits ? 'AGRUPAR' : 'VER PACOTE')}</span></button>
+  <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
   <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
   <span class="material-symbols-rounded">delete</span>
   </button>
@@ -20075,6 +20070,23 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  }
 }
 
+function isPackRecordFromToday(record = {}) {
+ const today = getDataBrasilISO();
+ const candidates = [record.finalizado_em, record.conferido_em, record.atualizado_em, record.data_hora, record.data_separacao, record.criado_em];
+ return candidates.some(value => {
+ const text = String(value || '').trim();
+ if (!text) return false;
+ if (text.slice(0, 10) === today) return true;
+ const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+ return br ? `${br[3]}-${br[2]}-${br[1]}` === today : false;
+ });
+}
+
+function isPackSessionFinished(session = {}) {
+ const status = normalizeOperationalLabel(session.status || session.situacao || '');
+ return status.includes('FINALIZ') || status.includes('CONFERID') || status.includes('CONCLUID');
+}
+
 async function renderPackMenu() {
  const currentUser = localStorage.getItem('currentUser');
  // Texto validado em UTF-8.
@@ -20090,61 +20102,59 @@ async function renderPackMenu() {
  }
 
  const activeSessions = (appData.separacao || []).filter(s => isSeparationPendingConferenceSession(s));
+ const completedConferenceIdsToday = new Set((appData.conferencia || []).filter(isPackRecordFromToday).map(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '')).filter(Boolean));
+ const completedToday = (appData.separacao || []).filter(session => {
+ const id = String(getPackSeparationSessionId(session));
+ return isPackSessionFinished(session) && (isPackRecordFromToday(session) || completedConferenceIdsToday.has(id));
+ });
+ const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
+  const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
+  const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
+  const current = groups.get(channelKey) || { channelName, sessions: [] };
+  current.sessions.push(session);
+  groups.set(channelKey, current);
+  return groups;
+ }, new Map()).values()].sort((a, b) => a.channelName.localeCompare(b.channelName, 'pt-BR'));
 
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in pack-screen module-screen standard-card-menu-screen">
+ <div class="dashboard-screen internal fade-in pack-screen module-screen standard-card-menu-screen pack-channel-summary-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('pack')}
 
  <main class="container">
- <div class="operational-counter-row">
- <span class="operational-counter-pill">
- <span class="material-symbols-rounded">fact_check</span>
- Separacoes pendentes: <strong>${activeSessions.length}</strong>
- </span>
- </div>
-
- ${activeSessions.length === 0 ? `
+  ${sessionsByChannel.length === 0 ? `
  <div class="operational-empty-card">
  <span class="material-symbols-rounded">fact_check</span>
  <strong>Nenhuma separacao pendente para conferencia.</strong>
  </div>
  ` : `
- <div class="standard-module-card-grid operational-card-grid operational-conference-grid">
- ${activeSessions.map(session => {
- const channelName = session.canal_nome || session.col_c || session.canal || 'Outros';
- const config = getChannelConfig(channelName);
- const uniqueId = getPackSeparationUniqueId(session);
- const displayId = getPackSeparationDisplayId(session);
- const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
- const productsCount = getSeparationProductTotal(session);
- const itemCount = getSeparationItemTotal(session);
- const packagesCount = getPickPackageCountFrom(session);
- const statusRaw = String(session.status || 'aberta');
- const statusLabel = statusRaw.toLowerCase().includes('pend') ? 'Pendente' : 'Aberta';
- return `
- <button type="button" class="standard-module-card operational-menu-card operational-conference-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
- <span class="standard-module-card-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
- <span class="standard-module-card-copy operational-conference-copy">
- <strong>${escapeKitAttribute(displayId)}</strong>
- <small>${escapeKitAttribute(channelName)}</small>
- <span class="operational-card-meta">
- <em>${escapeKitAttribute(createdAt)}</em>
- <em>${productsCount} produto(s)</em>
- <em>${itemCount} item(ns)</em>
- <em>${packagesCount} pacote(s)</em>
- <b>${escapeKitAttribute(statusLabel)}</b>
- </span>
- <span class="operational-open-indicator">
- <span class="material-symbols-rounded">arrow_forward</span>
- Abrir conferencia
- </span>
- </span>
- </button>
+  <div class="standard-module-card-grid operational-card-grid pack-pending-channel-grid">
+  ${sessionsByChannel.map(group => {
+  const { channelName, sessions } = group;
+  const config = getChannelConfig(channelName);
+  const separationsCount = sessions.length;
+  const clickAction = `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
+  return `
+  <button type="button" class="standard-module-card operational-menu-card pick-channel-card pack-pending-channel-card channel-${escapeKitAttribute(config.color)}" onclick="${clickAction}">
+  <span class="standard-module-card-icon pack-pending-channel-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
+  <span class="standard-module-card-copy pack-pending-channel-copy"><strong>${escapeKitAttribute(channelName)}</strong></span>
+  <b class="pack-pending-channel-count">${separationsCount}</b>
+  </button>
  `;
  }).join('')}
  </div>
  `}
+ ${completedToday.length ? `
+ <section class="pack-daily-completed">
+  <header><div><span class="material-symbols-rounded">today</span><div><strong>FINALIZADAS HOJE</strong><small>Consulta rapida do dia</small></div></div><b>${completedToday.length}</b></header>
+  <div class="pack-daily-completed-list">
+  ${completedToday.map(session => {
+  const sessionId = getPackSeparationSessionId(session);
+  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
+  return `<button type="button" onclick="renderPackDailyConsultation(${quotePackInlineArg(sessionId)})"><span class="material-symbols-rounded">task_alt</span><span><strong>${escapeKitAttribute(getPackSeparationDisplayId(session))}</strong><small>${escapeKitAttribute(channelName)} &middot; ${escapeKitAttribute(formatPackSeparationDate(session.finalizado_em || session.atualizado_em || session.data_separacao))}</small></span><em>Consultar</em></button>`;
+  }).join('')}
+  </div>
+ </section>` : ''}
  </main>
  </div>
  `;
@@ -20245,13 +20255,13 @@ async function renderPackSessionsList(channelName) {
  if (!usedFreshSupabase && !activeSessions.length) {
  activeSessions = (appData.separacao || []).filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
- return chan === channelName && isSeparationPendingConferenceSession(s);
+  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName) && isSeparationPendingConferenceSession(s);
  });
  }
 
  activeSessions = activeSessions.filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
- return chan === channelName && isSeparationPendingConferenceSession(s);
+  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName) && isSeparationPendingConferenceSession(s);
  });
 
  const channelConfig = getChannelConfig(channelName);
@@ -20302,10 +20312,7 @@ async function renderPackSessionsList(channelName) {
  const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
  const status = session.status || 'aberta';
  const statusClass = getSessionStatusClass(status);
- const productsCount = getSeparationProductTotal(session);
- const itemCount = getSeparationItemTotal(session);
- const packagesCount = getPickPackageCountFrom(session);
- return `
+  return `
  <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
  <div class="pack-session-card-main">
  <div class="pack-session-card-icon">
@@ -20315,7 +20322,7 @@ async function renderPackSessionsList(channelName) {
  <span class="pack-session-card-kicker">Separacao</span>
  <strong>${displayId}</strong>
  <small>${createdAt}</small>
- <small>${productsCount} produto(s) | ${itemCount} item(ns) | ${packagesCount} pacote(s)</small>
+  <small>Pronta para iniciar a confer\u00eancia</small>
  </div>
  </div>
  <div class="pack-session-card-meta">
@@ -20413,18 +20420,7 @@ async function renderPackSessionDetails(sessionId) {
  || String(s.pickingData?.separacao_row_id || '') === String(separacaoRowId)
  );
  
- if (separacaoSession) {
- const criadoPor = (separacaoSession.criado_por || separacaoSession.col_e || '').trim().toLowerCase();
- const usuarioAtual = (currentUser || '').trim().toLowerCase();
- 
- if (criadoPor && criadoPor === usuarioAtual) {
- showToast('Operacao concluida.', 'info');
- playBeep('error');
- return;
- }
- }
- 
- // Texto validado em UTF-8.
+  // Texto validado em UTF-8.
  const channelName = separacaoSession ? (separacaoSession.canal_nome || separacaoSession.col_d || '') : '';
  const channelConfig = getChannelConfig(channelName);
  const channelColorClass = channelConfig.color || '';
@@ -20478,6 +20474,7 @@ async function renderPackSessionDetails(sessionId) {
  descricao: item.descricao || item.descri_ao || item.descricao_base || item.nome || key,
  qtd_separada: 0,
  qtd_conferida: 0,
+ scanned_in_conference: false,
  divergencia: 'FALTA'
  };
  }
@@ -20488,9 +20485,12 @@ async function renderPackSessionDetails(sessionId) {
  // Texto validado em UTF-8.
  if (session && session.conferenceRows) {
  session.conferenceRows.forEach(row => {
- const key = row.ean || row.id_interno;
+ const key = getPickingProductId(row) || row.ean || row.id_interno;
  if (groupedExpected[key]) {
  groupedExpected[key].qtd_conferida = row.qtd_conferida;
+ groupedExpected[key].scanned_in_conference = Boolean(row.scanned_in_conference || Number(row.qtd_conferida || 0) > 0);
+ } else if (Number(row.qtd_conferida || 0) > 0) {
+ groupedExpected[key] = { ...row, scanned_in_conference: true };
  }
  });
  }
@@ -20545,43 +20545,37 @@ async function renderPackSessionDetails(sessionId) {
 function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
  const icon = getChannelConfig(channelName).svgIcon || menu3DIcons?.conferencia || '<span class="material-symbols-rounded">fact_check</span>';
  const title = channelName ? channelName.toUpperCase() : 'CONFERENCIA';
- const packageCount = getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {});
-
  app.innerHTML = `
- <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen ${channelColorClass}">
- ${getModuleSidebarHTML('pack')}
- ${getTopBarHTML(currentUser, 'renderPackMenu()')}
-
- <main class="pack-blind-shell">
- <header class="pack-blind-header">
- <button class="pack-blind-back-btn pack-blind-inline-back back-button-standard ds-back-button" type="button" onclick="renderPackMenu()" aria-label="Voltar">
+ <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen pick-workflow-screen conference-workflow-screen ${channelColorClass}" data-channel-color="conference">
+ <main class="pack-blind-shell pick-workflow-shell">
+ <header class="pack-blind-header pick-workflow-header">
+ <button class="pack-blind-back-btn pack-blind-inline-back pick-inline-back back-button-standard ds-back-button" type="button" onclick="renderPackMenu()" aria-label="Voltar">
  ${getBackButtonStandardIconHTML()}
  </button>
 
- <div class="pack-blind-title">
+ <div class="pack-blind-title pick-workflow-title">
  <span class="pack-blind-title-icon">${icon}</span>
- <div>
- <h1>CONFER(PACK)</h1>
+ <h1>CONFER\u00caNCIA (PACK) <span>\u2022 ${escapeKitAttribute(title)}</span></h1>
  </div>
- </div>
-
- <button class="pack-blind-manual-btn" type="button" onclick="focusPackManualInput()">
- <span class="material-symbols-rounded">barcode</span>
- Informar CAdigo
- </button>
+ <div class="pick-header-meta"><span><strong>${escapeKitAttribute(sessionId)}</strong></span><span><strong>${escapeKitAttribute(currentUser || '-')}</strong></span></div>
  </header>
 
- <section class="pack-blind-scan-panel">
- <div class="pack-blind-scan-field">
+ <section class="pack-blind-scan-panel pick-scan-panel">
+ <div class="pick-scan-row">
+ <div class="pack-blind-scan-field pick-scan-field">
  <span class="material-symbols-rounded">search</span>
  <input type="text" id="pack-ean-input" class="product-search-input"
- placeholder="Bipe o produto (EAN, SKU ou codigo interno)"
+ placeholder="Bipe ou digite: ID, EAN, SKU ou c\u00f3digo interno"
  onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPackScan(); }"
  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
  inputmode="none" enterkeyhint="done" autofocus>
+ <button class="pick-keyboard-btn" onclick="focusPackManualInput()" title="Digitar produto" aria-label="Ativar teclado para digitar produto" type="button">
+ <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M19 9h.01M7 13h.01M11 13h.01M15 13h.01M19 13h.01M8 17h8"></path></svg>
+ </button>
  <button class="pack-blind-scanner-btn" onclick="startScanner(false, true)" title="Abrir Scanner" type="button">
  <span class="material-symbols-rounded">qr_code_scanner</span>
  </button>
+ </div>
  </div>
  </section>
 
@@ -20592,52 +20586,49 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </button>
  </div>
 
- <section class="pack-blind-info-grid">
- <article class="pack-blind-info-card">
- <small>CANAL</small>
- <strong>${escapeKitAttribute(title)}</strong>
- </article>
- <article class="pack-blind-info-card">
- <small>ID DA SEPARACAOi</small>
- <strong>${escapeKitAttribute(sessionId)}</strong>
- </article>
- <article class="pack-blind-info-card">
- <small>OPERADOR</small>
- <strong>${escapeKitAttribute(currentUser || '-')}</strong>
- </article>
- </section>
-
- <section class="pack-blind-work-area">
- <div class="pack-blind-list-panel">
- <div class="pack-blind-list-header">
+ <section class="pack-blind-work-area pick-work-area">
+ <div class="pack-blind-list-panel pick-list-panel">
+ <div class="pack-blind-list-header pick-list-header">
  <h2>PRODUTOS BIPADOS</h2>
- <span id="pack-blind-list-count">0 PRODUTO(S)</span>
+ <div class="pick-list-filters" role="group" aria-label="Filtrar produtos bipados">
+ <button id="conference-filter-all" class="pick-filter-btn active" type="button" onclick="setConferenceViewFilter('all')">TODOS <strong id="conference-filter-all-count">0</strong></button>
+ <button id="conference-filter-standalone" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('standalone')">AVULSOS <strong id="conference-filter-standalone-count">0</strong></button>
+ <button id="conference-filter-kits" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('kits')">AGRUPADOS <strong id="conference-filter-kits-count">0</strong></button>
  </div>
+ </div>
+ <div id="conference-kit-selection-bar" class="pick-kit-selection-bar hidden"></div>
  <div class="pack-blind-table-head">
  <span>Produto</span>
  <span>Quantidade bipada</span>
+ <span>Agrupamento</span>
  <span>A\u00e7\u00f5es</span>
  </div>
- <div id="pack-divergence-alert" class="pack-divergence-alert hidden"></div>
- <div id="pack-items-list" class="pack-blind-items-list"></div>
+ <div id="pack-items-list" class="pack-blind-items-list pick-items-list"></div>
  </div>
 
- <aside class="pack-blind-summary-panel">
- <div class="pack-blind-summary-metrics">
- <div><small>Produtos diferentes</small><strong id="pack-summary-items">0</strong></div>
- <div><small>Itens / bips</small><strong id="pack-summary-units">0</strong></div>
- <div><small>Pacotes</small><strong id="pack-summary-packages">${packageCount}</strong></div>
- </div>
- <button class="pack-blind-finish-btn" id="btn-finish-pack" disabled>
- <span class="material-symbols-rounded">check_circle</span>
- Finalizar CONFERENCIA
+ <aside class="pack-blind-summary-panel pick-summary-panel pick-summary-single-line">
+ <div class="pack-blind-summary-metrics pick-summary-line">
+ <div class="pick-package-count-field"><span class="material-symbols-rounded">inventory_2</span><span>PRODUTOS BIPADOS</span><strong id="pack-summary-items">0</strong></div>
+ <div class="pick-package-count-field"><span class="material-symbols-rounded">barcode_scanner</span><span>TOTAL DE BIPS</span><strong id="pack-summary-units">0</strong></div>
+ <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
+ <span class="material-symbols-rounded">hub</span><span>AGRUPAMENTOS</span>
  </button>
- <button class="pack-blind-pause-btn" type="button" onclick="pauseConferenceSession()">
+ <button class="pack-blind-remove-btn pick-remove-scan-btn" id="conference-remove-scan-toggle" type="button" onclick="toggleConferenceRemovalMode()">
+ <span class="material-symbols-rounded">remove_circle</span><span id="conference-remove-scan-label">REMOVER</span>
+ </button>
+ <button class="pack-blind-pause-btn pick-pause-btn" type="button" onclick="pauseConferenceSession()">
  <span class="material-symbols-rounded">pause</span>
- Pausar CONFERENCIA
+ <span>PAUSAR</span>
  </button>
+ <button class="pack-blind-finish-btn pick-finish-btn" id="btn-finish-pack" disabled>
+ <span class="material-symbols-rounded">check_circle</span>
+ <span>FINALIZAR</span>
+ </button>
+ </div>
  </aside>
  </section>
+
+ <footer class="pick-workflow-footer"><span>ID separa\u00e7\u00e3o: <strong>${escapeKitAttribute(sessionId)}</strong></span><span>Canal em confer\u00eancia: <strong>${escapeKitAttribute(title)}</strong></span></footer>
 
  </main>
  </div>
@@ -20650,9 +20641,25 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
 function focusPackManualInput() {
  const input = document.getElementById('pack-ean-input');
  if (!input) return;
+ input.blur();
+ input.setAttribute('inputmode', 'search');
+ input.setAttribute('enterkeyhint', 'done');
+ input.setAttribute('virtualkeyboardpolicy', 'auto');
  input.focus();
  input.select?.();
- showToast("Digite o codigo e pressione Enter.", "info");
+ try { navigator.virtualKeyboard?.show?.(); } catch (error) {}
+ showToast("Digite o ID, EAN ou SKU e pressione Enter.", "info");
+}
+
+function renderPackDailyConsultation(sessionId) {
+ const currentUser = localStorage.getItem('currentUser');
+ const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === String(sessionId)) || {};
+ const rows = (appData.conferencia || []).filter(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '') === String(sessionId));
+ const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
+ app.innerHTML = `<div class="dashboard-screen internal fade-in pack-screen module-screen"><main class="container pack-daily-consult-shell">
+ <header class="pack-daily-consult-header"><button type="button" onclick="renderPackMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button><div><small>CONFERENCIA FINALIZADA HOJE</small><h1>${escapeKitAttribute(getPackSeparationDisplayId(session) || sessionId)}</h1><p>${escapeKitAttribute(channelName)}</p></div><span class="material-symbols-rounded">task_alt</span></header>
+ <section class="pack-daily-consult-list">${rows.length ? rows.map(row => `<article><span class="material-symbols-rounded">inventory_2</span><div><strong>${escapeKitAttribute(row.descricao || row.descricao_base || row.id_interno || 'Produto')}</strong><small>ID ${escapeKitAttribute(row.id_interno || '-')} &middot; EAN ${escapeKitAttribute(row.ean || '-')}</small></div><b>${formatStockNumber(Number(row.qtd_conferida || 0))}</b></article>`).join('') : '<div class="operational-empty-card"><span class="material-symbols-rounded">receipt_long</span><strong>Conferencia finalizada. Nao ha itens detalhados carregados para consulta.</strong></div>'}</section>
+ </main></div>`;
 }
 
 function pauseConferenceSession() {
@@ -20712,13 +20719,104 @@ function updatePackChrome() {
  const unitsEl = document.getElementById('pack-summary-units');
  const progressEl = document.getElementById('pack-summary-progress');
  const ratioEl = document.getElementById('pack-summary-ratio');
- const listCountEl = document.getElementById('pack-blind-list-count');
+ const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
+ const standaloneRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits === 0);
+ const groupedRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits > 0);
 
  if (itemsEl) itemsEl.textContent = String(stats.checkedItems);
  if (unitsEl) unitsEl.textContent = String(stats.checkedQty);
  if (progressEl) progressEl.textContent = `${progress}%`;
  if (ratioEl) ratioEl.textContent = `${stats.checkedItems} / ${expectedItems} itens`;
- if (listCountEl) listCountEl.textContent = `${stats.checkedItems} PRODUTO(S)`;
+ const filterCounts = { all: scannedRows.length, standalone: standaloneRows.length, kits: groupedRows.length };
+ Object.entries(filterCounts).forEach(([key, value]) => {
+ const count = document.getElementById(`conference-filter-${key}-count`);
+ const button = document.getElementById(`conference-filter-${key}`);
+ if (count) count.textContent = String(value);
+ if (button) button.classList.toggle('active', conferenceViewFilter === key);
+ });
+}
+
+function setConferenceViewFilter(filter) {
+ conferenceViewFilter = ['all', 'standalone', 'kits'].includes(filter) ? filter : 'all';
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+}
+
+function normalizeConferencePackageAssignments(row = {}) {
+ const qty = Math.max(0, Math.floor(parseStockQty(row.qtd_conferida)));
+ const values = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments.slice(0, qty) : [];
+ while (values.length < qty) values.push(null);
+ row.conference_package_assignments = values.map(value => value ? String(value) : null);
+ return row.conference_package_assignments;
+}
+
+function getConferenceKitSummary(row = {}) {
+ const values = normalizeConferencePackageAssignments(row);
+ const kitUnits = values.filter(Boolean).length;
+ return { kitUnits, standaloneUnits: values.length - kitUnits };
+}
+
+function getConferencePackageIds() {
+ return [...new Set((currentPackSession?.conferenceRows || []).flatMap(row => normalizeConferencePackageAssignments(row).filter(Boolean)))];
+}
+
+function getConferencePackageLabel(packageId) {
+ const index = getConferencePackageIds().indexOf(String(packageId || ''));
+ return index >= 0 ? `Pacote ${index + 1}` : 'Pacote';
+}
+
+async function toggleConferenceItemSelection(index) {
+ const row = currentPackSession?.conferenceRows?.[index];
+ if (!row || Number(row.qtd_conferida || 0) <= 0) return;
+ const key = getPickSelectionKey(row);
+ if (conferenceKitSelection.has(key)) {
+ conferenceKitSelection.delete(key);
+ renderConferenceKitSelection();
+ return;
+ }
+ const summary = getConferenceKitSummary(row);
+ if (summary.standaloneUnits < 1) return openConferencePackagesOverview();
+ let qty = 1;
+ if (summary.standaloneUnits > 1) {
+ const answer = await showAppPrompt({ title: 'Quantidade para agrupar', message: getPickItemTitle(row), detail: `${summary.standaloneUnits} unidade(s) avulsa(s) disponivel(is).`, label: 'Quantas unidades deseja selecionar?', defaultValue: '1', confirmLabel: 'Selecionar', cancelLabel: 'Cancelar', inputType: 'number', min: 1, max: summary.standaloneUnits, quantityStepper: true });
+ if (answer === null) return;
+ qty = Math.floor(Number(answer));
+ if (!Number.isFinite(qty) || qty < 1 || qty > summary.standaloneUnits) return showToast('Quantidade invalida.', 'warning');
+ }
+ conferenceKitSelection.set(key, { qty });
+ renderConferenceKitSelection();
+}
+
+function renderConferenceKitSelection() {
+ const bar = document.getElementById('conference-kit-selection-bar');
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+ if (!bar) return;
+ const selectedUnits = [...conferenceKitSelection.values()].reduce((sum, selection) => sum + Number(selection.qty || 0), 0);
+ if (!selectedUnits) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+ bar.innerHTML = `<strong>${selectedUnits} UNIDADE(S) SELECIONADA(S)</strong><div>${selectedUnits >= 2 ? '<button type="button" onclick="createConferencePackage()"><span class="material-symbols-rounded">hub</span>CRIAR PACOTE</button>' : '<span>Selecione ao menos 2 unidades avulsas</span>'}<button type="button" class="pick-kit-selection-cancel" onclick="clearConferenceKitSelection()">CANCELAR</button></div>`;
+ bar.classList.remove('hidden');
+}
+
+function clearConferenceKitSelection() {
+ conferenceKitSelection.clear();
+ renderConferenceKitSelection();
+}
+
+function createConferencePackage() {
+ const entries = [...conferenceKitSelection.entries()].map(([key, selection]) => ({ row: (currentPackSession?.conferenceRows || []).find(item => getPickSelectionKey(item) === key), selection })).filter(entry => entry.row);
+ const selectedUnits = entries.reduce((sum, entry) => sum + Number(entry.selection.qty || 0), 0);
+ if (selectedUnits < 2) return;
+ const packageId = `CPKG-${Date.now()}`;
+ entries.forEach(({ row, selection }) => {
+ const values = normalizeConferencePackageAssignments(row);
+ let remaining = Number(selection.qty || 0);
+ for (let index = values.length - 1; index >= 0 && remaining > 0; index--) if (values[index] === null) { values[index] = packageId; remaining--; }
+ });
+ conferenceKitSelection.clear();
+ persistPackSessionCache();
+ renderConferenceKitSelection();
+ showToast(`${getConferencePackageLabel(packageId)} criado com ${selectedUnits} unidade(s).`, 'success');
 }
 
 function renderPackItemsListHTML() {
@@ -20733,12 +20831,18 @@ function renderPackItemsListHTML() {
 
  updatePackChrome();
 
- const rowsToShow = currentPackSession.conferenceRows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
+ // Os itens vindos da separacao permanecem com quantidade conferida zero.
+ // A lista operacional exibe exclusivamente aquilo que recebeu bip nesta conferencia.
+ const scannedRows = currentPackSession.conferenceRows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
+ const rowsToShow = scannedRows.filter(row => {
+ const grouped = getConferenceKitSummary(row).kitUnits > 0;
+ return conferenceViewFilter === 'all' || (conferenceViewFilter === 'kits' ? grouped : !grouped);
+ });
 
- if (rowsToShow.length === 0) {
+ if (scannedRows.length === 0) {
  if (btnFinish) btnFinish.disabled = true;
  return `
- <div class="pack-blind-empty-state">
+ <div class="pack-blind-empty-state pick-empty-state">
  <span class="material-symbols-rounded">barcode_scanner</span>
  <strong>Nenhum produto bipado ainda.</strong>
  <small>Bipe os produtos para iniciar a conferencia.</small>
@@ -20746,37 +20850,47 @@ function renderPackItemsListHTML() {
  `;
  }
 
+ if (rowsToShow.length === 0) {
+ return `<div class="pack-blind-empty-state pick-empty-state"><span class="material-symbols-rounded">filter_alt_off</span><strong>Nenhum produto neste filtro.</strong><small>Escolha outro filtro para ver os produtos bipados.</small></div>`;
+ }
+
  if (btnFinish) btnFinish.disabled = !rowsToShow.some(row => parseFloat(row.qtd_conferida || 0) > 0);
 
  return rowsToShow.map((row) => {
  const index = currentPackSession.conferenceRows.indexOf(row);
  const checked = parseFloat(row.qtd_conferida || 0);
- const state = getConferenceRowState(row);
  const title = getPickItemTitle(row);
  const image = getPickProductImage(row);
+ const packageSummary = getConferenceKitSummary(row);
+ const packageIds = [...new Set(normalizeConferencePackageAssignments(row).filter(Boolean))];
+ const packageLabels = packageIds.map(id => getConferencePackageLabel(id));
+ const selection = conferenceKitSelection.get(getPickSelectionKey(row));
+ const lastScanTime = getPickLastScanTime(row);
  return `
- <div class="pack-blind-row fade-in">
- <div class="pack-blind-product-main" data-label="Produto">
- <div class="pack-blind-product-image">
+ <article class="pack-blind-row pick-product-row conferencia-item-card fade-in">
+ <div class="pack-blind-product-main pick-product-main" data-label="Produto">
+ <div class="pack-blind-product-image pick-product-image">
  ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
  </div>
- <div>
- <strong>${escapeKitAttribute(title)}</strong>
- <div class="pack-blind-product-meta">
+ <div class="pick-product-info">
+ <strong class="pick-product-title">${escapeKitAttribute(title)}</strong>
+ <div class="pack-blind-product-meta pick-product-meta">
  <span>SKU: ${escapeKitAttribute(getPickItemSku(row))}</span>
  <span>EAN: ${escapeKitAttribute(getPickItemEan(row))}</span>
- <span class="pack-blind-status ${state.tone}">${state.label}</span>
+ <span>COR: ${escapeKitAttribute(getPickItemColor(row))}</span>
+ ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openConferencePackagesOverview()">${escapeKitAttribute(packageIds.map((id, packageIndex) => `${packageLabels[packageIndex]}: ${normalizeConferencePackageAssignments(row).filter(value => value === id).length}`).join(' | '))}</button>` : ''}${packageSummary.standaloneUnits ? `<span class="pick-package-state is-standalone">${packageSummary.standaloneUnits} avulso(s)</span>` : ''}
+ ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Ultimo bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
  </div>
  </div>
  </div>
- <div class="pack-blind-qty" data-label="Quantidade bipada">
- <span class="pack-blind-qty-number">${formatStockNumber(checked)}</span>
- <span class="pack-blind-qty-unit">un</span>
+ <div class="pack-blind-qty pick-product-qty" data-label="Quantidade bipada">
+ <span class="pack-blind-qty-number pick-qty-number">${formatStockNumber(checked)}</span>
  </div>
- <button class="pack-blind-row-adjust" onclick="adjustConferenceRowDirect(${index}, -1)" type="button" aria-label="Remover uma unidade">
+ <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `toggleConferenceItemSelection(${index})` : 'openConferencePackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
+ <button class="pack-blind-row-adjust pick-product-delete" onclick="adjustConferenceRowDirect(${index}, -1)" type="button" aria-label="Remover uma unidade">
  <span class="material-symbols-rounded">delete</span>
  </button>
- </div>
+ </article>
  `;
  }).join('');
 }
@@ -20784,6 +20898,7 @@ function renderPackItemsListHTML() {
 function adjustConferenceRowDirect(index, delta) {
  const row = currentPackSession.conferenceRows[index];
  row.qtd_conferida = Math.max(0, row.qtd_conferida + delta);
+ row.scanned_in_conference = row.qtd_conferida > 0;
  
  if (row.qtd_conferida === row.qtd_separada) {
  row.divergencia = 'OK';
@@ -20794,6 +20909,7 @@ function adjustConferenceRowDirect(index, delta) {
  }
  
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
+ persistPackSessionCache();
 }
 
 function updateConferenceRowDivergence(row) {
@@ -20968,6 +21084,8 @@ async function addPackScan(scannedEan = null) {
  currentPackSession.conferenceRows.push(row);
  }
 
+ showPickScanCenterToast({ ...row, qty: Number(row.qtd_conferida || 1) }, Number(row.qtd_conferida || 1));
+
  if ((Number(row.qtd_conferida || 0) === getHighQtyThreshold()) && !row.high_qty_prompted) {
  row.high_qty_prompted = true;
  await openHighQtyModal({
@@ -20993,7 +21111,8 @@ async function addPackScan(scannedEan = null) {
  }
  input.value = '';
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
- showInputFeedback('pack-ean-input', row && row.divergencia !== 'SOBRA' ? 'success' : 'error');
+ persistPackSessionCache();
+  showInputFeedback('pack-ean-input', 'success');
  restoreScanFieldFocus('pack', 80);
  restoreScanFieldFocus('pack', 320);
 }
@@ -21054,9 +21173,7 @@ function renderConferenceCorrection() {
 
  <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px;">
  ${currentPackSession.conferenceRows.map((row, index) => {
- if (row.divergencia === 'OK' && !hasDivergence) return ''; // Hide OK rows if everything is OK to keep it clean
-
- let statusColor = '#ef4444'; // FALTA
+  let statusColor = '#ef4444'; // FALTA
  if (row.divergencia === 'OK') statusColor = '#22c55e';
  if (row.divergencia === 'SOBRA') statusColor = '#f59e0b';
 
@@ -21120,9 +21237,9 @@ function renderConferenceCorrection() {
  VOLTAR PARA BIPAGEM
  </button>
  
- <button class="btn-action" id="btn-finish-atomic"
- style="width: 100%; justify-content: center; background: #22c55e; ${hasDivergence ? 'opacity: 0.5; cursor: not-allowed;' : ''}" 
- showToast('Operacao concluida.', 'info');
+  <button class="btn-action" id="btn-finish-atomic"
+  style="width: 100%; justify-content: center; background: #22c55e; ${hasDivergence ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+  ${hasDivergence ? 'disabled' : 'onclick="confirmFinishConference()"'}>
  <span class="material-symbols-rounded">check_circle</span>
  FINALIZAR E DAR BAIXA
  </button>
@@ -21184,32 +21301,139 @@ function adjustConferenceRow(index, delta) {
  renderConferenceCorrection();
 }
 
-async function finishConferenceSession() {
- // Texto validado em UTF-8.
- const hasDivergence = currentPackSession.conferenceRows.some(row => 
- parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
- );
-
- if (hasDivergence) {
- showToast('Operacao concluida.', 'info');
- playBeep('error');
- renderConferenceCorrection();
- } else {
- // Texto validado em UTF-8.
- const confirmed = await showAppModal({
- type: 'confirm',
- title: 'Atencao',
- message: 'Deseja finalizar e dar baixa no estoque agora?',
- confirmText: 'Finalizar',
- cancelText: 'Revisar'
- });
- if (confirmed) {
- await confirmFinishConference();
- } else {
- renderConferenceCorrection(); // Mostra o resumo mesmo assim
- }
- }
+function closeConferenceResultModal() {
+ const modal = document.getElementById('conference-result-modal');
+ if (modal) modal.remove();
+ restoreScanFieldFocus('pack', 80);
 }
+
+function toggleConferenceRemovalMode() {
+ conferenceRemovalModeActive = !conferenceRemovalModeActive;
+ const button = document.getElementById('conference-remove-scan-toggle');
+ const label = document.getElementById('conference-remove-scan-label');
+ button?.classList.toggle('is-active', conferenceRemovalModeActive);
+ document.querySelector('.conference-workflow-screen')?.classList.toggle('is-removal-mode', conferenceRemovalModeActive);
+ if (label) label.textContent = conferenceRemovalModeActive ? 'REMOVENDO' : 'REMOVER';
+ showToast(conferenceRemovalModeActive ? 'Modo remover ativado. Bipe o produto que deseja remover.' : 'Modo remover desativado.', 'info');
+ restoreScanFieldFocus('pack', 80);
+}
+
+function openConferencePackagesOverview() {
+ document.getElementById('conference-packages-overview-modal')?.remove();
+ const scannedRows = (currentPackSession?.conferenceRows || []).filter(row => Number(row.qtd_conferida || 0) > 0);
+ const groupedRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits > 0);
+ const packageIds = getConferencePackageIds();
+ const modal = document.createElement('div');
+ modal.id = 'conference-packages-overview-modal';
+ modal.className = 'pick-grouping-modal';
+ modal.innerHTML = `<div class="pick-grouping-dialog pick-packages-overview" role="dialog" aria-modal="true" aria-labelledby="conference-packages-title">
+ <header class="pick-grouping-head"><div><span class="material-symbols-rounded">package_2</span><div><h2 id="conference-packages-title">AGRUPAMENTOS BIPADOS</h2><p>Somente produtos que ja passaram pela conferencia.</p></div></div><button type="button" onclick="closeConferencePackagesOverview()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header>
+ <div class="pick-packages-overview-summary"><span>${packageIds.length} PACOTE(S)</span><strong>${groupedRows.length} PRODUTO(S) BIPADO(S)</strong></div>
+ <div class="pick-packages-overview-list">${packageIds.length ? packageIds.map(id => {
+ const entries = groupedRows.map(row => ({ row, qty: normalizeConferencePackageAssignments(row).filter(value => value === id).length })).filter(entry => entry.qty > 0);
+ return `<section class="pick-package-overview-card"><header><div><span class="material-symbols-rounded">hub</span><strong>${escapeKitAttribute(getConferencePackageLabel(id))}</strong></div></header><div>${entries.map(({ row, qty }) => `<p><span>${escapeKitAttribute(getPickItemTitle(row))}</span><strong>${qty} un.</strong></p>`).join('')}</div><button type="button" onclick="ungroupConferencePackage('${escapeKitAttribute(id)}')"><span class="material-symbols-rounded">link_off</span>DESAGRUPAR PACOTE</button></section>`;
+ }).join('') : '<div class="pick-grouping-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum agrupamento bipado</strong><small>Os pacotes aparecerao aqui conforme os produtos forem conferidos.</small></div>'}</div>
+ <footer class="pick-grouping-actions"><button type="button" class="is-finish" onclick="closeConferencePackagesOverview()">FECHAR</button></footer></div>`;
+ document.body.appendChild(modal);
+}
+
+function closeConferencePackagesOverview() {
+ document.getElementById('conference-packages-overview-modal')?.remove();
+ restoreScanFieldFocus('pack', 60);
+}
+
+function ungroupConferencePackage(packageId) {
+ (currentPackSession?.conferenceRows || []).forEach(row => {
+ row.conference_package_assignments = normalizeConferencePackageAssignments(row).map(value => value === packageId ? null : value);
+ });
+ persistPackSessionCache();
+ openConferencePackagesOverview();
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+}
+
+function openConferenceResultModal() {
+ const rows = currentPackSession?.conferenceRows || [];
+ const resultRows = rows.map((row, index) => {
+  const expected = Number(row.qtd_separada || 0);
+  const checked = Number(row.qtd_conferida || 0);
+  const status = checked === expected ? 'ok' : checked < expected ? 'missing' : 'extra';
+  return { row, index, expected, checked, status };
+ });
+ const divergentRows = resultRows.filter(item => item.status !== 'ok');
+ const hasDivergence = divergentRows.length > 0;
+ document.getElementById('conference-result-modal')?.remove();
+ const modal = document.createElement('div');
+ modal.id = 'conference-result-modal';
+ modal.className = 'conference-result-overlay';
+ modal.innerHTML = `
+ <section class="conference-result-dialog ${hasDivergence ? 'has-divergence' : 'is-success'}" role="dialog" aria-modal="true" aria-labelledby="conference-result-title">
+  <header>
+   <span class="material-symbols-rounded">${hasDivergence ? 'rule' : 'task_alt'}</span>
+   <div><small>RESULTADO DA CONFER\u00caNCIA</small><h2 id="conference-result-title">${hasDivergence ? 'Ajustes necess\u00e1rios' : 'Confer\u00eancia correta'}</h2><p>${escapeKitAttribute(currentPackSession?.id || '')}</p></div>
+   <button type="button" onclick="closeConferenceResultModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
+  </header>
+  <div class="conference-result-summary">
+   <article><small>Corretos</small><strong>${resultRows.length - divergentRows.length}</strong></article>
+   <article><small>Faltando</small><strong>${resultRows.filter(item => item.status === 'missing').length}</strong></article>
+   <article><small>Excedentes</small><strong>${resultRows.filter(item => item.status === 'extra').length}</strong></article>
+  </div>
+  <div class="conference-result-list">
+   ${resultRows.map(({ row, index, expected, checked, status }) => `
+   <article class="is-${status}">
+    <span class="material-symbols-rounded">${status === 'ok' ? 'check_circle' : status === 'missing' ? 'add_circle' : 'remove_circle'}</span>
+    <div><strong>${escapeKitAttribute(getPickItemTitle(row))}</strong><small>ID ${escapeKitAttribute(getPickingProductId(row) || '-')} &middot; EAN ${escapeKitAttribute(getPickItemEan(row))}</small></div>
+    ${status === 'ok' ? '<em>CORRETO</em>' : conferenceCorrectionModeActive ? `<div class="conference-result-qty-actions"><button type="button" onclick="adjustConferenceFromResult(${index}, -1)" aria-label="Remover uma unidade"><span class="material-symbols-rounded">remove</span></button><button type="button" onclick="adjustConferenceFromResult(${index}, 1)" aria-label="Incluir uma unidade"><span class="material-symbols-rounded">add</span></button></div>` : `<em class="is-${status}">${status === 'missing' ? 'FALTANDO' : 'EXCEDENTE'}</em>`}
+    <p><span>Esperado <b>${formatStockNumber(expected)}</b></span><span>Bipado <b>${formatStockNumber(checked)}</b></span></p>
+   </article>`).join('')}
+  </div>
+  <footer>
+   ${hasDivergence ? conferenceCorrectionModeActive ? `
+   <p>Use os botoes − e + ou volte para bipar um produto que nao esteja na lista.</p>
+   <button type="button" class="conference-result-review" onclick="returnToConferenceScanning()"><span class="material-symbols-rounded">barcode_scanner</span>Bipar ou incluir produto</button>
+   ` : `
+   <p>Foi encontrada divergencia entre a separacao e os produtos bipados. Deseja corrigir?</p>
+   <button type="button" class="conference-result-review" onclick="enableConferenceResultCorrection()"><span class="material-symbols-rounded">edit</span>Sim, corrigir divergencias</button>
+   ` : `
+   <p>Todos os produtos e quantidades conferem com a separa\u00e7\u00e3o.</p>
+   <button type="button" class="conference-result-confirm" onclick="closeConferenceResultModal(); confirmFinishConference()"><span class="material-symbols-rounded">check_circle</span>Confirmar e finalizar</button>
+   `}
+  </footer>
+ </section>`;
+ document.body.appendChild(modal);
+}
+
+function enableConferenceResultCorrection() {
+ conferenceCorrectionModeActive = true;
+ openConferenceResultModal();
+}
+
+function returnToConferenceScanning() {
+ closeConferenceResultModal();
+ focusPackManualInput();
+}
+
+function adjustConferenceFromResult(index, delta) {
+ const row = currentPackSession?.conferenceRows?.[index];
+ if (!row) return;
+ row.qtd_conferida = Math.max(0, Number(row.qtd_conferida || 0) + Number(delta || 0));
+ row.scanned_in_conference = row.qtd_conferida > 0;
+ updateConferenceRowDivergence(row);
+ persistPackSessionCache();
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+ playBeep('success');
+ openConferenceResultModal();
+}
+
+async function finishConferenceSession() {
+  const hasDivergence = currentPackSession.conferenceRows.some(row =>
+  parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
+  );
+  if (hasDivergence) playBeep('error');
+  conferenceCorrectionModeActive = false;
+  openConferenceResultModal();
+ }
 
 function startFastPackSession(channelLabel, channelColor) {
  const currentUser = localStorage.getItem('currentUser');
@@ -32384,11 +32608,10 @@ function openQuickActionSeparationMenu(event) {
  if (!menu) return;
  menu.classList.add('has-separation-submenu');
  const pendingDrafts = getDraftPickSessionsWithLocalDraft().length;
- const pendingConference = (appData.separacao || []).filter(isSeparationPendingConferenceSession).length;
  const panel = document.createElement('section');
  panel.id = 'quick-separation-submenu';
  panel.className = 'quick-separation-submenu';
- panel.innerHTML = `<header><button type="button" onclick="closeQuickActionSeparationMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button><span><strong>SEPARA&Ccedil;&Atilde;O</strong><small>Acesso operacional rápido</small></span></header><div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><span class="material-symbols-rounded">pending_actions</span><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderPackMenu()"><span class="material-symbols-rounded">fact_check</span><span><strong>PENDENTES DE CONFERÊNCIA</strong><small>Separações aguardando conferência</small></span><b>${pendingConference}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><span class="material-symbols-rounded">task_alt</span><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><span class="material-symbols-rounded">history</span><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ panel.innerHTML = `<header><button type="button" onclick="closeQuickActionSeparationMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button><span><strong>SEPARA&Ccedil;&Atilde;O</strong><small>Acesso operacional rápido</small></span></header><div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><span class="material-symbols-rounded">pending_actions</span><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><span class="material-symbols-rounded">task_alt</span><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><span class="material-symbols-rounded">history</span><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
  menu.appendChild(panel);
 }
 
