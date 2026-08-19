@@ -20106,11 +20106,6 @@ async function renderPackMenu() {
  }
 
  const activeSessions = (appData.separacao || []).filter(s => isSeparationPendingConferenceSession(s));
- const completedConferenceIdsToday = new Set((appData.conferencia || []).filter(isPackRecordFromToday).map(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '')).filter(Boolean));
- const completedToday = (appData.separacao || []).filter(session => {
- const id = String(getPackSeparationSessionId(session));
- return isPackSessionFinished(session) && (isPackRecordFromToday(session) || completedConferenceIdsToday.has(id));
- });
  const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
   const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
   const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
@@ -20126,12 +20121,7 @@ async function renderPackMenu() {
  ${getModuleSidebarHTML('pack')}
 
  <main class="container">
-  ${sessionsByChannel.length === 0 ? `
- <div class="operational-empty-card">
- <span class="material-symbols-rounded">fact_check</span>
- <strong>Nenhuma separacao pendente para conferencia.</strong>
- </div>
- ` : `
+  ${sessionsByChannel.length ? `
   <div class="standard-module-card-grid operational-card-grid pack-pending-channel-grid">
   ${sessionsByChannel.map(group => {
   const { channelName, sessions } = group;
@@ -20149,18 +20139,7 @@ async function renderPackMenu() {
  `;
  }).join('')}
  </div>
- `}
- ${completedToday.length ? `
- <section class="pack-daily-completed">
-  <header><div><span class="material-symbols-rounded">today</span><div><strong>FINALIZADAS HOJE</strong><small>Consulta rapida do dia</small></div></div><b>${completedToday.length}</b></header>
-  <div class="pack-daily-completed-list">
-  ${completedToday.map(session => {
-  const sessionId = getPackSeparationSessionId(session);
-  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
-  return `<button type="button" onclick="renderPackDailyConsultation(${quotePackInlineArg(sessionId)})"><span class="material-symbols-rounded">task_alt</span><span><strong>${escapeKitAttribute(getPackSeparationDisplayId(session))}</strong><small>${escapeKitAttribute(channelName)} &middot; ${escapeKitAttribute(formatPackSeparationDate(session.finalizado_em || session.atualizado_em || session.data_separacao))}</small></span><em>Consultar</em></button>`;
-  }).join('')}
-  </div>
- </section>` : ''}
+` : ''}
  </main>
  </div>
  `;
