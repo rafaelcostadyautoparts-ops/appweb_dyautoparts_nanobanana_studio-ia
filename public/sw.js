@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v253';
+const CACHE_NAME = 'dy-autoparts-v254';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html

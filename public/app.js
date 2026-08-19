@@ -4632,7 +4632,7 @@ function getProductMovementDocument(mov = {}) {
  const nf = parseMovHistoryNF(mov.observacao);
  if (nf) return `NF ${nf}`;
  const obs = String(mov.observacao || '');
- const processId = obs.match(/\b((?:SEP|CONF|INV|AJU|TRF|GAR)[-_A-Z0-9.]+)\b/i)?.[1];
+ const processId = obs.match(/\b((?:SEP|CONF|INV|AJU|TRF|GAR)[-_][A-Z0-9][-_A-Z0-9.]*)\b/i)?.[1];
  return processId || mov.movimento_id || '-';
 }
 
