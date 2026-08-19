@@ -71964,7 +71964,7 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-qty .pick-qty-unit { display:none !important; }
 
 /* Separacao e conferencia compartilham a mesma largura operacional de 96%. */
-html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-workflow-shell {
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-workflow-shell {
   width:96% !important;
   max-width:1500px !important;
   margin-left:auto !important;

@@ -497,6 +497,10 @@ let currentPackSession = null;
 let currentPickSession = null;
 let currentSessionItems = [];
 let isModoRapido = false;
+let conferenceViewFilter = 'all';
+let conferenceRemovalModeActive = false;
+let conferenceCorrectionModeActive = false;
+const conferenceKitSelection = new Map();
 
 // ==== NAVIGATION MANAGEMENT ====
 // Texto validado em UTF-8.
@@ -17308,7 +17312,7 @@ function buildPickingItemPayload(item) {
 }
 
 function getPickingProductId(item) {
- return normalizePickCode(item?.id_interno || item?.col_a || item?.col_A || '');
+  return normalizePickCode(item?.id_interno || item?.produto_id_interno || item?.codigo_interno || item?.col_a || item?.col_A || '');
 }
 
 function showPickScanCenterToast(item = null, quantity = 1) {
@@ -20387,6 +20391,10 @@ function setActivePickSessions(sessions) {
 // Global Session State moved to top for hoisting safety
 async function renderPackSessionDetails(sessionId) {
  const currentUser = localStorage.getItem('currentUser');
+ conferenceViewFilter = 'all';
+ conferenceRemovalModeActive = false;
+ conferenceCorrectionModeActive = false;
+ conferenceKitSelection.clear();
  try {
  const data = await DataClient.loadModule('conferencia', true);
  if (data) {
@@ -20707,6 +20715,7 @@ function getPackStats() {
 
 function updatePackChrome() {
  const stats = getPackStats();
+ const rows = currentPackSession?.conferenceRows || [];
  const alertEl = document.getElementById('pack-divergence-alert');
  if (alertEl) {
  alertEl.classList.add('hidden');
@@ -21037,46 +21046,80 @@ function manualAddItemToConference(product) {
 
 
 async function addPackScan(scannedEan = null) {
- const input = document.getElementById('pack-ean-input');
- const ean = (scannedEan || input.value.trim()).toString();
- if (!ean) {
- restoreScanFieldFocus('pack', 80);
- return;
- }
+  const input = document.getElementById('pack-ean-input');
+  const rawCode = (scannedEan ?? input?.value ?? '').toString();
+  const ean = normalizePickCode(rawCode);
+  if (!ean) {
+  restoreScanFieldFocus('pack', 80);
+  return;
+  }
 
- let row = currentPackSession.conferenceRows.find(r =>
- (r.ean && r.ean.toString() === ean) ||
- (r.id_interno && r.id_interno.toString() === ean)
- );
+  let row = currentPackSession.conferenceRows.find(r => pickItemMatchesCode(r, ean));
+  let product = null;
+  if (!row) {
+  product = await findProductForPicking(ean);
+  const productId = getPickingProductId(product);
+  if (productId) {
+  row = currentPackSession.conferenceRows.find(r => getPickingProductId(r) === productId);
+  }
+  }
 
- if (row) {
- playBeep('success');
- triggerScanFeedback('success');
+  if (row) {
+  if (conferenceRemovalModeActive) {
+  if (Number(row.qtd_conferida || 0) <= 0) {
+  playBeep('error');
+  triggerScanFeedback('error');
+  showToast('Este produto ainda nao foi bipado.', 'warning');
+  if (input) input.value = '';
+  restoreScanFieldFocus('pack', 80);
+  return;
+  }
+  row.qtd_conferida = Math.max(0, Number(row.qtd_conferida || 0) - 1);
+  row.scanned_in_conference = row.qtd_conferida > 0;
+  updateConferenceRowDivergence(row);
+  playBeep('success');
+  triggerScanFeedback('success');
+  showToast('Produto removido.', 'success');
+  if (input) input.value = '';
+  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
+  persistPackSessionCache();
+  restoreScanFieldFocus('pack', 80);
+  return;
+  }
+  playBeep('success');
+  triggerScanFeedback('success');
  console.log('[INFO] Operacao registrada.');
- row.qtd_conferida++;
+ row.qtd_conferida = parseStockQty(row.qtd_conferida) + 1;
+ row.scanned_in_conference = true;
+ row.pick_resume_last_scan_at = new Date().toISOString();
+ row.pick_resume_last_scan_time = formatTimeBR(new Date());
 
  updateConferenceRowDivergence(row);
- showToast("Produto conferido.");
- } else {
+  } else {
+  if (conferenceRemovalModeActive) {
+  playBeep('error');
+  triggerScanFeedback('error');
+  showToast('Este produto ainda nao foi bipado.', 'warning');
+  if (input) input.value = '';
+  restoreScanFieldFocus('pack', 80);
+  return;
+  }
  // Item scanned but not in picking session (SOBRA)
  // Try to find product info in appData.products
- const product = appData.products.find(p =>
- (p.ean && p.ean.toString() === ean) ||
- (p.sku_fornecedor && p.sku_fornecedor.toString() === ean) ||
- (p.id_interno && p.id_interno.toString() === ean) ||
- (p.col_a && p.col_a.toString() === ean) ||
- (p.col_A && p.col_A.toString() === ean)
- );
- showScanFeedback('warning', 'Produto nao encontrado');
- showToast('Operacao concluida.', 'info');
+  product = product || await findProductForPicking(ean);
+  playBeep('success');
+  triggerScanFeedback('success');
 
  row = {
  rom_id: currentPackSession.id,
  id_interno: product ? (product.id_interno || product.col_a || product.col_A || '') : '',
- ean: ean,
+  ean: product?.ean || ean,
  descricao: product ? (product.descricao_base || product.col_aa || 'PRODUTO NAO IDENTIFICADO') : 'PRODUTO NAO IDENTIFICADO',
  qtd_separada: 0,
  qtd_conferida: 1,
+ scanned_in_conference: true,
+ pick_resume_last_scan_at: new Date().toISOString(),
+ pick_resume_last_scan_time: formatTimeBR(new Date()),
  divergencia: 'SOBRA',
  conferido_por: '',
  conferido_em: ''
