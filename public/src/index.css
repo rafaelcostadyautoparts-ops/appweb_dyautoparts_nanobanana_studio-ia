@@ -72179,3 +72179,88 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
 .mov-history-empty{color:#64748b!important}.mov-history-empty strong{color:#334155!important}
 @media(max-width:1180px){.mov-history-controls{grid-template-columns:1fr!important}.mov-history-period{grid-column:auto}.mov-history-row-main{grid-template-columns:minmax(0,1fr) auto!important}.mov-history-row-main>span:not(.mov-history-op):not(.mov-history-view-button){font-size:.72rem!important}.mov-history-op{grid-column:1/-1}.mov-history-view-button{grid-column:2;grid-row:2/span 3;align-self:center}}
 @media(max-width:640px){.mov-history-workspace{width:calc(100% - 20px)!important;padding-top:10px!important}.mov-history-back{top:24px!important;left:20px!important}.mov-history-header{padding-left:64px!important}.mov-history-header h1{font-size:1.05rem!important}.mov-history-summary{grid-template-columns:repeat(2,1fr)!important}.mov-history-summary article{min-height:76px!important}.mov-history-row-main{padding:10px!important}.mov-history-row-main>span:not(.mov-history-op):not(.mov-history-view-button)::before{color:#94a3b8}.mov-history-pagination{align-items:flex-start;flex-direction:column}}
+
+
+/* Producao: padrao geometrico das barras superiores baseado em Movimentacoes. */
+@media (min-width: 769px) {
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .module-top-bar,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .operational-top-bar,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .operational-top-bar {
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    min-width: 100vw !important;
+    max-width: 100vw !important;
+    height: 72px !important;
+    min-height: 72px !important;
+    max-height: 72px !important;
+    margin: 0 !important;
+    padding: 0 72px !important;
+    border-radius: 0 !important;
+    transform: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > :where(.module-top-bar,.operational-top-bar) .top-bar-label,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .operational-top-bar .top-bar-label,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .operational-top-bar .top-bar-label {
+    position: static !important;
+    width: auto !important;
+    max-width: calc(100vw - 160px) !important;
+    margin: 0 !important;
+    transform: none !important;
+    text-align: center !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .top-action-group,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .top-action-group,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .top-action-group {
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    left: 0 !important;
+    right: auto !important;
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    height: 72px !important;
+    min-height: 72px !important;
+    max-height: 72px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .top-action-group .fab-voltar,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .top-action-group .fab-voltar,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .top-action-group .fab-voltar {
+    position: static !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+  }
+}
+/* Producao: seta de retorno com traco leve e uniforme. */
+html body:not(.login-active) #app :where(.dashboard-screen,.product-submenu-screen) > .top-action-group .fab-voltar :where(.app-back-icon,.product-top-back-icon),
+html body:not(.login-active) #app :where(.dashboard-screen,.product-submenu-screen) > .top-action-group .fab-voltar svg {
+  width: 26px !important;
+  height: 26px !important;
+  filter: none !important;
+}
+html body:not(.login-active) #app :where(.dashboard-screen,.product-submenu-screen) > .top-action-group .fab-voltar svg :where(path,line,polyline) {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
