@@ -4925,7 +4925,7 @@ function buildMovHistoryMovementKey(mov) {
  if (type === 'entrada_nf' && nf) return `entrada_nf:${nf}`;
 
  const obs = String(mov.observacao || '');
- const sessionId = obs.match(/\b((?:INV|SEP|CONF|TRF|AJU|GAR)[-_A-Z0-9.]+)\b/i)?.[1];
+ const sessionId = obs.match(/\b((?:INV|SEP|CONF|TRF|AJU|GAR)[-_][A-Z0-9][-_A-Z0-9.]*)\b/i)?.[1];
  if (sessionId) return `${type}:${sessionId}`;
 
  const time = mov.data_hora ? getDataHoraBrasil(mov.data_hora).slice(0, 16) : mov.movimento_id;
@@ -4981,7 +4981,7 @@ function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set(
 }
 
 function getMovHistorySessionIdFromText(value = '') {
- return String(value || '').match(/\b((?:SEP|CONF)[-_A-Z0-9.]+)\b/i)?.[1] || '';
+ return String(value || '').match(/\b((?:SEP|CONF)[-_][A-Z0-9][-_A-Z0-9.]*)\b/i)?.[1] || '';
 }
 
 function getMovHistoryMovementSessionKeys(movimentos = []) {
