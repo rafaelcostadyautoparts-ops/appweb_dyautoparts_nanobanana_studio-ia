@@ -71647,6 +71647,107 @@ html.app-environment-homologation .pick-drafts-summary-card{min-height:68px!impo
 html.app-environment-homologation .pick-drafts-summary-card>.material-symbols-rounded,html.app-environment-homologation .pick-drafts-summary-card em{display:none!important}
 html.app-environment-homologation .pick-drafts-summary-card>div{display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;gap:8px!important}
 html.app-environment-homologation .pick-drafts-summary-card strong{font-size:1.45rem!important}.pick-drafts-summary-card small{font-weight:800!important}
+/* Devolucoes - resumo agrupado por area */
+.devolucao-history-screen .devolucao-history-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-card {
+  display: flex !important;
+  min-height: 320px !important;
+  padding: 18px !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 0 !important;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-total {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-total .devolucao-metric-icon {
+  width: 74px;
+  height: 74px;
+  margin-bottom: 18px;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-total .devolucao-metric-icon svg { width: 43px; height: 43px; }
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-total strong { margin-top: 12px !important; font-size: 1.8rem !important; }
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-group > header,
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-group > header {
+  min-height: 56px;
+  padding-bottom: 13px;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-group > header > strong {
+  margin: 0 !important;
+  color: #18233b !important;
+  font-size: 1.03rem !important;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-heading > strong {
+  margin: 0 !important;
+  color: #18233b !important;
+  font-size: 1.03rem !important;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-heading > small {
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row {
+  flex: 1;
+  min-height: 92px;
+  padding: 14px 0;
+  border-top: 1px solid #e4e8ef;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row .devolucao-metric-icon,
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-group > header .devolucao-metric-icon {
+  width: 46px;
+  height: 46px;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row .devolucao-metric-icon svg,
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-group > header .devolucao-metric-icon svg { width: 27px; height: 27px; }
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row strong {
+  margin-top: 5px !important;
+  font-size: 1.2rem !important;
+}
+.devolucao-history-screen .devolucao-history-metrics .devolucao-summary-row em {
+  display: block;
+  margin-top: 5px;
+  color: #64748b;
+  font-size: .68rem;
+  font-style: normal;
+  line-height: 1.25;
+}
+.devolucao-history-screen .devolucao-history-metrics .metric-red .devolucao-metric-icon { color:#e52c36; background:#fff0f1; }
+.devolucao-history-screen .devolucao-history-metrics .metric-red strong { color:#e52c36 !important; }
+.devolucao-history-screen .devolucao-history-metrics .metric-green .devolucao-metric-icon { color:#169b4a; background:#eaf8ef; }
+.devolucao-history-screen .devolucao-history-metrics .metric-green strong { color:#169b4a !important; }
+.devolucao-history-screen .devolucao-history-metrics .metric-orange .devolucao-metric-icon { color:#ed850e; background:#fff4e4; }
+.devolucao-history-screen .devolucao-history-metrics .metric-orange strong { color:#ed850e !important; }
+.devolucao-history-screen .devolucao-history-metrics .metric-blue .devolucao-metric-icon { color:#2563eb; background:#eaf1ff; }
+.devolucao-history-screen .devolucao-history-metrics .metric-blue strong { color:#2563eb !important; }
+.devolucao-history-screen .devolucao-history-metrics .metric-neutral .devolucao-metric-icon { color:#64748b; background:#eef2f6; }
+.devolucao-history-screen .devolucao-history-metrics .metric-neutral strong { color:#475569 !important; }
+@media (max-width: 1180px) {
+  .devolucao-history-screen .devolucao-history-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 620px) {
+  .devolucao-history-screen .devolucao-history-metrics { grid-template-columns: 1fr !important; }
+  .devolucao-history-screen .devolucao-history-metrics .devolucao-summary-card { min-height: auto !important; }
+  .devolucao-history-screen .devolucao-history-metrics .devolucao-summary-total { min-height: 220px !important; }
+}
 html.app-environment-homologation .pick-drafts-controls{width:93.75%!important;margin:0 auto 10px!important;padding:10px!important;border-radius:12px!important;box-shadow:none!important}
 html.app-environment-homologation .pick-drafts-future-filter{display:none!important}
 html.app-environment-homologation .pick-drafts-table-wrap{display:none!important}
