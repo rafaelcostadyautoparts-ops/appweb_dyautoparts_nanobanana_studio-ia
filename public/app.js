@@ -17931,6 +17931,37 @@ function getPickItemColor(item) {
  return item?.cor || item?.color || item?.colour || item?.col_h || item?.col_H || '-';
 }
 
+function getProductColorDotStyle(color) {
+ const normalized = normalizeOperationalLabel(color);
+ const palette = [
+  [['TRANSPARENTE', 'CRISTAL'], '#e2e8f0'],
+  [['BLACK PIANO', 'PRETO', 'BLACK'], '#111827'],
+  [['BRANCO', 'WHITE'], '#ffffff'],
+  [['PRATA', 'SILVER', 'CROMADO', 'CROMO'], '#aeb7c4'],
+  [['CINZA', 'GRAFITE', 'GRAY', 'GREY'], '#64748b'],
+  [['VERMELHO', 'RED'], '#dc2626'],
+  [['AZUL', 'BLUE'], '#2563eb'],
+  [['VERDE', 'GREEN'], '#16a34a'],
+  [['AMARELO', 'YELLOW'], '#facc15'],
+  [['LARANJA', 'ORANGE'], '#f97316'],
+  [['ROXO', 'VIOLETA', 'PURPLE'], '#7c3aed'],
+  [['ROSA', 'PINK'], '#ec4899'],
+  [['MARROM', 'BROWN'], '#854d0e'],
+  [['BEGE', 'BEIGE'], '#d6c7a1'],
+  [['DOURADO', 'GOLD'], '#d4a017']
+ ];
+ const colors = [];
+ palette.forEach(([names, hex]) => {
+  if (names.some(name => normalized.includes(name)) && !colors.includes(hex)) colors.push(hex);
+ });
+ if (normalized.includes('RGB') || normalized.includes('MULTICOLOR') || normalized.includes('COLORIDO')) {
+  return '--product-color-dot:linear-gradient(135deg,#ef4444 0 33%,#22c55e 33% 66%,#3b82f6 66% 100%)';
+ }
+ if (!colors.length) colors.push('#94a3b8');
+ const background = colors.length === 1 ? colors[0] : `linear-gradient(135deg,${colors.slice(0, 3).map((hex, index, list) => `${hex} ${index * 100 / list.length}% ${(index + 1) * 100 / list.length}%`).join(',')})`;
+ return `--product-color-dot:${background}`;
+}
+
 const HIGH_QTY_THRESHOLD = 15;
 
 function getHighQtyThreshold() {
@@ -19533,7 +19564,7 @@ function updatePickItemsList() {
   <div class="pick-product-meta">
   <span>SKU: <strong>${escapeKitAttribute(getPickItemSku(item))}</strong></span>
   <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(item))}</strong></span>
-  <span>COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
+  <span class="pick-product-color" style="${getProductColorDotStyle(getPickItemColor(item))}">COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
   ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openPickPackagesOverview()">${getPickItemPackageDetails(item).map(group => `${escapeKitAttribute(group.label)}: ${group.qty}`).join(' | ')}</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
   ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Último bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
   </div>
@@ -21069,7 +21100,7 @@ function renderPackItemsListHTML() {
  <div class="pack-blind-product-meta pick-product-meta">
  <span>SKU: <strong>${escapeKitAttribute(getPickItemSku(displayRow))}</strong></span>
  <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(displayRow))}</strong></span>
- <span class="pick-product-color">COR: <strong>${escapeKitAttribute(getPickItemColor(displayRow))}</strong></span>
+ <span class="pick-product-color" style="${getProductColorDotStyle(getPickItemColor(displayRow))}">COR: <strong>${escapeKitAttribute(getPickItemColor(displayRow))}</strong></span>
  ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openConferencePackagesOverview()">${escapeKitAttribute(packageIds.map((id, packageIndex) => `${packageLabels[packageIndex]}: ${normalizeConferencePackageAssignments(row).filter(value => value === id).length}`).join(' | '))}</button>` : ''}${packageSummary.standaloneUnits ? `<span class="pick-package-state is-standalone">${packageSummary.standaloneUnits} avulso(s)</span>` : ''}
  ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Ultimo bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
  </div>

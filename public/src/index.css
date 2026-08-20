@@ -72418,7 +72418,7 @@ html.app-environment-homologation body:not(.login-active) #app :where(.dashboard
   stroke-linecap: round !important;
   stroke-linejoin: round !important;
 }
-.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color::before{content:'';width:11px;height:11px;flex:0 0 11px;border-radius:50%;background:#64748b;border:1px solid rgba(255,255,255,.55)}
+.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color::before{content:'';width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--product-color-dot,#94a3b8);border:1px solid rgba(15,23,42,.28);box-shadow:0 0 0 1px rgba(255,255,255,.72)}
 
 
 /* Romaneio Flex: fluxo responsivo para preenchimento e assinatura no celular. */
@@ -72458,3 +72458,17 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen > mai
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen :is(#pick-items-list, #pack-items-list)::-webkit-scrollbar-thumb:hover {
   background: #e5e7eb !important;
 }
+
+/* Cabecalhos operacionais: retorno alinhado dentro da grade, sem herdar posicao fixa global. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header > .pick-inline-back {
+ position:static !important;
+ inset:auto !important;
+ align-self:center !important;
+ justify-self:start !important;
+ display:inline-flex !important;
+ align-items:center !important;
+ justify-content:center !important;
+ margin:0 !important;
+ transform:none !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header > .pick-inline-back .app-back-icon { display:block !important; margin:auto !important; }
