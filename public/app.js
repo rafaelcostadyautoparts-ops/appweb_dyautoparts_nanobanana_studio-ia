@@ -1905,6 +1905,16 @@ function atualizarStatusConexao() {
 
 window.addEventListener("online", atualizarStatusConexao);
 window.addEventListener("offline", atualizarStatusConexao);
+window.addEventListener("offline", () => {
+ loadOperationalCatalog().finally(() => {
+ if (currentScreen === 'menu') renderMenu(false);
+ });
+});
+window.addEventListener("online", () => {
+ processSyncQueue('connection_restored');
+ ensureProdutosLoaded(true).catch(error => console.warn('[OFFLINE] Atualizacao do catalogo falhou:', error));
+ if (currentScreen === 'menu') renderMenu(false);
+});
 
 // ==========================================
 // BOOTSTRAP RESILIENTE COM TIMEOUT E FALLBACK CONTROLADO
@@ -2027,6 +2037,7 @@ async function initApp() {
  }
 
  atualizarStatusConexao();
+ await loadOperationalCatalog();
 
  const [deviceStatus] = await Promise.all([
  ensureCurrentDeviceRegistered({ silent: true, source: 'bootstrap', logUpdate: true }),
@@ -2046,6 +2057,7 @@ async function initApp() {
  renderLogin();
  setTimeout(() => {
  loadAllData(true, 'startup_background').catch(error => console.warn('[BOOT] Sincronização em segundo plano falhou:', error));
+ if (navigator.onLine) ensureProdutosLoaded(false).catch(error => console.warn('[OFFLINE] Preparacao do catalogo falhou:', error));
  runStartupUpdateCheck().catch(error => console.warn('[BOOT] Verificação de atualização em segundo plano falhou:', error));
  }, 0);
  
@@ -2079,6 +2091,7 @@ async function initApp() {
 }
 
 async function loadUsersWithFallback() {
+ if (!navigator.onLine && Array.isArray(appData.users) && appData.users.length) return true;
  // Texto validado em UTF-8.
  console.log('[INFO] Operacao registrada.');
  try {
@@ -2124,6 +2137,61 @@ const PROCESS_SYNC_QUEUE_DEBOUNCE_MS = 3000;
 const OPERATION_OUTBOX_DB = 'DYAUTO_OPERATION_OUTBOX';
 const OPERATION_OUTBOX_STORE = 'operations';
 
+const OPERATIONAL_CACHE_DB = 'DYAUTO_OPERATIONAL_CACHE';
+const OPERATIONAL_CACHE_STORE = 'snapshots';
+const OPERATIONAL_CATALOG_KEY = 'product_catalog_v1';
+let productCodeIndex = new Map();
+
+function openOperationalCacheDB() {
+ return new Promise((resolve, reject) => {
+ const request = indexedDB.open(OPERATIONAL_CACHE_DB, 1);
+ request.onupgradeneeded = event => {
+ const db = event.target.result;
+ if (!db.objectStoreNames.contains(OPERATIONAL_CACHE_STORE)) db.createObjectStore(OPERATIONAL_CACHE_STORE, { keyPath: 'key' });
+ };
+ request.onsuccess = () => resolve(request.result);
+ request.onerror = () => reject(request.error || new Error('Cache operacional indisponivel'));
+ });
+}
+
+async function saveOperationalCatalog(products = [], estoque = []) {
+ if (!Array.isArray(products) || !products.length) return false;
+ const snapshot = { key: OPERATIONAL_CATALOG_KEY, products, estoque: Array.isArray(estoque) ? estoque : [], users: appData.users || [], separacao: appData.separacao || [], separacao_itens: appData.separacao_itens || [], conferencia: appData.conferencia || [], savedAt: new Date().toISOString() };
+ const db = await openOperationalCacheDB();
+ await new Promise((resolve, reject) => {
+ const tx = db.transaction(OPERATIONAL_CACHE_STORE, 'readwrite');
+ tx.objectStore(OPERATIONAL_CACHE_STORE).put(snapshot);
+ tx.oncomplete = resolve;
+ tx.onerror = () => reject(tx.error);
+ });
+ localStorage.setItem('dy_operational_catalog_saved_at', snapshot.savedAt);
+ return true;
+}
+
+async function loadOperationalCatalog() {
+ try {
+ const db = await openOperationalCacheDB();
+ const snapshot = await new Promise((resolve, reject) => {
+ const tx = db.transaction(OPERATIONAL_CACHE_STORE, 'readonly');
+ const request = tx.objectStore(OPERATIONAL_CACHE_STORE).get(OPERATIONAL_CATALOG_KEY);
+ request.onsuccess = () => resolve(request.result || null);
+ request.onerror = () => reject(request.error);
+ });
+ if (!snapshot?.products?.length) return false;
+ appData.products = hydrateProdutosForSearch(snapshot.products);
+ appData.estoque = Array.isArray(snapshot.estoque) ? snapshot.estoque : [];
+ appData.users = Array.isArray(snapshot.users) ? snapshot.users : appData.users;
+ appData.separacao = Array.isArray(snapshot.separacao) ? snapshot.separacao : appData.separacao;
+ appData.separacao_itens = Array.isArray(snapshot.separacao_itens) ? snapshot.separacao_itens : appData.separacao_itens;
+ appData.conferencia = Array.isArray(snapshot.conferencia) ? snapshot.conferencia : appData.conferencia;
+ rebuildProductCodeIndex(appData.products);
+ return true;
+ } catch (error) {
+ console.warn('[OFFLINE] Falha ao restaurar catalogo operacional:', error);
+ return false;
+ }
+}
+
 function openOperationOutboxDB() {
  return new Promise((resolve, reject) => {
  if (!window.indexedDB) {
@@ -2146,12 +2214,14 @@ function openOperationOutboxDB() {
 }
 
 async function queueOperation(type, payload, meta = {}) {
+ const executionId = payload.executionId || meta.executionId || generateExecutionId();
+ const operationId = meta.queueKey || [type, executionId, meta.sessionId || '', meta.itemId || ''].join(':');
  const operation = {
- id: payload.executionId || meta.executionId || generateExecutionId(),
+ id: operationId,
  type,
  payload: {
  ...payload,
- executionId: payload.executionId || meta.executionId || generateExecutionId()
+ executionId
  },
  meta,
  status: 'pending',
@@ -2160,7 +2230,6 @@ async function queueOperation(type, payload, meta = {}) {
  updatedAt: getDataHoraBrasil(),
  lastError: ''
  };
- operation.payload.executionId = operation.id;
 
  try {
  const db = await openOperationOutboxDB();
@@ -2171,7 +2240,7 @@ async function queueOperation(type, payload, meta = {}) {
  tx.onerror = () => reject(tx.error);
  });
  } catch (error) {
- const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
+ const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]').filter(item => item.id !== operation.id);
  fallback.push(operation);
  localStorage.setItem('operation_outbox_fallback', JSON.stringify(fallback));
  }
@@ -2876,7 +2945,20 @@ function hydrateProdutosForSearch(products) {
  });
 }
 
+function rebuildProductCodeIndex(products = appData.products) {
+ const nextIndex = new Map();
+ (Array.isArray(products) ? products : []).forEach(product => {
+ [product?.ean, product?.codigo_barras, product?.id_interno, product?.codigo_interno, product?.col_a, product?.col_A, product?.sku_fornecedor, product?.sku]
+ .map(normalizePickCode)
+ .filter(Boolean)
+ .forEach(code => nextIndex.set(code, product));
+ });
+ productCodeIndex = nextIndex;
+ return nextIndex;
+}
+
 function useEmergencyProductsFallback(reason) {
+
  if (!emergencyProductsCache.length) return false;
  console.warn(`[DATA] Usando fallback emergencial de produtos em cache. Motivo: ${reason}`);
  appData.products = hydrateProdutosForSearch(emergencyProductsCache);
@@ -2886,6 +2968,14 @@ function useEmergencyProductsFallback(reason) {
 
 async function ensureProdutosLoaded(force = false) {
  const previousProducts = Array.isArray(appData.products) ? appData.products : [];
+
+ if (!navigator.onLine) {
+ if (previousProducts.length) {
+ rebuildProductCodeIndex(previousProducts);
+ return true;
+ }
+ return loadOperationalCatalog();
+ }
 
  try {
  if (window.supabaseClientReady) {
@@ -2902,6 +2992,8 @@ async function ensureProdutosLoaded(force = false) {
  const indexStart = performance.now();
  appData.products = hydrateProdutosForSearch(data.products);
  appData.estoque = data.estoque;
+ rebuildProductCodeIndex(appData.products);
+ saveOperationalCatalog(data.products, data.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar catalogo:', error));
 
  console.log(`[PERF] Indice de busca criado para ${appData.products.length} produtos em ${Math.round(performance.now() - indexStart)}ms`);
  console.log('[SEP] total produtos carregados', appData.products.length);
@@ -3007,30 +3099,24 @@ function renderSplash() {
 
 function renderLoading(progress = 0, message = "Sincronizando Dados") {
  currentScreen = 'loading';
+ const dotCount = 18;
+ const activeDots = Math.max(1, Math.round((Math.max(0, Math.min(100, Number(progress) || 0)) / 100) * dotCount));
  app.innerHTML = `
- <div class="login-screen fade-in" style="justify-content: center; background: var(--bg);">
- <div class="login-logo-container" style="min-height: auto; margin-bottom: 40px; display: flex; justify-content: center; width: 100%;">
- <img src="${LOGO_URL}" alt="DY AutoParts" class="login-logo-img dy-app-logo" onerror="this.onerror=null; this.src='${LOGO_DARK_BG_FALLBACK}';">
- </div>
- <div style="text-align: center; width: 100%; max-width: 320px; padding: 0 20px;">
- <p style="margin-bottom: 20px; font-weight: 700; color: var(--muted); letter-spacing: 0.2em; font-size: 0.7rem; text-transform: uppercase;">${message}</p>
- <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
- <div id="loading-bar" style="width: ${progress}%; height: 100%; background: var(--primary); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px var(--primary);"></div>
- </section>
- <div style="display: flex; justify-content: space-between; align-items: center;">
- <span style="font-size: 0.6rem; color: var(--muted); font-weight: 600;">CARREGANDO...</span>
- <span id="loading-percent" style="font-size: 0.8rem; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums;">${progress}%</span>
- </div>
+ <div class="app-loading-screen fade-in">
+ <strong class="app-loading-label">CARREGANDO...</strong>
+ <div class="app-loading-dots" role="progressbar" aria-label="${escapeKitAttribute(message)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">
+ ${Array.from({ length: dotCount }, (_, index) => `<span class="${index < activeDots ? 'is-active' : ''}" style="--i:${index}"></span>`).join('')}
  </div>
  </div>
  `;
 }
 
 function updateLoadingProgress(progress) {
- const bar = document.getElementById('loading-bar');
- const percent = document.getElementById('loading-percent');
- if (bar) bar.style.width = `${progress}%`;
- if (percent) percent.innerText = `${progress}%`;
+ const dots = [...document.querySelectorAll('.app-loading-dots span')];
+ const activeDots = Math.max(1, Math.round((Math.max(0, Math.min(100, Number(progress) || 0)) / 100) * dots.length));
+ dots.forEach((dot, index) => dot.classList.toggle('is-active', index < activeDots));
+ const progressEl = document.querySelector('.app-loading-dots');
+ if (progressEl) progressEl.setAttribute('aria-valuenow', String(progress));
 }
 
 function showToast(message) {
@@ -3320,6 +3406,37 @@ function removeLegacyLoginFullscreenControls() {
  });
 }
 
+function applyHomologationLoginLayout() {
+ const isHomologation = document.documentElement.classList.contains('app-environment-homologation');
+ const loginScreen = document.getElementById('login-screen');
+ if (!isHomologation || !loginScreen) return;
+
+ const grid = loginScreen.querySelector('.login-user-grid');
+ setImportantStyle(grid, {
+  'display': 'grid',
+  'grid-template-columns': 'minmax(0, 1fr)',
+  'left': '50%',
+  'margin': '0',
+  'max-width': 'min(280px, calc(100vw - 32px))',
+  'padding': '0',
+  'position': 'fixed',
+  'right': 'auto',
+  'top': 'calc(50% + (var(--environment-banner-height) / 2))',
+  'transform': 'translate(-50%, -50%)',
+  'width': 'min(280px, calc(100vw - 32px))'
+ });
+ loginScreen.querySelectorAll('.login-user-card').forEach(card => setImportantStyle(card, {
+  'margin': '0',
+  'max-width': 'none',
+  'min-width': '0',
+  'width': '100%'
+ }));
+
+ let controls = loginScreen.querySelector('.top-hover-zone') || document.querySelector('.homologation-login-controls');
+ if (controls && controls.parentElement !== document.body) document.body.appendChild(controls);
+ if (controls) controls.classList.add('homologation-login-controls');
+}
+
 function renderLogin(push = true) {
  const configuredEnvironment = String(window.__DY_APP_CONFIG__?.appEnvironment || '').trim().toLowerCase();
  const isHomologationFront = document.documentElement.classList.contains('app-environment-homologation')
@@ -3479,9 +3596,10 @@ function renderLogin(push = true) {
  `);
  }
  removeLegacyLoginFullscreenControls();
- updateThemeControlsUI();
- applyPremiumMobileLoginLayout();
- setTimeout(removeLegacyLoginFullscreenControls, 0);
+  updateThemeControlsUI();
+  applyPremiumMobileLoginLayout();
+  applyHomologationLoginLayout();
+  setTimeout(removeLegacyLoginFullscreenControls, 0);
  return;
  }
  }
@@ -3490,6 +3608,7 @@ function renderLogin(push = true) {
  removeLegacyLoginFullscreenControls();
  updateThemeControlsUI();
  applyPremiumMobileLoginLayout();
+ applyHomologationLoginLayout();
  setTimeout(removeLegacyLoginFullscreenControls, 0);
 }
 
@@ -3680,12 +3799,13 @@ function getMenuItemsFromConfig() {
  return menuModulesConfig
  .sort((a, b) => a.order - b.order)
  .map(module => {
- let isDisabled = false;
+ let isDisabled = !navigator.onLine && !['pick', 'pack'].includes(module.id);
  let badge = null;
  
  if (module.type === 'em_breve') {
  badge = 'EM BREVE';
  }
+ if (isDisabled && module.type !== 'em_breve') badge = 'AGUARDE INTERNET';
  
  return {
  id: module.id,
@@ -3728,6 +3848,7 @@ function getEntradaNFQuickPendingCount() {
 
 function getQuickActionsHTML(modoRapidoAtivo) {
  let pendingSeparationsCount = 0;
+ let pendingConferencesCount = 0;
  let pendingEntradaNFCount = 0;
  try {
  pendingSeparationsCount = getDraftPickSessionsWithLocalDraft().length;
@@ -3737,6 +3858,8 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  const pendingSeparationsBadge = pendingSeparationsCount > 0
  ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separacoes pendentes">${pendingSeparationsCount}</span>`
  : '';
+ try { pendingConferencesCount = new Set((appData.separacao || []).filter(isSeparationPendingConferenceSession).map(getPackSeparationSessionId).filter(Boolean)).size; } catch (error) { pendingConferencesCount = 0; }
+ const pendingConferencesBadge = pendingConferencesCount > 0 ? `<span class="quick-action-pending-badge" aria-label="${pendingConferencesCount} conferencias pendentes">${pendingConferencesCount}</span>` : '';
  try {
  pendingEntradaNFCount = getEntradaNFQuickPendingCount();
  } catch (error) {
@@ -3746,6 +3869,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  ? `<span class="quick-action-pending-badge" aria-label="${pendingEntradaNFCount} notas fiscais pendentes">${pendingEntradaNFCount}</span>`
  : '';
  const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
+ const pendingConferencesClass = pendingConferencesCount > 0 ? 'has-pending' : '';
  const pendingEntradaNFClass = pendingEntradaNFCount > 0 ? 'has-pending' : '';
  const quickActionImage = modoRapidoAtivo
  ? '/assets/icons/modo-rapido-on.webp'
@@ -3761,9 +3885,10 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  ${pendingSeparationsBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-conferences" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-conferences ${pendingConferencesClass}" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
  <span class="quick-action-icon quick-action-icon-conferences material-symbols-rounded">fact_check</span>
  <span class="quick-action-label">CONFER&Ecirc;NCIA</span>
+ ${pendingConferencesBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
  <button class="quick-action-item quick-action-card quick-action-priority quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
@@ -4510,7 +4635,8 @@ const MOV_HISTORY_FILTERS = [
  { id: 'ajuste', label: 'Ajuste' },
  { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolu\u00e7\u00e3o ao fornecedor.' },
  { id: 'separacao', label: 'Separacao' },
- { id: 'conferencia', label: 'Conferencia' }
+ { id: 'conferencia', label: 'Conferencia' },
+ { id: 'cancelamento', label: 'Cancelamentos' }
 ];
 
 const MOV_HISTORY_PERIODS = [
@@ -4575,6 +4701,7 @@ function getMovHistoryTypeConfig(type) {
  garantia: { label: 'Garantia', icon: 'shield', color: '#a78bfa' },
  separacao: { label: 'Separacao', icon: 'inventory_2', color: '#ef4444' },
  conferencia: { label: 'CONFERENCIA', icon: 'task_alt', color: '#14b8a6' },
+ cancelamento: { label: 'CANCELAMENTO / ENTRADA', icon: 'undo', color: '#22c55e' },
  outro: { label: 'Movimento', icon: 'history', color: '#94a3b8' }
  };
  return map[type] || map.outro;
@@ -4591,7 +4718,7 @@ function classifyProductMovement(mov = {}) {
  const obs = String(mov.observacao || '').toUpperCase();
  const localDestino = String(mov.local_destino || '').trim();
  const localOrigem = String(mov.local_origem || '').trim();
- if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obs.includes('CANCEL')) return 'saida';
+ if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obs.includes('CANCEL')) return 'entrada';
  if (tipo.includes('SAIDA') || tipo.includes('BAIXA') || origem.includes('PICK') || origem.includes('PACK')) return 'saida';
  if (tipo.includes('ENTRADA') || (localDestino && !localOrigem)) return 'entrada';
  if (localOrigem && localDestino) return 'transferencia';
@@ -4623,7 +4750,7 @@ function getProductMovementConfig(mov = {}) {
  ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b', sign: '' },
  inventario: { label: 'Inao', icon: 'fact_check', color: '#38bdf8', sign: '' },
  garantia: { label: 'Garantia/Defeito', icon: 'shield', color: '#a78bfa', sign: '-' },
- cancelamento: { label: 'Cancelamento', icon: 'cancel', color: '#fb7185', sign: '' }
+ cancelamento: { label: 'Cancelamento / Entrada', icon: 'undo', color: '#22c55e', sign: '+' }
  };
  return map[displayType] || map.ajuste;
 }
@@ -4910,6 +5037,7 @@ function classifyMovHistoryMovement(mov = {}) {
  const obs = String(mov.observacao || '');
  const obsUpper = obs.toUpperCase();
  if (tipo.includes('ENTRADA_NF') || origem.includes('ENTRADA_NF') || parseMovHistoryNF(obs)) return 'entrada_nf';
+ if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obsUpper.includes('CANCEL')) return 'cancelamento';
  if (tipo.includes('INVENT') || origem.includes('INVENT') || obsUpper.includes('INVENT')) return 'inventario';
  if (tipo.includes('TRANSFER') || origem.includes('TRANSFER')) return 'transferencia';
  if (tipo.includes('GARANT') || origem.includes('GARANT') || String(mov.local_destino || '').toUpperCase().includes('GARANT')) return 'garantia';
@@ -5282,7 +5410,8 @@ function getMovHistorySummary() {
  { label: 'Ajustes', value: count('ajuste'), sub: 'correcoes manuais', icon: 'tune', type: 'ajuste' },
  { label: 'Garantias', value: count('garantia'), sub: 'envios e retornos', icon: 'shield', type: 'garantia' },
  { label: 'Separacoes', value: count('separacao'), sub: 'processos e baixas', icon: 'inventory_2', type: 'separacao' },
- { label: 'CONFERENCIAs', value: count('conferencia'), sub: 'pack e validacao', icon: 'task_alt', type: 'conferencia' }
+ { label: 'CONFERENCIAs', value: count('conferencia'), sub: 'pack e validacao', icon: 'task_alt', type: 'conferencia' },
+ { label: 'Cancelamentos', value: count('cancelamento'), sub: 'unidades devolvidas ao estoque', icon: 'undo', type: 'cancelamento' }
  ];
 }
 
@@ -15401,8 +15530,8 @@ async function resumePickingDraftFromServer(sessionId) {
  createdAt: localDraft.createdAt || getDataHoraBrasil(),
  isFastMode: isPickingFastModeSource(localDraft),
  modo_rapido: isPickingFastModeSource(localDraft),
- total_pacotes_montados: getPickPackageCountFrom(localDraft),
- totalPacotesMontados: getPickPackageCountFrom(localDraft)
+ total_pacotes_montados: getAutomaticPickPackageCount(currentSessionItems),
+ totalPacotesMontados: getAutomaticPickPackageCount(currentSessionItems)
  };
  beginPickResumeCheckpoint(currentSessionItems);
  saveDraftPickSession({ ...localDraft, sessionId: safeSessionId });
@@ -15440,6 +15569,7 @@ async function resumePickingDraftFromServer(sessionId) {
  if (!restorePickPackagesFromCloud(currentSessionItems, cloudPackages)) {
   restorePickPackageState(currentSessionItems, session);
  }
+ const automaticPackageCount = getAutomaticPickPackageCount(currentSessionItems);
  currentPickingContext = {
  sessionId,
  channelId,
@@ -15449,8 +15579,8 @@ async function resumePickingDraftFromServer(sessionId) {
  createdAt: session.criado_em || session.data_separacao || getDataHoraBrasil(),
  isFastMode: isPickingFastModeSource(session),
  modo_rapido: isPickingFastModeSource(session),
- total_pacotes_montados: getPickPackageCountFrom(session),
- totalPacotesMontados: getPickPackageCountFrom(session)
+ total_pacotes_montados: automaticPackageCount,
+ totalPacotesMontados: automaticPackageCount
  };
  beginPickResumeCheckpoint(currentSessionItems);
  saveDraftPickSession({
@@ -15465,12 +15595,13 @@ async function resumePickingDraftFromServer(sessionId) {
  executionId: currentPickingContext.executionId,
  isFastMode: isPickingFastModeSource(session),
  modo_rapido: isPickingFastModeSource(session),
- total_pacotes_montados: getPickPackageCountFrom(session),
- totalPacotesMontados: getPickPackageCountFrom(session),
+ total_pacotes_montados: automaticPackageCount,
+ totalPacotesMontados: automaticPackageCount,
  saveStatus: 'synced'
  });
 
  renderPickingScreen(sessionId, channelId, channelLabel, channelColor);
+ schedulePickPackagesCloudSync(0);
  if (!items.length) {
  showToast('Separacao retomada sem itens carregados. Confira antes de finalizar.', 'warning');
  }
@@ -17267,8 +17398,15 @@ async function ensureOfficialPickSessionForFirstItem(product = {}) {
  if (currentPickingContext?.sessionId && isValidPickSessionId(currentPickingContext.sessionId)) return currentPickingContext;
  if (!currentPickingContext?.channelLabel) return null;
  if (!navigator.onLine) {
- await showAppModal({ type: 'warning', title: 'Internet necessaria no primeiro bip', message: 'A nova separacao ainda nao possui numero oficial.', detail: 'Conecte-se para reservar a proxima sequencia. Depois disso, a sessao podera ser pausada e retomada normalmente.', confirmText: 'Entendi' });
- return null;
+ const dateKey = getPickSessionDateKey(new Date());
+ const prefix = getPickSessionChannelPrefix(currentPickingContext.channelLabel);
+ currentPickingContext.sessionId = `SEP-${prefix}-${dateKey}-${Date.now()}`;
+ currentPickingContext.createdAt = currentPickingContext.createdAt || getDataHoraBrasil();
+ const screen = document.querySelector('.pick-workflow-screen');
+ if (screen) screen.dataset.sessionId = currentPickingContext.sessionId;
+ document.querySelectorAll('[data-pick-session-id], #pick-session-id-label').forEach(element => { element.textContent = currentPickingContext.sessionId; });
+ showToast('Separacao iniciada offline. Aguardando sincronizacao.', 'info');
+ return currentPickingContext;
  }
  const productId = getPickingProductId(product);
  if (!productId) return null;
@@ -18045,7 +18183,7 @@ function updatePickSummaryUI() {
 }
 
 function focusPickManualInput() {
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  if (!input) return;
  pickManualInputModeActive = true;
  input.blur();
@@ -18061,7 +18199,7 @@ function focusPickManualInput() {
 
  ensurePickSearchCatalogLoaded().then(() => {
  const currentValue = input.value.trim();
- if (currentValue) renderPickSearchSuggestions(findPickProductSuggestions(currentValue), 'Nenhum produto encontrado.');
+ if (currentValue) renderPickSearchSuggestions(findOperationalProductSuggestions(currentValue), 'Nenhum produto encontrado.');
  });
 }
 
@@ -18101,7 +18239,7 @@ function isPickMobileViewport() {
 }
 
 function preparePickScannerInput({ focus = false } = {}) {
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  if (!input) return;
  input.setAttribute('inputmode', pickManualInputModeActive && isPickMobileViewport() ? 'text' : 'none');
  input.removeAttribute('readonly');
@@ -18120,7 +18258,7 @@ function settlePickScannerInput(delay = 60) {
  focusActivePickGroupingInput(0);
  return;
  }
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  if (!input) return;
  input.value = '';
  const workArea = input.closest('.pick-scan-panel') || input;
@@ -18135,7 +18273,9 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  pickManualInputModeActive = false;
  sessionId = String(sessionId || '').trim();
  const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
- const packageCount = getCurrentPickPackageCount(sessionId, channelId, channelLabel);
+ const packageCount = currentSessionItems.length
+  ? getAutomaticPickPackageCount(currentSessionItems)
+  : getCurrentPickPackageCount(sessionId, channelId, channelLabel);
  currentPickingContext = {
  sessionId,
  channelId,
@@ -18278,6 +18418,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  `;
 
  updatePickItemsList();
+ if (currentSessionItems.length) syncAutomaticPickPackageCount(true);
  updatePickKitModeUI();
  updatePickRemovalModeUI();
  preparePickScannerInput({ focus: true });
@@ -18345,7 +18486,7 @@ function getPickScanInputPlaceholder() {
 
 function updatePickRemovalModeUI() {
  const screen = document.querySelector('.pick-workflow-screen');
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  const button = document.getElementById('pick-remove-scan-toggle');
  const label = document.getElementById('pick-remove-scan-label');
  const badge = document.getElementById('pick-removal-badge');
@@ -18504,8 +18645,18 @@ function findPickProductSuggestions(query, limit = 8) {
  .map(entry => entry.product);
 }
 
+function getOperationalProductSearchInput() {
+ return document.getElementById('pack-ean-input') || document.getElementById('pick-ean-input');
+}
+
+function findOperationalProductSuggestions(query) {
+ const suggestions = findPickProductSuggestions(query);
+ if (!document.getElementById('pack-ean-input')) return suggestions;
+ const expectedIds = new Set((currentPackSession?.conferenceRows || []).map(getPickingProductId).filter(Boolean));
+ return suggestions.filter(product => expectedIds.has(getPickingProductId(product)));
+}
 function renderPickSearchSuggestions(suggestions = [], emptyMessage = '') {
- const container = document.getElementById('pick-search-suggestions');
+ const container = document.getElementById('pack-search-suggestions') || document.getElementById('pick-search-suggestions');
  if (!container) return;
  pickSearchSuggestions = suggestions;
  pickSearchActiveIndex = Math.min(pickSearchActiveIndex, suggestions.length - 1);
@@ -18539,7 +18690,7 @@ function clearPickSearchSuggestions() {
  clearTimeout(pickSearchDebounceTimer);
  pickSearchSuggestions = [];
  pickSearchActiveIndex = -1;
- const container = document.getElementById('pick-search-suggestions');
+ const container = document.getElementById('pack-search-suggestions') || document.getElementById('pick-search-suggestions');
  if (container) {
  container.classList.add('hidden');
  container.innerHTML = '';
@@ -18554,7 +18705,7 @@ function handlePickSearchInput(event) {
  return;
  }
  pickSearchDebounceTimer = setTimeout(async () => {
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  const currentValue = input?.value?.trim() || '';
  if (!currentValue) {
  clearPickSearchSuggestions();
@@ -18567,9 +18718,9 @@ function handlePickSearchInput(event) {
  await ensurePickSearchCatalogLoaded();
  }
 
- const latestValue = document.getElementById('pick-ean-input')?.value?.trim() || '';
+ const latestValue = getOperationalProductSearchInput()?.value?.trim() || '';
  if (!latestValue) return clearPickSearchSuggestions();
- renderPickSearchSuggestions(findPickProductSuggestions(latestValue), 'Nenhum produto encontrado para esta busca.');
+ renderPickSearchSuggestions(findOperationalProductSuggestions(latestValue), 'Nenhum produto encontrado para esta busca.');
  }, 120);
 }
 
@@ -18577,12 +18728,23 @@ async function selectPickSearchSuggestion(index) {
  const product = pickSearchSuggestions[index];
  const code = getPickSuggestionCode(product);
  if (!code) return;
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  if (input) input.value = code;
  clearPickSearchSuggestions();
- await addPickItem(code);
+ if (document.getElementById('pack-ean-input')) await addPackScan(code);
+ else await addPickItem(code);
 }
 
+function scrollOperationalPickingByArrow(direction) {
+ const screen = document.querySelector('.pick-workflow-screen');
+ if (!screen) return false;
+ const list = screen.querySelector('#pack-items-list, #pick-items-list');
+ const main = screen.querySelector(':scope > main.container');
+ const target = list && list.scrollHeight > list.clientHeight + 2 ? list : main;
+ if (!target || target.scrollHeight <= target.clientHeight + 2) return false;
+ target.scrollBy({ top: direction * Math.max(72, Math.round(target.clientHeight * 0.18)), behavior: 'smooth' });
+ return true;
+}
 async function handlePickSearchKeyDown(event) {
  if (!event) return;
  if (event.key === 'ArrowDown' && pickSearchSuggestions.length) {
@@ -18597,6 +18759,10 @@ async function handlePickSearchKeyDown(event) {
  renderPickSearchSuggestions(pickSearchSuggestions);
  return;
  }
+ if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !pickSearchSuggestions.length) {
+ if (scrollOperationalPickingByArrow(event.key === 'ArrowDown' ? 1 : -1)) event.preventDefault();
+ return;
+ }
  if (event.key === 'Escape') {
  clearPickSearchSuggestions();
  return;
@@ -18606,8 +18772,8 @@ async function handlePickSearchKeyDown(event) {
  if (pickSearchCatalogPromise) {
  renderPickSearchSuggestions([], 'Carregando produtos...');
  await pickSearchCatalogPromise;
- const currentValue = document.getElementById('pick-ean-input')?.value?.trim() || '';
- renderPickSearchSuggestions(findPickProductSuggestions(currentValue), 'Nenhum produto encontrado para esta busca.');
+ const currentValue = getOperationalProductSearchInput()?.value?.trim() || '';
+ renderPickSearchSuggestions(findOperationalProductSuggestions(currentValue), 'Nenhum produto encontrado para esta busca.');
  }
 
  const selectedIndex = pickSearchActiveIndex >= 0 ? pickSearchActiveIndex : 0;
@@ -18615,7 +18781,8 @@ async function handlePickSearchKeyDown(event) {
  selectPickSearchSuggestion(selectedIndex);
  } else {
  clearPickSearchSuggestions();
- addPickItem();
+ if (document.getElementById('pack-ean-input')) addPackScan();
+ else addPickItem();
  }
  }
 }
@@ -18623,11 +18790,8 @@ async function handlePickSearchKeyDown(event) {
 function findProductInLocalCacheByCode(cleanCode) {
  console.log('[SEP] buscando cache', cleanCode);
  const code = normalizePickCode(cleanCode);
- const product = (appData.products || []).find(p =>
- (normalizePickCode(p.ean) && normalizePickCode(p.ean) === code) ||
- (getPickingProductId(p) && getPickingProductId(p) === code) ||
- (normalizePickCode(p.sku_fornecedor || p.sku) && normalizePickCode(p.sku_fornecedor || p.sku) === code)
- );
+ if (!productCodeIndex.size && appData.products?.length) rebuildProductCodeIndex(appData.products);
+ const product = productCodeIndex.get(code) || null;
 
  if (product) {
  console.log('[SEP] produto encontrado cache', {
@@ -18652,6 +18816,9 @@ function upsertProductIntoLocalCache(product) {
  if (idx >= 0) appData.products[idx] = { ...appData.products[idx], ...indexed };
  else appData.products.unshift(indexed);
 
+ rebuildProductCodeIndex(appData.products);
+ saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao atualizar catalogo:', error));
+
  console.log('[SEP] total produtos carregados', appData.products.length);
  return indexed;
 }
@@ -18659,6 +18826,8 @@ function upsertProductIntoLocalCache(product) {
 async function findProductForPicking(cleanCode) {
  let product = findProductInLocalCacheByCode(cleanCode);
  if (product) return product;
+
+ if (!navigator.onLine) return null;
 
  try {
  const findByCode = DataClient?.findProdutoByCodeSupabase;
@@ -18914,7 +19083,7 @@ async function addPickItem(scannedEan = null) {
  return;
  }
 
- const input = document.getElementById('pick-ean-input');
+ const input = getOperationalProductSearchInput();
  const rawCode = (scannedEan ?? input?.value ?? '').toString();
  const ean = normalizePickCode(rawCode);
  console.log('[SEP] codigo bruto', rawCode);
@@ -19875,6 +20044,7 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
  if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
  else appData.separacao.unshift(localSession);
  rememberPickPackageTotal(sessionId, localSession);
+ saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
 
  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
  setActivePickSessions(activeSessions);
@@ -20030,6 +20200,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
  else appData.separacao.unshift(localSession);
  rememberPickPackageTotal(sessionId, localSession);
+ saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
 
  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
  activeSessions.unshift({
@@ -20106,6 +20277,11 @@ async function renderPackMenu() {
  }
 
  const activeSessions = (appData.separacao || []).filter(s => isSeparationPendingConferenceSession(s));
+ const completedConferenceIdsToday = new Set((appData.conferencia || []).filter(isPackRecordFromToday).map(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '')).filter(Boolean));
+ const completedToday = (appData.separacao || []).filter(session => {
+ const id = String(getPackSeparationSessionId(session));
+ return isPackSessionFinished(session) && (isPackRecordFromToday(session) || completedConferenceIdsToday.has(id));
+ });
  const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
   const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
   const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
@@ -20121,15 +20297,18 @@ async function renderPackMenu() {
  ${getModuleSidebarHTML('pack')}
 
  <main class="container">
-  ${sessionsByChannel.length ? `
+  ${sessionsByChannel.length === 0 ? `
+ <div class="operational-empty-card">
+ <span class="material-symbols-rounded">fact_check</span>
+ <strong>Nenhuma separacao pendente para conferencia.</strong>
+ </div>
+ ` : `
   <div class="standard-module-card-grid operational-card-grid pack-pending-channel-grid">
   ${sessionsByChannel.map(group => {
   const { channelName, sessions } = group;
   const config = getChannelConfig(channelName);
   const separationsCount = sessions.length;
-  const clickAction = sessions.length === 1
-   ? `renderPackSessionDetails(${quotePackInlineArg(getPackSeparationUniqueId(sessions[0]))})`
-   : `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
+  const clickAction = `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
   return `
   <button type="button" class="standard-module-card operational-menu-card pick-channel-card pack-pending-channel-card channel-${escapeKitAttribute(config.color)}" onclick="${clickAction}">
   <span class="standard-module-card-icon pack-pending-channel-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
@@ -20139,7 +20318,18 @@ async function renderPackMenu() {
  `;
  }).join('')}
  </div>
-` : ''}
+ `}
+ ${completedToday.length ? `
+ <section class="pack-daily-completed">
+  <header><div><span class="material-symbols-rounded">today</span><div><strong>FINALIZADAS HOJE</strong><small>Consulta rapida do dia</small></div></div><b>${completedToday.length}</b></header>
+  <div class="pack-daily-completed-list">
+  ${completedToday.map(session => {
+  const sessionId = getPackSeparationSessionId(session);
+  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
+  return `<button type="button" onclick="renderPackDailyConsultation(${quotePackInlineArg(sessionId)})"><span class="material-symbols-rounded">task_alt</span><span><strong>${escapeKitAttribute(getPackSeparationDisplayId(session))}</strong><small>${escapeKitAttribute(channelName)} &middot; ${escapeKitAttribute(formatPackSeparationDate(session.finalizado_em || session.atualizado_em || session.data_separacao))}</small></span><em>Consultar</em></button>`;
+  }).join('')}
+  </div>
+ </section>` : ''}
  </main>
  </div>
  `;
@@ -20435,6 +20625,7 @@ async function renderPackSessionDetails(sessionId) {
 
  // Texto validado em UTF-8.
  try {
+ await ensureProdutosLoaded();
  let expectedItems = (appData.separacao_itens || []).filter(item => String(item.separacao_id) === String(packSessionId));
  if (expectedItems.length === 0) {
  const freshData = await DataClient.loadModule('conferencia', true);
@@ -20458,16 +20649,23 @@ async function renderPackSessionDetails(sessionId) {
  const key = getPickingProductId(item);
  if (!key) return acc;
  if (!acc[key]) {
+ const product = getProductForConferenceRow(item);
  acc[key] = {
+ ...product,
  ...item,
  descricao: item.descricao || item.descri_ao || item.descricao_base || item.nome || key,
  qtd_separada: 0,
  qtd_conferida: 0,
  scanned_in_conference: false,
- divergencia: 'FALTA'
+ divergencia: 'FALTA',
+ expected_package_assignments: []
  };
  }
- acc[key].qtd_separada += parseFloat(item.quantidade ?? item.qty ?? item.qtd_separada ?? 0);
+ const itemQty = parseFloat(item.quantidade ?? item.qty ?? item.qtd_separada ?? 0);
+ acc[key].qtd_separada += itemQty;
+ const sourcePackages = Array.isArray(item.pick_package_assignments) ? item.pick_package_assignments : (Array.isArray(item.package_assignments) ? item.package_assignments : []);
+ if (sourcePackages.length) acc[key].expected_package_assignments.push(...sourcePackages);
+ else { const packageId = item.pick_package_id || item.pacote_id || item.package_id || null; for (let unit = 0; unit < itemQty; unit++) acc[key].expected_package_assignments.push(packageId); }
  return acc;
  }, {});
 
@@ -20555,7 +20753,8 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  <span class="material-symbols-rounded">search</span>
  <input type="text" id="pack-ean-input" class="product-search-input"
  placeholder="Bipe ou digite: ID, EAN, SKU ou c\u00f3digo interno"
- onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addPackScan(); }"
+ oninput="handlePickSearchInput(event)"
+ onkeydown="handlePickSearchKeyDown(event)"
  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
  inputmode="none" enterkeyhint="done" autofocus>
  <button class="pick-keyboard-btn" onclick="focusPackManualInput()" title="Digitar produto" aria-label="Ativar teclado para digitar produto" type="button">
@@ -20566,6 +20765,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </button>
  </div>
  </div>
+ <div id="pack-search-suggestions" class="pick-search-suggestions hidden"></div>
  </section>
 
  <div id="scanner-container-pack" class="hidden pack-blind-scanner-container">
@@ -20823,7 +21023,7 @@ function renderPackItemsListHTML() {
 
  // Os itens vindos da separacao permanecem com quantidade conferida zero.
  // A lista operacional exibe exclusivamente aquilo que recebeu bip nesta conferencia.
- const scannedRows = currentPackSession.conferenceRows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
+ const scannedRows = currentPackSession.conferenceRows.filter(row => parseFloat(row.qtd_conferida || 0) > 0).sort((a, b) => String(b.pick_resume_last_scan_at || '').localeCompare(String(a.pick_resume_last_scan_at || '')));
  const rowsToShow = scannedRows.filter(row => {
  const grouped = getConferenceKitSummary(row).kitUnits > 0;
  return conferenceViewFilter === 'all' || (conferenceViewFilter === 'kits' ? grouped : !grouped);
@@ -20847,6 +21047,7 @@ function renderPackItemsListHTML() {
  if (btnFinish) btnFinish.disabled = !rowsToShow.some(row => parseFloat(row.qtd_conferida || 0) > 0);
 
  return rowsToShow.map((row) => {
+ const displayRow = { ...getProductForConferenceRow(row), ...row };
  const index = currentPackSession.conferenceRows.indexOf(row);
  const checked = parseFloat(row.qtd_conferida || 0);
  const title = getPickItemTitle(row);
@@ -20856,8 +21057,9 @@ function renderPackItemsListHTML() {
  const packageLabels = packageIds.map(id => getConferencePackageLabel(id));
  const selection = conferenceKitSelection.get(getPickSelectionKey(row));
  const lastScanTime = getPickLastScanTime(row);
+ const isLastScanned = row === scannedRows[0] && Boolean(row.pick_resume_last_scan_at);
  return `
- <article class="pack-blind-row pick-product-row conferencia-item-card fade-in">
+ <article class="pack-blind-row pick-product-row conferencia-item-card fade-in ${isLastScanned ? 'is-last-scanned' : ''}">
  <div class="pack-blind-product-main pick-product-main" data-label="Produto">
  <div class="pack-blind-product-image pick-product-image">
  ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
@@ -20865,9 +21067,9 @@ function renderPackItemsListHTML() {
  <div class="pick-product-info">
  <strong class="pick-product-title">${escapeKitAttribute(title)}</strong>
  <div class="pack-blind-product-meta pick-product-meta">
- <span>SKU: ${escapeKitAttribute(getPickItemSku(row))}</span>
- <span>EAN: ${escapeKitAttribute(getPickItemEan(row))}</span>
- <span>COR: ${escapeKitAttribute(getPickItemColor(row))}</span>
+ <span>SKU: <strong>${escapeKitAttribute(getPickItemSku(displayRow))}</strong></span>
+ <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(displayRow))}</strong></span>
+ <span class="pick-product-color">COR: <strong>${escapeKitAttribute(getPickItemColor(displayRow))}</strong></span>
  ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openConferencePackagesOverview()">${escapeKitAttribute(packageIds.map((id, packageIndex) => `${packageLabels[packageIndex]}: ${normalizeConferencePackageAssignments(row).filter(value => value === id).length}`).join(' | '))}</button>` : ''}${packageSummary.standaloneUnits ? `<span class="pick-package-state is-standalone">${packageSummary.standaloneUnits} avulso(s)</span>` : ''}
  ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Ultimo bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
  </div>
@@ -20877,7 +21079,7 @@ function renderPackItemsListHTML() {
  <span class="pack-blind-qty-number pick-qty-number">${formatStockNumber(checked)}</span>
  </div>
  <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `toggleConferenceItemSelection(${index})` : 'openConferencePackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
- <button class="pack-blind-row-adjust pick-product-delete" onclick="adjustConferenceRowDirect(${index}, -1)" type="button" aria-label="Remover uma unidade">
+ <button class="pack-blind-row-adjust pick-product-delete" onclick="removeConferenceItem(${index})" type="button" aria-label="Remover produto da conferencia">
  <span class="material-symbols-rounded">delete</span>
  </button>
  </article>
@@ -20885,6 +21087,17 @@ function renderPackItemsListHTML() {
  }).join('');
 }
 
+async function removeConferenceItem(index) {
+ const row = currentPackSession?.conferenceRows?.[index];
+ if (!row) return;
+ const totalQty = Number(row.qtd_conferida || 0);
+ const confirmed = await showAppConfirm({ title: 'Remover todas as unidades deste produto?', message: getPickItemTitle({ ...getProductForConferenceRow(row), ...row }), detail: `Quantidade que sera removida: ${totalQty} ${totalQty === 1 ? 'unidade' : 'unidades'}.`, summary: 'Somente este produto sera removido. Os demais continuarao na conferencia.', confirmLabel: 'Remover produto', cancelLabel: 'Manter produto', danger: true });
+ if (!confirmed) return restoreScanFieldFocus('pack', 80);
+ row.qtd_conferida = 0; row.scanned_in_conference = false; row.conference_package_assignments = [];
+ updateConferenceRowDivergence(row); conferenceKitSelection.delete(getPickSelectionKey(row));
+ document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
+ persistPackSessionCache(); showToast('Produto removido da conferencia.', 'success'); restoreScanFieldFocus('pack', 80);
+}
 function adjustConferenceRowDirect(index, delta) {
  const row = currentPackSession.conferenceRows[index];
  row.qtd_conferida = Math.max(0, row.qtd_conferida + delta);
@@ -20929,29 +21142,17 @@ function persistPackSessionCache() {
  * Fun?o Compartilhada para Busca Manual de Produto
  */
 async function openManualAddProduct(callback) {
- const term = await showAppPrompt({
- title: 'Adicionar produto',
- message: 'Digite o EAN ou C?digo do produto para adicionar:',
- label: 'EAN ou codigo',
- confirmLabel: 'Adicionar',
- cancelLabel: 'Cancelar'
- });
- if (!term) return;
-
- const product = appData.products.find(p =>
- (p.ean && p.ean.toString() === term) ||
- (p.id_interno && p.id_interno.toString() === term) ||
- (p.sku_fornecedor && p.sku_fornecedor.toString() === term)
- );
-
+ const term = await showAppPrompt({ title: 'Adicionar produto', message: 'Digite exatamente o EAN, SKU ou codigo interno cadastrado:', label: 'EAN, SKU ou codigo interno', confirmLabel: 'Adicionar', cancelLabel: 'Cancelar' });
+ const exactCode = normalizePickCode(term);
+ if (!exactCode) return;
+ await ensureProdutosLoaded(true);
+ const product = (appData.products || []).find(item => [item?.ean, item?.codigo_barras, item?.sku_fornecedor, item?.sku, item?.id_interno, item?.codigo_interno, item?.col_a, item?.col_A].some(value => value != null && normalizePickCode(value) === exactCode));
  if (!product) {
  playBeep('error');
- showToast("Produto n\u00e3o encontrado!");
+ await showAppModal({ type: 'error', title: 'Produto nao cadastrado', message: `O codigo ${exactCode} nao foi encontrado no cadastro de produtos.`, detail: 'O codigo deve ser exatamente igual ao EAN, SKU ou codigo interno cadastrado. O produto nao foi adicionado.', confirmText: 'Entendi' });
  return;
  }
-
- playBeep('success');
- callback(product);
+ await callback(product);
 }
 
 async function openManualAddProductToSession(sessionId, type = 'PACK') {
@@ -20995,6 +21196,7 @@ function manualAddItemToConference(product) {
  }
 
  let row = currentPackSession.conferenceRows.find(r => getPickingProductId(r) === productId);
+ if (!row) { playBeep('error'); showAppModal({ type: 'error', title: 'Produto nao pertence a esta separacao', message: getPickItemTitle(product) + ' esta cadastrado, mas nao esta previsto nesta conferencia.', detail: 'O produto nao foi adicionado. Confira o codigo e o romaneio.', confirmText: 'Entendi' }); return; }
  if (row) {
  row.qtd_conferida++;
  } else {
@@ -21070,7 +21272,11 @@ async function addPackScan(scannedEan = null) {
   playBeep('success');
   triggerScanFeedback('success');
  console.log('[INFO] Operacao registrada.');
- row.qtd_conferida = parseStockQty(row.qtd_conferida) + 1;
+ const previousCheckedQty = parseStockQty(row.qtd_conferida);
+ row.qtd_conferida = previousCheckedQty + 1;
+ const assignments = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments : [];
+ assignments[previousCheckedQty] = row.expected_package_assignments?.[previousCheckedQty] || null;
+ row.conference_package_assignments = assignments;
  row.scanned_in_conference = true;
  row.pick_resume_last_scan_at = new Date().toISOString();
  row.pick_resume_last_scan_time = formatTimeBR(new Date());
@@ -21085,27 +21291,19 @@ async function addPackScan(scannedEan = null) {
   restoreScanFieldFocus('pack', 80);
   return;
   }
- // Item scanned but not in picking session (SOBRA)
- // Try to find product info in appData.products
   product = product || await findProductForPicking(ean);
-  playBeep('success');
-  triggerScanFeedback('success');
-
- row = {
- rom_id: currentPackSession.id,
- id_interno: product ? (product.id_interno || product.col_a || product.col_A || '') : '',
-  ean: product?.ean || ean,
- descricao: product ? (product.descricao_base || product.col_aa || 'PRODUTO NAO IDENTIFICADO') : 'PRODUTO NAO IDENTIFICADO',
- qtd_separada: 0,
- qtd_conferida: 1,
- scanned_in_conference: true,
- pick_resume_last_scan_at: new Date().toISOString(),
- pick_resume_last_scan_time: formatTimeBR(new Date()),
- divergencia: 'SOBRA',
- conferido_por: '',
- conferido_em: ''
- };
- currentPackSession.conferenceRows.push(row);
+  playBeep('error');
+  triggerScanFeedback('error');
+  if (input) input.value = '';
+  await showAppModal({
+  type: 'error',
+  title: product ? 'Produto nao pertence a esta separacao' : 'Produto nao cadastrado',
+  message: product ? `${getPickItemTitle(product)} nao esta previsto nesta conferencia.` : `O codigo ${ean} nao foi encontrado no cadastro de produtos.`,
+  detail: product ? 'Confira o EAN bipado e o romaneio antes de continuar.' : 'Cadastre o produto ou informe um EAN, SKU ou codigo interno valido.',
+  confirmText: 'Entendi'
+  });
+  restoreScanFieldFocus('pack', 80);
+  return;
  }
 
  showPickScanCenterToast({ ...row, qty: Number(row.qtd_conferida || 1) }, Number(row.qtd_conferida || 1));
@@ -21403,7 +21601,7 @@ function openConferenceResultModal() {
    <article><small>Excedentes</small><strong>${resultRows.filter(item => item.status === 'extra').length}</strong></article>
   </div>
   <div class="conference-result-list">
-   ${resultRows.map(({ row, index, expected, checked, status }) => `
+   ${divergentRows.map(({ row, index, expected, checked, status }) => `
    <article class="is-${status}">
     <span class="material-symbols-rounded">${status === 'ok' ? 'check_circle' : status === 'missing' ? 'add_circle' : 'remove_circle'}</span>
     <div><strong>${escapeKitAttribute(getPickItemTitle(row))}</strong><small>ID ${escapeKitAttribute(getPickingProductId(row) || '-')} &middot; EAN ${escapeKitAttribute(getPickItemEan(row))}</small></div>
@@ -21454,9 +21652,8 @@ async function finishConferenceSession() {
   const hasDivergence = currentPackSession.conferenceRows.some(row =>
   parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
   );
-  if (hasDivergence) playBeep('error');
-  conferenceCorrectionModeActive = false;
-  openConferenceResultModal();
+  if (hasDivergence) { playBeep('error'); conferenceCorrectionModeActive = false; openConferenceResultModal(); return; }
+  playBeep('success'); conferenceCorrectionModeActive = false; await confirmFinishConference();
  }
 
 function startFastPackSession(channelLabel, channelColor) {
@@ -22241,103 +22438,78 @@ function setRomaneioSessionPackageCount(sessionId, value) {
  const counter = document.getElementById('romaneio-tracking-counter');
  if (counter) counter.textContent = formatRomaneioTrackingCounter(total);
 }
+const ROMANEIO_COLLECTORS_STORAGE_KEY = 'dyRomaneioCollectors';
+function getRomaneioCollectors() {
+ let saved = [];
+ try { saved = JSON.parse(localStorage.getItem(ROMANEIO_COLLECTORS_STORAGE_KEY) || '[]'); } catch (error) { saved = []; }
+ const map = new Map();
+ [...(Array.isArray(saved) ? saved : []), ...getRomaneios().map(item => ({ nome: item.responsavel, documento: item.documento }))].forEach(item => {
+  const nome = String(item?.nome || '').trim(); const documento = String(item?.documento || '').trim();
+  if (!nome || !documento) return; map.set(normalizeOperationalLabel(nome + documento), { nome, documento });
+ });
+ return [...map.values()].sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+function saveRomaneioCollector(nome, documento) {
+ const collectors = getRomaneioCollectors();
+ const key = normalizeOperationalLabel(nome + documento);
+ if (!collectors.some(item => normalizeOperationalLabel(item.nome + item.documento) === key)) collectors.push({ nome, documento });
+ localStorage.setItem(ROMANEIO_COLLECTORS_STORAGE_KEY, JSON.stringify(collectors));
+}
+function selectRomaneioCollector(value) {
+ const collector = String(value) === '' ? null : getRomaneioCollectors()[Number(value)];
+ const form = document.getElementById('romaneio-form');
+ if (!form) return;
+ if (collector) { form.elements.responsavel.value = collector.nome; form.elements.documento.value = collector.documento; }
+ else { form.elements.responsavel.value = ''; form.elements.documento.value = ''; form.elements.responsavel.focus(); }
+}
+function toggleRomaneioReturnFields(value) {
+ const active = String(value) === 'sim';
+ const panel = document.getElementById('romaneio-return-panel');
+ if (panel) panel.hidden = !active;
+ const qty = document.getElementById('romaneio-return-quantity');
+ if (qty) qty.required = active;
+ if (!active) { if (qty) qty.value = '0'; clearRomaneioPackagePhoto(); }
+}
 function renderRomaneioForm(metrics) {
  const selectedKey = serializeRomaneioSelectedChannels(metrics.canais || [metrics.tipo_retirada]);
  const selectedChannels = metrics.canais || [metrics.tipo_retirada];
- const isOther = selectedChannels
- .some(channel => normalizeOperationalLabel(channel) === 'OUTROS');
- const isCorreios = selectedChannels
- .some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
- ensureRomaneioTrackingState(selectedKey);
- ensureRomaneioPackageEditState(selectedKey, metrics);
- const adjustedMetrics = applyRomaneioPackageEdits(metrics);
- const packageTotal = adjustedMetrics.pacotes;
+ const isOther = selectedChannels.some(channel => normalizeOperationalLabel(channel) === 'OUTROS');
+ const isCorreios = selectedChannels.some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
+ const isFlex = selectedChannels.length === 1 && selectedChannels.some(channel => normalizeOperationalLabel(channel).includes('FLEX'));
+ ensureRomaneioTrackingState(selectedKey); ensureRomaneioPackageEditState(selectedKey, metrics);
+ const adjustedMetrics = applyRomaneioPackageEdits(metrics); const packageTotal = adjustedMetrics.pacotes;
+ const collectors = getRomaneioCollectors();
  return `
- <section class="romaneio-form-card">
+ <section class="romaneio-form-card ${isFlex ? 'is-flex-flow' : ''}">
  <div class="romaneio-metrics-grid">
  <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
- <div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saída líquida</em><span class="material-symbols-rounded">inventory_2</span></div>
- <div><small>Pacotes</small><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><em>pacotes</em><span class="material-symbols-rounded">package_2</span></div>
- <div><small>Separações</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
+ <div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saida liquida</em><span class="material-symbols-rounded">inventory_2</span></div>
+ <div><small>Pacotes</small><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><em>pacotes preparados</em><span class="material-symbols-rounded">package_2</span></div>
+ <div><small>Separacoes</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
  <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
  </div>
  ${renderRomaneioSeparationBreakdown(adjustedMetrics)}
-
- <form id="romaneio-form" class="romaneio-form" onsubmit="event.preventDefault(); saveRomaneioFromForm(${quotePackInlineArg(selectedKey)})">
- ${isOther ? `
- <label class="romaneio-field-full">
- <span>Nome do Canal *</span>
- <input name="canal_personalizado" type="text" autocomplete="organization" required placeholder="Turbo Motoboy, Transportadora, Retirada BalcAo">
- </label>
- ` : ''}
- <label>
- <span>Nome de quem retirou *</span>
- <input name="responsavel" type="text" autocomplete="name" required>
- </label>
- <label>
- <span>Documento (opcional)</span>
- <input name="documento" type="text" autocomplete="off">
- </label>
- <label class="romaneio-field-full">
- <span>Observação (opcional)</span>
- <input name="observacao" type="text" autocomplete="off" placeholder="Ex.: retirada às 16h40 na agência central">
- </label>
- ${isCorreios ? `
- <section class="romaneio-tracking-panel" data-expected="${Number(packageTotal || 0)}">
- <div class="romaneio-tracking-head"><div><strong>Conferência dos pacotes dos Correios</strong><small>Bipe o código de rastreio de cada pacote antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(packageTotal)}</span></div>
- <div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o código de rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div>
- <div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div>
- </section>
- <label class="romaneio-field-full">
- <span>E-mail para envio do romaneio</span>
- <input name="email_destino" type="email" autocomplete="email" required placeholder="Ex.: expedicao@empresa.com">
- </label>
- ` : ''}
-
- <div class="romaneio-photo-box">
- <div>
- <strong>Foto do pacote</strong>
- <small>Opcional</small>
- </div>
- <label class="romaneio-photo-btn">
- <span class="material-symbols-rounded">photo_camera</span>
- Tirar foto
- <input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)">
- </label>
- <button class="romaneio-photo-clear" type="button" onclick="clearRomaneioPackagePhoto()">Limpar foto</button>
- <img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto do pacote" hidden>
- </div>
-
- <div class="romaneio-signature-grid">
- <div class="romaneio-signature-box">
- <div class="romaneio-signature-header">
- <strong>Assinatura de quem entrega - Alexandre</strong>
- <div>
- <button type="button" onclick="clearRomaneioDeliverySignature()">Limpar assinatura</button>
- <button type="button" onclick="redoRomaneioDeliverySignature()">Refazer assinatura</button>
- </div>
- </div>
- <canvas id="romaneio-delivery-signature-canvas"></canvas>
- </div>
- <div class="romaneio-signature-box">
- <div class="romaneio-signature-header">
- <strong>Assinatura de quem retira</strong>
- <div>
- <button type="button" onclick="clearRomaneioSignature()">Limpar assinatura</button>
- <button type="button" onclick="redoRomaneioSignature()">Refazer assinatura</button>
- </div>
- </div>
- <canvas id="romaneio-signature-canvas"></canvas>
- </div>
- </div>
-
- <button class="romaneio-save-btn" type="submit">
- <span class="material-symbols-rounded">draw</span>
- Salvar Romaneio
- </button>
- </form>
- </section>
- `;
+ <form id="romaneio-form" class="romaneio-form ${isFlex ? 'romaneio-flex-form' : ''}" onsubmit="event.preventDefault(); saveRomaneioFromForm(${quotePackInlineArg(selectedKey)})">
+ ${isOther ? `<label class="romaneio-field-full"><span>Nome do Canal *</span><input name="canal_personalizado" type="text" required></label>` : ''}
+ ${isFlex ? `<section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">person</span><div><strong>Coletor Flex</strong><small>Selecione um coletor salvo ou cadastre somente nome e CPF/RG.</small></div></header>
+ <label class="romaneio-field-full"><span>Coletor cadastrado</span><select onchange="selectRomaneioCollector(this.value)"><option value="">Novo coletor</option>${collectors.map((item,index)=>`<option value="${index}">${escapeKitAttribute(item.nome)} - ${escapeKitAttribute(item.documento)}</option>`).join('')}</select></label>` : ''}
+ <label><span>Nome de quem retirou *</span><input name="responsavel" type="text" autocomplete="name" required></label>
+ <label><span>${isFlex ? 'CPF ou RG *' : 'Documento (opcional)'}</span><input name="documento" type="text" autocomplete="off" ${isFlex ? 'required' : ''}></label>
+ ${isFlex ? `</section><section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">inventory_2</span><div><strong>Conferencia da retirada</strong><small>Informe apenas as quantidades. Nao e necessario bipar todos os pacotes.</small></div></header>
+ <label><span>Pacotes entregues *</span><input name="pacotes_entregues" type="number" inputmode="numeric" min="0" step="1" value="${Number(packageTotal || 0)}" required></label>
+ <label><span>Pacotes nao lidos</span><input name="pacotes_nao_lidos" type="number" inputmode="numeric" min="0" step="1" value="0"></label>
+ <label class="romaneio-field-full"><span>Motivo dos pacotes nao lidos</span><input name="motivo_nao_lidos" type="text" placeholder="Preencha quando houver pacote sem leitura"></label>
+ </section><section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">assignment_return</span><div><strong>Devolucao trazida pelo coletor</strong><small>Registre no mesmo romaneio quando o Flex trouxer pacotes de volta.</small></div></header>
+ <label class="romaneio-field-full"><span>Teve devolucao?</span><select name="teve_devolucao" onchange="toggleRomaneioReturnFields(this.value)" required><option value="nao">Nao</option><option value="sim">Sim</option></select></label>
+ <div id="romaneio-return-panel" class="romaneio-return-panel romaneio-field-full" hidden><label><span>Quantidade devolvida *</span><input id="romaneio-return-quantity" name="quantidade_devolvida" type="number" inputmode="numeric" min="1" step="1" value="0"></label><label><span>Observacao da devolucao</span><input name="observacao_devolucao" type="text" placeholder="Opcional"></label>
+ <div class="romaneio-photo-box romaneio-field-full"><div><strong>Foto da devolucao *</strong><small>Fotografe os pacotes recebidos.</small></div><label class="romaneio-photo-btn"><span class="material-symbols-rounded">photo_camera</span>Abrir camera<input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><button class="romaneio-photo-clear" type="button" onclick="clearRomaneioPackagePhoto()">Refazer</button><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto da devolucao" hidden></div></div>
+ </section>` : ''}
+ <label class="romaneio-field-full"><span>Observacao geral (opcional)</span><input name="observacao" type="text" autocomplete="off"></label>
+ ${isCorreios ? `<section class="romaneio-tracking-panel" data-expected="${Number(packageTotal || 0)}"><div class="romaneio-tracking-head"><div><strong>Conferencia dos pacotes dos Correios</strong><small>Bipe cada codigo antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(packageTotal)}</span></div><div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div><div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div></section><label class="romaneio-field-full"><span>E-mail para envio</span><input name="email_destino" type="email" required></label>` : ''}
+ ${!isFlex ? `<div class="romaneio-photo-box"><div><strong>Foto do pacote</strong><small>Opcional</small></div><label class="romaneio-photo-btn"><span class="material-symbols-rounded">photo_camera</span>Tirar foto<input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><button class="romaneio-photo-clear" type="button" onclick="clearRomaneioPackagePhoto()">Limpar foto</button><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto do pacote" hidden></div>` : ''}
+ <div class="romaneio-signature-grid ${isFlex ? 'is-single' : ''}">${!isFlex ? `<div class="romaneio-signature-box"><div class="romaneio-signature-header"><strong>Assinatura de quem entrega - Alexandre</strong><div><button type="button" onclick="clearRomaneioDeliverySignature()">Limpar</button><button type="button" onclick="redoRomaneioDeliverySignature()">Refazer</button></div></div><canvas id="romaneio-delivery-signature-canvas"></canvas></div>` : ''}<div class="romaneio-signature-box"><div class="romaneio-signature-header"><strong>Assinatura de quem retira</strong><div><button type="button" onclick="clearRomaneioSignature()">Limpar</button><button type="button" onclick="redoRomaneioSignature()">Refazer</button></div></div><p class="romaneio-signature-consent">Confirmo a retirada dos pacotes e, quando indicado, a entrega das devolucoes registradas neste romaneio.</p><canvas id="romaneio-signature-canvas"></canvas></div></div>
+ <button class="romaneio-save-btn" type="submit"><span class="material-symbols-rounded">draw</span>Salvar Romaneio</button>
+ </form></section>`;
 }
 
 function renderRomaneioSeparationBreakdown(metrics = {}) {
@@ -22420,7 +22592,11 @@ function renderRomaneioDetail(item) {
  <div><small>Canal</small><strong>${escapeKitAttribute(item.canal)}</strong></div>
  <div><small>Produtos diferentes</small><strong>${Number(item.produtos || 0)}</strong></div>
  <div><small>Quantidade movimentada</small><strong>${formatStockNumber(item.itens || 0)}</strong></div>
- <div><small>Pacotes</small><strong>${Number(item.pacotes || 0)}</strong></div>
+ <div><small>Pacotes entregues</small><strong>${Number(item.pacotes || 0)}</strong></div>
+ <div><small>Pacotes preparados</small><strong>${Number(item.pacotes_preparados ?? item.pacotes ?? 0)}</strong></div>
+ <div><small>Pacotes nao lidos</small><strong>${Number(item.pacotes_nao_lidos || 0)}</strong></div>
+ <div><small>Teve devolucao</small><strong>${item.teve_devolucao ? 'Sim' : 'Nao'}</strong></div>
+ ${item.teve_devolucao ? `<div><small>Quantidade devolvida</small><strong>${Number(item.quantidade_devolvida || 0)}</strong></div><div><small>Observacao da devolucao</small><strong>${escapeKitAttribute(item.observacao_devolucao || '-')}</strong></div>` : ''}
  <div><small>Separações</small><strong>${Number(item.separacoes || 0)}</strong></div>
  <div><small>Responsável pela retirada</small><strong>${escapeKitAttribute(item.responsavel || '-')}</strong></div>
  <div><small>Documento</small><strong>${escapeKitAttribute(item.documento || '-')}</strong></div>
@@ -22445,19 +22621,7 @@ function renderRomaneioDetail(item) {
 
 function renderRomaneioPostSaveActions(item) {
  const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
- if (!type.includes('CORREIOS')) {
- return `
- <div class="romaneio-post-actions">
- <button type="button" onclick="renderMenu()">Concluir</button>
- </div>
- `;
- }
- return `
- <div class="romaneio-post-actions">
- <button class="romaneio-email-send-btn" type="button" onclick="shareRomaneioEmail('${escapeKitAttribute(item.id)}')">Enviar romaneio por e-mail</button>
- <button type="button" onclick="renderMenu()">Concluir</button>
- </div>
- `;
+ return `<div class="romaneio-post-actions">${type.includes('CORREIOS') ? `<button class="romaneio-email-send-btn" type="button" onclick="shareRomaneioEmail('${escapeKitAttribute(item.id)}')">Enviar por e-mail</button>` : ''}<button class="romaneio-email-send-btn" type="button" onclick="generateRomaneioPDF('${escapeKitAttribute(item.id)}')">Baixar PDF</button><button type="button" onclick="shareRomaneioWhatsApp('${escapeKitAttribute(item.id)}')">Compartilhar</button><button type="button" onclick="renderMenu()">Concluir</button></div>`;
 }
 
 function initRomaneioSignaturePad() {
@@ -22649,6 +22813,12 @@ function saveRomaneioFromForm(withdrawalType) {
  const finalChannel = finalChannels.join(' + ');
  const responsavel = String(data.get('responsavel') || '').trim();
  const isCorreios = finalChannels.some(channel => normalizeOperationalLabel(channel).includes('CORREIOS'));
+ const isFlex = finalChannels.length === 1 && finalChannels.some(channel => normalizeOperationalLabel(channel).includes('FLEX'));
+ const documento = String(data.get('documento') || '').trim();
+ const pacotesEntregues = isFlex ? normalizePickPackageCount(data.get('pacotes_entregues')) : 0;
+ const pacotesNaoLidos = isFlex ? normalizePickPackageCount(data.get('pacotes_nao_lidos')) : 0;
+ const teveDevolucao = isFlex && String(data.get('teve_devolucao') || 'nao') === 'sim';
+ const quantidadeDevolvida = teveDevolucao ? normalizePickPackageCount(data.get('quantidade_devolvida')) : 0;
  if (isOther && !customChannel) {
  showToast('Informe o nome do canal.', 'warning');
  return;
@@ -22678,7 +22848,7 @@ function saveRomaneioFromForm(withdrawalType) {
  return;
  }
  }
- if (!romaneioDeliverySignatureState.dataUrl) {
+ if (!isFlex && !romaneioDeliverySignatureState.dataUrl) {
  showToast('Colete a assinatura de quem entrega antes de salvar.', 'warning');
  return;
  }
@@ -22697,26 +22867,34 @@ function saveRomaneioFromForm(withdrawalType) {
  tipo_retirada: type,
  produtos: metrics.produtos,
  itens: metrics.itens,
- pacotes: isCorreios ? romaneioTrackingState.codes.length : metrics.pacotes,
+ pacotes: isCorreios ? romaneioTrackingState.codes.length : (isFlex ? pacotesEntregues : metrics.pacotes),
+ pacotes_preparados: Number(metrics.pacotes || 0),
+ pacotes_nao_lidos: pacotesNaoLidos,
+ motivo_nao_lidos: isFlex ? String(data.get('motivo_nao_lidos') || '').trim() : '',
+ teve_devolucao: teveDevolucao,
+ quantidade_devolvida: quantidadeDevolvida,
+ observacao_devolucao: teveDevolucao ? String(data.get('observacao_devolucao') || '').trim() : '',
  rastreios: isCorreios ? [...romaneioTrackingState.codes] : [],
  email_destino: isCorreios ? String(data.get('email_destino') || '').trim() : '',
  separacoes: metrics.separacoes,
  sessoes: metrics.sessoes || [],
  responsavel,
- documento: String(data.get('documento') || '').trim(),
+ documento,
  observacao: String(data.get('observacao') || '').trim(),
  agencia_correios: 'AGF Eng. Armando de Arruda',
  cliente: 'DY Auto Parts',
  responsavel_entrega: 'Alexandre',
  horario_coleta: '15:00',
- assinatura_entrega: romaneioDeliverySignatureState.dataUrl,
+ assinatura_entrega: isFlex ? '' : romaneioDeliverySignatureState.dataUrl,
  assinatura: romaneioSignatureState.dataUrl,
  foto_pacote: romaneioPackagePhotoState.dataUrl || '',
+ foto_devolucao: teveDevolucao ? (romaneioPackagePhotoState.dataUrl || '') : '',
  usuario: localStorage.getItem('currentUser') || '',
  status: 'Assinado',
  createdAt: now.toISOString()
  };
 
+ if (isFlex) saveRomaneioCollector(responsavel, documento);
  const romaneios = getRomaneios();
  romaneios.unshift(romaneio);
  saveRomaneios(romaneios);
@@ -22769,7 +22947,28 @@ function addRomaneioPDFImage(doc, dataUrl, x, y, maxWidth, maxHeight) {
  }
 }
 
+async function createFlexRomaneioPDF(item) {
+ const { jsPDF } = window.jspdf || {}; if (!jsPDF) throw new Error('Gerador de PDF nao carregado');
+ const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+ const width = doc.internal.pageSize.getWidth(); const height = doc.internal.pageSize.getHeight(); const margin = 15;
+ const [logo, signature, returnPhoto] = await Promise.all([loadRomaneioPDFImage(LOGO_LIGHT_BG), loadRomaneioPDFImage(item.assinatura), loadRomaneioPDFImage(item.foto_devolucao || item.foto_pacote)]);
+ doc.setFillColor(23,74,145); doc.rect(0,0,width,7,'F'); doc.setFillColor(255,211,0); doc.rect(0,7,width,3,'F');
+ if (logo) addRomaneioPDFImage(doc,logo,margin,15,38,17);
+ doc.setFont('helvetica','bold'); doc.setTextColor(28,39,58); doc.setFontSize(18); doc.text('ROMANEIO DE RETIRADA - FLEX',width-margin,20,{align:'right'});
+ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(93,105,125); doc.text(`Numero: ${item.id}`,width-margin,27,{align:'right'}); doc.text(`Data: ${item.data} | Hora: ${item.hora}`,width-margin,32,{align:'right'});
+ doc.setDrawColor(222,227,235); doc.line(margin,39,width-margin,39);
+ const summary=[['PACOTES PREPARADOS',String(item.pacotes_preparados ?? item.pacotes ?? 0)],['PACOTES ENTREGUES',String(item.pacotes||0)],['PACOTES NAO LIDOS',String(item.pacotes_nao_lidos||0)],['PACOTES DEVOLVIDOS',String(item.quantidade_devolvida||0)]];
+ summary.forEach(([label,value],i)=>{const x=margin+(i%2)*91,y=47+Math.floor(i/2)*20;doc.setFillColor(248,250,252);doc.roundedRect(x,y,86,15,2,2,'F');doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(105,117,137);doc.text(label,x+4,y+5);doc.setFontSize(13);doc.setTextColor(28,39,58);doc.text(value,x+4,y+12);});
+ let y=92; doc.setFontSize(11); doc.setTextColor(28,39,58); doc.text('DADOS DA RETIRADA',margin,y); y+=7;
+ const details=[['Coletor',item.responsavel||'-'],['CPF/RG',item.documento||'-'],['Registrado por',item.usuario||'-'],['Separacoes',String(item.separacoes||0)],['Motivo dos nao lidos',item.motivo_nao_lidos||'-'],['Observacao geral',item.observacao||'-']];
+ details.forEach(([label,value])=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(100,111,130);doc.text(label.toUpperCase(),margin,y);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(35,47,66);const lines=doc.splitTextToSize(String(value),125);doc.text(lines,55,y);y+=Math.max(7,lines.length*5);});
+ doc.setFillColor(item.teve_devolucao?235:247,item.teve_devolucao?248:249,item.teve_devolucao?240:252);doc.roundedRect(margin,y,width-margin*2,22,2,2,'F');doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(28,39,58);doc.text(item.teve_devolucao?'DEVOLUCAO REGISTRADA':'SEM DEVOLUCAO NESTA RETIRADA',margin+5,y+7);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(item.teve_devolucao?`${item.quantidade_devolvida||0} pacote(s). ${item.observacao_devolucao||'Sem observacao.'}`:'O coletor nao entregou pacotes de devolucao.',margin+5,y+14);y+=30;
+ if (item.teve_devolucao && returnPhoto) {doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('FOTO DA DEVOLUCAO',margin,y);y+=5;const photoHeight=addRomaneioPDFImage(doc,returnPhoto,margin,y,width-margin*2,70);y+=photoHeight+8;}
+ if (y>height-62){doc.addPage();y=20;} doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('ASSINATURA DE QUEM RETIRA',margin,y);y+=5;doc.setDrawColor(220,225,233);doc.roundedRect(margin,y,width-margin*2,38,2,2,'S');if(signature)addRomaneioPDFImage(doc,signature,margin+4,y+3,width-margin*2-8,30);
+ const pages=doc.getNumberOfPages();for(let page=1;page<=pages;page++){doc.setPage(page);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(125,135,151);doc.text(`DY Auto Parts - Romaneio ${item.id} - Pagina ${page} de ${pages}`,width/2,height-7,{align:'center'});} return doc;
+}
 async function createRomaneioPDF(item) {
+ if (normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX')) return createFlexRomaneioPDF(item);
  const { jsPDF } = window.jspdf || {};
  if (!jsPDF) throw new Error('Gerador de PDF não carregado');
  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -22895,7 +23094,8 @@ async function createRomaneioPDF(item) {
 }
 
 function getRomaneioPDFFileName(item) {
- return `romaneio-correios-${String(item.id || 'sem-numero').replace(/[^a-z0-9-]+/gi, '-')}.pdf`;
+ const type = normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX') ? 'flex' : 'correios';
+ return `romaneio-${type}-${String(item.id || 'sem-numero').replace(/[^a-z0-9-]+/gi, '-')}.pdf`;
 }
 
 async function generateRomaneioPDF(id) {
