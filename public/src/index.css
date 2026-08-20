@@ -72472,3 +72472,6 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
  transform:none !important;
 }
 html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header > .pick-inline-back .app-back-icon { display:block !important; margin:auto !important; }
+/* Acao rapida: cancelamento diario de itens finalizados. */
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-icon-cancellation { background:#fee2e2 !important; color:#b91c1c !important; }
+.global-cancel-results>p.is-success { border-color:#86efac; background:#f0fdf4; color:#15803d; font-weight:800; }

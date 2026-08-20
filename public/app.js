@@ -3891,6 +3891,11 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  ${pendingConferencesBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-cancellation" type="button" role="menuitem" onclick="toggleQuickActions();openGlobalFinalizedItemCancellation('quick')">
+ <span class="quick-action-icon quick-action-icon-cancellation material-symbols-rounded">cancel_presentation</span>
+ <span class="quick-action-label">CANCELAMENTO</span>
+ <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ </button>
  <button class="quick-action-item quick-action-card quick-action-priority quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
  <span class="quick-action-icon quick-action-icon-nf-drafts material-symbols-rounded">receipt_long</span>
  <span class="quick-action-label">ENTRADA NF</span>
@@ -32950,10 +32955,11 @@ let finalizedCancellationLookup = { scope: 'today', code: '', candidates: [], se
 
 function openGlobalFinalizedItemCancellation(scope = 'today') {
  closeCancelSeparationModal();
- finalizedCancellationLookup = { scope, code: '', candidates: [], selected: null };
+ const safeScope = scope === 'all' ? 'all' : (scope === 'quick' ? 'quick' : 'today');
+ finalizedCancellationLookup = { scope: safeScope, code: '', candidates: [], selected: null };
  const modal = document.createElement('div');
  modal.id = 'cancel-separation-modal'; modal.className = 'cancel-separation-modal global-item-cancel-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>LOCALIZAR ITEM FINALIZADO</h2><p>Leia o produto e escolha o canal correto</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>${safeScope === 'quick' ? 'CANCELAMENTO RÁPIDO' : 'LOCALIZAR ITEM FINALIZADO'}</h2><p>Leia o produto e escolha o canal correto · somente operações de hoje</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
  document.body.appendChild(modal);
  const input=document.getElementById('global-cancel-code'); input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchFinalizedItemCancellation();}}); setTimeout(()=>input?.focus(),50);
 }
@@ -32962,7 +32968,11 @@ async function searchFinalizedItemCancellation() {
  const code=String(document.getElementById('global-cancel-code')?.value||'').trim(); if(!code){showToast('Bipe o produto.','warning');return;}
  const box=document.getElementById('global-cancel-results'); if(box) box.innerHTML='<p>Consultando canais e separações...</p>';
  const candidates=[];
- for(const session of (appData.separacao||[]).filter(isFinalizedSeparationForHistory)){
+ const eligibleSessions = (appData.separacao || []).filter(isFinalizedSeparationForHistory).filter(session => {
+  if (finalizedCancellationLookup.scope === 'all') return true;
+  return isDateTodayBR(getFinalizedSeparationViewModel(session).finishedAt);
+ });
+ for(const session of eligibleSessions){
   const sessionId=getPackSeparationSessionId(session); const item=getSeparationItemsForSession(session).find(row=>String(row.ean||'')===code||String(row.id_interno||'')===code); if(!item)continue;
   const productId=getPickingProductId(item)||item.id_interno||''; const original=Number(item.qtd_separada??item.qtd_solicitada??0)||0;
   const cancelResponse=await window.supabaseClient.from('separacao_item_cancelamentos').select('quantidade').eq('separacao_id',sessionId).eq('id_interno',productId); if(cancelResponse.error)throw cancelResponse.error;
@@ -32976,11 +32986,42 @@ async function searchFinalizedItemCancellation() {
 
 function renderFinalizedCancellationCandidates(){
  const box=document.getElementById('global-cancel-results'); const rows=finalizedCancellationLookup.candidates||[]; if(!box)return;
- box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação finalizada possui unidade disponível deste produto.</p>';
+ box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação finalizada hoje possui unidade disponível deste produto.</p>';
  document.getElementById('global-cancel-confirm')?.classList.add('hidden');
 }
 function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-submit')?.focus();}
-async function confirmGlobalFinalizedItemCancellation(){const selected=finalizedCancellationLookup.selected;if(!selected){showToast('Selecione o canal e a separação.','warning');return;}const button=document.getElementById('cancel-separation-submit');if(button)button.disabled=true;try{await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code});closeCancelSeparationModal();showToast(`1 unidade cancelada em ${selected.channel}.`,'success');await renderFinalizedSeparationsScreen(finalizedCancellationLookup.scope);}catch(error){showToast(error.message||'Não foi possível cancelar o item.','error');if(button)button.disabled=false;}}
+async function confirmGlobalFinalizedItemCancellation(){
+ const selected=finalizedCancellationLookup.selected;
+ if(!selected){showToast('Selecione o canal e a separação.','warning');return;}
+ const button=document.getElementById('cancel-separation-submit');
+ if(button)button.disabled=true;
+ try{
+  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code});
+  const fresh = await DataClient.loadModule('conferencia', true);
+  if (fresh) {
+   appData.separacao = fresh.separacao || appData.separacao;
+   appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens;
+   appData.conferencia = fresh.conferencia || appData.conferencia;
+  }
+  showToast(`1 unidade cancelada em ${selected.channel}. Restam ${result?.restante ?? 0}.`,'success');
+  if (finalizedCancellationLookup.scope === 'quick') {
+   finalizedCancellationLookup={scope:'quick',code:'',candidates:[],selected:null};
+   const input=document.getElementById('global-cancel-code');
+   if(input)input.value='';
+   const box=document.getElementById('global-cancel-results');
+   if(box)box.innerHTML='<p class="is-success">Cancelamento registrado. Bipe o próximo produto ou feche esta tela.</p>';
+   document.getElementById('global-cancel-confirm')?.classList.add('hidden');
+   setTimeout(()=>input?.focus(),60);
+   return;
+  }
+  const returnScope=finalizedCancellationLookup.scope;
+  closeCancelSeparationModal();
+  await renderFinalizedSeparationsScreen(returnScope);
+ }catch(error){
+  showToast(error.message||'Não foi possível cancelar o item.','error');
+  if(button)button.disabled=false;
+ }
+}
 function openCancelItemSeparationModal(sessionId, returnScope = 'today') {
  closeCancelSeparationModal();
  const modal = document.createElement('div');
