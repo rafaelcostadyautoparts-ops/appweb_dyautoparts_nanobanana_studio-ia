@@ -17939,32 +17939,47 @@ function getPickItemColor(item) {
 function getProductColorDotStyle(color) {
  const normalized = normalizeOperationalLabel(color);
  if (!normalized || ['SEM COR', 'NAO INFORMADA', 'NAO INFORMADO'].includes(normalized)) return '';
+ if (normalized.includes('RGB') || normalized.includes('MULTICOLOR') || normalized.includes('COLORIDO')) {
+  return '--product-color-dot:linear-gradient(135deg,#ef4444 0 33%,#22c55e 33% 66%,#3b82f6 66% 100%)';
+ }
  const palette = [
-  [['TRANSPARENTE', 'CRISTAL'], '#e2e8f0'],
+  [['CINZA ESCURO', 'GRAFITE', 'CHUMBO'], '#374151'],
+  [['AZUL ESCURO', 'AZUL MARINHO', 'MARINHO'], '#1e3a8a'],
+  [['AZUL CLARO'], '#60a5fa'],
+  [['VERDE LIMAO', 'VERDE NEON'], '#84cc16'],
   [['BLACK PIANO', 'PRETO', 'BLACK'], '#111827'],
+  [['BRANCO GELO', 'OFF WHITE', 'CREME'], '#f5f1e8'],
   [['BRANCO', 'WHITE'], '#ffffff'],
-  [['PRATA', 'SILVER', 'CROMADO', 'CROMO'], '#aeb7c4'],
-  [['CINZA', 'GRAFITE', 'GRAY', 'GREY'], '#64748b'],
+  [['CROMADO', 'CROMO'], '#d7dde5'],
+  [['PRATA', 'SILVER', 'INOX'], '#b8c0cc'],
+  [['CINZA', 'GRAY', 'GREY'], '#8a94a3'],
+  [['FUME', 'FUMACA'], '#4b5563'],
+  [['AMBAR', 'AMABAR'], '#f59e0b'],
+  [['LARANJA', 'ORANGE'], '#f97316'],
+  [['AMARELO', 'YELLOW'], '#facc15'],
   [['VERMELHO', 'RED'], '#dc2626'],
   [['AZUL', 'BLUE'], '#2563eb'],
   [['VERDE', 'GREEN'], '#16a34a'],
-  [['AMARELO', 'YELLOW'], '#facc15'],
-  [['LARANJA', 'ORANGE'], '#f97316'],
   [['ROXO', 'VIOLETA', 'PURPLE'], '#7c3aed'],
   [['ROSA', 'PINK'], '#ec4899'],
   [['MARROM', 'BROWN'], '#854d0e'],
   [['BEGE', 'BEIGE'], '#d6c7a1'],
-  [['DOURADO', 'GOLD'], '#d4a017']
+  [['DOURADO', 'GOLD'], '#d4a017'],
+  [['BRONZE'], '#92400e'],
+  [['COBRE'], '#b45309'],
+  [['TRANSPARENTE', 'CRISTAL'], '#e2e8f0']
  ];
  const colors = [];
+ let remaining = normalized;
  palette.forEach(([names, hex]) => {
-  if (names.some(name => normalized.includes(name)) && !colors.includes(hex)) colors.push(hex);
+  const matched = names.some(name => remaining.includes(name));
+  if (!matched) return;
+  if (!colors.includes(hex)) colors.push(hex);
+  names.forEach(name => { remaining = remaining.replaceAll(name, ' '); });
  });
- if (normalized.includes('RGB') || normalized.includes('MULTICOLOR') || normalized.includes('COLORIDO')) {
-  return '--product-color-dot:linear-gradient(135deg,#ef4444 0 33%,#22c55e 33% 66%,#3b82f6 66% 100%)';
- }
- if (!colors.length) colors.push('#94a3b8');
- const background = colors.length === 1 ? colors[0] : `linear-gradient(135deg,${colors.slice(0, 3).map((hex, index, list) => `${hex} ${index * 100 / list.length}% ${(index + 1) * 100 / list.length}%`).join(',')})`;
+ if (!colors.length) return '';
+ const selectedColors = colors.slice(0, 3);
+ const background = selectedColors.length === 1 ? selectedColors[0] : `linear-gradient(135deg,${selectedColors.map((hex, index, list) => `${hex} ${index * 100 / list.length}% ${(index + 1) * 100 / list.length}%`).join(',')})`;
  return `--product-color-dot:${background}`;
 }
 
