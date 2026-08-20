@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.93",
-    "build":  "2026.08.20.01",
-    "commit":  "cancelamento-rapido-diario",
-    "deployDate":  "2026-08-20T12:00:00-03:00"
+    "version":  "2.1.94",
+    "build":  "2026.08.20.02",
+    "commit":  "padroniza-retorno-global",
+    "deployDate":  "2026-08-20T12:30:00-03:00"
 }
