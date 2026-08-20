@@ -17938,6 +17938,7 @@ function getPickItemColor(item) {
 
 function getProductColorDotStyle(color) {
  const normalized = normalizeOperationalLabel(color);
+ if (!normalized || ['SEM COR', 'NAO INFORMADA', 'NAO INFORMADO'].includes(normalized)) return '';
  const palette = [
   [['TRANSPARENTE', 'CRISTAL'], '#e2e8f0'],
   [['BLACK PIANO', 'PRETO', 'BLACK'], '#111827'],

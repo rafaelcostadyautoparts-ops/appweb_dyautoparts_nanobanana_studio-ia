@@ -72418,7 +72418,7 @@ html.app-environment-homologation body:not(.login-active) #app :where(.dashboard
   stroke-linecap: round !important;
   stroke-linejoin: round !important;
 }
-.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color::before{content:'';width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--product-color-dot,#94a3b8);border:1px solid rgba(15,23,42,.28);box-shadow:0 0 0 1px rgba(255,255,255,.72)}
+.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color[style*="--product-color-dot"]::before{content:'';width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--product-color-dot,#94a3b8);border:1px solid rgba(15,23,42,.28);box-shadow:0 0 0 1px rgba(255,255,255,.72)}
 
 
 /* Romaneio Flex: fluxo responsivo para preenchimento e assinatura no celular. */
@@ -72500,4 +72500,25 @@ html body:not(.login-active) #app .back-button-standard .app-back-icon {
 }
 @media(max-width:768px){
  html body:not(.login-active) #app .back-button-standard { left:10px !important; top:10px !important; }
+}
+/* Homologacao: metadados dos cards mais bem distribuidos, sem ocupar a area das acoes. */
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta {
+ width:min(100%,720px) !important;
+ max-width:720px !important;
+ display:flex !important;
+ align-items:center !important;
+ justify-content:space-between !important;
+ column-gap:clamp(14px,2vw,34px) !important;
+ row-gap:5px !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta :where(.pick-package-state.is-standalone,.pick-package-state.is-kit,.pick-last-scan-time) {
+ margin-left:0 !important;
+}
+@media(max-width:768px){
+ html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-product-meta {
+  width:100% !important;
+  max-width:none !important;
+  justify-content:flex-start !important;
+  column-gap:14px !important;
+ }
 }
