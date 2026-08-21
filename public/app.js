@@ -23292,6 +23292,138 @@ let labelGeneratorState = {
  items: []
 };
 
+const LABEL_TEMPLATE_FALLBACK_ROWS = [
+ { codigo: 'A4251', nome: 'A4051 / A4251 / A4351', tipo_folha: 'A4', largura_pagina_cm: 21, altura_pagina_cm: 29.7, margem_superior_cm: 1.07, margem_lateral_cm: .45, densidade_vertical_cm: 2.12, densidade_horizontal_cm: 4.07, altura_etiqueta_cm: 2.12, largura_etiqueta_cm: 3.82, etiquetas_por_linha: 5, linhas_por_pagina: 13, total_etiquetas: 65, padrao: true },
+ { codigo: '6080', nome: 'Pimaco 6080 (3 col)', tipo_folha: 'CARTA', largura_pagina_cm: 21.59, altura_pagina_cm: 27.94, margem_superior_cm: 1.27, margem_lateral_cm: .47, densidade_vertical_cm: 2.54, densidade_horizontal_cm: 7, altura_etiqueta_cm: 2.54, largura_etiqueta_cm: 6.67, etiquetas_por_linha: 3, linhas_por_pagina: 10, total_etiquetas: 30, padrao: false },
+ { codigo: 'A4356', nome: 'A4056 / A4256 / A4356 / A4056R', tipo_folha: 'A4', largura_pagina_cm: 21, altura_pagina_cm: 29.7, margem_superior_cm: .88, margem_lateral_cm: .72, densidade_vertical_cm: 2.54, densidade_horizontal_cm: 6.61, altura_etiqueta_cm: 2.54, largura_etiqueta_cm: 6.35, etiquetas_por_linha: 3, linhas_por_pagina: 11, total_etiquetas: 33, padrao: false }
+];
+
+function normalizeLabelPaperType(value) {
+ const normalized = String(value || 'A4').trim().toUpperCase();
+ return normalized.includes('CARTA') || normalized === 'LETTER' ? 'CARTA' : 'A4';
+}
+
+function normalizeLabelTemplateRow(row = {}) {
+ const codigo = String(row.codigo || row.key || '').trim();
+ const labelWidth = Number(row.largura_etiqueta_cm || 0) * 10;
+ const labelHeight = Number(row.altura_etiqueta_cm || 0) * 10;
+ const pitchX = Number(row.densidade_horizontal_cm || row.largura_etiqueta_cm || 0) * 10;
+ const pitchY = Number(row.densidade_vertical_cm || row.altura_etiqueta_cm || 0) * 10;
+ const calibration = LABEL_TEMPLATE_CALIBRATION_DEFAULTS[codigo] || {};
+ return {
+  key: codigo,
+  codigo,
+  descricao: String(row.nome || row.descricao || codigo).trim(),
+  paperType: normalizeLabelPaperType(row.tipo_folha),
+  pageWidth: Number(row.largura_pagina_cm || 0) * 10,
+  pageHeight: Number(row.altura_pagina_cm || 0) * 10,
+  cols: Math.max(1, Number(row.etiquetas_por_linha || 1)),
+  rows: Math.max(1, Number(row.linhas_por_pagina || 1)),
+  labelWidth,
+  labelHeight,
+  pitchX,
+  pitchY,
+  gapX: Math.max(0, pitchX - labelWidth),
+  gapY: Math.max(0, pitchY - labelHeight),
+  marginTop: Number(row.margem_superior_cm || 0) * 10,
+  marginLeft: Number(row.margem_lateral_cm || 0) * 10,
+  offsetX: Number(calibration.offsetX || 0),
+  offsetY: Number(calibration.offsetY || 0),
+  totalLabels: Number(row.total_etiquetas || 0),
+  isDefault: row.padrao === true
+ };
+}
+
+function getLabelTemplatesByPaper(paperType = labelGeneratorState.paperType) {
+ const normalized = normalizeLabelPaperType(paperType);
+ return labelTemplateOptions.filter(template => template.paperType === normalized);
+}
+
+function applyLabelTemplate(key) {
+ const template = labelTemplateOptions.find(item => item.key === key);
+ if (!template) return false;
+ labelGeneratorState = { ...labelGeneratorState, ...template, template: template.key, paperType: template.paperType };
+ return true;
+}
+
+function getLabelTemplateConfig() {
+ return labelGeneratorState;
+}
+
+function isA4356LabelTemplate(cfg = getLabelTemplateConfig()) {
+ return String(cfg?.codigo || cfg?.template || cfg?.key || '').trim().toUpperCase() === 'A4356';
+}
+
+async function ensureLabelTemplatesLoaded(force = false) {
+ if (labelTemplatesLoaded && !force && labelTemplateOptions.length) return labelTemplateOptions;
+ let rows = [];
+ try {
+  const client = await window.supabaseClientReady;
+  const { data, error } = await client.from('label_templates').select('*').eq('ativo', true).order('padrao', { ascending: false }).order('codigo', { ascending: true });
+  if (error) throw error;
+  rows = Array.isArray(data) ? data : [];
+ } catch (error) {
+  console.warn('[ETIQUETAS] usando gabaritos locais:', error?.message || error);
+ }
+ labelTemplateOptions = (rows.length ? rows : LABEL_TEMPLATE_FALLBACK_ROWS).map(normalizeLabelTemplateRow).filter(item => item.key && item.pageWidth && item.pageHeight);
+ labelTemplatesLoaded = true;
+ const selected = labelTemplateOptions.find(item => item.key === labelGeneratorState.template)
+  || getLabelTemplatesByPaper(labelGeneratorState.paperType).find(item => item.isDefault)
+  || getLabelTemplatesByPaper(labelGeneratorState.paperType)[0]
+  || labelTemplateOptions[0];
+ if (selected) applyLabelTemplate(selected.key);
+ return labelTemplateOptions;
+}
+
+function saveLabelDraft() {
+ try {
+  localStorage.setItem(LABEL_DRAFT_STORAGE_KEY, JSON.stringify(labelGeneratorState));
+ } catch (error) {
+  console.warn('[ETIQUETAS] rascunho local nao salvo:', error?.message || error);
+ }
+}
+
+function loadLabelDraft() {
+ try {
+  const saved = JSON.parse(localStorage.getItem(LABEL_DRAFT_STORAGE_KEY) || 'null');
+  if (!saved || typeof saved !== 'object') return;
+  const items = Array.isArray(saved.items) ? saved.items : [];
+  labelGeneratorState = { ...labelGeneratorState, ...saved, items };
+  if (saved.template && labelTemplateOptions.some(item => item.key === saved.template)) {
+   const custom = { offsetX: Number(saved.offsetX || 0), offsetY: Number(saved.offsetY || 0) };
+   applyLabelTemplate(saved.template);
+   labelGeneratorState.offsetX = custom.offsetX;
+   labelGeneratorState.offsetY = custom.offsetY;
+  }
+ } catch (error) {
+  console.warn('[ETIQUETAS] rascunho local invalido:', error?.message || error);
+  localStorage.removeItem(LABEL_DRAFT_STORAGE_KEY);
+ }
+}
+
+function getExpandedLabelItems(repeatToFill = false) {
+ const labels = (labelGeneratorState.items || []).flatMap(item => {
+  const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+  return Array.from({ length: quantity }, () => ({ ...item }));
+ });
+ if (!repeatToFill || !labelGeneratorState.repeatToFill || !labels.length) return labels;
+ const totalCells = Math.max(0, Number(labelGeneratorState.cols || 0) * Number(labelGeneratorState.rows || 0));
+ if (!totalCells) return labels;
+ const targetLength = Math.ceil(labels.length / totalCells) * totalCells;
+ const expanded = [...labels];
+ for (let index = labels.length; index < targetLength; index++) expanded.push({ ...labels[index % labels.length] });
+ return expanded;
+}
+
+function getLabelCellPosition(cfg, index) {
+ const cols = Math.max(1, Number(cfg.cols || 1));
+ const col = index % cols;
+ const row = Math.floor(index / cols);
+ return {
+  x: Number(cfg.marginLeft || 0) + Number(cfg.offsetX || 0) + (col * Number(cfg.pitchX || cfg.labelWidth || 0)),
+  y: Number(cfg.marginTop || 0) + Number(cfg.offsetY || 0) + (row * Number(cfg.pitchY || cfg.labelHeight || 0))
+ };
+}
 async function quickActionGerarEtiquetas() {
  toggleQuickActions();
  if (!appData.products || appData.products.length === 0) {

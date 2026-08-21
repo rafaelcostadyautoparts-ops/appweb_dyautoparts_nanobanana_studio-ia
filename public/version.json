@@ -1,6 +1,6 @@
 {
-  "version": "2.2.3",
-  "build": "2026.08.21.06",
-  "commit": "producao-leitura-ean-devolucao",
-  "deployDate": "2026-08-21T14:03:40-03:00"
+  "version": "2.2.4",
+  "build": "2026.08.21.07",
+  "commit": "producao-restaura-gerador-etiquetas",
+  "deployDate": "2026-08-21T16:42:50-03:00"
 }
