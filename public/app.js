@@ -1881,8 +1881,9 @@ let operacoesPendentes = 0;
 
 function atualizarPendentes() {
  const el = document.getElementById("pendentesSync");
- if (!el) return;
- el.innerHTML = `${operacoesPendentes}`;
+ if (el) el.innerHTML = `${operacoesPendentes}`;
+ document.querySelectorAll('[data-sync-pending-count]').forEach(el => el.textContent = String(operacoesPendentes));
+ document.querySelectorAll('[data-sync-pending-card]').forEach(el => el.classList.toggle('hidden', operacoesPendentes === 0));
 }
 
 function adicionarPendencia() {
@@ -2581,9 +2582,32 @@ function getColumnLetter(index) {
 }
 
 function getOfflinePendingCount() {
- // Se houver uma fila offline real no appData, retornar o tamanho dela.
- // Por enquanto, retorna 0 conforme solicitado.
- return (window.appData && window.appData.offlineQueue) ? window.appData.offlineQueue.length : 0;
+ try { return JSON.parse(localStorage.getItem('pending_sync_queue') || '[]').length; }
+ catch (error) { return 0; }
+}
+
+function getPendingSyncBannerHTML() {
+ return `<button class="pending-sync-banner hidden" data-sync-pending-card type="button" onclick="renderPendingSyncScreen()"><span class="material-symbols-rounded">cloud_upload</span><span><strong><b data-sync-pending-count>${operacoesPendentes}</b> operacoes aguardando sincronizacao</strong><small>Toque para ver o que foi feito offline</small></span></button>`;
+}
+
+async function renderPendingSyncScreen() {
+ const operations = await getQueuedOperations();
+ let legacy = [];
+ try { legacy = JSON.parse(localStorage.getItem('pending_sync_queue') || '[]'); } catch (error) {}
+ const groups = new Map();
+ [...operations, ...legacy].forEach(operation => {
+ const payload = operation.payload || {};
+ const key = String(operation.meta?.sessionId || payload.sessionId || payload.separacao_id || operation.id || 'Operacao offline');
+ if (!groups.has(key)) groups.set(key, []);
+ groups.get(key).push(operation);
+ });
+ const cards = Array.from(groups.entries()).map(([key, rows]) => {
+ const details = rows.flatMap(row => row.payload?.items || row.payload?.rows || (row.payload?.item ? [row.payload.item] : []));
+ const error = rows.map(row => row.lastError).find(Boolean) || '';
+ return `<article class="pending-sync-task ${error ? 'has-error' : ''}"><span class="material-symbols-rounded">${error ? 'sync_problem' : 'schedule'}</span><div><strong>Separacao salva offline</strong><small>${escapeKitAttribute(key)}</small>${error ? `<em>${escapeKitAttribute(error)}</em>` : ''}</div><aside><b>${new Set(details.map(item => item.id_interno || item.ean).filter(Boolean)).size}</b> produtos | <b>${details.reduce((sum, item) => sum + Number(item.qtd_separada || item.qtd_conferida || 0), 0)}</b> itens<small>${rows.length} registros para enviar</small></aside></article>`;
+ }).join('');
+ const user = localStorage.getItem('currentUser');
+ app.innerHTML = `<div class="dashboard-screen internal fade-in pending-sync-screen">${getTopBarHTML(user, 'renderMenu()')}<main class="container"><section class="pending-sync-panel"><header><span class="material-symbols-rounded">cloud_upload</span><div><h1>SINCRONIZACAO PENDENTE</h1><p>${groups.size} tarefa(s) aguardando envio neste aparelho.</p></div></header><div class="pending-sync-list">${cards || '<div class="pending-sync-empty"><strong>Tudo sincronizado</strong><p>Nao ha tarefas aguardando envio.</p></div>'}</div>${groups.size ? '<button class="pending-sync-now" onclick="processSyncQueue(\'pending_screen\').then(renderPendingSyncScreen)">SINCRONIZAR AGORA</button>' : ''}</section></main></div>`;
 }
 
 // Texto validado em UTF-8.
@@ -2954,6 +2978,7 @@ function rebuildProductCodeIndex(products = appData.products) {
  const nextIndex = new Map();
  (Array.isArray(products) ? products : []).forEach(product => {
  [product?.ean, product?.codigo_barras, product?.id_interno, product?.codigo_interno, product?.col_a, product?.col_A, product?.sku_fornecedor, product?.sku]
+ .filter(isUsableProductScanCode)
  .map(normalizePickCode)
  .filter(Boolean)
  .forEach(code => nextIndex.set(code, product));
@@ -3941,6 +3966,7 @@ function renderMenu(push = true) {
  <div class="dashboard-screen fade-in menu-screen">
  ${getTopBarHTML(currentUser, null, 'menu')}
  <main class="container">
+ ${getPendingSyncBannerHTML()}
  <div class="menu-grid">
 ${finalMenuItems.map(item => {
  const routeAction = menuRoutes[item.id] || `handleMenuClick('${item.label}')`;
@@ -3960,6 +3986,7 @@ ${finalMenuItems.map(item => {
  ${getQuickActionsHTML(false)}
  </div>
  `;
+ refreshOutboxPendingCount().catch(error => console.warn('[OUTBOX] Falha ao atualizar indicador:', error));
 }
 
 async function renderDashboard() {
@@ -17445,7 +17472,7 @@ function buildPickingItemPayload(item) {
  const qty = Number(item?.qty || item?.qtd_separada || 1);
  return {
  id_interno: item?.id_interno || item?.col_a || item?.col_A || '',
- ean: item?.ean || '',
+ ean: isUsableProductScanCode(item?.ean) ? String(item.ean).trim() : '',
  descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
  qtd_solicitada: qty,
  qtd_separada: qty
@@ -17927,7 +17954,8 @@ function getPickItemSku(item) {
 }
 
 function getPickItemEan(item) {
- return item?.ean || item?.codigo_barras || item?.gtin || '-';
+ const value = [item?.ean, item?.codigo_barras, item?.gtin].find(isUsableProductScanCode);
+ return value ? String(value).trim() : '-';
 }
 
 function getPickItemColor(item) {
@@ -18507,7 +18535,14 @@ function showInputFeedback(inputId, type) {
  }, 300);
 }
 
+function isUsableProductScanCode(value) {
+ const normalized = String(value ?? '').normalize('NFKC').trim().toUpperCase().replace(/[\s_.-]+/g, '');
+ if (!normalized) return false;
+ return !['SEMGTIN', 'SEMEAN', 'SEMSKU', 'NA', 'N/A', 'NULL', 'UNDEFINED'].includes(normalized);
+}
+
 function normalizePickCode(rawValue) {
+ if (!isUsableProductScanCode(rawValue)) return '';
  let code = String(rawValue ?? '')
  .normalize('NFKC')
  .trim()
