@@ -73129,3 +73129,11 @@ html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-chan
   html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong { font-size:1.05rem !important; }
   html body:not(.login-active) #app button.back-button-standard { top:9px !important;left:9px !important; }
 }
+
+/* Producao: indicador de cor discretamente maior na lista operacional. */
+.pick-product-color[style*="--product-color-dot"]::before {
+  width: 12px !important;
+  height: 12px !important;
+  flex-basis: 12px !important;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .08) !important;
+}
