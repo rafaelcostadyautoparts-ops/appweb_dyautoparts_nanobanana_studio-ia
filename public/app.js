@@ -31310,7 +31310,8 @@ const devolucaoMarketplaceState = {
  editingId: null,
  editingStatus: null,
  editingMarketplaceAcionado: false,
- manualSelectionRequested: false
+ manualSelectionRequested: false,
+ productSearchTimer: null
 };
 
 const DEVOLUCAO_CHANNEL_FILTER_OPTIONS = ['Amazon', 'Magalu Djozu', 'Magalu Kawai', 'Magalu DY', 'ML Djozu', 'ML DY', 'ML Kawai', 'ML PF Ale', 'ML PF Carla', 'ML PF Clécio', 'ML PF Dani', 'ML PF Palo', 'ML PF Pri', 'ML PF Tban', 'ML PF Yugi', 'PDV', 'Shopee Djozu', 'Shopee DY', 'Shopee Kawai', 'Shopee PF Ale', 'Shopee PF Carla', 'Shopee PF Clécio', 'Shopee PF Dani', 'Shopee PF Gu', 'Shopee PF Tban', 'Shopee PF Yugi', 'Site', 'TikTok', 'Via Varejo'];
@@ -31592,7 +31593,7 @@ function buildDevolucaoMarketplacePayload(pedido, dataDevolucao) {
  : (marketplaceAcionado ? 'em_analise' : 'resolvida');
  return {
  devolucao: {
- canal: document.getElementById('dev-canal')?.value || 'Amazon',
+ canal: document.getElementById('dev-canal')?.value.trim() || '',
  pedido,
  remetente: document.getElementById('dev-remetente')?.value.trim() || '',
  data_devolucao: dataDevolucao,
@@ -31685,8 +31686,20 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <footer class="devolucao-form-footer"><button type="button" class="devolucao-cancel-btn" onclick="closeDevolucaoMarketplaceModal()">Cancelar</button><button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()"><span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}</button></footer>
  </section></div>`);
 
+
+ const channelSelect = document.getElementById('dev-canal');
+ if (channelSelect && !channelSelect.querySelector('option[value=""]')) {
+  channelSelect.insertAdjacentHTML('afterbegin', '<option value="" disabled>Selecione o canal</option>');
+ }
+ if (channelSelect && !editRecord) channelSelect.value = '';
+
+ const productCodeInput = document.getElementById('dev-product-code');
+ if (productCodeInput) {
+  productCodeInput.oninput = event => scheduleDevolucaoProductSearch(event.target.value);
+ }
+
  if (editRecord) {
- setDevolucaoModalValue('dev-canal', editRecord.canal || 'Amazon');
+ setDevolucaoModalValue('dev-canal', editRecord.canal || '');
  setDevolucaoModalValue('dev-pedido', editRecord.pedido || '');
  setDevolucaoModalValue('dev-remetente', editRecord.remetente || '');
  setDevolucaoModalValue('dev-data', String(editRecord.data_devolucao || '').slice(0, 10));
@@ -31711,6 +31724,8 @@ function editHistoricoDevolucao(id) {
 
 function closeDevolucaoMarketplaceModal() {
  document.getElementById('devolucao-marketplace-modal')?.remove();
+ clearTimeout(devolucaoMarketplaceState.productSearchTimer);
+ devolucaoMarketplaceState.productSearchTimer = null;
  devolucaoMarketplaceState.editingId = null;
  devolucaoMarketplaceState.editingStatus = null;
  devolucaoMarketplaceState.editingMarketplaceAcionado = false;
@@ -31722,11 +31737,27 @@ function handleDevolucaoModalBackdrop(event) {
 function handleDevolucaoScanKey(event) {
  if (event.key !== 'Enter') return;
  event.preventDefault();
+ clearTimeout(devolucaoMarketplaceState.productSearchTimer);
+ devolucaoMarketplaceState.productSearchTimer = null;
  scanDevolucaoProduct();
 }
 
+function scheduleDevolucaoProductSearch(value) {
+ clearTimeout(devolucaoMarketplaceState.productSearchTimer);
+ devolucaoMarketplaceState.productSearchTimer = null;
+ const query = String(value || '').trim();
+ if (query.length < 2) {
+  handleDevolucaoProductSearchInput(query);
+  return;
+ }
+ devolucaoMarketplaceState.productSearchTimer = setTimeout(() => {
+  devolucaoMarketplaceState.productSearchTimer = null;
+  handleDevolucaoProductSearchInput(query);
+ }, 160);
+
 function getDevolucaoProductSearchText(product) {
  return normalizeText([product?.descricao_completa, product?.descricao_base, product?.descricao, product?.nome, product?.id_interno, product?.ean, product?.sku_fornecedor, product?.sku, product?.marca, product?.categoria].filter(Boolean).join(' '));
+}
 }
 
 function clearDevolucaoProductSuggestions() {
@@ -31899,11 +31930,13 @@ async function scanDevolucaoProduct() {
  devolucaoMarketplaceState.scanning = true;
  if (feedback) feedback.innerHTML = '<span class="material-symbols-rounded dev-spin">progress_activity</span> Buscando produto...';
  try {
- let product = null;
+ let product = findDevolucaoProductByIdentity(code);
+ if (!product) {
  try {
  product = await DataClient.findProdutoByCodeSupabase(code);
  } catch (_) {
  await ensureProdutosLoaded();
+ }
  }
  if (!product) {
  product = (appData.products || []).find(item =>
@@ -32057,6 +32090,8 @@ async function saveDevolucaoMarketplace() {
  if (devolucaoMarketplaceState.saving) return;
  const pedido = document.getElementById('dev-pedido')?.value.trim() || '';
  const dataDevolucao = document.getElementById('dev-data')?.value || '';
+ const canal = document.getElementById('dev-canal')?.value.trim() || '';
+ if (!canal) return showToast('Selecione o canal da devolução.', 'warning');
  if (!pedido) return showToast('Informe o n\u00famero do pedido.', 'warning');
  if (!dataDevolucao) return showToast('Informe a data da devolu\u00e7\u00e3o.', 'warning');
  if (!devolucaoMarketplaceState.draftItems.length) return showToast('Adicione ao menos um produto.', 'warning');

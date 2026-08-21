@@ -1,6 +1,6 @@
 {
-  "version": "2.2.2",
-  "build": "2026.08.21.05",
-  "commit": "producao-voltar-centralizado",
-  "deployDate": "2026-08-21T13:52:57-03:00"
+  "version": "2.2.3",
+  "build": "2026.08.21.06",
+  "commit": "producao-leitura-ean-devolucao",
+  "deployDate": "2026-08-21T14:03:40-03:00"
 }
