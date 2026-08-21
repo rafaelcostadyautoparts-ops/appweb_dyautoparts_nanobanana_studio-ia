@@ -31672,7 +31672,7 @@ function buildDevolucaoMarketplacePayload(pedido, dataDevolucao) {
  : (marketplaceAcionado ? 'em_analise' : 'resolvida');
  return {
  devolucao: {
- canal: document.getElementById('dev-canal')?.value || 'Amazon',
+ canal: document.getElementById('dev-canal')?.value.trim() || '',
  pedido,
  remetente: document.getElementById('dev-remetente')?.value.trim() || '',
  data_devolucao: dataDevolucao,
@@ -31765,8 +31765,15 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <footer class="devolucao-form-footer"><button type="button" class="devolucao-cancel-btn" onclick="closeDevolucaoMarketplaceModal()">Cancelar</button><button id="dev-save-btn" type="button" onclick="saveDevolucaoMarketplace()"><span class="material-symbols-rounded">save</span> ${editRecord ? 'Salvar altera\u00e7\u00f5es' : 'Salvar devolu\u00e7\u00e3o'}</button></footer>
  </section></div>`);
 
+ const devolucaoCanalSelect = document.getElementById('dev-canal');
+ if (!editRecord && devolucaoCanalSelect) {
+ const placeholder = new Option('Selecione o canal', '', true, true);
+ placeholder.disabled = true;
+ devolucaoCanalSelect.prepend(placeholder);
+ }
+
  if (editRecord) {
- setDevolucaoModalValue('dev-canal', editRecord.canal || 'Amazon');
+ setDevolucaoModalValue('dev-canal', editRecord.canal || '');
  setDevolucaoModalValue('dev-pedido', editRecord.pedido || '');
  setDevolucaoModalValue('dev-remetente', editRecord.remetente || '');
  setDevolucaoModalValue('dev-data', String(editRecord.data_devolucao || '').slice(0, 10));
@@ -32136,6 +32143,12 @@ function renderDevolucaoDraftItems() {
 async function saveDevolucaoMarketplace() {
  if (devolucaoMarketplaceState.saving) return;
  const pedido = document.getElementById('dev-pedido')?.value.trim() || '';
+ const canalSelect = document.getElementById('dev-canal');
+ const canal = canalSelect?.value.trim() || '';
+ if (!canal) {
+ canalSelect?.focus();
+ return showToast('Selecione o canal da devolucao.', 'warning');
+ }
  const dataDevolucao = document.getElementById('dev-data')?.value || '';
  if (!pedido) return showToast('Informe o n\u00famero do pedido.', 'warning');
  if (!dataDevolucao) return showToast('Informe a data da devolu\u00e7\u00e3o.', 'warning');
