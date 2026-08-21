@@ -17606,6 +17606,10 @@ function getPickItemTitle(item) {
 }
 
 async function promptLooseOperationalDetails(defaults = {}) {
+ // O Enter que confirma o codigo ainda esta terminando de propagar no
+ // documento. Aguarde esse evento encerrar para ele nao confirmar o popup
+ // recem-aberto com o campo vazio.
+ await new Promise(resolve => setTimeout(resolve, 180));
  const descriptionResult = await showAppPrompt({
  title: 'Identificar item avulso',
  message: 'Informe exatamente qual produto ou componente sera enviado.',
