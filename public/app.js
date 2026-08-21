@@ -17615,8 +17615,8 @@ async function promptLooseOperationalDetails(defaults = {}) {
  confirmLabel: 'Continuar',
  cancelLabel: 'Cancelar'
  });
- if (!descriptionResult?.confirmed) return null;
- const descricao = String(descriptionResult.value || '').trim();
+ if (descriptionResult === null) return null;
+ const descricao = String(descriptionResult || '').trim();
  if (!descricao) {
  showToast('Informe o produto ou componente.', 'warning');
  return null;
@@ -17630,8 +17630,8 @@ async function promptLooseOperationalDetails(defaults = {}) {
  confirmLabel: 'Adicionar',
  cancelLabel: 'Cancelar'
  });
- if (!reasonResult?.confirmed) return null;
- const motivo = String(reasonResult.value || '').trim();
+ if (reasonResult === null) return null;
+ const motivo = String(reasonResult || '').trim();
  if (!motivo) {
  showToast('Informe o motivo do envio.', 'warning');
  return null;
