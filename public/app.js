@@ -2639,8 +2639,10 @@ function getInlineAppIconHTML(iconName) {
  return `<span class="app-inline-icon" aria-hidden="true">${svg}</span>`;
 }
 
-function getBackButtonStandardIconHTML() {
- return '<svg class="app-back-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5M12 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function getBackButtonStandardIconHTML(color = '') {
+ const colorStyle = color ? ` style="color:${escapeKitAttribute(color)}!important;filter:none!important"` : '';
+ const pathStyle = color ? ` style="stroke:${escapeKitAttribute(color)}!important"` : '';
+ return `<svg class="app-back-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"${colorStyle}><path d="M19 12H5M12 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"${pathStyle}/></svg>`;
 }
 
 const DS_HEADER_MODULES = new Set(['inventario', 'kit_lampada', 'pick', 'pack']);
@@ -2653,13 +2655,15 @@ function getDesignSystemOperationalClass(type = 'PICKING') {
  return ` ds-app-header ds-operational-header ds-header-${type === 'PACK' ? 'pack' : 'pick'}`;
 }
 
-function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') {
+function getTopBarHTML(currentUser, backAction = null, screenType = 'internal', backButtonClass = '') {
  const isMenu = screenType === 'menu';
+ const headerColor = 'var(--homolog-header-color,#b91c1c)';
+ const standardBackStyle = ` style="background:#fff!important;background-color:#fff!important;background-image:none!important;border-color:#fff!important;color:${headerColor}!important;filter:none!important;opacity:1!important"`;
  return `
  <div class="top-action-group ds-top-action-group">
  ${!isMenu && backAction ? `
- <button class="fab-icon-btn fab-voltar back-button-standard ds-back-button" type="button" onclick="${backAction}" aria-label="Voltar">
- ${getBackButtonStandardIconHTML()}
+ <button class="fab-icon-btn fab-voltar back-button-standard ds-back-button ${escapeKitAttribute(backButtonClass)}" type="button" onclick="${backAction}" aria-label="Voltar"${standardBackStyle}>
+ ${getBackButtonStandardIconHTML(headerColor)}
  </button>
  ` : ''}
  ${isMenu ? `
@@ -2675,9 +2679,10 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal') 
 }
 
 function getInventoryModuleBackButtonHTML(backAction = 'renderInventarioSubMenu()') {
+ const headerColor = 'var(--homolog-header-color,#f97316)';
  return `
- <button type="button" class="inventory-module-back back-button-standard ds-back-button" onclick="${backAction}" aria-label="Voltar">
- ${getBackButtonStandardIconHTML()}
+ <button type="button" class="inventory-module-back back-button-standard ds-back-button" onclick="${backAction}" aria-label="Voltar" style="background:#fff!important;background-color:#fff!important;background-image:none!important;border-color:#fff!important;color:${headerColor}!important;filter:none!important;opacity:1!important">
+ ${getBackButtonStandardIconHTML(headerColor)}
  </button>
  `;
 }
@@ -2701,11 +2706,11 @@ function getOperationalIdentityHTML(type = 'PICKING') {
  const label = isPick ? 'SEPARAÇÃO (PICK)' : 'CONFERENCIA NCIA (PACK)';
  const icon = isPick ? 'inventory_2' : 'verified';
  const mobileGradient = isPick
- ? 'linear-gradient(90deg, #EF4444 0%, #B91C1C 100%)'
- : 'linear-gradient(90deg, #22C55E 0%, #15803D 100%)';
+ ? 'linear-gradient(90deg, #2563EB 0%, #1D4ED8 100%)'
+ : 'linear-gradient(90deg, #0891B2 0%, #0E7490 100%)';
  
  return `
- <div class="operational-top-bar${getDesignSystemOperationalClass(type)}" style="background:${mobileGradient};">
+ <div class="operational-top-bar${getDesignSystemOperationalClass(type)}" style="background:${mobileGradient}!important;">
  <div class="top-bar-icon-wrap">
  <span class="material-symbols-rounded top-bar-icon">${icon}</span>
  </div>
@@ -2716,15 +2721,15 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 
 // Texto validado em UTF-8.
 const MODULE_SIDEBAR_CONFIG = {
- produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
- kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#F59E0B', colorTo: '#B45309', shadow: '245,158,11' },
- movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#8B5CF6', colorTo: '#6D28D9', shadow: '139,92,246' },
+ produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DB2777', colorTo: '#9D174D', shadow: '219,39,119' },
+ kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
+ movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
  dashboard: { label: 'DASHBOARD', icon: 'dashboard', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
  inventario: { label: 'INVENT\u00c1RIO', icon: 'fact_check', colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
- nf: { label: 'ENTRADA NF', icon: 'receipt_long', colorFrom: '#1E3A8A', colorTo: '#1E40AF', shadow: '30,58,138' },
- pick: { label: 'SEPARA\u00c7\u00c3O (PICK)', icon: 'inventory_2', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
- pack: { label: 'CONFER\u00caNCIA (PACK)', icon: 'verified', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
- compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#EF2B2D', colorTo: '#B91C1C', shadow: '239,43,45' },
+ nf: { label: 'ENTRADA NF', icon: 'receipt_long', colorFrom: '#8B5CF6', colorTo: '#7C3AED', shadow: '139,92,246' },
+ pick: { label: 'SEPARA\u00c7\u00c3O (PICK)', icon: 'inventory_2', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
+ pack: { label: 'CONFER\u00caNCIA (PACK)', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
+ compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#E11D48', colorTo: '#BE123C', shadow: '225,29,72' },
  financeiro: { label: 'FINANCEIRO', icon: 'payments', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
  configuracoes: { label: 'CONFIG.', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
@@ -2735,7 +2740,7 @@ function getModuleSidebarHTML(moduleKey, labelOverride = '', rightHTML = '') {
  const moduleLabel = labelOverride || (moduleKey === 'inventario' ? 'INVENT\u00c1RIO' : cfg.label);
  const topBarBg = `linear-gradient(90deg,${cfg.colorFrom} 0%,${cfg.colorTo} 100%)`;
  return `
- <div class="module-top-bar mod-topbar-${moduleKey}${getDesignSystemModuleClass(moduleKey)}" style="background:${topBarBg};box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
+ <div class="module-top-bar mod-topbar-${moduleKey}${getDesignSystemModuleClass(moduleKey)}" style="background:${topBarBg}!important;box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
  <div class="top-bar-icon-wrap">
  <span class="material-symbols-rounded top-bar-icon">${cfg.icon}</span>
  </div>
@@ -3646,7 +3651,7 @@ async function renderAlerts() {
  const currentUser = localStorage.getItem('currentUser');
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
+ ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
  ${getModuleSidebarHTML('dashboard')}
  <main class="container operations-dashboard-shell">
  <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
@@ -3700,27 +3705,20 @@ async function renderAlerts() {
  });
 
  const channels = [...channelTotals.values()].filter(item => item.packages > 0).sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
- const totalPackages = channels.reduce((sum, item) => sum + item.packages, 0);
- const todayLabel = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date());
-
+ const totalPackages = channels.reduce((total, channel) => total + Number(channel.packages || 0), 0);
+ const dashboardTotalHTML = `<div class="dashboard-top-total" aria-label="Total de pacotes"><span>TOTAL</span><strong>${totalPackages}</strong></div>`;
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('dashboard')}
+ ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+ ${getModuleSidebarHTML('dashboard', '', dashboardTotalHTML)}
  <main class="container operations-dashboard-shell">
- <header class="operations-dashboard-header">
- <div><span class="material-symbols-rounded">monitoring</span><div><h1>DASHBOARD OPERACIONAL</h1><p>Visão rápida para acompanhar a operação e tomar decisões.</p></div></div>
- <time>${escapeKitAttribute(todayLabel)}</time>
- </header>
- <section class="dashboard-packages-panel">
- <header><div><small>OPERAÇÃO DE HOJE</small><h2>PACOTES REALIZADOS</h2><p>Somente canais com pacotes finalizados.</p></div><div class="dashboard-packages-total"><span>Total</span><strong>${totalPackages}</strong><small>${totalPackages === 1 ? 'pacote' : 'pacotes'}</small></div></header>
- ${channels.length ? `<div class="dashboard-channel-grid">${channels.map(channel => `
+ ${channels.length ? `<section class="dashboard-channel-grid">${channels.map(channel => `
  <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
- <span class="dashboard-channel-icon material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>
- <div><small>CANAL</small><h3>${escapeKitAttribute(channel.label)}</h3></div>
- <strong>${channel.packages}</strong><em>${channel.packages === 1 ? 'pacote' : 'pacotes'}</em>
- </article>`).join('')}</div>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum pacote realizado hoje</strong><p>Os canais aparecerão aqui assim que houver pacotes finalizados.</p></div>`}
- </section>
+ <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
+ <strong class="dashboard-channel-quantity">${channel.packages}</strong>
+ <h3>${escapeKitAttribute(channel.label)}</h3>
+ <span class="dashboard-channel-percentage">${totalPackages > 0 ? Math.round((channel.packages / totalPackages) * 100) : 0}%</span>
+ </article>`).join('')}</section>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma operação finalizada hoje</strong><p>Os canais aparecerão aqui após a primeira finalização.</p></div>`}
  </main>
  </div>
  `;
@@ -3947,7 +3945,7 @@ function renderMenu(push = true) {
 ${finalMenuItems.map(item => {
  const routeAction = menuRoutes[item.id] || `handleMenuClick('${item.label}')`;
  return `
- <button class="menu-card mobile-nav-card ${item.disabled ? 'disabled' : ''}" type="button"
+ <button class="menu-card mobile-nav-card menu-module-${escapeKitAttribute(item.id)} ${item.disabled ? 'disabled' : ''}" type="button"
  ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="runMenuAction('${routeAction.replace(/'/g, "\\'")}')" onkeydown="handleActionKey(event, '${routeAction.replace(/'/g, "\\'")}')"`}
  aria-label="${item.label}">
  ${item.badge ? `<span class="badge">${item.badge}</span>` : ''}
@@ -18343,9 +18341,10 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  const channelIcon = getChannelConfig(channelLabel).svgIcon || menu3DIcons?.[channelId] || '<span class="material-symbols-rounded">inventory_2</span>';
  const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
  const operatorInitials = getPickOperatorInitials(currentUser);
+ const isFlexChannel = normalizeOperationalLabel(channelLabel) === 'FLEX';
  
  app.innerHTML = `
- <div class="dashboard-screen fade-in internal no-top-bar picking-screen pick-workflow-screen"
+ <div class="dashboard-screen fade-in internal no-top-bar picking-screen pick-workflow-screen${isFlexChannel ? ' pick-flex-screen' : ''}"
  data-session-id="${escapeKitAttribute(sessionId)}"
  data-channel-id="${escapeKitAttribute(channelId || '')}"
  data-channel-label="${escapeKitAttribute(channelLabel || '')}"
@@ -18756,6 +18755,7 @@ function handlePickSearchInput(event) {
  clearPickSearchSuggestions();
  return;
  }
+
  pickSearchDebounceTimer = setTimeout(async () => {
  const input = getOperationalProductSearchInput();
  const currentValue = input?.value?.trim() || '';

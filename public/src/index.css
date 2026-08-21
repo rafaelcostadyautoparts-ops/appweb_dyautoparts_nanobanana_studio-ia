@@ -251,6 +251,38 @@
             font-display: swap;
         }
 
+        @font-face {
+            font-family: 'Jost';
+            src: url('/assets/fontes/Jost-VariableFont_wght.ttf') format('truetype');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Bebas Neue';
+            src: url('/assets/fontes/BebasNeue-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Roboto Condensed';
+            src: url('/assets/fontes/RobotoCondensed-VariableFont_wght.ttf') format('truetype');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Roboto Mono';
+            src: url('/assets/fontes/RobotoMono-VariableFont_wght.ttf') format('truetype');
+            font-weight: 100 700;
+            font-style: normal;
+            font-display: swap;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -72336,6 +72368,68 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
 @media(max-width:640px){.mov-history-workspace{width:calc(100% - 20px)!important;padding-top:10px!important}.mov-history-back{top:24px!important;left:20px!important}.mov-history-header{padding-left:64px!important}.mov-history-header h1{font-size:1.05rem!important}.mov-history-summary{grid-template-columns:repeat(2,1fr)!important}.mov-history-summary article{min-height:76px!important}.mov-history-row-main{padding:10px!important}.mov-history-row-main>span:not(.mov-history-op):not(.mov-history-view-button)::before{color:#94a3b8}.mov-history-pagination{align-items:flex-start;flex-direction:column}}
 
 /* Homologacao: padrao geometrico das barras superiores baseado em Movimentacoes. */
+html.app-environment-homologation {
+  --homolog-header-height: 60px;
+  --homolog-back-size: 42px;
+  --homolog-back-icon-size: 27px;
+  --homolog-header-title-size: 25px;
+}
+
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-produtos,
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-dashboard,
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-compras,
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-pick,
+html.app-environment-homologation body:not(.login-active) #app .ds-header-pick { --homolog-header-color: #dc2626; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-kit_lampada,
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-inventario,
+html.app-environment-homologation body:not(.login-active) #app .ds-header-inventario { --homolog-header-color: #f97316; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-movimentos { --homolog-header-color: #8b5cf6; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-nf { --homolog-header-color: #1e40af; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-pack,
+html.app-environment-homologation body:not(.login-active) #app .ds-header-pack { --homolog-header-color: #059669; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-financeiro { --homolog-header-color: #059669; }
+html.app-environment-homologation body:not(.login-active) #app .mod-topbar-configuracoes { --homolog-header-color: #475569; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :where(.mod-topbar-produtos,.mod-topbar-dashboard,.mod-topbar-compras,.mod-topbar-pick,.ds-header-pick)) { --homolog-header-color: #dc2626; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :where(.mod-topbar-kit_lampada,.mod-topbar-inventario,.ds-header-inventario)) { --homolog-header-color: #f97316; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-movimentos) { --homolog-header-color: #8b5cf6; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-nf) { --homolog-header-color: #1e40af; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :where(.mod-topbar-pack,.ds-header-pack,.mod-topbar-financeiro)) { --homolog-header-color: #059669; }
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-configuracoes) { --homolog-header-color: #475569; }
+html.app-environment-homologation body:not(.login-active) #app .devolucao-app-bar { --homolog-header-color: #0f766e; }
+html.app-environment-homologation body:not(.login-active) #app .sd-report-appbar { --homolog-header-color: #8b5cf6; }
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .ds-app-header {
+  height: var(--homolog-header-height) !important;
+  min-height: var(--homolog-header-height) !important;
+  max-height: var(--homolog-header-height) !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .ds-app-header > :where(.ds-back-button,.back-button-standard) {
+  width: var(--homolog-back-size) !important;
+  min-width: var(--homolog-back-size) !important;
+  max-width: var(--homolog-back-size) !important;
+  height: var(--homolog-back-size) !important;
+  min-height: var(--homolog-back-size) !important;
+  max-height: var(--homolog-back-size) !important;
+  background: #fff !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  border-color: #fff !important;
+  color: var(--homolog-header-color, #b91c1c) !important;
+  filter: none !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .ds-app-header > :where(.ds-back-button,.back-button-standard) .app-back-icon {
+  width: var(--homolog-back-icon-size) !important;
+  height: var(--homolog-back-icon-size) !important;
+  color: inherit !important;
+  filter: none !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .ds-app-header > :where(.ds-back-button,.back-button-standard) .app-back-icon path {
+  stroke: currentColor !important;
+}
+
 @media (min-width: 769px) {
   html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .module-top-bar,
   html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.picking-screen > .operational-top-bar,
@@ -72349,9 +72443,9 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
     width: 100vw !important;
     min-width: 100vw !important;
     max-width: 100vw !important;
-    height: 72px !important;
-    min-height: 72px !important;
-    max-height: 72px !important;
+    height: var(--homolog-header-height) !important;
+    min-height: var(--homolog-header-height) !important;
+    max-height: var(--homolog-header-height) !important;
     margin: 0 !important;
     padding: 0 72px !important;
     border-radius: 0 !important;
@@ -72381,9 +72475,9 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
     width: 72px !important;
     min-width: 72px !important;
     max-width: 72px !important;
-    height: 72px !important;
-    min-height: 72px !important;
-    max-height: 72px !important;
+    height: var(--homolog-header-height) !important;
+    min-height: var(--homolog-header-height) !important;
+    max-height: var(--homolog-header-height) !important;
     margin: 0 !important;
     padding: 0 !important;
     transform: none !important;
@@ -72393,17 +72487,112 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
   html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.picking-screen > .top-action-group .fab-voltar,
   html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pack-screen > .top-action-group .fab-voltar {
     position: static !important;
-    width: 44px !important;
-    min-width: 44px !important;
-    max-width: 44px !important;
-    height: 44px !important;
-    min-height: 44px !important;
-    max-height: 44px !important;
+    width: var(--homolog-back-size) !important;
+    min-width: var(--homolog-back-size) !important;
+    max-width: var(--homolog-back-size) !important;
+    height: var(--homolog-back-size) !important;
+    min-height: var(--homolog-back-size) !important;
+    max-height: var(--homolog-back-size) !important;
     margin: 0 !important;
     padding: 0 !important;
     transform: none !important;
   }
 }
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > :where(.module-top-bar,.operational-top-bar,.ds-app-header) :where(.top-bar-label,.inventory-module-heading h1) {
+  font-size: var(--homolog-header-title-size) !important;
+  letter-spacing: 3px !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .top-action-group :where(.fab-voltar,.ds-back-button,.back-button-standard) {
+  width: var(--homolog-back-size) !important;
+  min-width: var(--homolog-back-size) !important;
+  max-width: var(--homolog-back-size) !important;
+  height: var(--homolog-back-size) !important;
+  min-height: var(--homolog-back-size) !important;
+  max-height: var(--homolog-back-size) !important;
+  background: #fff !important;
+  color: var(--homolog-header-color, #b91c1c) !important;
+  border: 0 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .top-action-group :where(.fab-voltar,.ds-back-button,.back-button-standard) :where(.app-back-icon,.product-top-back-icon,svg) {
+  width: var(--homolog-back-icon-size) !important;
+  min-width: var(--homolog-back-icon-size) !important;
+  max-width: var(--homolog-back-icon-size) !important;
+  height: var(--homolog-back-icon-size) !important;
+  min-height: var(--homolog-back-icon-size) !important;
+  max-height: var(--homolog-back-icon-size) !important;
+  color: inherit !important;
+  filter: none !important;
+}
+
+/* Homologacao: contraste invertido definitivo do botao voltar em todas as barras oficiais. */
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen.module-screen,.dashboard-screen.picking-screen,.dashboard-screen.pack-screen,.product-submenu-screen):has(> :where(.module-top-bar,.operational-top-bar,.ds-app-header)) > .top-action-group > :where(.fab-icon-btn.fab-voltar.back-button-standard,.fab-voltar.ds-back-button,.back-button-standard.ds-back-button) {
+  background: #fff !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  border-color: #fff !important;
+  color: var(--homolog-header-color, #b91c1c) !important;
+  filter: none !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen.module-screen,.dashboard-screen.picking-screen,.dashboard-screen.pack-screen,.product-submenu-screen):has(> :where(.module-top-bar,.operational-top-bar,.ds-app-header)) > .top-action-group > :where(.fab-icon-btn.fab-voltar.back-button-standard,.fab-voltar.ds-back-button,.back-button-standard.ds-back-button) .app-back-icon {
+  color: var(--homolog-header-color, #b91c1c) !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen.module-screen,.dashboard-screen.picking-screen,.dashboard-screen.pack-screen,.product-submenu-screen):has(> :where(.module-top-bar,.operational-top-bar,.ds-app-header)) > .top-action-group > :where(.fab-icon-btn.fab-voltar.back-button-standard,.fab-voltar.ds-back-button,.back-button-standard.ds-back-button) .app-back-icon path {
+  stroke: var(--homolog-header-color, #b91c1c) !important;
+}
+
+@media (max-width: 768px) {
+  html.app-environment-homologation {
+    --homolog-header-title-size: 20px;
+  }
+
+  html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > :where(.module-top-bar,.operational-top-bar,.ds-app-header),
+  html.app-environment-homologation body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen) > .top-action-group {
+    height: var(--homolog-header-height) !important;
+    min-height: var(--homolog-header-height) !important;
+    max-height: var(--homolog-header-height) !important;
+  }
+}
+
+/* Identidade cromatica dos modulos: card do menu, topo e seta usam a mesma cor. */
+html body:not(.login-active) #app .menu-module-produtos .menu-icon-3d circle:first-child { fill:#db2777 !important; }
+html body:not(.login-active) #app .menu-module-kit_lampada .menu-icon-3d circle:first-child { fill:#ca8a04 !important; }
+html body:not(.login-active) #app .menu-module-pick .menu-icon-3d circle:first-child { fill:#2563eb !important; }
+html body:not(.login-active) #app .menu-module-pack .menu-icon-3d circle:first-child { fill:#0891b2 !important; }
+html body:not(.login-active) #app .menu-module-movimentacoes .menu-icon-3d circle:first-child { fill:#4f46e5 !important; }
+html body:not(.login-active) #app .menu-module-inventario .menu-icon-3d circle:first-child { fill:#f97316 !important; }
+html body:not(.login-active) #app .menu-module-dashboard .menu-icon-3d circle:first-child { fill:#dc2626 !important; }
+html body:not(.login-active) #app .menu-module-nf .menu-icon-3d circle:first-child { fill:#8b5cf6 !important; }
+html body:not(.login-active) #app .menu-module-financeiro .menu-icon-3d circle:first-child { fill:#059669 !important; }
+html body:not(.login-active) #app .menu-module-compras .menu-icon-3d circle:first-child { fill:#e11d48 !important; }
+
+html body:not(.login-active) #app .mod-topbar-produtos { background:linear-gradient(90deg,#db2777,#9d174d) !important; --homolog-header-color:#db2777; }
+html body:not(.login-active) #app .mod-topbar-kit_lampada { background:linear-gradient(90deg,#ca8a04,#a16207) !important; --homolog-header-color:#ca8a04; }
+html body:not(.login-active) #app :is(.mod-topbar-pick,.ds-header-pick,.operational-top-bar.ds-header-pick) { background:linear-gradient(90deg,#2563eb,#1d4ed8) !important; --homolog-header-color:#2563eb; }
+html body:not(.login-active) #app :is(.mod-topbar-pack,.ds-header-pack,.operational-top-bar.ds-header-pack) { background:linear-gradient(90deg,#0891b2,#0e7490) !important; --homolog-header-color:#0891b2; }
+html body:not(.login-active) #app .mod-topbar-movimentos { background:linear-gradient(90deg,#4f46e5,#3730a3) !important; --homolog-header-color:#4f46e5; }
+html body:not(.login-active) #app :is(.mod-topbar-inventario,.ds-header-inventario) { background:linear-gradient(90deg,#f97316,#c2410c) !important; --homolog-header-color:#f97316; }
+html body:not(.login-active) #app .mod-topbar-dashboard { background:linear-gradient(90deg,#dc2626,#991b1b) !important; --homolog-header-color:#dc2626; }
+html body:not(.login-active) #app .mod-topbar-nf { background:linear-gradient(90deg,#8b5cf6,#7c3aed) !important; --homolog-header-color:#8b5cf6; }
+html body:not(.login-active) #app .mod-topbar-financeiro { background:linear-gradient(90deg,#059669,#047857) !important; --homolog-header-color:#059669; }
+html body:not(.login-active) #app .mod-topbar-compras { background:linear-gradient(90deg,#e11d48,#be123c) !important; --homolog-header-color:#e11d48; }
+
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-produtos) { --homolog-header-color:#db2777; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-kit_lampada) { --homolog-header-color:#ca8a04; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :is(.mod-topbar-pick,.ds-header-pick)) { --homolog-header-color:#2563eb; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :is(.mod-topbar-pack,.ds-header-pack)) { --homolog-header-color:#0891b2; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-movimentos) { --homolog-header-color:#4f46e5; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> :is(.mod-topbar-inventario,.ds-header-inventario)) { --homolog-header-color:#f97316; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-dashboard) { --homolog-header-color:#dc2626; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-nf) { --homolog-header-color:#8b5cf6; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-financeiro) { --homolog-header-color:#059669; }
+html body:not(.login-active) #app > :where(.dashboard-screen,.product-submenu-screen):has(> .mod-topbar-compras) { --homolog-header-color:#e11d48; }
 /* Homologacao: seta de retorno com traco leve e uniforme. */
 html.app-environment-homologation body:not(.login-active) #app :where(.dashboard-screen,.product-submenu-screen) > .top-action-group .fab-voltar :where(.app-back-icon,.product-top-back-icon),
 html.app-environment-homologation body:not(.login-active) #app :where(.dashboard-screen,.product-submenu-screen) > .top-action-group .fab-voltar svg {
@@ -72418,7 +72607,7 @@ html.app-environment-homologation body:not(.login-active) #app :where(.dashboard
   stroke-linecap: round !important;
   stroke-linejoin: round !important;
 }
-.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color[style*="--product-color-dot"]::before{content:'';width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--product-color-dot,#94a3b8);border:1px solid rgba(15,23,42,.28);box-shadow:0 0 0 1px rgba(255,255,255,.72)}
+.pick-product-color{display:inline-flex!important;align-items:center;gap:6px}.pick-product-color[style*="--product-color-dot"]::before{content:'';width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--product-color-dot,#94a3b8);border:0;box-shadow:none}
 
 
 /* Romaneio Flex: fluxo responsivo para preenchimento e assinatura no celular. */
@@ -72521,4 +72710,418 @@ html.app-environment-homologation body:not(.login-active) #app > .dashboard-scre
   justify-content:flex-start !important;
   column-gap:14px !important;
  }
+}
+
+/* Homologacao: acabamento final global do retorno nas barras superiores. */
+html.app-environment-homologation body:not(.login-active) #app button.back-button-standard,
+html.app-environment-homologation body:not(.login-active) #app .top-action-group > button.fab-icon-btn.fab-voltar.back-button-standard,
+html.app-environment-homologation body:not(.login-active) #app .top-action-group > button.fab-voltar.ds-back-button {
+  width: var(--homolog-back-size, 42px) !important;
+  min-width: var(--homolog-back-size, 42px) !important;
+  max-width: var(--homolog-back-size, 42px) !important;
+  height: var(--homolog-back-size, 42px) !important;
+  min-height: var(--homolog-back-size, 42px) !important;
+  max-height: var(--homolog-back-size, 42px) !important;
+  background: #fff !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  border-color: #fff !important;
+  color: var(--homolog-header-color, #b91c1c) !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app button.back-button-standard :is(.app-back-icon,.product-top-back-icon,svg),
+html.app-environment-homologation body:not(.login-active) #app .top-action-group > button.fab-voltar.ds-back-button :is(.app-back-icon,.product-top-back-icon,svg) {
+  width: var(--homolog-back-icon-size, 27px) !important;
+  min-width: var(--homolog-back-icon-size, 27px) !important;
+  max-width: var(--homolog-back-icon-size, 27px) !important;
+  height: var(--homolog-back-icon-size, 27px) !important;
+  min-height: var(--homolog-back-icon-size, 27px) !important;
+  max-height: var(--homolog-back-icon-size, 27px) !important;
+  color: inherit !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app button.back-button-standard svg :is(path,line,polyline),
+html.app-environment-homologation body:not(.login-active) #app .top-action-group > button.fab-voltar.ds-back-button svg :is(path,line,polyline) {
+  fill: none !important;
+  stroke: currentColor !important;
+}
+
+/* Homologacao: metadados do topo usam a mesma tipografia de "NESTA SEPARACAO". */
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong {
+  font-family: 'PT Sans Narrow', 'Arial Narrow', Arial, sans-serif !important;
+  font-size: clamp(.7rem, .9vw, .86rem) !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 768px) {
+  html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-header-meta strong {
+    font-size: clamp(.58rem, 1.7vw, .7rem) !important;
+  }
+}
+
+/* Dashboard homologacao: retorno invertido e cards operacionais essenciais. */
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-back-button,
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .top-action-group > button.dashboard-back-button {
+  background: #fff !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  border: 0 !important;
+  color: #dc2626 !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-back-button .app-back-icon {
+  color: #dc2626 !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-back-button .app-back-icon path {
+  fill: none !important;
+  stroke: #dc2626 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .operations-dashboard-shell {
+  padding-top: 24px !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-grid {
+  width: min(100%, 1400px) !important;
+  margin: 0 auto !important;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card {
+  display: flex !important;
+  min-height: 112px !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  padding: 18px 20px !important;
+  border-left: 5px solid var(--c, #64748b) !important;
+  overflow: hidden !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card h3 {
+  margin: 0 !important;
+  color: #172033 !important;
+  font: 900 1.05rem/1 'PT Sans Narrow', Arial, sans-serif !important;
+  text-transform: uppercase !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card > strong {
+  color: var(--c, #334155) !important;
+  font: 700 2rem/1 'Fjalla One', 'Oswald', sans-serif !important;
+}
+
+@media (max-width: 768px) {
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .operations-dashboard-shell {
+    padding: 14px 10px 24px !important;
+  }
+
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card {
+    min-height: 86px !important;
+    padding: 13px !important;
+  }
+}
+
+/* Homologacao: correspondencia final e inalteravel entre icones do menu e barras. */
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-produtos { background:linear-gradient(90deg,#db2777,#9d174d) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-kit_lampada { background:linear-gradient(90deg,#ca8a04,#a16207) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-pick,
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen > .operational-top-bar.ds-header-pick { background:linear-gradient(90deg,#2563eb,#1d4ed8) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-pack,
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen > .operational-top-bar.ds-header-pack { background:linear-gradient(90deg,#0891b2,#0e7490) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-movimentos { background:linear-gradient(90deg,#4f46e5,#3730a3) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-inventario,
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen > .ds-header-inventario { background:linear-gradient(90deg,#f97316,#c2410c) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-dashboard { background:linear-gradient(90deg,#dc2626,#991b1b) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-nf { background:linear-gradient(90deg,#8b5cf6,#7c3aed) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-financeiro { background:linear-gradient(90deg,#059669,#047857) !important; }
+html.app-environment-homologation body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > .module-top-bar.mod-topbar-compras { background:linear-gradient(90deg,#e11d48,#be123c) !important; }
+
+/* Menu principal: aro discreto e uniforme ao redor de todos os icones de modulo. */
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen .menu-card .menu-icon-3d {
+  border:1px solid rgba(148,163,184,.24) !important;
+  border-radius:50% !important;
+  background:rgba(255,255,255,.18) !important;
+  box-shadow:0 0 0 6px rgba(148,163,184,.10),0 8px 18px rgba(15,23,42,.12) !important;
+}
+
+html[data-theme="dark"] body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen .menu-card .menu-icon-3d {
+  border-color:rgba(255,255,255,.16) !important;
+  background:rgba(255,255,255,.06) !important;
+  box-shadow:0 0 0 6px rgba(255,255,255,.055),0 8px 18px rgba(0,0,0,.24) !important;
+}
+
+/* Separacao Pick Flex: metadados da direita sem caixas e com a tipografia do titulo. */
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen.pick-flex-screen .pick-header-meta {
+  gap:18px !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen.pick-flex-screen .pick-header-meta > span {
+  display:flex !important;
+  align-items:center !important;
+  min-width:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen.pick-flex-screen .pick-header-meta strong {
+  max-width:190px !important;
+  margin:0 !important;
+  color:#fff !important;
+  font-family:'PT Sans Narrow','Arial Narrow',Arial,sans-serif !important;
+  font-size:clamp(.7rem,.9vw,.86rem) !important;
+  font-weight:900 !important;
+  letter-spacing:0 !important;
+  line-height:1 !important;
+  text-transform:uppercase !important;
+}
+
+@media (max-width:768px) {
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen.pick-flex-screen .pick-header-meta { gap:10px !important; }
+  html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen.pick-flex-screen .pick-header-meta strong {
+    max-width:120px !important;
+    font-size:clamp(.58rem,1.7vw,.7rem) !important;
+  }
+}
+
+/* Dashboard: icones oficiais compactos, participacao por canal e total no topo. */
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total {
+  position:absolute !important;
+  top:50% !important;
+  right:18px !important;
+  z-index:3 !important;
+  display:flex !important;
+  align-items:baseline !important;
+  gap:7px !important;
+  margin:0 !important;
+  padding:0 !important;
+  transform:translateY(-50%) !important;
+  color:#fff !important;
+  background:transparent !important;
+  border:0 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total span,
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong {
+  color:#fff !important;
+  font-family:'PT Sans Narrow','Arial Narrow',Arial,sans-serif !important;
+  font-weight:900 !important;
+  line-height:1 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total span { font-size:.72rem !important; }
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong { font-size:1.25rem !important; }
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card {
+  position:relative !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:11px !important;
+  padding:24px 18px 18px !important;
+  border:0 !important;
+  border-left:0 !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-icon {
+  width:38px !important;
+  height:38px !important;
+  padding:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-icon svg {
+  display:block !important;
+  width:38px !important;
+  height:38px !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-quantity {
+  flex:0 0 auto !important;
+  margin:0 !important;
+  color:var(--c,#334155) !important;
+  font:700 1.75rem/1 'Fjalla One','Oswald',sans-serif !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card h3 {
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  margin:0 !important;
+  text-align:left !important;
+}
+
+html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-percentage {
+  position:absolute !important;
+  top:10px !important;
+  right:14px !important;
+  z-index:2 !important;
+  color:var(--c,#64748b) !important;
+  font:900 .68rem/1 'PT Sans Narrow','Arial Narrow',Arial,sans-serif !important;
+  white-space:nowrap !important;
+}
+
+@media (max-width:768px) {
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total { right:10px !important; gap:5px !important; }
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total span { font-size:.62rem !important; }
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong { font-size:1.05rem !important; }
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card { padding:22px 11px 14px !important; gap:7px !important; }
+  html.app-environment-homologation body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-percentage { top:8px !important; right:9px !important; }
+}
+
+/* Producao: componentes aprovados na homologacao. */
+html {
+  --app-header-height:60px;
+  --app-back-size:42px;
+  --app-header-title-size:25px;
+}
+
+html body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > :is(.module-top-bar,.operational-top-bar).ds-app-header,
+html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .module-top-bar {
+  height:var(--app-header-height) !important;
+  min-height:var(--app-header-height) !important;
+  max-height:var(--app-header-height) !important;
+}
+
+html body:not(.login-active) #app > :is(.dashboard-screen,.product-submenu-screen) > :is(.module-top-bar,.operational-top-bar,.ds-app-header) :is(.top-bar-label,.inventory-module-heading h1) {
+  font-size:var(--app-header-title-size) !important;
+  letter-spacing:3px !important;
+}
+
+html body:not(.login-active) #app button.back-button-standard {
+  width:var(--app-back-size) !important;
+  min-width:var(--app-back-size) !important;
+  max-width:var(--app-back-size) !important;
+  height:var(--app-back-size) !important;
+  min-height:var(--app-back-size) !important;
+  max-height:var(--app-back-size) !important;
+  background:#fff !important;
+  background-color:#fff !important;
+  background-image:none !important;
+  border-color:#fff !important;
+  color:var(--homolog-header-color,#b91c1c) !important;
+  filter:none !important;
+  opacity:1 !important;
+}
+
+html body:not(.login-active) #app button.back-button-standard .app-back-icon {
+  width:27px !important;
+  height:27px !important;
+  color:inherit !important;
+  filter:none !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .operations-dashboard-shell {
+  padding-top:24px !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-grid {
+  width:min(100%,1400px) !important;
+  margin:0 auto !important;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr)) !important;
+  gap:12px !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total {
+  position:absolute !important;
+  top:50% !important;
+  right:18px !important;
+  z-index:3 !important;
+  display:flex !important;
+  align-items:baseline !important;
+  gap:7px !important;
+  padding:0 !important;
+  transform:translateY(-50%) !important;
+  color:#fff !important;
+  background:transparent !important;
+  border:0 !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total :is(span,strong) {
+  color:#fff !important;
+  font-family:'PT Sans Narrow','Arial Narrow',Arial,sans-serif !important;
+  font-weight:900 !important;
+  line-height:1 !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total span { font-size:.72rem !important; }
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong { font-size:1.25rem !important; }
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card {
+  position:relative !important;
+  display:flex !important;
+  min-height:112px !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:11px !important;
+  padding:24px 18px 18px !important;
+  border:0 !important;
+  overflow:hidden !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-icon,
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-icon svg {
+  display:block !important;
+  width:38px !important;
+  height:38px !important;
+  padding:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-quantity {
+  flex:0 0 auto !important;
+  margin:0 !important;
+  color:var(--c,#334155) !important;
+  font:700 1.75rem/1 'Fjalla One','Oswald',sans-serif !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card h3 {
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  margin:0 !important;
+  color:#172033 !important;
+  font:900 1.05rem/1 'PT Sans Narrow',Arial,sans-serif !important;
+  text-align:left !important;
+  text-transform:uppercase !important;
+}
+
+html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-percentage {
+  position:absolute !important;
+  top:10px !important;
+  right:14px !important;
+  z-index:2 !important;
+  color:var(--c,#64748b) !important;
+  font:900 .68rem/1 'PT Sans Narrow','Arial Narrow',Arial,sans-serif !important;
+  white-space:nowrap !important;
+}
+
+@media (max-width:768px) {
+  html { --app-header-title-size:20px; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .operations-dashboard-shell { padding:14px 10px 24px !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-card { min-height:86px !important;padding:22px 11px 14px !important;gap:7px !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-channel-percentage { top:8px !important;right:9px !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total { right:10px !important;gap:5px !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total span { font-size:.62rem !important; }
+  html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-top-total strong { font-size:1.05rem !important; }
 }

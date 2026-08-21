@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v262';
+const CACHE_NAME = 'dy-autoparts-v264';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -12,6 +12,17 @@ const ASSETS_TO_CACHE = [
   '/timeUtils.js',
   '/src/index.css',
   '/src/purchasePlanning.css',
+  '/assets/fontes/FjallaOne-Regular.ttf',
+  '/assets/fontes/Oswald-Regular.ttf',
+  '/assets/fontes/Oswald-Medium.ttf',
+  '/assets/fontes/Oswald-SemiBold.ttf',
+  '/assets/fontes/Oswald-Bold.ttf',
+  '/assets/fontes/PTSansNarrow-Regular.ttf',
+  '/assets/fontes/PTSansNarrow-Bold.ttf',
+  '/assets/fontes/Jost-VariableFont_wght.ttf',
+  '/assets/fontes/BebasNeue-Regular.ttf',
+  '/assets/fontes/RobotoCondensed-VariableFont_wght.ttf',
+  '/assets/fontes/RobotoMono-VariableFont_wght.ttf',
   '/assets/images/login-bg-desktop-claro.webp',
   '/assets/images/login-bg-desktop-escuro.webp',
   '/assets/images/login-bg-mobile-claro.webp',

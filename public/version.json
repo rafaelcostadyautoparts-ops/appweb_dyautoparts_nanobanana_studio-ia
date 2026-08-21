@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.94",
-    "build":  "2026.08.20.02",
-    "commit":  "padroniza-retorno-global",
-    "deployDate":  "2026-08-20T12:30:00-03:00"
+    "version":  "2.1.95",
+    "build":  "2026.08.20.03",
+    "commit":  "publica-ui-operacional-dashboard",
+    "deployDate":  "2026-08-20T23:31:03-03:00"
 }
