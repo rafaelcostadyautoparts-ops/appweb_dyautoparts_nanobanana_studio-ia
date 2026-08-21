@@ -73137,3 +73137,33 @@ html body:not(.login-active) #app > .operations-dashboard-screen .dashboard-chan
   flex-basis: 14px !important;
   box-shadow: 0 0 0 1px rgba(15, 23, 42, .08) !important;
 }
+
+/* Barra superior: centraliza o retorno na faixa lateral sem alterar seu tamanho. */
+@media (min-width: 769px) {
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .top-action-group,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .top-action-group,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .top-action-group {
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    height: var(--app-header-height) !important;
+    min-height: var(--app-header-height) !important;
+    max-height: var(--app-header-height) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) > .top-action-group .fab-voltar,
+  html body:not(.login-active) #app > .dashboard-screen.picking-screen > .top-action-group .fab-voltar,
+  html body:not(.login-active) #app > .dashboard-screen.pack-screen > .top-action-group .fab-voltar {
+    position: static !important;
+    margin: 0 !important;
