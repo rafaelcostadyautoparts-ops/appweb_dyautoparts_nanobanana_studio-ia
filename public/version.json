@@ -1,6 +1,6 @@
 {
-    "version":  "2.1.95",
-    "build":  "2026.08.20.03",
-    "commit":  "publica-ui-operacional-dashboard",
-    "deployDate":  "2026-08-20T23:31:03-03:00"
+    "version":  "2.1.96",
+    "build":  "2026.08.20.04",
+    "commit":  "corrige-topos-e-modos-dashboard",
+    "deployDate":  "2026-08-20T23:49:26-03:00"
 }

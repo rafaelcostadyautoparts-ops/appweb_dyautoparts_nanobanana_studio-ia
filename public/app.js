@@ -3692,11 +3692,18 @@ async function renderAlerts() {
  };
 
  const channelTotals = new Map();
- (appData.separacao || [])
+ const todayFinalizedSessions = (appData.separacao || [])
  .filter(isFinalizedSeparationForHistory)
- .filter(session => isDateTodayBR(getSeparationFinishedAt(session)))
- .forEach(session => {
+ .filter(session => isDateTodayBR(getSeparationFinishedAt(session)));
+ const modeTotals = {
+ fast: { label: 'RÁPIDO', separations: 0, packages: 0 },
+ standard: { label: 'PADRÃO', separations: 0, packages: 0 }
+ };
+ todayFinalizedSessions.forEach(session => {
  const packageCount = getPickPackageCountFrom(session);
+ const mode = isPickingFastModeSource(session) ? modeTotals.fast : modeTotals.standard;
+ mode.separations += 1;
+ mode.packages += packageCount;
  if (packageCount <= 0) return;
  const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
  const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
@@ -3712,6 +3719,14 @@ async function renderAlerts() {
  ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
  ${getModuleSidebarHTML('dashboard', '', dashboardTotalHTML)}
  <main class="container operations-dashboard-shell">
+ <section class="dashboard-mode-summary" aria-label="Separações finalizadas por modo">
+ ${[modeTotals.fast, modeTotals.standard].map(mode => `
+ <article class="dashboard-mode-card mode-${mode === modeTotals.fast ? 'fast' : 'standard'}">
+ <span>${escapeKitAttribute(mode.label)}</span>
+ <strong>${mode.packages}</strong>
+ <small>${mode.packages === 1 ? 'pacote' : 'pacotes'} · ${mode.separations} ${mode.separations === 1 ? 'separação' : 'separações'}</small>
+ </article>`).join('')}
+ </section>
  ${channels.length ? `<section class="dashboard-channel-grid">${channels.map(channel => `
  <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
  <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
