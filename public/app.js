@@ -16155,6 +16155,7 @@ let scanSuccessGlowTimeout = null;
 const PICK_STATUS_DRAFT = 'em_separacao';
 const PICK_STATUS_READY_FOR_PACK = 'aberta';
 const PICK_STATUS_FINISHED = 'finalizada';
+const LOOSE_OPERATIONAL_PRODUCT_ID = 'DY-000.000';
 const PICK_FAST_OBSERVATION = 'SAIDA_RAPIDA AUTOMATICA';
 const PICK_MANUAL_OBSERVATION = 'SEPARACAO MANUAL';
 const PICK_PACKAGE_TOTALS_STORAGE_KEY = 'dyPickPackageTotalsBySession';
@@ -16491,7 +16492,7 @@ function getPickGroupedUnits(items = currentSessionItems) {
 }
 function countDifferentPickProducts(items = currentSessionItems) {
  const uniqueProducts = new Set((items || [])
- .map(item => getPickingProductId(item) || normalizePickCode(item?.ean || item?.codigo || item?.descricao || ''))
+ .map(item => getPickSelectionKey(item) || normalizePickCode(item?.ean || item?.codigo || item?.descricao || ''))
  .filter(Boolean));
  return uniqueProducts.size || (items || []).length;
 }
@@ -16806,7 +16807,11 @@ async function cancelPickGrouping() {
 }
 
 function getPickSelectionKey(item = {}) {
- return String(getPickingProductId(item) || item.ean || item.codigo || '');
+ return String(item?.item_avulso_id || getPickingProductId(item) || item.ean || item.codigo || '');
+}
+
+function isLooseOperationalItem(item = {}) {
+ return getPickingProductId(item) === LOOSE_OPERATIONAL_PRODUCT_ID || item?.item_avulso === true;
 }
 
 function getPickKitIds(item = {}) {
@@ -17475,7 +17480,10 @@ function buildPickingItemPayload(item) {
  ean: isUsableProductScanCode(item?.ean) ? String(item.ean).trim() : '',
  descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
  qtd_solicitada: qty,
- qtd_separada: qty
+ qtd_separada: qty,
+ item_avulso: isLooseOperationalItem(item),
+ item_avulso_id: item?.item_avulso_id || null,
+ motivo_avulso: item?.motivo_avulso || null
  };
 }
 
@@ -17593,7 +17601,42 @@ function triggerScanSuccessGlow() {
 }
 
 function getPickItemTitle(item) {
+ if (isLooseOperationalItem(item)) return item?.descricao || item?.descricao_base || item?.descricao_completa || 'ITEM AVULSO';
  return item?.descricao_completa || item?.descricao_base || item?.descricao || item?.col_aa || 'PRODUTO';
+}
+
+async function promptLooseOperationalDetails(defaults = {}) {
+ const descriptionResult = await showAppPrompt({
+ title: 'Identificar item avulso',
+ message: 'Informe exatamente qual produto ou componente sera enviado.',
+ label: 'Produto ou componente',
+ defaultValue: defaults.descricao || '',
+ placeholder: 'Ex.: modulo do sensor de re',
+ confirmLabel: 'Continuar',
+ cancelLabel: 'Cancelar'
+ });
+ if (!descriptionResult?.confirmed) return null;
+ const descricao = String(descriptionResult.value || '').trim();
+ if (!descricao) {
+ showToast('Informe o produto ou componente.', 'warning');
+ return null;
+ }
+ const reasonResult = await showAppPrompt({
+ title: 'Motivo do item avulso',
+ message: descricao,
+ label: 'Motivo',
+ defaultValue: defaults.motivo || '',
+ placeholder: 'Ex.: envio de peca de reposicao em garantia',
+ confirmLabel: 'Adicionar',
+ cancelLabel: 'Cancelar'
+ });
+ if (!reasonResult?.confirmed) return null;
+ const motivo = String(reasonResult.value || '').trim();
+ if (!motivo) {
+ showToast('Informe o motivo do envio.', 'warning');
+ return null;
+ }
+ return { descricao, motivo };
 }
 
 function getPickItemMetaHTML(item) {
@@ -19186,7 +19229,7 @@ async function addPickItem(scannedEan = null) {
  return;
  }
 
- const product = await findProductForPicking(ean);
+ let product = await findProductForPicking(ean);
 
  if (product) {
  const productId = getPickingProductId(product);
@@ -19199,9 +19242,22 @@ async function addPickItem(scannedEan = null) {
  return;
  }
 
- const allowNegative = isSaidaEstoqueZeroPermitida();
- const stock = getPickAvailableStock(productId);
- const existingItemForQty = currentSessionItems.find(item => getPickingProductId(item) === productId);
+ const looseItem = productId === LOOSE_OPERATIONAL_PRODUCT_ID;
+ if (looseItem) {
+ const details = await promptLooseOperationalDetails();
+ if (!details) {
+ if (input) input.value = '';
+ restoreScanFieldFocus('pick', 80);
+ return;
+ }
+ product = { ...product, id_interno: LOOSE_OPERATIONAL_PRODUCT_ID, ean: '',
+ descricao: details.descricao, descricao_base: details.descricao,
+ motivo_avulso: details.motivo, item_avulso: true,
+ item_avulso_id: `AVL-${generateExecutionId()}` };
+ }
+ const allowNegative = looseItem || isSaidaEstoqueZeroPermitida();
+ const stock = looseItem ? Number.POSITIVE_INFINITY : getPickAvailableStock(productId);
+ const existingItemForQty = looseItem ? null : currentSessionItems.find(item => getPickingProductId(item) === productId);
  const currentDraftQty = existingItemForQty ? existingItemForQty.qty : 0;
  const currentRoundBeforeScan = getPickItemRoundState(existingItemForQty || {});
  let roundCompletedNow = false;
@@ -19274,7 +19330,7 @@ async function addPickItem(scannedEan = null) {
  descricao: getPickItemTitle(product)
  });
 
- const existingIndex = currentSessionItems.findIndex(item => getPickingProductId(item) === productId);
+ const existingIndex = currentSessionItems.findIndex(item => getPickSelectionKey(item) === getPickSelectionKey(product));
  const wasAlreadySeparated = existingIndex >= 0;
  const previousTotalBeforeScan = wasAlreadySeparated ? Number(currentSessionItems[existingIndex]?.qty || 0) : 0;
  const resumeScanMs = Date.now();
@@ -19320,7 +19376,7 @@ async function addPickItem(scannedEan = null) {
  });
  }
  if (activePickKitId) activePickKitScanCount += 1;
- lastScannedPickItemKey = productId;
+ lastScannedPickItemKey = getPickSelectionKey(product);
  lastPickScanAction = 'add';
  expandedPickItemKey = null;
  clearPickSearchSuggestions();
@@ -19935,12 +19991,15 @@ function adjustPickRow(index, delta, sessionId, channelId, channelLabel, channel
 
 function buildFastPickingFinalRows(items, sessionId) {
  const grouped = (items || []).reduce((acc, item) => {
- const key = getPickingProductId(item);
+ const key = getPickSelectionKey(item);
  if (!key) return acc;
  if (!acc[key]) {
  acc[key] = {
  id_interno: item.id_interno || item.col_a || item.col_A || key,
  ean: item.ean || '',
+ item_avulso: isLooseOperationalItem(item),
+ item_avulso_id: item.item_avulso_id || null,
+ motivo_avulso: item.motivo_avulso || null,
  descricao: getPickItemTitle(item),
  qtd_separada: 0,
  qtd_conferida: 0,
@@ -20733,7 +20792,7 @@ async function renderPackSessionDetails(sessionId) {
  
  // Texto validado em UTF-8.
  const groupedExpected = expectedItems.reduce((acc, item) => {
- const key = getPickingProductId(item);
+ const key = getPickSelectionKey(item);
  if (!key) return acc;
  if (!acc[key]) {
  const product = getProductForConferenceRow(item);
@@ -20759,7 +20818,7 @@ async function renderPackSessionDetails(sessionId) {
  // Texto validado em UTF-8.
  if (session && session.conferenceRows) {
  session.conferenceRows.forEach(row => {
- const key = getPickingProductId(row) || row.ean || row.id_interno;
+ const key = getPickSelectionKey(row);
  if (groupedExpected[key]) {
  groupedExpected[key].qtd_conferida = row.qtd_conferida;
  groupedExpected[key].scanned_in_conference = Boolean(row.scanned_in_conference || Number(row.qtd_conferida || 0) > 0);
@@ -21334,7 +21393,10 @@ async function addPackScan(scannedEan = null) {
   return;
   }
 
-  let row = currentPackSession.conferenceRows.find(r => pickItemMatchesCode(r, ean));
+  let row = ean === LOOSE_OPERATIONAL_PRODUCT_ID
+  ? currentPackSession.conferenceRows.find(r => isLooseOperationalItem(r) && Number(r.qtd_conferida || 0) < Number(r.qtd_separada || 0))
+  || currentPackSession.conferenceRows.find(r => isLooseOperationalItem(r))
+  : currentPackSession.conferenceRows.find(r => pickItemMatchesCode(r, ean));
   let product = null;
   if (!row) {
   product = await findProductForPicking(ean);
@@ -21345,6 +21407,20 @@ async function addPackScan(scannedEan = null) {
   }
 
   if (row) {
+  if (isLooseOperationalItem(row) && !conferenceRemovalModeActive) {
+  const details = await promptLooseOperationalDetails({
+  descricao: row.descricao || '',
+  motivo: row.motivo_avulso || ''
+  });
+  if (!details) {
+  if (input) input.value = '';
+  restoreScanFieldFocus('pack', 80);
+  return;
+  }
+  row.descricao = details.descricao;
+  row.motivo_avulso = details.motivo;
+  row.item_avulso = true;
+  }
   if (conferenceRemovalModeActive) {
   if (Number(row.qtd_conferida || 0) <= 0) {
   playBeep('error');

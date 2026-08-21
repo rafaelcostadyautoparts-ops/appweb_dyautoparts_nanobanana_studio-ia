@@ -1323,29 +1323,40 @@ const DataClient = (function () {
                 descricao: item.descricao || '',
                 qtd_solicitada: Number(item.qtd_solicitada || item.qtd_separada || 1),
                 qtd_separada: Number(item.qtd_separada || item.qtd_solicitada || 1),
+                item_avulso: item.item_avulso === true,
+                item_avulso_id: item.item_avulso_id || null,
+                motivo_avulso: item.motivo_avulso || null,
                 atualizado_em: now
             };
 
             console.log('[SEP] salvando item payload', itemRow);
 
-            const { data: existing, error: existingError } = await client
+            let existingQuery = client
                 .from('separacao_itens')
                 .select('id')
                 .eq('separacao_id', session.separacao_id)
-                .eq('id_interno', itemRow.id_interno)
-                .limit(1);
+                .eq('id_interno', itemRow.id_interno);
+            if (itemRow.item_avulso_id) existingQuery = existingQuery.eq('item_avulso_id', itemRow.item_avulso_id);
+            let { data: existing, error: existingError } = await existingQuery.limit(1);
 
             if (existingError) {
                 logSepSupabaseError('erro ao salvar item', existingError, itemRow);
                 throw existingError;
+            }
+            if (itemRow.item_avulso_id && (!existing || existing.length === 0)) {
+                const placeholder = await client.from('separacao_itens').select('id')
+                    .eq('separacao_id', session.separacao_id)
+                    .eq('id_interno', itemRow.id_interno)
+                    .is('item_avulso_id', null).limit(1);
+                if (placeholder.error) throw placeholder.error;
+                existing = placeholder.data || [];
             }
 
             if (existing && existing.length > 0) {
                 const { data, error } = await client
                     .from('separacao_itens')
                     .update(itemRow)
-                    .eq('separacao_id', session.separacao_id)
-                    .eq('id_interno', itemRow.id_interno)
+                    .eq('id', existing[0].id)
                     .select();
 
                 if (error) {
@@ -1433,6 +1444,9 @@ const DataClient = (function () {
                 descricao: item.descricao || '',
                 qtd_solicitada: Number(item.qtd_solicitada || item.qtd_separada || 1),
                 qtd_separada: Number(item.qtd_separada || item.qtd_solicitada || 1),
+                item_avulso: item.item_avulso === true,
+                item_avulso_id: item.item_avulso_id || null,
+                motivo_avulso: item.motivo_avulso || null,
                 atualizado_em: now
             }));
 
