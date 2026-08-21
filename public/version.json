@@ -1,6 +1,6 @@
 {
-  "version": "2.1.98",
-  "build": "2026.08.21.01",
-  "commit": "fix-id-interno-sem-gtin",
-  "deployDate": "2026-08-21T09:48:01-03:00"
+  "version": "2.1.99",
+  "build": "2026.08.21.02",
+  "commit": "fix-conferencia-prioriza-id-interno",
+  "deployDate": "2026-08-21T10:02:25-03:00"
 }

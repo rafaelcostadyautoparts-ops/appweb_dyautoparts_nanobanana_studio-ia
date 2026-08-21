@@ -20951,10 +20951,20 @@ function pauseConferenceSession() {
 }
 
 function getProductForConferenceRow(row) {
- return (appData.products || []).find(p =>
- (row.ean && String(p.ean || '') === String(row.ean)) ||
- (row.id_interno && String(p.id_interno || p.col_A || p.col_a || '') === String(row.id_interno))
- ) || {};
+ const products = appData.products || [];
+ const rowId = getPickingProductId(row);
+ if (rowId) {
+ const productById = products.find(product => getPickingProductId(product) === rowId);
+ if (productById) return productById;
+ }
+
+ const rowEan = isUsableProductScanCode(row?.ean) ? normalizePickCode(row.ean) : '';
+ if (rowEan) {
+ const productByEan = products.find(product => isUsableProductScanCode(product?.ean) && normalizePickCode(product.ean) === rowEan);
+ if (productByEan) return productByEan;
+ }
+
+ return {};
 }
 
 function getConferenceRowState(row) {
