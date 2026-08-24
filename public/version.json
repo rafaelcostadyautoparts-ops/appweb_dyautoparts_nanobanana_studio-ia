@@ -1,6 +1,6 @@
 {
-  "version": "2.2.5",
-  "build": "2026.08.24.01",
-  "commit": "producao-servicos-rapidos-operacionais",
+  "version": "2.2.6",
+  "build": "2026.08.24.02",
+  "commit": "preserva-data-criacao-separacao",
   "deployDate": "2026-08-24T14:45:00-03:00"
 }

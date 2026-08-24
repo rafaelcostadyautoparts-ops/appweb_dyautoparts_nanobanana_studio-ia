@@ -5634,7 +5634,7 @@ function buildMovHistoryFromSeparacoes(separacoes = [], separacaoItens = [], mov
  const items = getMovHistorySeparationItems(sessionId, separacaoItens);
  const channel = session.canal_nome || session.canal || session.col_c || '';
  const status = session.status || '-';
- const date = session.finalizado_em || session.finalizada_em || session.data_finalizacao || session.atualizado_em || session.criado_em || session.data_separacao || session.col_b;
+ const date = getSeparationCreatedAt(session);
  const user = session.criado_por || session.usuario || session.operador || session.col_e || '-';
  const packageCount = getPickPackageCountFrom(session);
  const quantityTotal = items.reduce((sum, item) => sum + parseDecimal(item.qtd_separada ?? item.quantidade ?? item.qty ?? item.qtd_solicitada), 0)
@@ -22727,7 +22727,7 @@ function getRomaneioTodayMetrics(channelNames, withdrawalType = channelNames) {
  const typeTarget = normalizeOperationalLabel(Array.isArray(withdrawalType) ? withdrawalType.join(' ') : withdrawalType);
  const sessions = (appData.separacao || []).filter(session => {
  const channel = normalizeOperationalLabel(session.canal_nome || session.canal || session.col_c || '');
- const rawDate = String(session.data_separacao || session.criado_em || session.finalizado_em || session.col_b || '');
+ const rawDate = String(getSeparationCreatedAt(session));
  const matchesDate = rawDate.includes(todayBr) || rawDate.includes(todayIso);
  const knownChannels = ['FLEX', 'CORREIOS', 'TURBO', 'MOTOBOY', 'TRANSPORTADORA'];
  const matchesChannel = typeTarget === 'OUTROS'
@@ -33654,7 +33654,7 @@ function openQuickActionSeparationMenu(event) {
  const panel = document.createElement('section');
  panel.id = 'quick-separation-submenu';
  panel.className = 'quick-separation-submenu';
- panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>SEPARAÇÕES DE HOJE</strong><small>Finalizadas e criadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
  menu.appendChild(panel);
 }
 
@@ -33686,6 +33686,17 @@ function getSeparationFinishedAt(session = {}) {
  return conference?.conferido_em || conference?.atualizado_em || session.finalizado_em || session.atualizado_em || session.criado_em || '';
 }
 
+function getSeparationCreatedAt(session = {}) {
+ const directDate = session.criado_em || session.data_separacao || session.col_b || '';
+ if (directDate) return directDate;
+ const sessionId = getPackSeparationSessionId(session);
+ const match = String(sessionId || '').toUpperCase().match(/^SEP-[A-Z0-9]+-(\d{2})(\d{2})-\d+$/);
+ if (!match) return '';
+ const referenceDate = session.finalizado_em || session.atualizado_em || new Date();
+ const referenceYear = new Date(referenceDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).slice(0, 4);
+ return `${referenceYear}-${match[2]}-${match[1]}`;
+}
+
 function isDateTodayBR(value) {
  if (!value) return false;
  try { return new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
@@ -33697,8 +33708,9 @@ function getFinalizedSeparationViewModel(session) {
  const conference = getSeparationConference(sessionId);
  const channel = getPickDraftChannelInfo(session);
  const finishedAt = getSeparationFinishedAt(session);
+ const createdAt = getSeparationCreatedAt(session);
  const mode = isPickingFastModeSource(session) ? 'Rápido' : 'Normal';
- return { session, sessionId, conference, channel, finishedAt, mode, products: getSeparationProductTotal(session), items: getSeparationItemTotal(session), packages: getPickPackageCountFrom(session), operator: session.criado_por || '-', conferenceOperator: conference?.conferido_por || '', searchText: normalizeOperationalLabel([sessionId, channel.label, session.criado_por, mode].join(' ')) };
+ return { session, sessionId, conference, channel, createdAt, finishedAt, mode, products: getSeparationProductTotal(session), items: getSeparationItemTotal(session), packages: getPickPackageCountFrom(session), operator: session.criado_por || '-', conferenceOperator: conference?.conferido_por || '', searchText: normalizeOperationalLabel([sessionId, channel.label, session.criado_por, mode].join(' ')) };
 }
 
 function applyFinalizedSeparationFilters() {
@@ -33724,9 +33736,9 @@ async function renderFinalizedSeparationsScreen(scope = 'today') {
   if (separationData) { appData.separacao = separationData.separacao || []; appData.separacao_itens = separationData.separacao_itens || []; }
   if (conferenceData) { appData.conferencia = conferenceData.conferencia || []; appData.conferencia_itens = conferenceData.conferencia_itens || []; }
  } catch (error) { console.warn('[SEP HIST] Falha ao atualizar:', error); }
- const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.finishedAt)).sort((a,b) => String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
+ const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.createdAt)).sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
  const channels = [...new Set(rows.map(row => row.channel.label).filter(Boolean))].sort();
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">CANCELAR ITEM</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS · CRIADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">CANCELAR ITEM</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>Criada ${escapeKitAttribute(formatPackSeparationDate(row.createdAt))} · Finalizada ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
 }
 
 function closeCancelSeparationModal() {
@@ -33741,7 +33753,7 @@ function openGlobalFinalizedItemCancellation(scope = 'today') {
  finalizedCancellationLookup = { scope: safeScope, code: '', candidates: [], selected: null };
  const modal = document.createElement('div');
  modal.id = 'cancel-separation-modal'; modal.className = 'cancel-separation-modal global-item-cancel-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>${safeScope === 'quick' ? 'CANCELAMENTO RÁPIDO' : 'LOCALIZAR ITEM FINALIZADO'}</h2><p>Leia o produto e escolha o canal correto · somente operações de hoje</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
+ modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>${safeScope === 'quick' ? 'CANCELAMENTO RÁPIDO' : 'LOCALIZAR ITEM FINALIZADO'}</h2><p>Leia o produto e escolha o canal correto · somente separações criadas hoje</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
  document.body.appendChild(modal);
  const input=document.getElementById('global-cancel-code'); input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchFinalizedItemCancellation();}}); setTimeout(()=>input?.focus(),50);
 }
@@ -33752,7 +33764,7 @@ async function searchFinalizedItemCancellation() {
  const candidates=[];
  const eligibleSessions = (appData.separacao || []).filter(isFinalizedSeparationForHistory).filter(session => {
   if (finalizedCancellationLookup.scope === 'all') return true;
-  return isDateTodayBR(getFinalizedSeparationViewModel(session).finishedAt);
+  return isDateTodayBR(getFinalizedSeparationViewModel(session).createdAt);
  });
  for(const session of eligibleSessions){
   const sessionId=getPackSeparationSessionId(session); const item=getSeparationItemsForSession(session).find(row=>String(row.ean||'')===code||String(row.id_interno||'')===code); if(!item)continue;
@@ -33768,7 +33780,7 @@ async function searchFinalizedItemCancellation() {
 
 function renderFinalizedCancellationCandidates(){
  const box=document.getElementById('global-cancel-results'); const rows=finalizedCancellationLookup.candidates||[]; if(!box)return;
- box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação finalizada hoje possui unidade disponível deste produto.</p>';
+ box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação criada hoje e já finalizada possui unidade disponível deste produto.</p>';
  document.getElementById('global-cancel-confirm')?.classList.add('hidden');
 }
 function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-submit')?.focus();}
