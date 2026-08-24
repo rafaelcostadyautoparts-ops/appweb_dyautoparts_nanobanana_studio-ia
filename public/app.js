@@ -2902,7 +2902,7 @@ function getStandardModuleCardsHTML(items = []) {
  <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
  <span class="standard-module-card-copy">
  <strong>${item.label}</strong>
- <small>${item.description || ''}</small>
+ ${item.description ? `<small>${item.description}</small>` : ''}
  </span>
  </button>
  `).join('')}
@@ -3879,7 +3879,7 @@ const menu3DIcons = {
  financeiro_pagas_mes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M19 32 L28 41 L46 23" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="20" stroke="#fff" stroke-width="3" fill="none" opacity="0.35"/></svg>',
  // Texto validado em UTF-8.
  busca: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><circle cx="28" cy="28" r="8" stroke="#fff" stroke-width="3" fill="none"/><line x1="34" y1="34" x2="42" y2="42" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>',
- cadastrar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><line x1="32" y1="20" x2="32" y2="44" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line x1="20" y1="32" x2="44" y2="32" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>',
+ cadastrar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M18 25 32 18l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="M18 25v16l14 7 8-4M32 32v16" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="m39 38 8-8 3 3-8 8-4 1 1-4Z" fill="#10B981" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>',
  transferencia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M22 28 L30 20 L38 28 M30 20 V44" stroke="#fff" stroke-width="3" fill="none"/><path d="M42 36 L34 44 L26 36" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/></svg>',
  ajuste: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 22 L42 42 M22 42 L42 22" stroke="#fff" stroke-width="3"/></svg>',
  historico: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><circle cx="32" cy="32" r="12" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M32 24 V32 L38 36" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>',
@@ -12759,7 +12759,7 @@ const doPerformSearch = async () => {
  productSearchVisibleCount = PRODUCT_SEARCH_PAGE_SIZE;
  const resultsContainer = document.getElementById('search-results');
  if (resultsContainer) resultsContainer.innerHTML = renderSearchInitialStateHTML();
- updateProductSearchSummary(0, []);
+ updateProductSearchSummary(0, false);
  return;
  }
 
@@ -13027,7 +13027,7 @@ function renderSearchProductSellableLocations(product) {
 
 function renderProductSearchSummaryBar(resultCount = 0) {
  return `
- <section class="product-search-summary-bar product-search-command-bar" aria-label="Consulta de produtos">
+ <section class="product-search-summary-bar product-search-command-bar is-pristine" aria-label="Consulta de produtos">
  <div class="search-bar-wrapper product-search-command-input">
  <div class="product-search-bar">
  <span class="material-symbols-rounded search-icon">search</span>
@@ -13056,7 +13056,7 @@ function renderProductSearchSummaryBar(resultCount = 0) {
  </div>
  </div>
 
- <div class="product-summary-metric product-found-counter">
+ <div class="product-summary-metric product-found-counter" hidden>
  <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
  <span class="found-label">PRODUTOS ENCONTRADOS</span>
  </div>
@@ -13081,24 +13081,17 @@ function getSearchCardPrimaryLocation(product) {
 }
 
 function renderSearchInitialStateHTML() {
- return `
- <div id="search-initial-state" class="search-empty-state">
- <div class="empty-state-visual">
- <div class="empty-state-icon-glow"></div>
- <span class="material-symbols-rounded">search</span>
- </div>
- <div class="empty-state-content">
- <h3>Nenhum produto encontrado</h3>
- <p>Digite, escaneie ou utilize o leitor para localizar um item.</p>
- </div>
- </div>
- `;
+ return '';
 }
 
-function updateProductSearchSummary(resultCount = 0) {
+function updateProductSearchSummary(resultCount = 0, hasSearched = false) {
  const countEl = document.getElementById('product-summary-count');
+ const counter = document.querySelector('.product-found-counter');
+ const commandBar = document.querySelector('.product-search-command-bar');
 
  if (countEl) countEl.textContent = formatStockNumber(resultCount);
+ if (counter) counter.hidden = !hasSearched;
+ if (commandBar) commandBar.classList.toggle('is-pristine', !hasSearched);
 }
 
 
@@ -13111,17 +13104,16 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
  if (totalResults === 0) {
  if (query.length < 2) {
  resultsContainer.innerHTML = renderSearchInitialStateHTML();
- updateProductSearchSummary(0, []);
+ updateProductSearchSummary(0, false);
  return;
  }
  resultsContainer.innerHTML = `
  <div class="search-no-results">
  <span class="material-symbols-rounded">search_off</span>
  <h3>Nenhum produto encontrado</h3>
- <p>Digite, escaneie ou utilize o leitor para localizar um item.</p>
  </div>
  `;
- updateProductSearchSummary(0, []);
+ updateProductSearchSummary(0, true);
  return;
  }
 
@@ -13220,7 +13212,7 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
  if (shouldResetScroll) resetProductSearchScroll();
 
  updateProductSearchStatus(query);
- updateProductSearchSummary(totalResults, results);
+ updateProductSearchSummary(totalResults, true);
 }
 
 function highlightMatch(text, query) {
@@ -26609,8 +26601,8 @@ function renderProductSubMenu() {
  if (!currentUser) return renderLogin();
 
  const subItems = [
- { id: 'prod_buscar', label: 'BUSCAR PRODUTO', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, EAN, ID interno ou SKU.' },
- { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", description: navigator.onLine ? 'Criar um novo cadastro de produto com dados comerciais, imagens e atributos.' : 'Cadastro indisponivel sem internet.', disabled: !navigator.onLine }
+ { id: 'prod_buscar', label: 'BUSCAR PRODUTO', icon: 'busca', onclick: 'renderSearchScreen()' },
+ { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", disabled: !navigator.onLine }
  ];
 
  container.innerHTML = `
