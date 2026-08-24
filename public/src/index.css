@@ -73937,3 +73937,17 @@ html body:not(.login-active) #app > .dashboard-screen.product-search-screen .pro
 html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-found-counter[hidden] {
   display: none !important;
 }
+
+/* Homologacao: margens simetricas e responsivas na busca de produtos. */
+@media (min-width: 1181px) {
+  html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-center {
+    padding-left: clamp(24px, 6vw, 88px) !important;
+    padding-right: clamp(24px, 6vw, 88px) !important;
+  }
+}
+@media (max-width: 1180px) and (min-width: 769px) {
+  html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-search-center {
+    padding-left: clamp(20px, 6vw, 64px) !important;
+    padding-right: clamp(20px, 6vw, 64px) !important;
+  }
+}
