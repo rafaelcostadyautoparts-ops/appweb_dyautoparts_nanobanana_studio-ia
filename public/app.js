@@ -1884,6 +1884,11 @@ function atualizarPendentes() {
  if (el) el.innerHTML = `${operacoesPendentes}`;
  document.querySelectorAll('[data-sync-pending-count]').forEach(el => el.textContent = String(operacoesPendentes));
  document.querySelectorAll('[data-sync-pending-card]').forEach(el => el.classList.toggle('hidden', operacoesPendentes === 0));
+ document.querySelectorAll('[data-sync-pending-button]').forEach(el => {
+ el.classList.toggle('has-pending', operacoesPendentes > 0);
+ el.setAttribute('aria-label', operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao');
+ el.setAttribute('title', operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado');
+ });
 }
 
 function adicionarPendencia() {
@@ -2586,10 +2591,6 @@ function getOfflinePendingCount() {
  catch (error) { return 0; }
 }
 
-function getPendingSyncBannerHTML() {
- return `<button class="pending-sync-banner hidden" data-sync-pending-card type="button" onclick="renderPendingSyncScreen()"><span class="material-symbols-rounded">cloud_upload</span><span><strong><b data-sync-pending-count>${operacoesPendentes}</b> operacoes aguardando sincronizacao</strong><small>Toque para ver o que foi feito offline</small></span></button>`;
-}
-
 async function renderPendingSyncScreen() {
  const operations = await getQueuedOperations();
  let legacy = [];
@@ -2601,13 +2602,46 @@ async function renderPendingSyncScreen() {
  if (!groups.has(key)) groups.set(key, []);
  groups.get(key).push(operation);
  });
- const cards = Array.from(groups.entries()).map(([key, rows]) => {
+ const groupedTasks = Array.from(groups.entries()).map(([key, rows]) => {
  const details = rows.flatMap(row => row.payload?.items || row.payload?.rows || (row.payload?.item ? [row.payload.item] : []));
  const error = rows.map(row => row.lastError).find(Boolean) || '';
- return `<article class="pending-sync-task ${error ? 'has-error' : ''}"><span class="material-symbols-rounded">${error ? 'sync_problem' : 'schedule'}</span><div><strong>Separacao salva offline</strong><small>${escapeKitAttribute(key)}</small>${error ? `<em>${escapeKitAttribute(error)}</em>` : ''}</div><aside><b>${new Set(details.map(item => item.id_interno || item.ean).filter(Boolean)).size}</b> produtos | <b>${details.reduce((sum, item) => sum + Number(item.qtd_separada || item.qtd_conferida || 0), 0)}</b> itens<small>${rows.length} registros para enviar</small></aside></article>`;
- }).join('');
+ const isConference = rows.some(row => row.meta?.module === 'conferencia' || row.meta?.rpcName === 'finalizar_conferencia' || String(row.type || '').includes('conference'));
+ return { key, rows, details, error, type: isConference ? 'conference' : 'separation' };
+ });
+ const renderTaskCard = task => {
+ const productCount = new Set(task.details.map(item => item.id_interno || item.ean).filter(Boolean)).size;
+ const itemCount = task.details.reduce((sum, item) => sum + Number(item.qtd_separada || item.qtd_conferida || 0), 0);
+ return `<article class="pending-sync-task ${task.error ? 'has-error' : ''}"><header><span class="material-symbols-rounded">${task.error ? 'sync_problem' : 'schedule'}</span><div><strong>${task.type === 'conference' ? 'CONFERENCIA PENDENTE' : 'SEPARACAO PENDENTE'}</strong><small>${escapeKitAttribute(task.key)}</small></div></header><dl><div><dt>Produtos</dt><dd>${productCount}</dd></div><div><dt>Itens</dt><dd>${itemCount}</dd></div><div><dt>Registros</dt><dd>${task.rows.length}</dd></div></dl>${task.error ? '' : '<p class="pending-sync-waiting">Aguardando conexao para sincronizar</p>'}</article>`;
+ };
+ const separations = groupedTasks.filter(task => task.type === 'separation');
+ const conferences = groupedTasks.filter(task => task.type === 'conference');
+ const emptyColumn = label => `<div class="pending-sync-column-empty"><span class="material-symbols-rounded">task_alt</span><p>Nenhuma ${label.toLowerCase()} pendente.</p></div>`;
  const user = localStorage.getItem('currentUser');
- app.innerHTML = `<div class="dashboard-screen internal fade-in pending-sync-screen">${getTopBarHTML(user, 'renderMenu()')}<main class="container"><section class="pending-sync-panel"><header><span class="material-symbols-rounded">cloud_upload</span><div><h1>SINCRONIZACAO PENDENTE</h1><p>${groups.size} tarefa(s) aguardando envio neste aparelho.</p></div></header><div class="pending-sync-list">${cards || '<div class="pending-sync-empty"><strong>Tudo sincronizado</strong><p>Nao ha tarefas aguardando envio.</p></div>'}</div>${groups.size ? '<button class="pending-sync-now" onclick="processSyncQueue(\'pending_screen\').then(renderPendingSyncScreen)">SINCRONIZAR AGORA</button>' : ''}</section></main></div>`;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in pending-sync-screen">${getTopBarHTML(user, 'renderMenu()')}<main class="container pending-sync-shell"><section class="pending-sync-panel"><header class="pending-sync-heading"><div><span class="material-symbols-rounded">sync</span><span><h1>SINCRONIZACAO PENDENTE</h1><p>${groupedTasks.length} processo(s) aguardando envio neste aparelho</p></span></div><aside>${groupedTasks.length ? '<button class="pending-sync-clear" type="button" onclick="clearAllPendingSyncTasks()"><span class="material-symbols-rounded">delete_sweep</span>EXCLUIR TODAS</button>' : ''}<button class="pending-sync-now" type="button" onclick="processSyncQueue('pending_screen').then(renderPendingSyncScreen)" ${navigator.onLine && groupedTasks.length ? '' : 'disabled'}><span class="material-symbols-rounded">sync</span>SINCRONIZAR AGORA</button></aside></header><div class="pending-sync-columns"><section class="pending-sync-column separation-column"><header><span class="material-symbols-rounded">inventory_2</span><div><h2>SEPARACAO</h2><p>Operacoes realizadas no Pick</p></div><b>${separations.length}</b></header><div class="pending-sync-list">${separations.length ? separations.map(renderTaskCard).join('') : emptyColumn('Separacao')}</div></section><section class="pending-sync-column conference-column"><header><span class="material-symbols-rounded">fact_check</span><div><h2>CONFERENCIA</h2><p>Operacoes realizadas no Pack</p></div><b>${conferences.length}</b></header><div class="pending-sync-list">${conferences.length ? conferences.map(renderTaskCard).join('') : emptyColumn('Conferencia')}</div></section></div></section></main></div>`;
+ const pendingScreen = document.querySelector('.pending-sync-screen');
+ pendingScreen?.classList.add('module-screen');
+ pendingScreen?.querySelector(':scope > .top-action-group')?.insertAdjacentHTML('afterend', getModuleSidebarHTML('sync', 'SINCRONIZA\u00C7\u00C3O PENDENTE'));
+}
+
+async function clearAllPendingSyncTasks() {
+ if (!window.confirm('Excluir todas as separacoes e conferencias pendentes deste aparelho? Esta acao nao pode ser desfeita.')) return;
+ try {
+ const db = await openOperationOutboxDB();
+ await new Promise((resolve, reject) => {
+ const tx = db.transaction(OPERATION_OUTBOX_STORE, 'readwrite');
+ tx.objectStore(OPERATION_OUTBOX_STORE).clear();
+ tx.oncomplete = resolve;
+ tx.onerror = () => reject(tx.error);
+ });
+ } catch (error) {
+ console.warn('[OUTBOX] Falha ao limpar IndexedDB:', error);
+ }
+ localStorage.removeItem('operation_outbox_fallback');
+ localStorage.removeItem('pending_sync_queue');
+ operacoesPendentes = 0;
+ atualizarPendentes();
+ showToast('Pendencias offline excluidas.', 'success');
+ await renderPendingSyncScreen();
 }
 
 // Texto validado em UTF-8.
@@ -2651,6 +2685,59 @@ function updateMenuStatusUI() {
  if (pendingCount) {
  pendingCount.textContent = `${getOfflinePendingCount()} pendentes`;
  }
+
+ const connectivityIndicator = document.querySelector('.fab-connectivity-status');
+ if (connectivityIndicator) {
+ const isOnline = navigator.onLine;
+ const connectionLabel = isOnline ? 'Conexao online' : 'Sem conexao';
+ connectivityIndicator.classList.toggle('is-online', isOnline);
+ connectivityIndicator.classList.toggle('is-offline', !isOnline);
+ connectivityIndicator.setAttribute('aria-label', connectionLabel);
+ connectivityIndicator.setAttribute('title', isOnline ? 'Online' : 'Offline');
+ }
+
+ document.querySelectorAll('.homologation-offline-banner').forEach(banner => {
+ banner.classList.toggle('is-visible', !navigator.onLine);
+ banner.setAttribute('aria-hidden', navigator.onLine ? 'true' : 'false');
+ });
+}
+
+function getHomologationConnectivityIndicatorHTML() {
+ if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
+ const isOnline = navigator.onLine;
+ const stateClass = isOnline ? 'is-online' : 'is-offline';
+ const connectionLabel = isOnline ? 'Conexao online' : 'Sem conexao';
+ return `
+ <span class="fab-icon-btn fab-connectivity-status ${stateClass}" role="status" aria-live="polite" aria-label="${connectionLabel}" title="${isOnline ? 'Online' : 'Offline'}">
+ <span class="app-inline-icon" aria-hidden="true">
+ <svg viewBox="0 0 24 24" focusable="false">
+ <path class="connectivity-wave connectivity-wave-wide" d="M3.5 8.8a13.2 13.2 0 0 1 17 0"/>
+ <path class="connectivity-wave connectivity-wave-mid" d="M6.7 12.1a8.2 8.2 0 0 1 10.6 0"/>
+ <path class="connectivity-wave connectivity-wave-short" d="M9.8 15.3a3.5 3.5 0 0 1 4.4 0"/>
+ <circle class="connectivity-dot" cx="12" cy="18.2" r="1.25"/>
+ <path class="connectivity-offline-slash" d="M4.5 4.5l15 15"/>
+ </svg>
+ </span>
+ </span>`;
+}
+
+function getHomologationOfflineBannerHTML() {
+ if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
+ const isOffline = !navigator.onLine;
+ return `
+ <div class="homologation-offline-banner ${isOffline ? 'is-visible' : ''}" role="status" aria-live="polite" aria-hidden="${isOffline ? 'false' : 'true'}">
+ <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 8.8a13.2 13.2 0 0 1 17 0M6.7 12.1a8.2 8.2 0 0 1 10.6 0M9.8 15.3a3.5 3.5 0 0 1 4.4 0"/><circle cx="12" cy="18.2" r="1.25"/><path d="M4.5 4.5l15 15"/></svg>
+ <span><strong>MODO OFFLINE</strong><small>Opera&ccedil;&otilde;es ser&atilde;o sincronizadas quando a internet voltar</small></span>
+ </div>`;
+}
+
+function getHomologationSyncIndicatorHTML() {
+ if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
+ return `
+ <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="renderPendingSyncScreen()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
+ <span class="app-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7.2 18.5h10.4a4 4 0 0 0 .5-8 6.2 6.2 0 0 0-11.8-1.2 4.6 4.6 0 0 0 .9 9.2Z"/><path d="M12 16v-6m0 0-2.4 2.4M12 10l2.4 2.4"/></svg></span>
+ <b class="sync-pending-badge" data-sync-pending-count>${operacoesPendentes}</b>
+ </button>`;
 }
 
 function getInlineAppIconHTML(iconName) {
@@ -2691,6 +2778,8 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal', 
  </button>
  ` : ''}
  ${isMenu ? `
+ ${getHomologationConnectivityIndicatorHTML()}
+ ${getHomologationSyncIndicatorHTML()}
  <button class="fab-icon-btn fab-config" type="button" onclick="renderConfigSubMenu()" aria-label="Configuracoes">
  ${getInlineAppIconHTML('settings')}
  </button>
@@ -2699,6 +2788,7 @@ function getTopBarHTML(currentUser, backAction = null, screenType = 'internal', 
  </button>
  ` : ''}
  </div>
+ ${!isMenu ? getHomologationOfflineBannerHTML() : ''}
  `;
 }
 
@@ -2749,9 +2839,13 @@ const MODULE_SIDEBAR_CONFIG = {
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
  movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
  dashboard: { label: 'DASHBOARD', icon: 'dashboard', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
+ sync: { label: 'SINCRONIZACAO PENDENTE', icon: 'cloud_upload', colorFrom: '#64748B', colorTo: '#475569', shadow: '71,85,105' },
  inventario: { label: 'INVENT\u00c1RIO', icon: 'fact_check', colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
  nf: { label: 'ENTRADA NF', icon: 'receipt_long', colorFrom: '#8B5CF6', colorTo: '#7C3AED', shadow: '139,92,246' },
  pick: { label: 'SEPARA\u00c7\u00c3O (PICK)', icon: 'inventory_2', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
+ romaneio_flex: { label: 'ROMANEIO FLEX', icon: 'assignment_turned_in', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
+ romaneios: { label: 'ROMANEIOS', icon: 'assignment', colorFrom: '#64748B', colorTo: '#475569', shadow: '71,85,105' },
+ romaneio_correios: { label: 'ROMANEIO - CORREIOS', icon: 'local_shipping', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
  pack: { label: 'CONFER\u00caNCIA (PACK)', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
  compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#E11D48', colorTo: '#BE123C', shadow: '225,29,72' },
  financeiro: { label: 'FINANCEIRO', icon: 'payments', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
@@ -2804,7 +2898,7 @@ function getStandardModuleCardsHTML(items = []) {
  return `
  <div class="standard-module-card-grid">
  ${items.map(item => `
- <button type="button" class="standard-module-card" onclick="${item.onclick}">
+ <button type="button" class="standard-module-card ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
  <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
  <span class="standard-module-card-copy">
  <strong>${item.label}</strong>
@@ -3768,15 +3862,15 @@ const menuModulesConfig = [
 ];
 
 const menu3DIcons = {
- produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="18" y="22" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="28" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="33" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="38" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
+ produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
- pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M28 43 L33 49 L43 38" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+ pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
- inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="18" y="31" width="25" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="18" y="36" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><rect x="18" y="41" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/></svg>',
+ inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F97316"/><path d="M16 22h32M16 41h32M20 22v24M44 22v24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><rect x="22" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><rect x="33" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M25 30h3M36 30h3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
  configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
- nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#475569"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.6"/><rect x="20" y="39" width="12" height="2.5" rx="1.25" fill="#fff" opacity="0.5"/><rect x="20" y="44" width="9" height="2.5" rx="1.25" fill="#fff" opacity="0.35"/></svg>',
+ nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 15h17l7 7v27H20V15Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M37 15v8h7M25 29h14M25 35h8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M36 38v8m0 0-4-4m4 4 4-4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  compras: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M20 22 L22 18 H42 L44 22 V40 H20 Z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/><path d="M26 22 V18 M38 22 V18" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M26 31 L31 36 L38 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  financeiro: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><circle cx="32" cy="32" r="14" stroke="#fff" stroke-width="2.5" fill="none"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">$</text></svg>',
  financeiro_avencer: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 18 H42 C44 18 46 20 46 22 V46 H18 V22 C18 20 20 18 22 18 Z" fill="#fff" opacity="0.95"/><path d="M24 28 H40 M24 34 H36" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/><path d="M34 40 L38 44 L46 36" stroke="#F59E0B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -3822,7 +3916,7 @@ function getMenuItemsFromConfig() {
  return menuModulesConfig
  .sort((a, b) => a.order - b.order)
  .map(module => {
- let isDisabled = !navigator.onLine && !['pick', 'pack'].includes(module.id);
+ let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard'].includes(module.id);
  let badge = null;
  
  if (module.type === 'em_breve') {
@@ -3902,37 +3996,47 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="Acoes rApidas">
  <span class="quick-sheet-grabber" aria-hidden="true"></span>
  <div class="quick-actions-list" role="none">
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="openQuickActionSeparationMenu(event)">
- <span class="quick-action-icon quick-action-icon-picking-drafts material-symbols-rounded">folder_open</span>
- <span class="quick-action-label">SEPARA&Ccedil;&Atilde;O</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="openQuickActionSeparationMenu(event)">
+ <img class="quick-action-icon quick-action-icon-picking-drafts" src="/assets/icons/menu-separacao.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">SEPARA&Ccedil;&Atilde;O <small>(PEDIDOS)</small></span>
  ${pendingSeparationsBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-conferences ${pendingConferencesClass}" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
- <span class="quick-action-icon quick-action-icon-conferences material-symbols-rounded">fact_check</span>
- <span class="quick-action-label">CONFER&Ecirc;NCIA</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-conferences ${pendingConferencesClass}" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
+ <img class="quick-action-icon quick-action-icon-conferences" src="/assets/icons/menu-conferencia.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">CONFER&Ecirc;NCIA <small>(PACOTES)</small></span>
  ${pendingConferencesBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-cancellation" type="button" role="menuitem" onclick="toggleQuickActions();openGlobalFinalizedItemCancellation('quick')">
- <span class="quick-action-icon quick-action-icon-cancellation material-symbols-rounded">cancel_presentation</span>
- <span class="quick-action-label">CANCELAMENTO</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-cancellation" type="button" role="menuitem" onclick="toggleQuickActions();openGlobalFinalizedItemCancellation('quick')">
+ <img class="quick-action-icon quick-action-icon-cancellation" src="/assets/icons/menu-cancelamento.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">CANCELAMENTO <small>(ANTES DO ENVIO)</small></span>
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
- <span class="quick-action-icon quick-action-icon-nf-drafts material-symbols-rounded">receipt_long</span>
- <span class="quick-action-label">ENTRADA NF</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-devolucao" type="button" role="menuitem" onclick="toggleQuickActions();renderHistoricoDevolucoes()">
+ <img class="quick-action-icon quick-action-icon-devolucao" src="/assets/icons/menu-devolucao.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">DEVOLU&Ccedil;&Atilde;O <small>(MARKETPLACE)</small></span>
+ <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ </button>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-romaneio" type="button" role="menuitem" onclick="quickActionGerarRomaneio(event)">
+ <img class="quick-action-icon quick-action-icon-romaneio" src="/assets/icons/menu-romaneios.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">ROMANEIOS <small>(RETIRADAS)</small></span>
+ <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ </button>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-nf-drafts ${pendingEntradaNFClass}" type="button" role="menuitem" onclick="quickActionEntradaNF()">
+ <img class="quick-action-icon quick-action-icon-nf-drafts" src="/assets/icons/menu-entrada-nf.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">ENTRADA NF <small>(RECEBIMENTO)</small></span>
  ${pendingEntradaNFBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-romaneio" type="button" role="menuitem" onclick="quickActionGerarRomaneio()">
- <span class="quick-action-icon quick-action-icon-romaneio material-symbols-rounded">assignment</span>
- <span class="quick-action-label">ROMANEIOS</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-orcamentos" type="button" role="menuitem" onclick="toggleQuickActions();renderOrcamentoClienteScreen()">
+ <img class="quick-action-icon quick-action-icon-orcamentos" src="/assets/icons/menu-orcamentos.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">OR&Ccedil;AMENTOS <small>(COTA&Ccedil;&Otilde;ES)</small></span>
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-labels" type="button" role="menuitem" onclick="quickActionGerarEtiquetas()">
- <span class="quick-action-icon quick-action-icon-labels material-symbols-rounded">barcode_scanner</span>
- <span class="quick-action-label">GERAR ETIQUETAS</span>
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-labels" type="button" role="menuitem" onclick="quickActionGerarEtiquetas()">
+ <img class="quick-action-icon quick-action-icon-labels" src="/assets/icons/menu-etiquetas.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">GERAR ETIQUETAS <small>(IMPRESS&Atilde;O)</small></span>
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
  </div>
@@ -3966,7 +4070,6 @@ function renderMenu(push = true) {
  <div class="dashboard-screen fade-in menu-screen">
  ${getTopBarHTML(currentUser, null, 'menu')}
  <main class="container">
- ${getPendingSyncBannerHTML()}
  <div class="menu-grid">
 ${finalMenuItems.map(item => {
  const routeAction = menuRoutes[item.id] || `handleMenuClick('${item.label}')`;
@@ -3982,11 +4085,11 @@ ${finalMenuItems.map(item => {
 }).join('')}
  </div>
  </main>
- ${getAppVersionBadgeHTML('footer')}
  ${getQuickActionsHTML(false)}
  </div>
  `;
  refreshOutboxPendingCount().catch(error => console.warn('[OUTBOX] Falha ao atualizar indicador:', error));
+ updateMenuStatusUI();
 }
 
 async function renderDashboard() {
@@ -4465,6 +4568,345 @@ function renderCotacaoComprasScreen() {
  </div>
  </section>
  `);
+}
+
+let orcamentoClienteState = { numero: '', emissao: '', validade: '', itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
+const ORCAMENTO_CLIENTE_DRAFT_KEY = 'dyOrcamentoClienteRascunhoV1';
+const ORCAMENTO_CLIENTE_SEQUENCE_KEY = 'dyOrcamentoClienteSequenciaV1';
+
+function getOrcamentoTodayISO() {
+ return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+function addOrcamentoDays(dateISO, days = 7) {
+ const date = new Date(`${dateISO}T12:00:00`);
+ date.setDate(date.getDate() + Number(days || 0));
+ return date.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+function createOrcamentoNumber(dateISO = getOrcamentoTodayISO()) {
+ const date = String(dateISO || getOrcamentoTodayISO()).replaceAll('-', '');
+ let saved = {};
+ try { saved = JSON.parse(localStorage.getItem(ORCAMENTO_CLIENTE_SEQUENCE_KEY) || '{}'); } catch (_) { saved = {}; }
+ const next = saved.date === date ? Math.max(1, Number(saved.sequence || 0) + 1) : 1;
+ return `ORC-${date}-${String(next).padStart(4, '0')}`;
+}
+
+function commitOrcamentoNumber(number) {
+ const match = String(number || '').match(/^ORC-(\d{8})-(\d{4})$/);
+ if (!match) return;
+ localStorage.setItem(ORCAMENTO_CLIENTE_SEQUENCE_KEY, JSON.stringify({ date: match[1], sequence: Number(match[2]) }));
+}
+
+function getOrcamentoProductId(product = {}) {
+ return String(product.id_interno || product.col_a || product.col_A || product.codigo_interno || '').trim();
+}
+
+function getOrcamentoProductName(product = {}) {
+ return String(product.descricao_completa || product.descricao_base || product.descricao || product.nome || product.col_b || product.col_B || getOrcamentoProductId(product) || 'Produto sem descricao').trim();
+}
+
+function getOrcamentoProductPrice(product = {}) {
+ const candidates = [product.preco_venda, product.valor_venda, product.preco, product.valor, product.preco_site, product.preco_marketplace];
+ const value = candidates.map(item => parseDecimal(item)).find(item => Number(item) > 0);
+ return Number(value || 0);
+}
+
+function getOrcamentoProductImage(product = {}) {
+ const source = product.image_path || product.url_imagem || product.imagem_url || product.imagem || '';
+ return source ? formatImageUrl(source) : '';
+}
+
+function getOrcamentoCatalogSearch(query = '') {
+ const normalized = normalizeOperationalLabel(query);
+ if (!normalized) return [];
+ return (appData.products || []).filter(product => normalizeOperationalLabel([
+ getOrcamentoProductId(product), product.ean, product.sku_fornecedor, product.sku, getOrcamentoProductName(product)
+ ].join(' ')).includes(normalized)).slice(0, 7);
+}
+
+function renderOrcamentoProductSuggestions(value = '') {
+ const box = document.getElementById('orcamento-product-suggestions');
+ if (!box) return;
+ const results = getOrcamentoCatalogSearch(value);
+ box.innerHTML = results.map(product => {
+ const id = getOrcamentoProductId(product);
+ return `<button type="button" onclick="addOrcamentoProductById(${quotePackInlineArg(id)})"><span>${escapeKitAttribute(id || 'SEM ID')}</span><strong>${escapeKitAttribute(getOrcamentoProductName(product))}</strong><small>${formatCurrency(getOrcamentoProductPrice(product))}</small></button>`;
+ }).join('') || (String(value || '').trim().length >= 2 ? '<p>Nenhum produto encontrado.</p>' : '');
+ box.hidden = !box.innerHTML;
+}
+
+function addOrcamentoProductFromSearch() {
+ const input = document.getElementById('orcamento-product-search');
+ const first = getOrcamentoCatalogSearch(input?.value || '')[0];
+ if (!first) return showToast('Produto nao encontrado no cadastro.', 'warning');
+ addOrcamentoProductById(getOrcamentoProductId(first));
+}
+
+function addOrcamentoProductById(productId) {
+ const product = (appData.products || []).find(item => getOrcamentoProductId(item) === String(productId));
+ if (!product) return showToast('Produto nao encontrado no cadastro.', 'warning');
+ const existing = orcamentoClienteState.itens.find(item => item.id_interno === String(productId));
+ if (existing) existing.quantidade += 1;
+ else orcamentoClienteState.itens.push({ localId: `ORCI-${Date.now()}`, id_interno: String(productId), descricao: getOrcamentoProductName(product), imagem: getOrcamentoProductImage(product), quantidade: 1, valor_unitario: getOrcamentoProductPrice(product) });
+ const input = document.getElementById('orcamento-product-search');
+ if (input) input.value = '';
+ const suggestions = document.getElementById('orcamento-product-suggestions');
+ if (suggestions) { suggestions.innerHTML = ''; suggestions.hidden = true; }
+ renderOrcamentoItems();
+}
+
+function updateOrcamentoItem(localId, field, value) {
+ const item = orcamentoClienteState.itens.find(row => row.localId === localId);
+ if (!item) return;
+ item[field] = field === 'quantidade' ? Math.max(1, Number(value || 1)) : Math.max(0, parseDecimal(value));
+ renderOrcamentoItems();
+}
+
+function removeOrcamentoItem(localId) {
+ orcamentoClienteState.itens = orcamentoClienteState.itens.filter(item => item.localId !== localId);
+ renderOrcamentoItems();
+}
+
+function getOrcamentoTotals() {
+ const subtotal = orcamentoClienteState.itens.reduce((sum, item) => sum + Number(item.quantidade || 0) * Number(item.valor_unitario || 0), 0);
+ const descontoValor = subtotal * Math.max(0, Number(orcamentoClienteState.desconto || 0)) / 100;
+ const freteCobrado = orcamentoClienteState.freteResponsavel === 'cliente' ? Math.max(0, Number(orcamentoClienteState.freteValor || 0)) : 0;
+ return { subtotal, descontoValor, freteCobrado, total: Math.max(0, subtotal - descontoValor + freteCobrado) };
+}
+
+function renderOrcamentoItems() {
+ const list = document.getElementById('orcamento-items-list');
+ if (list) list.innerHTML = orcamentoClienteState.itens.length ? orcamentoClienteState.itens.map(item => `
+ <article class="orcamento-item-row">
+ <div class="orcamento-item-product"><span class="orcamento-item-thumb">${item.imagem ? `<img src="${escapeKitAttribute(item.imagem)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.hidden=false"><i class="material-symbols-rounded" hidden>inventory_2</i>` : '<i class="material-symbols-rounded">inventory_2</i>'}</span><span class="orcamento-item-copy"><small>${escapeKitAttribute(item.id_interno)}</small><strong>${escapeKitAttribute(item.descricao)}</strong></span></div>
+ <label><small>Quantidade</small><input type="number" min="1" step="1" value="${Number(item.quantidade || 1)}" onchange="updateOrcamentoItem(${quotePackInlineArg(item.localId)},'quantidade',this.value)"></label>
+ <label><small>Valor unitario</small><input type="number" min="0" step="0.01" value="${Number(item.valor_unitario || 0).toFixed(2)}" onchange="updateOrcamentoItem(${quotePackInlineArg(item.localId)},'valor_unitario',this.value)"></label>
+ <b>${formatCurrency(Number(item.quantidade || 0) * Number(item.valor_unitario || 0))}</b>
+ <button type="button" onclick="removeOrcamentoItem(${quotePackInlineArg(item.localId)})" aria-label="Remover produto" title="Remover produto">&times;</button>
+ </article>`).join('') : '<div class="orcamento-items-empty"><strong>Nenhum produto adicionado</strong><small>Digite o ID interno, EAN ou descricao para iniciar.</small></div>';
+ renderOrcamentoSummary();
+}
+
+function renderOrcamentoSummary() {
+ const totals = getOrcamentoTotals();
+ const values = { subtotal: totals.subtotal, desconto: totals.descontoValor, frete: totals.freteCobrado, total: totals.total };
+ Object.entries(values).forEach(([key, value]) => { const el = document.getElementById(`orcamento-summary-${key}`); if (el) el.textContent = formatCurrency(value); });
+}
+
+function updateOrcamentoDiscount(value) {
+ const custom = document.getElementById('orcamento-discount-custom');
+ const isCustom = String(value) === 'personalizado';
+ if (custom) custom.hidden = !isCustom;
+ orcamentoClienteState.desconto = isCustom ? Math.max(0, parseDecimal(custom?.value || 0)) : Math.max(0, Number(value || 0));
+ renderOrcamentoSummary();
+}
+
+function updateOrcamentoCustomDiscount(value) {
+ orcamentoClienteState.desconto = Math.min(100, Math.max(0, parseDecimal(value)));
+ renderOrcamentoSummary();
+}
+
+function updateOrcamentoFreight(field, value) {
+ if (field === 'responsavel') orcamentoClienteState.freteResponsavel = String(value || 'cliente');
+ else orcamentoClienteState.freteValor = Math.max(0, parseDecimal(value));
+ renderOrcamentoSummary();
+}
+
+function updateOrcamentoValidity(value) {
+ orcamentoClienteState.validade = value || addOrcamentoDays(orcamentoClienteState.emissao, 7);
+ const note = document.getElementById('orcamento-validity-note');
+ if (note) note.textContent = `Este orcamento e valido ate ${new Date(`${orcamentoClienteState.validade}T12:00:00`).toLocaleDateString('pt-BR')}.`;
+}
+
+function updateOrcamentoEmission(value) {
+ const emission = value || getOrcamentoTodayISO();
+ orcamentoClienteState.emissao = emission;
+ orcamentoClienteState.validade = addOrcamentoDays(emission, 7);
+ orcamentoClienteState.numero = createOrcamentoNumber(emission);
+ const validityInput = document.querySelector('#orcamento-cliente-form [name="data_validade"]');
+ const numberLabel = document.getElementById('orcamento-number-label');
+ if (validityInput) validityInput.value = orcamentoClienteState.validade;
+ if (numberLabel) numberLabel.textContent = orcamentoClienteState.numero;
+ updateOrcamentoValidity(orcamentoClienteState.validade);
+}
+
+function saveOrcamentoClienteDraft() {
+ const form = document.getElementById('orcamento-cliente-form');
+ if (!form) return;
+ if (!orcamentoClienteState.itens.length) return showToast('Adicione pelo menos um produto.', 'warning');
+ const data = Object.fromEntries(new FormData(form).entries());
+ const draft = { ...orcamentoClienteState, cliente: data, totais: getOrcamentoTotals(), salvo_em: new Date().toISOString() };
+ localStorage.setItem(ORCAMENTO_CLIENTE_DRAFT_KEY, JSON.stringify(draft));
+ showToast('Rascunho do orcamento salvo neste aparelho.');
+}
+
+function getOrcamentoClienteDocument() {
+ const form = document.getElementById('orcamento-cliente-form');
+ if (!form) return null;
+ if (!form.reportValidity()) return null;
+ if (!orcamentoClienteState.itens.length) { showToast('Adicione pelo menos um produto.', 'warning'); return null; }
+ const cliente = Object.fromEntries(new FormData(form).entries());
+ return { ...orcamentoClienteState, cliente, totais: getOrcamentoTotals(), salvo_em: new Date().toISOString() };
+}
+
+async function registerOrcamentoPDFFonts(doc) {
+ try {
+ const loadFont = async (url, fileName, style) => {
+ const response = await fetch(url);
+ if (!response.ok) throw new Error(`Fonte indisponivel: ${url}`);
+ const bytes = new Uint8Array(await response.arrayBuffer());
+ let binary = '';
+ for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+ doc.addFileToVFS(fileName, btoa(binary));
+ doc.addFont(fileName, 'PTSansNarrow', style);
+ };
+ await Promise.all([
+ loadFont('/assets/fontes/PTSansNarrow-Regular.ttf', 'PTSansNarrow-Regular.ttf', 'normal'),
+ loadFont('/assets/fontes/PTSansNarrow-Bold.ttf', 'PTSansNarrow-Bold.ttf', 'bold')
+ ]);
+ return 'PTSansNarrow';
+ } catch (error) {
+ console.warn('[ORCAMENTO] Fonte local nao carregada no PDF:', error);
+ return 'helvetica';
+ }
+}
+
+async function loadOrcamentoPDFThumbnail(source) {
+ if (!source) return '';
+ const dataUrl = await loadRomaneioPDFImage(source);
+ if (!dataUrl) return '';
+ return new Promise(resolve => {
+ const image = new Image();
+ image.onload = () => {
+ const canvas = document.createElement('canvas');
+ const size = 180; const ratio = Math.min(size / image.width, size / image.height, 1);
+ canvas.width = size; canvas.height = size;
+ const context = canvas.getContext('2d');
+ context.fillStyle = '#ffffff'; context.fillRect(0, 0, size, size);
+ const width = image.width * ratio; const height = image.height * ratio;
+ context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+ resolve(canvas.toDataURL('image/jpeg', .72));
+ };
+ image.onerror = () => resolve('');
+ image.src = dataUrl;
+ });
+}
+
+async function generateOrcamentoClientePDF() {
+ const item = getOrcamentoClienteDocument();
+ if (!item) return;
+ const { jsPDF } = window.jspdf || {};
+ if (!jsPDF) return showToast('Gerador de PDF nao carregado.', 'error');
+ try {
+ const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+ const pageWidth = doc.internal.pageSize.getWidth();
+ const pageHeight = doc.internal.pageSize.getHeight();
+ const margin = 14;
+ const contentWidth = pageWidth - margin * 2;
+ const pdfFont = await registerOrcamentoPDFFonts(doc);
+ const logo = await loadRomaneioPDFImage(LOGO_LIGHT_BG);
+ const productImages = await Promise.all(item.itens.map(row => loadOrcamentoPDFThumbnail(row.imagem)));
+ const fmtDate = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
+ const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+ const safe = value => String(value || '').trim() || '-';
+ const drawPageHeader = () => {
+ doc.setFillColor(230, 0, 18); doc.rect(margin, 10, contentWidth, 1.4, 'F');
+ doc.setFillColor(248, 250, 252); doc.roundedRect(margin, 12, contentWidth, 30, 2, 2, 'F');
+ if (logo) addRomaneioPDFImage(doc, logo, margin + 5, 17, 34, 16);
+ doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(13); doc.text('DY PARTS AUTO PECAS LTDA', margin + 44, 20);
+ doc.setFont(pdfFont, 'normal'); doc.setTextColor(85, 99, 118); doc.setFontSize(8.2);
+ doc.text('CNPJ 31.869.538/0001-60', margin + 44, 25);
+ doc.text('Alameda dos Guatas, 477 - Vila da Saude - Sao Paulo/SP - CEP 04053-041', margin + 44, 29.5);
+ doc.text('Rafael Costa - (11) 99008-5977 - contato@dyautoparts.com.br', margin + 44, 34);
+ doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(15); doc.text('ORCAMENTO', pageWidth - margin - 5, 20, { align: 'right' });
+ doc.setFontSize(8); doc.setTextColor(77, 91, 111); doc.text(item.numero, pageWidth - margin - 5, 26, { align: 'right' });
+ doc.setFont(pdfFont, 'normal'); doc.text(`Emissao: ${fmtDate(item.emissao)}`, pageWidth - margin - 5, 31, { align: 'right' });
+ doc.text(`Validade: ${fmtDate(item.validade)}`, pageWidth - margin - 5, 35.5, { align: 'right' });
+ };
+ const drawFooter = () => {
+ const pages = doc.getNumberOfPages();
+ for (let page = 1; page <= pages; page += 1) {
+ doc.setPage(page); doc.setDrawColor(224, 229, 236); doc.line(margin, pageHeight - 13, pageWidth - margin, pageHeight - 13);
+ doc.setFont(pdfFont, 'normal'); doc.setFontSize(7.5); doc.setTextColor(112, 124, 142);
+ doc.text(`DY Auto Parts - ${item.numero}`, margin, pageHeight - 8);
+ doc.text(`Pagina ${page} de ${pages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+ }
+ };
+ drawPageHeader();
+ let y = 49;
+ doc.setFont(pdfFont, 'bold'); doc.setFontSize(11); doc.setTextColor(24, 35, 53); doc.text('DADOS DO CLIENTE', margin, y); y += 4;
+ const clientRows = [
+ ['Empresa / Razao social', safe(item.cliente.empresa), 'CPF / CNPJ', safe(item.cliente.documento)],
+ ['Responsavel', safe(item.cliente.responsavel), 'Telefone', safe(item.cliente.telefone)],
+ ['E-mail do cliente', safe(item.cliente.email), 'Endereco', safe(item.cliente.endereco)]
+ ];
+ doc.autoTable({ startY: y, body: clientRows, margin: { left: margin, right: margin }, theme: 'grid',
+ styles: { font: pdfFont, fontSize: 9, cellPadding: 2.4, textColor: [35, 47, 66], lineColor: [224, 229, 236], lineWidth: .2 },
+ columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 28 }, 1: { cellWidth: 58 }, 2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 24 }, 3: { cellWidth: 72 } } });
+ y = doc.lastAutoTable.finalY + 9;
+ doc.setFont(pdfFont, 'bold'); doc.setFontSize(11); doc.text('PRODUTOS', margin, y); y += 3;
+ doc.autoTable({ startY: y, head: [['Foto', 'Codigo', 'Descricao', 'Qtd.', 'Valor unit.', 'Total']],
+ body: item.itens.map(row => ['', row.id_interno, row.descricao, String(row.quantidade), money(row.valor_unitario), money(Number(row.quantidade) * Number(row.valor_unitario))]),
+ margin: { top: 48, left: margin, right: margin, bottom: 40 }, theme: 'striped',
+ headStyles: { fillColor: [36, 48, 67], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+ styles: { font: pdfFont, fontSize: 9, cellPadding: 2.7, textColor: [35, 47, 66], lineColor: [226, 231, 238], lineWidth: .15 },
+ alternateRowStyles: { fillColor: [247, 249, 252] },
+ columnStyles: { 0: { cellWidth: 18, minCellHeight: 17 }, 1: { cellWidth: 23, fontStyle: 'bold' }, 2: { cellWidth: 68 }, 3: { cellWidth: 13, halign: 'center' }, 4: { cellWidth: 27, halign: 'right' }, 5: { cellWidth: 29, halign: 'right', fontStyle: 'bold' } },
+ didDrawCell: data => { if (data.section === 'body' && data.column.index === 0) { const thumbnail = productImages[data.row.index]; if (thumbnail) addRomaneioPDFImage(doc, thumbnail, data.cell.x + 1.5, data.cell.y + 1.2, data.cell.width - 3, data.cell.height - 2.4); } },
+ didDrawPage: data => { if (data.pageNumber > 1) drawPageHeader(); } });
+ y = doc.lastAutoTable.finalY + 8;
+ if (y > pageHeight - 78) { doc.addPage(); drawPageHeader(); y = 50; }
+ const infoWidth = 112; const totalsX = margin + infoWidth + 7; const totalsWidth = contentWidth - infoWidth - 7;
+ doc.setFillColor(248, 250, 252); doc.roundedRect(margin, y, infoWidth, 48, 2, 2, 'F');
+ doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('CONDICOES COMERCIAIS', margin + 4, y + 6);
+ doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66);
+ const commercial = [`Pagamento: ${safe(item.cliente.forma_pagamento)}`, `Frete: ${item.freteResponsavel === 'cliente' ? 'por conta do cliente' : item.freteResponsavel === 'dy' ? 'por conta da DY Auto Parts' : 'retirada / sem frete'}`, `Chave Pix: contato@dyautoparts.com.br`, `Condicao: ${safe(item.cliente.condicao_negociada)}`];
+ commercial.forEach((line, index) => doc.text(doc.splitTextToSize(line, infoWidth - 8).slice(0, 2), margin + 4, y + 13 + index * 7));
+ const summary = [['Subtotal', money(item.totais.subtotal)], [`Desconto (${Number(item.desconto || 0).toLocaleString('pt-BR')}%)`, `- ${money(item.totais.descontoValor)}`], ['Frete', money(item.totais.freteCobrado)], ['TOTAL', money(item.totais.total)]];
+ summary.forEach(([label, value], index) => { const rowY = y + index * 12; doc.setFillColor(index === 3 ? 230 : 250, index === 3 ? 0 : 251, index === 3 ? 18 : 253); doc.rect(totalsX, rowY, totalsWidth, 11, 'F'); doc.setFont(pdfFont, index === 3 ? 'bold' : 'normal'); doc.setFontSize(index === 3 ? 11 : 9); doc.setTextColor(index === 3 ? 255 : 31, index === 3 ? 255 : 42, index === 3 ? 255 : 59); doc.text(label, totalsX + 4, rowY + 7); doc.text(value, totalsX + totalsWidth - 4, rowY + 7, { align: 'right' }); });
+ y += 57;
+ const observations = safe(item.cliente.observacoes);
+ doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('OBSERVACOES', margin, y);
+ doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66); doc.text(doc.splitTextToSize(observations, contentWidth), margin, y + 5);
+ doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.text(`Orcamento valido ate ${fmtDate(item.validade)}. Valores e disponibilidade sujeitos a confirmacao.`, margin, Math.min(pageHeight - 23, y + 19));
+ doc.setFont(pdfFont, 'normal'); doc.setFontSize(8); doc.setTextColor(92, 104, 122); doc.text(`Para aprovar, responda ao e-mail contato@dyautoparts.com.br informando o numero ${item.numero}.`, margin, Math.min(pageHeight - 18, y + 25));
+ drawFooter();
+ localStorage.setItem(ORCAMENTO_CLIENTE_DRAFT_KEY, JSON.stringify(item));
+ commitOrcamentoNumber(item.numero);
+ doc.save(`${item.numero}.pdf`);
+ showToast(`Orcamento ${item.numero} gerado em PDF.`);
+ } catch (error) {
+ console.error('[ORCAMENTO] Falha ao gerar PDF:', error);
+ showToast('Nao foi possivel gerar o PDF do orcamento.', 'error');
+ }
+}
+
+async function renderOrcamentoClienteScreen() {
+ const currentUser = localStorage.getItem('currentUser');
+ const emissao = getOrcamentoTodayISO();
+ orcamentoClienteState = { numero: createOrcamentoNumber(), emissao, validade: addOrcamentoDays(emissao, 7), itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
+ app.innerHTML = `<div class="dashboard-screen fade-in internal module-screen orcamento-cliente-screen">
+ ${getTopBarHTML(currentUser, 'renderMenu()')}${getModuleSidebarHTML('financeiro', 'OR&Ccedil;AMENTO')}
+ <main class="container orcamento-cliente-shell"><div class="orcamento-loading">Carregando cadastro de produtos...</div></main></div>`;
+ try {
+ if (!Array.isArray(appData.products) || !appData.products.length) {
+ const data = await DataClient.loadModule('produtos', true);
+ appData.products = hydrateProdutosForSearch(data?.products || data?.produtos || []);
+ }
+ } catch (error) { console.warn('[ORCAMENTO] Falha ao carregar produtos:', error); }
+ const shell = document.querySelector('.orcamento-cliente-shell');
+ if (!shell) return;
+ shell.innerHTML = `<form id="orcamento-cliente-form" class="orcamento-document" onsubmit="event.preventDefault();saveOrcamentoClienteDraft()">
+ <header class="orcamento-brand"><div class="orcamento-brand-logo"><img src="${LOGO_LIGHT_BG}" alt="DY Auto Parts"><b id="orcamento-number-label">${escapeKitAttribute(orcamentoClienteState.numero)}</b></div><div class="orcamento-company"><strong>DY PARTS AUTO PE&Ccedil;AS LTDA</strong><span>CNPJ 31.869.538/0001-60</span><span>Alameda dos Guat&aacute;s, 477 &middot; Vila da Sa&uacute;de &middot; S&atilde;o Paulo/SP &middot; CEP 04053-041</span><span>Rafael Costa &middot; (11) 99008-5977 &middot; contato@dyautoparts.com.br</span></div><aside class="orcamento-meta"><div><label>Emiss&atilde;o<input name="data_emissao" type="date" value="${emissao}" onchange="updateOrcamentoEmission(this.value)"></label><label>Validade autom&aacute;tica<input name="data_validade" type="date" value="${orcamentoClienteState.validade}" readonly tabindex="-1"></label></div><small>Prazo padr&atilde;o: 7 dias</small></aside></header>
+ <section class="orcamento-section"><header><b>1</b><div><strong>Dados do solicitante</strong><small>Contato que receber&aacute; e aprovar&aacute; o or&ccedil;amento.</small></div></header><div class="orcamento-fields orcamento-client-fields"><label class="span-2"><span>Empresa / Raz&atilde;o social *</span><input name="empresa" autocomplete="organization" placeholder="Nome da empresa ou cliente" required></label><label><span>CPF / CNPJ</span><input name="documento" inputmode="numeric" placeholder="Documento do cliente"></label><label><span>Respons&aacute;vel pela solicita&ccedil;&atilde;o *</span><input name="responsavel" autocomplete="name" placeholder="Nome de quem solicitou" required></label><label class="orcamento-email-field"><span>E-mail do cliente *</span><input name="email" type="email" autocomplete="email" placeholder="cliente@empresa.com.br" required></label><label><span>Telefone / WhatsApp</span><input name="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 00000-0000"></label><label class="full"><span>Endere&ccedil;o</span><input name="endereco" autocomplete="street-address" placeholder="Rua, n&uacute;mero, bairro, cidade e CEP"></label></div></section>
+ <section class="orcamento-section"><header><b>2</b><div><strong>Produtos</strong><small>Busca direta no cadastro. O valor pode ser ajustado somente neste or&ccedil;amento.</small></div></header><div class="orcamento-product-search"><div class="orcamento-search-field"><label for="orcamento-product-search">ID interno, EAN ou descri&ccedil;&atilde;o</label><input id="orcamento-product-search" autocomplete="off" oninput="renderOrcamentoProductSuggestions(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();addOrcamentoProductFromSearch()}" placeholder="Digite o c&oacute;digo ou nome do produto"></div><button type="button" onclick="addOrcamentoProductFromSearch()"><span class="material-symbols-rounded" aria-hidden="true">add</span> Adicionar</button><div id="orcamento-product-suggestions" hidden></div></div><div id="orcamento-items-list" class="orcamento-items-list"></div></section>
+ <section class="orcamento-section"><header><b>3</b><div><strong>Pagamento e frete</strong><small>Condicoes comerciais aplicadas ao total.</small></div></header><div class="orcamento-fields"><label><span>Forma de pagamento</span><select name="forma_pagamento"><option>Pix</option><option>Dinheiro</option><option>Cartao</option><option>Boleto</option><option>Transferencia</option></select></label><label><span>Desconto</span><select name="desconto_opcao" onchange="updateOrcamentoDiscount(this.value)"><option value="0">Sem desconto</option><option value="5">5%</option><option value="10">10%</option><option value="personalizado">Personalizado</option></select></label><label id="orcamento-discount-custom" hidden><span>Desconto personalizado (%)</span><input type="number" min="0" max="100" step="0.01" value="0" oninput="updateOrcamentoCustomDiscount(this.value)"></label><label><span>Responsavel pelo frete</span><select name="frete_responsavel" onchange="updateOrcamentoFreight('responsavel',this.value)"><option value="cliente">Cliente</option><option value="dy">DY Auto Parts</option><option value="retirada">Retirada / sem frete</option></select></label><label><span>Valor do frete</span><input name="frete_valor" type="number" min="0" step="0.01" value="0.00" oninput="updateOrcamentoFreight('valor',this.value)"></label><label><span>Chave Pix</span><input value="contato@dyautoparts.com.br" readonly></label><label class="full"><span>Condicao negociada</span><input name="condicao_negociada" placeholder="Ex.: pagamento integral na confirmacao"></label></div></section>
+ <section class="orcamento-section orcamento-notes"><header><b>4</b><div><strong>Observa&ccedil;&otilde;es</strong><small id="orcamento-validity-note">Este or&ccedil;amento &eacute; v&aacute;lido at&eacute; ${new Date(`${orcamentoClienteState.validade}T12:00:00`).toLocaleDateString('pt-BR')}.</small></div></header><textarea name="observacoes" rows="4" placeholder="Prazo de entrega, garantia, disponibilidade ou outra informa&ccedil;&atilde;o importante."></textarea></section>
+ <section class="orcamento-summary"><div><span>Subtotal</span><strong id="orcamento-summary-subtotal">R$ 0,00</strong></div><div><span>Desconto</span><strong id="orcamento-summary-desconto">R$ 0,00</strong></div><div><span>Frete cobrado</span><strong id="orcamento-summary-frete">R$ 0,00</strong></div><div class="total"><span>Total do orcamento</span><strong id="orcamento-summary-total">R$ 0,00</strong></div></section>
+ <footer class="orcamento-actions"><span>Os valores s&atilde;o atualizados automaticamente durante o preenchimento.</span><div><button type="button" onclick="renderMenu()">Cancelar</button><button type="submit"><span class="material-symbols-rounded" aria-hidden="true">save</span> Salvar rascunho</button><button class="primary" type="button" onclick="generateOrcamentoClientePDF()"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span> Finalizar e gerar PDF</button></div></footer>
+ </form></main></div>`;
+ renderOrcamentoItems();
 }
 function renderProdutosAbaixoMinimoComprasScreen() {
  return renderPlanejamentoCompras();
@@ -20364,11 +20806,6 @@ async function renderPackMenu() {
  }
 
  const activeSessions = (appData.separacao || []).filter(s => isSeparationPendingConferenceSession(s));
- const completedConferenceIdsToday = new Set((appData.conferencia || []).filter(isPackRecordFromToday).map(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '')).filter(Boolean));
- const completedToday = (appData.separacao || []).filter(session => {
- const id = String(getPackSeparationSessionId(session));
- return isPackSessionFinished(session) && (isPackRecordFromToday(session) || completedConferenceIdsToday.has(id));
- });
  const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
   const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
   const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
@@ -20406,17 +20843,6 @@ async function renderPackMenu() {
  }).join('')}
  </div>
  `}
- ${completedToday.length ? `
- <section class="pack-daily-completed">
-  <header><div><span class="material-symbols-rounded">today</span><div><strong>FINALIZADAS HOJE</strong><small>Consulta rapida do dia</small></div></div><b>${completedToday.length}</b></header>
-  <div class="pack-daily-completed-list">
-  ${completedToday.map(session => {
-  const sessionId = getPackSeparationSessionId(session);
-  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
-  return `<button type="button" onclick="renderPackDailyConsultation(${quotePackInlineArg(sessionId)})"><span class="material-symbols-rounded">task_alt</span><span><strong>${escapeKitAttribute(getPackSeparationDisplayId(session))}</strong><small>${escapeKitAttribute(channelName)} &middot; ${escapeKitAttribute(formatPackSeparationDate(session.finalizado_em || session.atualizado_em || session.data_separacao))}</small></span><em>Consultar</em></button>`;
-  }).join('')}
-  </div>
- </section>` : ''}
  </main>
  </div>
  `;
@@ -22149,6 +22575,7 @@ function toggleQuickActions() {
  } else {
  menu.classList.add('hidden');
  if (overlay) overlay.classList.add('hidden');
+ closeQuickActionSeparationMenu();
  }
  }
 }
@@ -22173,15 +22600,15 @@ function quickActionEntradaNF() {
  renderEntradaNFRascunhosList();
 }
 
-function quickActionGerarRomaneio() {
- toggleQuickActions();
- renderRomaneioScreen();
+function quickActionGerarRomaneio(event) {
+ openQuickActionRomaneioMenu(event);
 }
 
-const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetirada';
+const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetiradaV2';
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
+let romaneioReturnPhotoState = { dataUrl: '' };
 let romaneioTrackingState = { key: '', codes: [] };
 let romaneioPackageEditState = { key: '', values: {} };
 
@@ -22365,23 +22792,25 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
 
  const availableChannels = getRomaneioAvailableChannels();
  const selectedChannels = parseRomaneioSelectedChannels(selectedType);
- const romaneios = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+ const isFlexFlow = selectedChannels.length === 1 && selectedChannels.some(channel => normalizeOperationalLabel(channel).includes('FLEX'));
+ const allRomaneios = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+ const romaneios = isFlexFlow ? allRomaneios.filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX')) : allRomaneios;
  const selected = selectedId ? romaneios.find(item => item.id === selectedId) : null;
  const metrics = selectedChannels.length ? getRomaneioTodayMetrics(selectedChannels, selectedChannels) : null;
 
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in module-screen romaneio-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('pick')}
+ ${getModuleSidebarHTML(isFlexFlow ? 'romaneio_flex' : 'pick')}
  <main class="container romaneio-shell">
- <header class="romaneio-header">
+ <header class="romaneio-header ${isFlexFlow ? 'hidden' : ''}">
  <div>
- <span>Retirada</span>
- <h1>Gerar Romaneio</h1>
+ <span>${isFlexFlow ? 'Registro digital da retirada' : 'Retirada'}</span>
+ <h1>${isFlexFlow ? 'Romaneio Flex' : 'Gerar Romaneio'}</h1>
  </div>
  </header>
 
- <section class="romaneio-channel-step">
+ <section class="romaneio-channel-step ${isFlexFlow ? 'hidden' : ''}">
  <h2>Canais da separacao</h2>
  <div class="romaneio-channel-grid">
  ${availableChannels.map(type => {
@@ -22410,6 +22839,7 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
 
  if (metrics) {
  romaneioPackagePhotoState = { dataUrl: '' };
+ romaneioReturnPhotoState = { dataUrl: '' };
  setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
  }
 }
@@ -22565,7 +22995,18 @@ function toggleRomaneioReturnFields(value) {
  if (panel) panel.hidden = !active;
  const qty = document.getElementById('romaneio-return-quantity');
  if (qty) qty.required = active;
- if (!active) { if (qty) qty.value = '0'; clearRomaneioPackagePhoto(); }
+ if (!active) { if (qty) qty.value = '0'; clearRomaneioReturnPhoto(); }
+ updateRomaneioReturnSummary();
+}
+function updateRomaneioReturnSummary() {
+ const checkbox = document.querySelector('#romaneio-form input[name="teve_devolucao"]');
+ const qty = document.getElementById('romaneio-return-quantity');
+ const stat = document.getElementById('romaneio-summary-returned-stat');
+ const value = Math.max(0, Number(qty?.value || 0));
+ if (!stat) return;
+ stat.hidden = !(checkbox?.checked && value > 0);
+ const output = document.getElementById('romaneio-summary-returned');
+ if (output) output.textContent = String(value);
 }
 function renderRomaneioForm(metrics) {
  const selectedKey = serializeRomaneioSelectedChannels(metrics.canais || [metrics.tipo_retirada]);
@@ -22576,36 +23017,33 @@ function renderRomaneioForm(metrics) {
  ensureRomaneioTrackingState(selectedKey); ensureRomaneioPackageEditState(selectedKey, metrics);
  const adjustedMetrics = applyRomaneioPackageEdits(metrics); const packageTotal = adjustedMetrics.pacotes;
  const collectors = getRomaneioCollectors();
+ const flexNow = new Date();
  return `
  <section class="romaneio-form-card ${isFlex ? 'is-flex-flow' : ''}">
- <div class="romaneio-metrics-grid">
- <div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div>
- <div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saida liquida</em><span class="material-symbols-rounded">inventory_2</span></div>
- <div><small>Pacotes</small><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><em>pacotes preparados</em><span class="material-symbols-rounded">package_2</span></div>
- <div><small>Separacoes</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div>
- <div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>
+ ${isFlex ? `<header class="romaneio-flex-brand"><img src="${LOGO_LIGHT_BG}" alt="DY Auto Parts"><div><small>ROMANEIO DE RETIRADA</small><strong>FLEX</strong></div><aside><span>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</span><b>${escapeKitAttribute(formatTimeBR(flexNow))}</b></aside></header>` : ''}
+ <div class="${isFlex ? 'romaneio-flex-overview' : 'romaneio-metrics-grid'}">
+ ${isFlex ? `<div class="romaneio-flex-overview-main"><span>${channel3DIcons.flex}</span><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><div><b>PACOTES HOJE</b><small>Quantidade preparada hoje</small></div></div><div class="romaneio-flex-overview-stats"><div><strong id="romaneio-summary-delivered">${formatStockNumber(packageTotal)}</strong><small>PACOTES ENTREGUES</small></div><div><strong id="romaneio-summary-unscanned">0</strong><small>PACOTES NAO BIPADOS</small></div><div id="romaneio-summary-returned-stat" hidden><strong id="romaneio-summary-returned">0</strong><small>PACOTES DEVOLVIDOS</small></div></div>` : `<div><small>Produtos</small><strong>${metrics.produtos}</strong><em>diferentes</em><span class="material-symbols-rounded">deployed_code</span></div><div><small>Quantidade movimentada</small><strong>${formatStockNumber(metrics.itens)}</strong><em>saida liquida</em><span class="material-symbols-rounded">inventory_2</span></div><div><small>Pacotes</small><strong id="romaneio-package-total">${formatStockNumber(packageTotal)}</strong><em>pacotes preparados</em><span class="material-symbols-rounded">package_2</span></div><div><small>Separacoes</small><strong>${metrics.separacoes}</strong><em>separacoes</em><span class="material-symbols-rounded">assignment</span></div><div><small>Data</small><strong>${escapeKitAttribute(formatRomaneioShortDate(metrics.data))}</strong><em>${escapeKitAttribute(metrics.data)}</em><span class="material-symbols-rounded">calendar_month</span></div>`}
  </div>
- ${renderRomaneioSeparationBreakdown(adjustedMetrics)}
+ ${isFlex ? '' : renderRomaneioSeparationBreakdown(adjustedMetrics)}
  <form id="romaneio-form" class="romaneio-form ${isFlex ? 'romaneio-flex-form' : ''}" onsubmit="event.preventDefault(); saveRomaneioFromForm(${quotePackInlineArg(selectedKey)})">
  ${isOther ? `<label class="romaneio-field-full"><span>Nome do Canal *</span><input name="canal_personalizado" type="text" required></label>` : ''}
- ${isFlex ? `<section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">person</span><div><strong>Coletor Flex</strong><small>Selecione um coletor salvo ou cadastre somente nome e CPF/RG.</small></div></header>
+ ${isFlex ? `<section class="romaneio-flex-section romaneio-field-full"><header><span class="romaneio-step-number">1</span><div><strong>Coletor Flex</strong><small>Selecione um coletor salvo ou cadastre nome e CPF/RG.</small></div></header>
  <label class="romaneio-field-full"><span>Coletor cadastrado</span><select onchange="selectRomaneioCollector(this.value)"><option value="">Novo coletor</option>${collectors.map((item,index)=>`<option value="${index}">${escapeKitAttribute(item.nome)} - ${escapeKitAttribute(item.documento)}</option>`).join('')}</select></label>` : ''}
  <label><span>Nome de quem retirou *</span><input name="responsavel" type="text" autocomplete="name" required></label>
  <label><span>${isFlex ? 'CPF ou RG *' : 'Documento (opcional)'}</span><input name="documento" type="text" autocomplete="off" ${isFlex ? 'required' : ''}></label>
- ${isFlex ? `</section><section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">inventory_2</span><div><strong>Conferencia da retirada</strong><small>Informe apenas as quantidades. Nao e necessario bipar todos os pacotes.</small></div></header>
- <label><span>Pacotes entregues *</span><input name="pacotes_entregues" type="number" inputmode="numeric" min="0" step="1" value="${Number(packageTotal || 0)}" required></label>
- <label><span>Pacotes nao lidos</span><input name="pacotes_nao_lidos" type="number" inputmode="numeric" min="0" step="1" value="0"></label>
- <label class="romaneio-field-full"><span>Motivo dos pacotes nao lidos</span><input name="motivo_nao_lidos" type="text" placeholder="Preencha quando houver pacote sem leitura"></label>
- </section><section class="romaneio-flex-section romaneio-field-full"><header><span class="material-symbols-rounded">assignment_return</span><div><strong>Devolucao trazida pelo coletor</strong><small>Registre no mesmo romaneio quando o Flex trouxer pacotes de volta.</small></div></header>
- <label class="romaneio-field-full"><span>Teve devolucao?</span><select name="teve_devolucao" onchange="toggleRomaneioReturnFields(this.value)" required><option value="nao">Nao</option><option value="sim">Sim</option></select></label>
- <div id="romaneio-return-panel" class="romaneio-return-panel romaneio-field-full" hidden><label><span>Quantidade devolvida *</span><input id="romaneio-return-quantity" name="quantidade_devolvida" type="number" inputmode="numeric" min="1" step="1" value="0"></label><label><span>Observacao da devolucao</span><input name="observacao_devolucao" type="text" placeholder="Opcional"></label>
- <div class="romaneio-photo-box romaneio-field-full"><div><strong>Foto da devolucao *</strong><small>Fotografe os pacotes recebidos.</small></div><label class="romaneio-photo-btn"><span class="material-symbols-rounded">photo_camera</span>Abrir camera<input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><button class="romaneio-photo-clear" type="button" onclick="clearRomaneioPackagePhoto()">Refazer</button><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto da devolucao" hidden></div></div>
+ ${isFlex ? `</section><section class="romaneio-flex-section romaneio-field-full"><header><span class="romaneio-step-number">2</span><div><strong>Pacotes da retirada</strong></div></header>
+ <label class="romaneio-package-field"><span>Pacotes entregues</span><input class="romaneio-auto-quantity" name="pacotes_entregues" type="number" inputmode="numeric" min="0" step="1" value="${Number(packageTotal || 0)}" readonly aria-readonly="true"><small class="romaneio-field-hint" aria-hidden="true">&nbsp;</small></label>
+ <label class="romaneio-package-field"><span>Pacotes nao bipados</span><input name="pacotes_nao_lidos" type="number" inputmode="numeric" min="0" step="1" value="0" oninput="document.getElementById('romaneio-summary-unscanned').textContent = String(Math.max(0, Number(this.value || 0)))"><small class="romaneio-field-hint">Quantidade informada pelo entregador</small></label>
+ <div class="romaneio-photo-box romaneio-field-full romaneio-flex-package-photo"><div><strong>Foto dos pacotes entregues</strong><small>Opcional</small></div><label class="romaneio-photo-btn romaneio-icon-only" title="Adicionar foto" aria-label="Adicionar foto"><span class="material-symbols-rounded">photo_camera</span><input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto dos pacotes entregues" hidden></div>
+ </section><section class="romaneio-flex-section romaneio-field-full romaneio-return-section"><header><span class="romaneio-step-number">3</span><div><strong>Devolucao</strong></div></header>
+ <label class="romaneio-return-toggle romaneio-field-full"><input name="teve_devolucao" type="checkbox" value="sim" onchange="toggleRomaneioReturnFields(this.checked ? 'sim' : 'nao')"><span aria-hidden="true"></span><strong>Marcar devolucao</strong></label>
+ <div id="romaneio-return-panel" class="romaneio-return-panel romaneio-field-full" hidden><label class="romaneio-field-full"><span>Quantidade devolvida *</span><input id="romaneio-return-quantity" name="quantidade_devolvida" type="number" inputmode="numeric" min="1" step="1" value="0" oninput="updateRomaneioReturnSummary()"></label>
+ <div class="romaneio-photo-box romaneio-field-full"><div><strong>Foto da devolucao</strong><small>Opcional</small></div><label class="romaneio-photo-btn romaneio-icon-only" title="Adicionar foto" aria-label="Adicionar foto"><span class="material-symbols-rounded">photo_camera</span><input id="romaneio-return-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioReturnPhoto(this)"></label><img id="romaneio-return-photo-preview" class="romaneio-package-photo-preview" alt="Foto da devolucao" hidden></div></div>
  </section>` : ''}
- <label class="romaneio-field-full"><span>Observacao geral (opcional)</span><input name="observacao" type="text" autocomplete="off"></label>
  ${isCorreios ? `<section class="romaneio-tracking-panel" data-expected="${Number(packageTotal || 0)}"><div class="romaneio-tracking-head"><div><strong>Conferencia dos pacotes dos Correios</strong><small>Bipe cada codigo antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(packageTotal)}</span></div><div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div><div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div></section><label class="romaneio-field-full"><span>E-mail para envio</span><input name="email_destino" type="email" required></label>` : ''}
  ${!isFlex ? `<div class="romaneio-photo-box"><div><strong>Foto do pacote</strong><small>Opcional</small></div><label class="romaneio-photo-btn"><span class="material-symbols-rounded">photo_camera</span>Tirar foto<input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><button class="romaneio-photo-clear" type="button" onclick="clearRomaneioPackagePhoto()">Limpar foto</button><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto do pacote" hidden></div>` : ''}
  <div class="romaneio-signature-grid ${isFlex ? 'is-single' : ''}">${!isFlex ? `<div class="romaneio-signature-box"><div class="romaneio-signature-header"><strong>Assinatura de quem entrega - Alexandre</strong><div><button type="button" onclick="clearRomaneioDeliverySignature()">Limpar</button><button type="button" onclick="redoRomaneioDeliverySignature()">Refazer</button></div></div><canvas id="romaneio-delivery-signature-canvas"></canvas></div>` : ''}<div class="romaneio-signature-box"><div class="romaneio-signature-header"><strong>Assinatura de quem retira</strong><div><button type="button" onclick="clearRomaneioSignature()">Limpar</button><button type="button" onclick="redoRomaneioSignature()">Refazer</button></div></div><p class="romaneio-signature-consent">Confirmo a retirada dos pacotes e, quando indicado, a entrega das devolucoes registradas neste romaneio.</p><canvas id="romaneio-signature-canvas"></canvas></div></div>
- <button class="romaneio-save-btn" type="submit"><span class="material-symbols-rounded">draw</span>Salvar Romaneio</button>
+ <button class="romaneio-save-btn" type="submit"><span class="material-symbols-rounded">draw</span>${isFlex ? 'Salvar retirada Flex' : 'Salvar Romaneio'}</button>
  </form></section>`;
 }
 
@@ -22709,15 +23147,30 @@ function renderRomaneioDetail(item) {
  pacotes: item.pacotes || 0
  })}
  <div class="romaneio-saved-signatures">${item.assinatura_entrega ? `<figure><figcaption>Assinatura de quem entrega - Alexandre</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura_entrega)}" alt="Assinatura de Alexandre"></figure>` : ''}${item.assinatura ? `<figure><figcaption>Assinatura de quem retira</figcaption><img class="romaneio-signature-preview" src="${escapeKitAttribute(item.assinatura)}" alt="Assinatura de quem retirou"></figure>` : ''}</div>
- ${item.foto_pacote ? `<img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto do pacote">` : ''}
+ ${(item.foto_pacote || item.foto_devolucao) ? `<div class="romaneio-saved-photos">${item.foto_pacote ? `<figure><figcaption>Foto dos pacotes entregues</figcaption><img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_pacote)}" alt="Foto dos pacotes entregues"></figure>` : ''}${item.foto_devolucao ? `<figure><figcaption>Foto da devolucao</figcaption><img class="romaneio-package-photo-saved" src="${escapeKitAttribute(item.foto_devolucao)}" alt="Foto da devolucao"></figure>` : ''}</div>` : ''}
 
  ${renderRomaneioPostSaveActions(item)}
  </section>
  `;
 }
 
+function renderRomaneiosCompletedList(records = []) {
+ const rows = Array.isArray(records) ? records : [];
+ return `
+ <section class="romaneio-completed-list">
+ <header><div><span class="material-symbols-rounded">fact_check</span><div><h1>Romaneios realizados</h1><small>${rows.length} registro(s)</small></div></div></header>
+ <div class="romaneio-completed-table">
+ <table>
+ <thead><tr><th>Data</th><th>Hora</th><th>Quantidade</th><th>Nao bipados</th><th>Nome</th><th>CPF/RG</th><th>Assinatura</th><th aria-label="Visualizar"></th></tr></thead>
+ <tbody>${rows.map(item => `<tr><td>${escapeKitAttribute(item.data || '-')}</td><td>${escapeKitAttribute(item.hora || '-')}</td><td><strong>${formatStockNumber(item.pacotes || 0)}</strong></td><td>${formatStockNumber(item.pacotes_nao_lidos || 0)}</td><td>${escapeKitAttribute(item.responsavel || '-')}</td><td>${escapeKitAttribute(item.documento || '-')}</td><td><span class="romaneio-signature-status ${item.assinatura ? 'is-signed' : ''}"><span class="material-symbols-rounded">${item.assinatura ? 'draw' : 'pending'}</span>${item.assinatura ? 'Assinado' : 'Pendente'}</span></td><td><button class="romaneio-view-button" type="button" onclick="renderRomaneioScreen('',${quotePackInlineArg(item.id)})" title="Visualizar romaneio" aria-label="Visualizar romaneio"><span class="material-symbols-rounded">visibility</span></button></td></tr>`).join('') || `<tr><td class="romaneio-completed-empty" colspan="8"><span class="material-symbols-rounded">inbox</span><strong>Nenhum romaneio realizado</strong><small>Os próximos romaneios salvos aparecerão aqui.</small></td></tr>`}</tbody>
+ </table>
+ </div>
+ </section>`;
+}
+
 function renderRomaneioPostSaveActions(item) {
  const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
+ if (type.includes('FLEX')) return `<div class="romaneio-post-actions"><button type="button" onclick="renderMenu()">Concluir</button></div>`;
  return `<div class="romaneio-post-actions">${type.includes('CORREIOS') ? `<button class="romaneio-email-send-btn" type="button" onclick="shareRomaneioEmail('${escapeKitAttribute(item.id)}')">Enviar por e-mail</button>` : ''}<button class="romaneio-email-send-btn" type="button" onclick="generateRomaneioPDF('${escapeKitAttribute(item.id)}')">Baixar PDF</button><button type="button" onclick="shareRomaneioWhatsApp('${escapeKitAttribute(item.id)}')">Compartilhar</button><button type="button" onclick="renderMenu()">Concluir</button></div>`;
 }
 
@@ -22892,6 +23345,42 @@ function clearRomaneioPackagePhoto() {
  }
 }
 
+function handleRomaneioReturnPhoto(input) {
+ const file = input?.files?.[0];
+ if (!file) return;
+ if (!String(file.type || '').startsWith('image/')) {
+ showToast('Selecione uma imagem valida.', 'warning');
+ return;
+ }
+ const reader = new FileReader();
+ reader.onload = () => {
+ const image = new Image();
+ image.onload = () => {
+ const maxSide = 1280;
+ const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+ const canvas = document.createElement('canvas');
+ canvas.width = Math.max(1, Math.round(image.width * scale));
+ canvas.height = Math.max(1, Math.round(image.height * scale));
+ canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+ romaneioReturnPhotoState.dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+ const preview = document.getElementById('romaneio-return-photo-preview');
+ if (preview) { preview.src = romaneioReturnPhotoState.dataUrl; preview.hidden = false; }
+ showToast('Foto da devolucao anexada.');
+ };
+ image.onerror = () => showToast('Nao foi possivel carregar a foto.', 'warning');
+ image.src = reader.result;
+ };
+ reader.readAsDataURL(file);
+}
+
+function clearRomaneioReturnPhoto() {
+ romaneioReturnPhotoState = { dataUrl: '' };
+ const input = document.getElementById('romaneio-return-photo-input');
+ const preview = document.getElementById('romaneio-return-photo-preview');
+ if (input) input.value = '';
+ if (preview) { preview.removeAttribute('src'); preview.hidden = true; }
+}
+
 function getRomaneioText(item) {
  return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos diferentes: ${item.produtos}\nQuantidade movimentada: ${formatStockNumber(item.itens || 0)}\nPacotes: ${item.pacotes}\nRastreios: ${(item.rastreios || []).join(', ') || '-'}\nSeparacoes: ${item.separacoes || 0}\nFoto do pacote: ${item.foto_pacote ? 'Anexada' : 'Nao anexada'}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nE-mail: ${item.email_destino || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
 }
@@ -22914,6 +23403,7 @@ function saveRomaneioFromForm(withdrawalType) {
  const documento = String(data.get('documento') || '').trim();
  const pacotesEntregues = isFlex ? normalizePickPackageCount(data.get('pacotes_entregues')) : 0;
  const pacotesNaoLidos = isFlex ? normalizePickPackageCount(data.get('pacotes_nao_lidos')) : 0;
+ const motivoNaoLidos = isFlex ? String(data.get('motivo_nao_lidos') || '').trim() : '';
  const teveDevolucao = isFlex && String(data.get('teve_devolucao') || 'nao') === 'sim';
  const quantidadeDevolvida = teveDevolucao ? normalizePickPackageCount(data.get('quantidade_devolvida')) : 0;
  if (isOther && !customChannel) {
@@ -22926,6 +23416,10 @@ function saveRomaneioFromForm(withdrawalType) {
  }
  if (!responsavel) {
  showToast('Operacao concluida.', 'info');
+ return;
+ }
+ if (isFlex && pacotesNaoLidos > pacotesEntregues) {
+ showToast('A quantidade nao lida nao pode ser maior que os pacotes entregues.', 'warning');
  return;
  }
  let metrics = getRomaneioTodayMetrics(finalChannels, finalChannels);
@@ -22953,7 +23447,6 @@ function saveRomaneioFromForm(withdrawalType) {
  showToast('Colete a assinatura de quem retira antes de salvar.', 'warning');
  return;
  }
-
  const now = new Date();
  const romaneio = {
  id: `ROM-${normalizeOperationalLabel(finalChannel || type).slice(0, 3)}-${Date.now()}`,
@@ -22967,7 +23460,7 @@ function saveRomaneioFromForm(withdrawalType) {
  pacotes: isCorreios ? romaneioTrackingState.codes.length : (isFlex ? pacotesEntregues : metrics.pacotes),
  pacotes_preparados: Number(metrics.pacotes || 0),
  pacotes_nao_lidos: pacotesNaoLidos,
- motivo_nao_lidos: isFlex ? String(data.get('motivo_nao_lidos') || '').trim() : '',
+ motivo_nao_lidos: motivoNaoLidos,
  teve_devolucao: teveDevolucao,
  quantidade_devolvida: quantidadeDevolvida,
  observacao_devolucao: teveDevolucao ? String(data.get('observacao_devolucao') || '').trim() : '',
@@ -22985,7 +23478,7 @@ function saveRomaneioFromForm(withdrawalType) {
  assinatura_entrega: isFlex ? '' : romaneioDeliverySignatureState.dataUrl,
  assinatura: romaneioSignatureState.dataUrl,
  foto_pacote: romaneioPackagePhotoState.dataUrl || '',
- foto_devolucao: teveDevolucao ? (romaneioPackagePhotoState.dataUrl || '') : '',
+ foto_devolucao: teveDevolucao ? (romaneioReturnPhotoState.dataUrl || '') : '',
  usuario: localStorage.getItem('currentUser') || '',
  status: 'Assinado',
  createdAt: now.toISOString()
@@ -22997,8 +23490,10 @@ function saveRomaneioFromForm(withdrawalType) {
  saveRomaneios(romaneios);
  romaneioTrackingState = { key: '', codes: [] };
  romaneioPackageEditState = { key: '', values: {} };
+ romaneioPackagePhotoState = { dataUrl: '' };
+ romaneioReturnPhotoState = { dataUrl: '' };
  showToast('Romaneio salvo.');
- renderRomaneioScreen('', romaneio.id);
+ renderRomaneioScreen('', '__realizados__');
 }
 
 function findRomaneioById(id) {
@@ -26115,7 +26610,7 @@ function renderProductSubMenu() {
 
  const subItems = [
  { id: 'prod_buscar', label: 'BUSCAR PRODUTO', icon: 'busca', onclick: 'renderSearchScreen()', description: 'Consultar produtos por nome, EAN, ID interno ou SKU.' },
- { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", description: 'Criar um novo cadastro de produto com dados comerciais, imagens e atributos.' }
+ { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", description: navigator.onLine ? 'Criar um novo cadastro de produto com dados comerciais, imagens e atributos.' : 'Cadastro indisponivel sem internet.', disabled: !navigator.onLine }
  ];
 
  container.innerHTML = `
@@ -26177,13 +26672,9 @@ function formatConfigDate(value) {
 }
 
 function getAppVersionBadgeHTML(context = 'footer') {
- const updatedAt = DY_APP_DEPLOY_DATE
-  ? new Date(DY_APP_DEPLOY_DATE).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-  : '';
  return `
  <div class="app-version-badge app-version-badge-${escapeKitAttribute(context)}" aria-label="Versao atual do aplicativo">
  <span>v${escapeKitAttribute(DY_APP_VERSION)}</span>
- <small>${escapeKitAttribute(updatedAt || DY_APP_BUILD || DY_APP_COMMIT || getUpdateStatusLabel())}</small>
  </div>
  `;
 }
@@ -26815,7 +27306,7 @@ function renderConfigSubMenu() {
  </div>
 
  <div style="margin-top: 40px; text-align: center; color: var(--muted); font-size: 0.75rem;">
- <p>DY AUTO PARTS - v2.0.0</p>
+ <p>DY AUTO PARTS - v${escapeKitAttribute(DY_APP_VERSION)}</p>
  </div>
  </div>
  </main>
@@ -32994,6 +33485,54 @@ renderRomaneioScreen = async function(selectedType='', selectedId='') {
  if(metrics){romaneioPackagePhotoState={dataUrl:''};setTimeout(()=>{initRomaneioSignaturePad();initRomaneioDeliverySignaturePad();document.getElementById('romaneio-tracking-input')?.focus();},80);}
 };
 
+/* Fluxo final de Romaneios: escolha exclusiva entre Flex e Correios. */
+renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
+ const currentUser = localStorage.getItem('currentUser');
+ document.body.classList.remove('menu-active');
+ const requestedChannel = parseRomaneioSelectedChannels(selectedType)
+ .find(channel => ['FLEX', 'CORREIOS'].includes(normalizeOperationalLabel(channel))) || '';
+ const selectedChannels = requestedChannel ? [requestedChannel] : [];
+ const selectedKey = normalizeOperationalLabel(requestedChannel);
+ const completedListRequested = String(selectedId || '') === '__realizados__';
+ const newRomaneioRequested = String(selectedId || '') === '__novo__';
+ const channelSelector = `<section class="romaneio-channel-choice" aria-label="Selecione o canal"><button class="is-correios ${selectedKey === 'CORREIOS' ? 'is-active' : ''}" type="button" onclick="renderRomaneioScreen('Correios')"><span class="romaneio-choice-icon">${channel3DIcons.correios}<i class="material-symbols-rounded">assignment_turned_in</i></span><strong>CORREIOS</strong></button><button class="is-flex ${selectedKey === 'FLEX' ? 'is-active' : ''}" type="button" onclick="renderRomaneioScreen('Flex')"><span class="romaneio-choice-icon">${channel3DIcons.flex}<i class="material-symbols-rounded">assignment_turned_in</i></span><strong>FLEX</strong></button></section>`;
+ if (!requestedChannel && !selectedId) {
+ renderMenu();
+ return;
+ }
+ if (!requestedChannel && newRomaneioRequested) {
+ app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-choice-screen">${getTopBarHTML(currentUser, 'renderRomaneioScreen()')}${getModuleSidebarHTML('romaneios', 'NOVO ROMANEIO')}<main class="container romaneio-shell romaneio-choice-shell">${channelSelector}</main></div>`;
+ return;
+ }
+ try {
+ const [data, movements] = await Promise.all([DataClient.loadModule('separacao', true), DataClient.fetchMovimentosSupabase()]);
+ if (data) {
+ appData.separacao = data.separacao || appData.separacao || [];
+ appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+ }
+ appData.movimentacoes = Array.isArray(movements) ? movements : [];
+ } catch (error) {
+ console.warn('[ROMANEIO] Falha ao atualizar dados:', error);
+ }
+ const allRecords = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+ const records = allRecords.filter(item => {
+ const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
+ return type.includes('FLEX') || type.includes('CORREIOS');
+ });
+ const selected = selectedId && !completedListRequested && !newRomaneioRequested ? records.find(item => item.id === selectedId) : null;
+ const metrics = selectedChannels.length ? getRomaneioTodayMetrics(selectedChannels, selectedChannels) : null;
+ const showingCompleted = completedListRequested || Boolean(selected);
+ const headerKey = selectedKey === 'FLEX' ? 'romaneio_flex' : selectedKey === 'CORREIOS' ? 'romaneio_correios' : 'romaneios';
+ const headerLabel = showingCompleted ? 'ROMANEIOS REALIZADOS' : selectedKey === 'FLEX' ? 'ROMANEIO - FLEX' : selectedKey === 'CORREIOS' ? 'ROMANEIO - CORREIOS' : 'ROMANEIOS';
+ const backAction = selected ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+ app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, backAction)}${getModuleSidebarHTML(headerKey, headerLabel)}<main class="container romaneio-shell romaneio-ui-shell">${metrics ? renderRomaneioForm(metrics) : ''}${completedListRequested ? renderRomaneiosCompletedList(records) : ''}${selected ? renderRomaneioDetail(selected) : ''}</main></div>`;
+ if (metrics) {
+ romaneioPackagePhotoState = { dataUrl: '' };
+ romaneioReturnPhotoState = { dataUrl: '' };
+ setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+ }
+};
+
 
 /* Relatorio operacional: saidas da separacao x entradas por devolucao. */
 var saidaDevolucaoReportState={mes:'todos',canal:'todos',busca:'',rows:[],mesesMedia:0};
@@ -33100,6 +33639,8 @@ function exportSaidaDevolucaoXLSX() {
 function closeQuickActionSeparationMenu() {
  const panel = document.getElementById('quick-separation-submenu');
  if (panel) panel.remove();
+ const romaneioPanel = document.getElementById('quick-romaneio-submenu');
+ if (romaneioPanel) romaneioPanel.remove();
  document.getElementById('quick-actions-menu')?.classList.remove('has-separation-submenu');
 }
 
@@ -33113,7 +33654,20 @@ function openQuickActionSeparationMenu(event) {
  const panel = document.createElement('section');
  panel.id = 'quick-separation-submenu';
  panel.className = 'quick-separation-submenu';
- panel.innerHTML = `<header><button type="button" onclick="closeQuickActionSeparationMenu()" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></button><span><strong>SEPARA&Ccedil;&Atilde;O</strong><small>Acesso operacional rápido</small></span></header><div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><span class="material-symbols-rounded">pending_actions</span><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><span class="material-symbols-rounded">task_alt</span><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><span class="material-symbols-rounded">history</span><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>FINALIZADAS HOJE</strong><small>Consultar produtos e pacotes do dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ menu.appendChild(panel);
+}
+
+function openQuickActionRomaneioMenu(event) {
+ event?.stopPropagation?.();
+ closeQuickActionSeparationMenu();
+ const menu = document.getElementById('quick-actions-menu');
+ if (!menu) return;
+ menu.classList.add('has-separation-submenu');
+ const panel = document.createElement('section');
+ panel.id = 'quick-romaneio-submenu';
+ panel.className = 'quick-separation-submenu quick-romaneio-submenu';
+ panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__novo__')"><img src="/assets/icons/quick-romaneio-new.svg" alt="" aria-hidden="true"><span><strong>NOVO ROMANEIO</strong><small>Iniciar retirada Flex ou Correios</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__realizados__')"><img src="/assets/icons/quick-romaneio-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO</strong><small>Consultar romaneios realizados</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
  menu.appendChild(panel);
 }
 
@@ -33336,5 +33890,5 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  packages.forEach(pacote => (pacote.itens || []).forEach(item => { const key=String(item.id_interno||''); if(!packageByProduct.has(key))packageByProduct.set(key,[]); packageByProduct.get(key).push({id:pacote.pacote_id,type:pacote.tipo,qty:Number(item.quantidade||0)}); }));
  const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO' && String(row.status).toUpperCase()!=='CANCELADO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO' && String(row.status).toUpperCase()!=='CANCELADO').length;
  const cancelledProducts = cancelledByProduct.size;
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')"><span class="material-symbols-rounded">arrow_back</span></button><div><span class="finalized-channel tone-${view.channel.tone}">${escapeKitAttribute(view.channel.label)}</span><h1>${escapeKitAttribute(view.sessionId)}</h1><p>${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} · Modo ${view.mode} · Finalizada</p></div></header><section class="finalized-detail-summary"><article><small>Produtos ativos</small><strong>${view.products}</strong></article><article><small>Unidades ativas</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span>Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><h2>PRODUTOS DA SEPARAÇÃO</h2><span>HISTÓRICO · SOMENTE LEITURA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header tone-${view.channel.tone}"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')" aria-label="Voltar para separações finalizadas"><span class="material-symbols-rounded">arrow_back</span></button><div class="finalized-detail-title"><h1>SEPARAÇÃO <i>•</i> ${escapeKitAttribute(view.channel.label)}</h1><p>${escapeKitAttribute(view.sessionId)} <i>•</i> ${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} <i>•</i> Modo ${view.mode}</p></div><div class="finalized-detail-state"><span class="material-symbols-rounded">task_alt</span><strong>FINALIZADA</strong><small>Somente leitura</small></div></header><section class="finalized-detail-summary" aria-label="Resumo da separação"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span class="material-symbols-rounded">person</span><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span class="finalized-detail-conference">Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><div><small>HISTÓRICO DA OPERAÇÃO</small><h2>PRODUTOS SEPARADOS</h2></div><span><span class="material-symbols-rounded">visibility</span> CONSULTA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><span class="finalized-product-check material-symbols-rounded">check_circle</span><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
 }
