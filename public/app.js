@@ -3850,12 +3850,12 @@ async function renderAlerts() {
 // ========================================================
 const menuModulesConfig = [
  { id: 'produtos', label: 'PRODUTOS', icon: 'produtos', order: 1, type: 'principal' },
- { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 2, type: 'principal' },
+ { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 11, type: 'principal' },
  { id: 'pick', label: 'SEPARAÇÃO (PICK)', icon: 'pick', order: 3, type: 'principal' },
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
- { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
+ { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 2, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
  { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' }
