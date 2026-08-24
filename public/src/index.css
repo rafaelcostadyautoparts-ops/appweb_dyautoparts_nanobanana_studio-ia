@@ -73951,3 +73951,26 @@ html body:not(.login-active) #app > .dashboard-screen.product-search-screen .pro
     padding-right: clamp(20px, 6vw, 64px) !important;
   }
 }
+
+/* Homologacao: contador em duas colunas, com rotulo em duas linhas. */
+html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-found-counter:not([hidden]) {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  column-gap: 12px !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-found-counter strong {
+  font-size: 2.05rem !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-found-counter .found-label {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  white-space: normal !important;
+  line-height: 1.05 !important;
+  text-align: left !important;
+}
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.product-search-screen .product-found-counter strong {
+    font-size: 1.6rem !important;
+  }
+}

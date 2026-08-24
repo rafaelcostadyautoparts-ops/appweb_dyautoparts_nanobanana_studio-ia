@@ -13002,7 +13002,7 @@ function renderSearchProductSellableLocations(product) {
  const productId = product?.id_interno || product?.col_A;
  const locations = [
  { key: 'TERREO', label: 'TERREO' },
- { key: 'PRIMEIRO_ANDAR', label: '1AasAi ANDAR' },
+ { key: 'PRIMEIRO_ANDAR', label: '1\u00ba ANDAR' },
  { key: 'MOSTRUARIO', label: 'MOSTRUARIO' }
  ]
  .map(location => ({
@@ -13058,7 +13058,7 @@ function renderProductSearchSummaryBar(resultCount = 0) {
 
  <div class="product-summary-metric product-found-counter" hidden>
  <strong id="product-summary-count">${formatStockNumber(resultCount)}</strong>
- <span class="found-label">PRODUTOS ENCONTRADOS</span>
+ <span class="found-label"><span>PRODUTOS</span><span>ENCONTRADOS</span></span>
  </div>
  </section>
  `;
