@@ -1,6 +1,6 @@
 {
-  "version": "2.2.4",
-  "build": "2026.08.21.07",
-  "commit": "producao-restaura-gerador-etiquetas",
-  "deployDate": "2026-08-21T16:42:50-03:00"
+  "version": "2.2.5",
+  "build": "2026.08.24.01",
+  "commit": "producao-servicos-rapidos-operacionais",
+  "deployDate": "2026-08-24T14:45:00-03:00"
 }
