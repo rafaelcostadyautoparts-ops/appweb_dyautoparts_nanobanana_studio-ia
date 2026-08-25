@@ -74494,3 +74494,9 @@ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) 
   left:50vw !important;
   transform:translateX(-50%) !important;
 }
+
+
+/* Homologacao: aproxima a consulta mensal da barra superior. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  align-self:start !important;
+}

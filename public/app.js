@@ -32886,7 +32886,8 @@ async function handleDevolucaoProductSearchInput(value) {
  return [];
  }
  box.innerHTML = matches.map(product => {
- const identity = encodeURIComponent(String(product.id_interno || product.ean || product.sku_fornecedor || product.id || ''));
+ const identityField = product.id ? 'id' : product.id_interno ? 'id_interno' : product.ean ? 'ean' : product.sku_fornecedor ? 'sku_fornecedor' : 'sku';
+ const identity = encodeURIComponent(identityField + ':' + String(product[identityField] || ''));
  const name = escapeDevolucaoHTML(product.descricao_completa || product.descricao_base || product.descricao || product.nome || 'Produto sem descricao');
  const meta = escapeDevolucaoHTML([product.id_interno, product.ean, product.sku_fornecedor || product.sku, product.marca].filter(Boolean).join(' | '));
  return '<button type="button" onclick="selectDevolucaoProductFromSearch(\'' + identity + '\')"><strong>' + name + '</strong><small>' + (meta || 'Sem codigos cadastrados') + '</small></button>';
@@ -32895,13 +32896,38 @@ async function handleDevolucaoProductSearchInput(value) {
  return matches;
 }
 
-function isSameDevolucaoDraftProduct(item = {}, product = {}) {
- if (item.produto_id && product.id && String(item.produto_id) === String(product.id)) return true;
- if (item.id_interno && product.id_interno && String(item.id_interno).toLowerCase() === String(product.id_interno).toLowerCase()) return true;
- if (item.ean && product.ean && String(item.ean).toLowerCase() === String(product.ean).toLowerCase()) return true;
- return false;
+function normalizeDevolucaoProductIdentity(value) {
+ const normalized = String(value || '').trim().toLowerCase();
+ if (!normalized || ['0', '-', 'null', 'undefined', 'n/a', 'nao informado', 'não informado'].includes(normalized)) return '';
+ return normalized;
 }
 
+function findDevolucaoProductBySelectionIdentity(identity) {
+ const decoded = decodeURIComponent(String(identity || ''));
+ const separator = decoded.indexOf(':');
+ if (separator < 1) return findDevolucaoProductByIdentity(decoded);
+ const field = decoded.slice(0, separator);
+ const target = normalizeDevolucaoProductIdentity(decoded.slice(separator + 1));
+ if (!target || !['id', 'id_interno', 'ean', 'sku_fornecedor', 'sku'].includes(field)) return null;
+ return (appData.products || []).find(product => normalizeDevolucaoProductIdentity(product[field]) === target) || null;
+}
+
+function isSameDevolucaoDraftProduct(item = {}, product = {}) {
+ const itemProductId = normalizeDevolucaoProductIdentity(item.produto_id);
+ const productId = normalizeDevolucaoProductIdentity(product.id);
+ if (itemProductId && productId) return itemProductId === productId;
+
+ const itemInternalId = normalizeDevolucaoProductIdentity(item.id_interno);
+ const productInternalId = normalizeDevolucaoProductIdentity(product.id_interno);
+ const itemEan = normalizeDevolucaoProductIdentity(item.ean);
+ const productEan = normalizeDevolucaoProductIdentity(product.ean);
+ if (itemInternalId && productInternalId && itemEan && productEan) {
+  return itemInternalId === productInternalId && itemEan === productEan;
+ }
+ if (itemEan && productEan) return itemEan === productEan;
+ if (itemInternalId && productInternalId) return itemInternalId === productInternalId;
+ return false;
+}
 function addDevolucaoProductDirect(product, source = 'busca') {
  const existing = devolucaoMarketplaceState.draftItems.find(item => isSameDevolucaoDraftProduct(item, product));
  if (existing) {
@@ -32989,7 +33015,7 @@ async function openDevolucaoManualProduct() {
  }
 }
 async function selectDevolucaoProductFromSearch(identity) {
- const product = findDevolucaoProductByIdentity(decodeURIComponent(String(identity || '')));
+ const product = findDevolucaoProductBySelectionIdentity(identity);
  if (!product) return showToast('Produto nao encontrado na lista carregada.', 'warning');
  if (devolucaoMarketplaceState.manualSelectionRequested) {
   await prepareDevolucaoProductManual(product);
@@ -33090,7 +33116,7 @@ function addDevolucaoDraftItem() {
  const devolveuCorreto = document.getElementById('dev-item-correct')?.value === 'true';
  const custoProduto = getDevolucaoProductCost(product);
 
- devolucaoMarketplaceState.draftItems.push({
+ const draftItem = {
  localId: `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
  produto_id: product.id || null,
  id_interno: product.id_interno || '',
@@ -33109,12 +33135,19 @@ function addDevolucaoDraftItem() {
  estoque_movimento_id: '',
  observacoes: document.getElementById('dev-item-notes')?.value.trim() || '',
  destino: devolveuCorreto ? 'disponivel' : 'divergencia'
- });
+ };
+
+ const existing = devolucaoMarketplaceState.draftItems.find(item => isSameDevolucaoDraftProduct(item, product));
+ if (existing) {
+  existing.quantidade = Number(existing.quantidade || 0) + quantidade;
+ } else {
+  devolucaoMarketplaceState.draftItems.push(draftItem);
+ }
 
  devolucaoMarketplaceState.selectedProduct = null;
  devolucaoMarketplaceState.manualSelectionRequested = false;
  document.getElementById('dev-selected-product').innerHTML = '';
- document.getElementById('dev-product-feedback').textContent = 'Produto adicionado. Continue bipando, pesquisando ou salve a devolucao.';
+ document.getElementById('dev-product-feedback').textContent = existing ? 'Quantidade atualizada para o mesmo produto.' : 'Produto adicionado. Continue bipando, pesquisando ou salve a devolucao.';
  clearDevolucaoProductSuggestions();
  renderDevolucaoDraftItems();
  const searchInput = document.getElementById('dev-product-code');
@@ -33656,7 +33689,7 @@ function renderHistoricoDevolucaoList() {
   <div class="devolucao-summary-row metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 14h28M18 14V8h12v6M14 14l2 28h16l2-28M21 21v13M27 21v13"/></svg></span><div><small>Perda/Descarte</small><strong>${formatCurrency(financialTotals.prejuizo)}</strong></div></div>
  </article>
  <article class="devolucao-summary-card devolucao-summary-group">
-  <header class="metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m16 25 5 5 11-12"/></svg></span><div class="devolucao-summary-heading"><strong>Reputa\u00e7\u00e3o</strong><small>${percentualReputacaoRecuperada.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</small></div></header>
+  <header class="metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m16 25 5 5 11-12"/></svg></span><div class="devolucao-summary-heading"><strong>Reputa\u00e7\u00e3o Recuperada</strong><small>${percentualReputacaoRecuperada.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</small></div></header>
   <div class="devolucao-summary-row metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 6 44 41H4L24 6Z"/><path d="M24 17v12M24 36h.01"/></svg></span><div><small>Reputa\u00e7\u00e3o afetada</small><strong>${reputacaoAfetada}</strong></div></div>
   <div class="devolucao-summary-row metric-green"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m15 25 6 6 12-13"/></svg></span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></div>
  </article>
