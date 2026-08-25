@@ -1,6 +1,6 @@
 {
-  "version": "2.2.14",
-  "build": "2026.08.25.08",
-  "commit": "homolog-centraliza-resumo-flex",
-  "deployDate": "2026-08-25T15:00:00-03:00"
+  "version": "2.2.15",
+  "build": "2026.08.25.09",
+  "commit": "homolog-centraliza-card-viewport",
+  "deployDate": "2026-08-25T15:20:00-03:00"
 }
