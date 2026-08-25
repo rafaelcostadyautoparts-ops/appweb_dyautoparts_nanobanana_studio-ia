@@ -74038,3 +74038,54 @@ html body:not(.login-active) #app > .dashboard-screen.product-search-screen .pro
 .pack-records-list{display:grid;gap:10px}.pack-records-list>button{align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:15px;color:var(--text);display:grid;grid-template-columns:auto 1fr auto;gap:12px;padding:14px;text-align:left}.pack-records-list>button>span{color:#4f46e5;font-size:28px}.pack-records-list>button>div{display:grid;gap:3px}.pack-records-list>button small{color:var(--muted)}.pack-records-list>button em{color:#b45309;font-style:normal;font-weight:750}.pack-records-list>button>b{background:#dcfce7;border-radius:999px;color:#166534;font-size:.7rem;padding:5px 9px}.pack-records-list>button>b.is-adjusted{background:#fef3c7;color:#92400e}
 .pack-daily-adjustment{align-items:flex-start;background:#fffbeb;border:1px solid #fbbf24;border-radius:14px;color:#78350f;display:flex;gap:12px;margin-bottom:14px;padding:14px}.pack-daily-adjustment>span{color:#d97706}.pack-daily-adjustment p{margin:3px 0}.pack-daily-consult-list article em{color:var(--muted);display:block;font-size:.72rem;font-style:normal;margin-top:4px}.pack-daily-consult-list article.has-adjustment{border-color:#f59e0b!important}
 @media(max-width:650px){.pack-home-card{border-radius:20px;padding:12px}.pack-home-card>button{grid-template-columns:40px 1fr auto;padding:10px}.pack-records-list>button{grid-template-columns:auto 1fr}.pack-records-list>button>b{grid-column:2;justify-self:start}}
+
+
+/* Homologacao: centralizacao do Flex e consulta mensal automatica. */
+html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-ui-shell,
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  box-sizing: border-box !important;
+  width: min(1320px, calc(100% - 40px)) !important;
+  max-width: 1320px !important;
+  margin-inline: auto !important;
+  padding-inline: 0 !important;
+}
+html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-form-card.is-flex-flow {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  margin-inline: auto !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet { overflow:hidden;width:100%;margin:8px auto 28px;border:1px solid #9ca3af;border-radius:4px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.08); }
+html.app-environment-homologation .romaneio-monthly-heading { display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px;border-bottom:2px solid #374151;text-align:center; }
+html.app-environment-homologation .romaneio-monthly-heading>div { flex:1; }
+html.app-environment-homologation .romaneio-monthly-heading small { color:#d97706;font-size:.68rem;font-weight:900;letter-spacing:.12em; }
+html.app-environment-homologation .romaneio-monthly-heading h1 { margin:4px 0 0;color:#111827;font:700 1.2rem/1.2 Arial,sans-serif; }
+html.app-environment-homologation .romaneio-monthly-heading p { margin:5px 0 0;color:#475569;font-size:.82rem;font-weight:800;text-transform:capitalize; }
+html.app-environment-homologation .romaneio-monthly-heading label { display:grid;gap:5px;min-width:165px;text-align:left; }
+html.app-environment-homologation .romaneio-monthly-heading label span { color:#64748b;font-size:.65rem;font-weight:900;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-heading input { min-height:40px;padding:0 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-summary { display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #9ca3af;background:#f8fafc; }
+html.app-environment-homologation .romaneio-monthly-summary span { display:grid;gap:3px;padding:10px;text-align:center;border-right:1px solid #d1d5db; }
+html.app-environment-homologation .romaneio-monthly-summary span:last-child { border-right:0; }
+html.app-environment-homologation .romaneio-monthly-summary small { color:#64748b;font-size:.65rem;font-weight:800;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-summary strong { color:#111827;font-size:1rem; }
+html.app-environment-homologation .romaneio-monthly-table { overflow-x:auto; }
+html.app-environment-homologation .romaneio-monthly-table table { width:100%;min-width:1050px;border-collapse:collapse;table-layout:fixed; }
+html.app-environment-homologation .romaneio-monthly-table :is(th,td) { border-right:1px solid #9ca3af;border-bottom:1px solid #9ca3af; }
+html.app-environment-homologation .romaneio-monthly-table :is(th,td):last-child { border-right:0; }
+html.app-environment-homologation .romaneio-monthly-table th { padding:9px 8px;background:#eef0f3;color:#1f2937;font-size:.68rem;font-weight:900;text-align:center;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-table td { height:54px;padding:6px 8px;color:#1f2937;font-size:.78rem;text-align:center;vertical-align:middle; }
+html.app-environment-homologation .romaneio-monthly-table tbody tr:nth-child(even) { background:#fafafa; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(5),html.app-environment-homologation .romaneio-monthly-table td:nth-child(5) { width:18%; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(6),html.app-environment-homologation .romaneio-monthly-table td:nth-child(6) { width:15%; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(8),html.app-environment-homologation .romaneio-monthly-table td:nth-child(8) { width:17%; }
+html.app-environment-homologation .romaneio-monthly-table th:last-child,html.app-environment-homologation .romaneio-monthly-table td:last-child { width:50px; }
+html.app-environment-homologation .romaneio-monthly-signature img { display:block;width:100%;height:42px;object-fit:contain; }
+html.app-environment-homologation .romaneio-monthly-signature span { color:#94a3b8;font-size:.68rem;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-empty { height:190px!important;color:#64748b!important;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-sheet>footer { padding:10px 16px;color:#64748b;background:#f8fafc;font-size:.67rem;text-align:center; }
+@media (max-width:700px) {
+ html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-ui-shell,
+ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell { width:calc(100% - 20px)!important; }
+ html.app-environment-homologation .romaneio-monthly-heading { align-items:stretch;flex-direction:column;padding:15px; }
+ html.app-environment-homologation .romaneio-monthly-heading label { min-width:0; }
+}
