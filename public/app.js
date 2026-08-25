@@ -691,16 +691,7 @@ if ('serviceWorker' in navigator) {
  const newWorker = reg.installing;
  newWorker.addEventListener('statechange', async () => {
  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
- const shouldUpdate = await showAppConfirm({
- title: 'Atencao',
- message: 'Revise os dados e tente novamente.',
- confirmLabel: 'Atualizar',
- cancelLabel: 'Depois'
- });
- if (shouldUpdate) {
- newWorker.postMessage({action: 'skipWaiting'});
- window.location.reload();
- }
+ newWorker.postMessage({ action: 'skipWaiting' });
  }
  });
  });
@@ -27173,10 +27164,8 @@ function normalizeVersionPart(value) {
 function isRemoteAppVersionNewer(remote = {}) {
  const remoteVersion = normalizeVersionPart(remote.version);
  const remoteBuild = normalizeVersionPart(remote.build);
- const remoteCommit = normalizeVersionPart(remote.commit);
- if (remoteVersion && remoteVersion !== DY_APP_VERSION) return true;
- if (remoteBuild && remoteBuild !== DY_APP_BUILD) return true;
- if (remoteCommit && remoteCommit !== 'local' && DY_APP_COMMIT !== 'local' && remoteCommit !== DY_APP_COMMIT) return true;
+ if (remoteVersion && remoteVersion !== normalizeVersionPart(DY_APP_VERSION)) return true;
+ if (remoteBuild && remoteBuild !== normalizeVersionPart(DY_APP_BUILD)) return true;
  return false;
 }
 
@@ -27336,7 +27325,7 @@ async function detectAppUpdate({ renderConfig = false } = {}) {
  if (registration) {
  swChecked = true;
  await registration.update();
- hasUpdate = hasUpdate || !!(registration.waiting || registration.installing);
+ if (!remote) hasUpdate = !!(registration.waiting || registration.installing);
  }
  }
  } catch (error) {
