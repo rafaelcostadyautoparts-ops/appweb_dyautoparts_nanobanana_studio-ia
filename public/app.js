@@ -22449,34 +22449,19 @@ async function authorizeConferenceDivergence() {
  );
  if (!divergentRows.length) return confirmFinishConference();
 
- const reason = await showAppPrompt({
-  title: 'Autorizar ajuste da conferencia',
-  message: 'Explique por que o envio final ficara diferente da separacao original.',
-  detail: 'O estoque sera movimentado pela quantidade conferida. A separacao original e este motivo ficarao preservados no historico.',
-  label: 'Motivo obrigatorio',
-  confirmLabel: 'Continuar',
-  cancelLabel: 'Voltar',
-  inputType: 'text'
- });
- const cleanReason = String(reason || '').trim();
- if (!cleanReason) {
-  if (reason !== null) showToast('Informe o motivo do ajuste para continuar.', 'warning');
-  return;
- }
-
  const additions = divergentRows.filter(row => Number(row.qtd_conferida || 0) > Number(row.qtd_separada || 0)).length;
  const removals = divergentRows.filter(row => Number(row.qtd_conferida || 0) < Number(row.qtd_separada || 0)).length;
  const confirmed = await showAppConfirm({
-  title: 'Finalizar com divergencia autorizada?',
+  title: 'Finalizar com divergencia?',
   message: 'A quantidade conferida sera considerada a quantidade realmente enviada.',
-  summary: `Produtos com acrescimo: ${additions}\nProdutos com reducao: ${removals}\nMotivo: ${cleanReason}`,
-  detail: 'Esta decisao sera registrada com usuario, data e hora. O estoque sera movimentado pelo conferido.',
-  confirmLabel: 'Autorizar e finalizar',
+  summary: `Produtos com acrescimo: ${additions}\nProdutos com reducao: ${removals}`,
+  detail: 'O estoque sera movimentado pela quantidade conferida.',
+  confirmLabel: 'Finalizar com divergencia',
   cancelLabel: 'Revisar bipes'
  });
  if (!confirmed) return;
  closeConferenceResultModal();
- await confirmFinishConference({ allowDivergence: true, divergenceReason: cleanReason });
+ await confirmFinishConference({ allowDivergence: true });
 }
 
 function returnToConferenceScanning() {
@@ -22734,26 +22719,6 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  const { error: itensError } = await client.from('conferencia_itens').insert(itensPayload);
  if (itensError) throw itensError;
 
- if (payload.divergenceAuthorized === true) {
-  const adjustmentRows = itensPayload.filter(row => Number(row.qtd_separada || 0) !== Number(row.qtd_conferida || 0)).map(row => ({
-   conferencia_id: conferenciaId,
-   separacao_id: payload.sessionId,
-   id_interno: row.id_interno,
-   ean: row.ean || null,
-   descricao: row.descricao || '',
-   qtd_separada: Number(row.qtd_separada || 0),
-   qtd_conferida: Number(row.qtd_conferida || 0),
-   diferenca: Number(row.qtd_conferida || 0) - Number(row.qtd_separada || 0),
-   motivo: payload.divergenceReason,
-   autorizado_por: payload.user,
-   autorizado_em: now
-  }));
-  if (adjustmentRows.length) {
-   const { error: adjustmentError } = await client.from('conferencia_ajustes').insert(adjustmentRows);
-   if (adjustmentError) throw adjustmentError;
-  }
- }
-
  let movimentos = 0;
  for (const row of rows) {
  if (isHomologationEnvironment() && isOperationalNoStockItem(row)) continue;
@@ -22853,7 +22818,6 @@ async function confirmFinishConference(options = {}) {
 
  // Formatar linhas para o backend processar movimentos atomicos
  const allowDivergence = options.allowDivergence === true;
- const divergenceReason = String(options.divergenceReason || '').trim();
  const rows = currentPackSession.conferenceRows.map(row => ({
  id_interno: row.id_interno,
  ean: row.ean,
@@ -22864,7 +22828,7 @@ async function confirmFinishConference(options = {}) {
   ? 'SOBRA'
   : Number(row.qtd_conferida || 0) < Number(row.qtd_separada || 0) ? 'FALTA' : null,
  divergencia_autorizada: allowDivergence,
- motivo_divergencia: allowDivergence ? divergenceReason : null,
+ motivo_divergencia: null,
  separacao_id: sessionId
  }));
 
@@ -22873,10 +22837,10 @@ async function confirmFinishConference(options = {}) {
  sessionId: sessionId,
  isFastMode: false,
  modo_rapido: false,
- observacao: allowDivergence ? `${PICK_MANUAL_OBSERVATION} | AJUSTE AUTORIZADO: ${divergenceReason}` : PICK_MANUAL_OBSERVATION,
+ observacao: PICK_MANUAL_OBSERVATION,
  user: currentUser,
  divergenceAuthorized: allowDivergence,
- divergenceReason,
+ divergenceReason: '',
  rows: rows,
  executionId
  });
