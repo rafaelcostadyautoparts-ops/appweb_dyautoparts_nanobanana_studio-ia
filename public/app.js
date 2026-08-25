@@ -23563,21 +23563,66 @@ function setRomaneioMonthlyViewMonth(value) {
  renderRomaneioScreen('', '__realizados__');
 }
 
+function setRomaneioMonthlyMonth(value) {
+ const year = String(romaneioMonthlyViewMonth || '').slice(0, 4) || String(new Date().getFullYear());
+ romaneioMonthlyViewMonth = year + '-' + String(value || '').padStart(2, '0');
+ renderRomaneioScreen('', '__realizados__');
+}
+
+function setRomaneioMonthlyYear(value) {
+ const month = String(romaneioMonthlyViewMonth || '').slice(5, 7) || String(new Date().getMonth() + 1).padStart(2, '0');
+ romaneioMonthlyViewMonth = String(value || new Date().getFullYear()) + '-' + month;
+ renderRomaneioScreen('', '__realizados__');
+}
+
+function closeRomaneioMonthlyMedia() {
+ document.getElementById('romaneio-monthly-media-modal')?.remove();
+}
+
+function openRomaneioMonthlyMedia(id) {
+ const item = getRomaneios().find(row => String(row.id) === String(id));
+ if (!item) return showToast('Romaneio nao encontrado.', 'warning');
+ const media = [
+  item.foto_pacote ? { title: 'Foto dos pacotes da separacao', src: item.foto_pacote } : null,
+  item.foto_devolucao ? { title: 'Foto da devolucao', src: item.foto_devolucao } : null
+ ].filter(Boolean);
+ if (!media.length) return showToast('Este romaneio nao possui fotos.', 'info');
+ const overlay = document.createElement('div');
+ overlay.id = 'romaneio-monthly-media-modal';
+ overlay.className = 'romaneio-monthly-media-overlay';
+ overlay.innerHTML = '<section role="dialog" aria-modal="true" aria-label="Imagens do romaneio"><header><div><small>' + escapeKitAttribute(item.data || '') + ' ' + escapeKitAttribute(item.hora || '') + '</small><h2>Imagens da retirada</h2></div><button type="button" onclick="closeRomaneioMonthlyMedia()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="romaneio-monthly-media-grid">' + media.map(photo => '<figure><figcaption>' + escapeKitAttribute(photo.title) + '</figcaption><img src="' + escapeKitAttribute(photo.src) + '" alt="' + escapeKitAttribute(photo.title) + '"></figure>').join('') + '</div></section>';
+ overlay.addEventListener('click', event => { if (event.target === overlay) closeRomaneioMonthlyMedia(); });
+ document.body.appendChild(overlay);
+}
+
 function renderRomaneioMonthlyFlexList(records = []) {
  const flexRecords = (Array.isArray(records) ? records : []).filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX'));
  if (!romaneioMonthlyViewMonth) romaneioMonthlyViewMonth = getRomaneioMonthlyDefaultMonth(flexRecords);
  const rows = flexRecords.filter(item => getRomaneioRecordMonthKey(item) === romaneioMonthlyViewMonth)
   .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+ const availableYears = [...new Set(flexRecords.map(getRomaneioRecordMonthKey).filter(Boolean).map(key => key.slice(0, 4)))].sort().reverse();
+ const selectedYear = romaneioMonthlyViewMonth.slice(0, 4);
+ const selectedMonth = romaneioMonthlyViewMonth.slice(5, 7);
+ if (!availableYears.includes(selectedYear)) availableYears.push(selectedYear);
+ const monthNames = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
  const total = rows.reduce((sum, item) => sum + Number(item.pacotes || 0), 0);
  const returns = rows.reduce((sum, item) => sum + Number(item.quantidade_devolvida || 0), 0);
  const body = rows.map(item => {
   const signature = item.assinatura
    ? '<img src="' + escapeKitAttribute(item.assinatura) + '" alt="Assinatura de ' + escapeKitAttribute(item.responsavel || 'coletor') + '">'
    : '<span>Pendente</span>';
-  return '<tr><td>' + escapeKitAttribute(item.data || '-') + '</td><td>' + escapeKitAttribute(item.hora || '-') + '</td><td><strong>' + formatStockNumber(item.pacotes || 0) + '</strong></td><td>' + formatStockNumber(item.pacotes_nao_lidos || 0) + '</td><td>' + escapeKitAttribute(item.responsavel || '-') + '</td><td>' + escapeKitAttribute(item.documento || '-') + '</td><td><strong>' + formatStockNumber(item.quantidade_devolvida || 0) + '</strong></td><td class="romaneio-monthly-signature">' + signature + '</td><td><button class="romaneio-view-button" type="button" onclick="renderRomaneioScreen(\'\',' + quotePackInlineArg(item.id) + ')" title="Visualizar romaneio" aria-label="Visualizar romaneio"><span class="material-symbols-rounded">visibility</span></button></td></tr>';
+  const hasMedia = Boolean(item.foto_pacote || item.foto_devolucao);
+  const mediaButton = '<button class="romaneio-monthly-media-button ' + (hasMedia ? 'has-media' : 'no-media') + '" type="button" onclick="openRomaneioMonthlyMedia(' + quotePackInlineArg(item.id) + ')" title="' + (hasMedia ? 'Abrir fotos da separacao e devolucao' : 'Nenhuma foto registrada') + '" aria-label="' + (hasMedia ? 'Abrir imagens do romaneio' : 'Nenhuma imagem neste romaneio') + '"' + (hasMedia ? '' : ' disabled') + '><span class="material-symbols-rounded">' + (hasMedia ? 'add' : 'image_not_supported') + '</span></button>';
+  return '<tr><td>' + escapeKitAttribute(item.data || '-') + '</td><td>' + escapeKitAttribute(item.hora || '-') + '</td><td><strong>' + formatStockNumber(item.pacotes || 0) + '</strong></td><td>' + formatStockNumber(item.pacotes_nao_lidos || 0) + '</td><td>' + escapeKitAttribute(item.responsavel || '-') + '</td><td>' + escapeKitAttribute(item.documento || '-') + '</td><td><strong>' + formatStockNumber(item.quantidade_devolvida || 0) + '</strong></td><td class="romaneio-monthly-signature">' + signature + '</td><td>' + mediaButton + '</td></tr>';
  }).join('');
- return '<section class="romaneio-monthly-sheet"><header class="romaneio-monthly-heading"><div><small>CONTROLE MENSAL</small><h1>Controle de Coleta Flex - DY Auto Parts</h1><p>' + escapeKitAttribute(formatRomaneioMonthlyTitle(romaneioMonthlyViewMonth)) + '</p></div><label><span>Mes</span><input type="month" value="' + escapeKitAttribute(romaneioMonthlyViewMonth) + '" onchange="setRomaneioMonthlyViewMonth(this.value)"></label></header><div class="romaneio-monthly-summary"><span><small>Retiradas</small><strong>' + rows.length + '</strong></span><span><small>Pacotes</small><strong>' + formatStockNumber(total) + '</strong></span><span><small>Devolucoes</small><strong>' + formatStockNumber(returns) + '</strong></span></div><div class="romaneio-monthly-table"><table><thead><tr><th>Data</th><th>Hora</th><th>Qtde total</th><th>Qtde nao lida</th><th>Nome</th><th>RG/CPF</th><th>Qtde devolucao</th><th>Assinatura</th><th aria-label="Visualizar"></th></tr></thead><tbody>' + (body || '<tr><td class="romaneio-monthly-empty" colspan="9">Nenhuma coleta Flex registrada neste mes.</td></tr>') + '</tbody></table></div><footer>Gerado automaticamente a partir dos romaneios diarios assinados no aplicativo.</footer></section>';
+ const monthOptions = monthNames.map((name, index) => {
+  const value = String(index + 1).padStart(2, '0');
+  return '<option value="' + value + '"' + (value === selectedMonth ? ' selected' : '') + '>' + name + '</option>';
+ }).join('');
+ const yearOptions = availableYears.map(year => '<option value="' + year + '"' + (year === selectedYear ? ' selected' : '') + '>' + year + '</option>').join('');
+ return '<section class="romaneio-monthly-sheet"><header class="romaneio-monthly-heading"><div><h1>Controle de Coleta Flex - DY Auto Parts</h1></div><div class="romaneio-monthly-period"><label><span>Mes</span><select onchange="setRomaneioMonthlyMonth(this.value)">' + monthOptions + '</select></label><label><span>Ano</span><select onchange="setRomaneioMonthlyYear(this.value)">' + yearOptions + '</select></label></div></header><div class="romaneio-monthly-summary"><span><small>Retiradas</small><strong>' + rows.length + '</strong></span><span><small>Pacotes</small><strong>' + formatStockNumber(total) + '</strong></span><span><small>Devolucoes</small><strong>' + formatStockNumber(returns) + '</strong></span></div><div class="romaneio-monthly-table"><table><thead><tr><th>Data</th><th>Hora</th><th>Qtde total</th><th>Qtde nao lida</th><th>Nome</th><th>RG/CPF</th><th>Qtde devolucao</th><th>Assinatura</th><th>Fotos</th></tr></thead><tbody>' + (body || '<tr><td class="romaneio-monthly-empty" colspan="9">Nenhuma coleta Flex registrada neste periodo.</td></tr>') + '</tbody></table></div><footer>Gerado automaticamente a partir dos romaneios diarios assinados no aplicativo.</footer></section>';
 }
+
 
 function renderRomaneiosCompletedList(records = []) {
  if (isHomologationEnvironment()) return renderRomaneioMonthlyFlexList(records);
