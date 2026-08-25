@@ -1,7 +1,5 @@
-const PRODUCTION_SUPABASE_URL = 'https://ccpxhbvmmabrttqsmqaj.supabase.co';
-const PRODUCTION_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjcHhoYnZtbWFicnR0cXNtcWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjU5ODIsImV4cCI6MjA5MjA0MTk4Mn0.0cAmazh1Yv_Nj5ISxBPHrdDq7Gk2R29BJIGI8PXji7A';
 const HOMOLOGATION_PROJECT_REF = 'doklsgduslimidfbyngj';
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+const HOMOLOGATION_SUPABASE_URL = `https://${HOMOLOGATION_PROJECT_REF}.supabase.co`;
 
 function getConfiguredValue(value) {
     const normalized = String(value || '').trim();
@@ -9,31 +7,55 @@ function getConfiguredValue(value) {
 }
 
 const runtimeConfig = window.__DY_APP_CONFIG__ || {};
-const isLocalEnvironment = LOCAL_HOSTNAMES.has(window.location.hostname);
 const configuredEnvironment = getConfiguredValue(runtimeConfig.appEnvironment).toLowerCase();
-const configuredSupabaseUrl = getConfiguredValue(runtimeConfig.supabaseUrl).replace(/\/rest\/v1\/?$/, '');
+const configuredSupabaseUrl = getConfiguredValue(runtimeConfig.supabaseUrl).replace(/\/$/, '');
 const configuredSupabaseAnonKey = getConfiguredValue(runtimeConfig.supabaseAnonKey);
-const SUPABASE_URL = configuredSupabaseUrl || PRODUCTION_SUPABASE_URL;
-const SUPABASE_ANON_KEY = configuredSupabaseAnonKey || PRODUCTION_SUPABASE_ANON_KEY;
 const isHomologation = configuredEnvironment === 'homologation' || configuredEnvironment === 'homologacao';
-const localConfigurationIsSafe = !isLocalEnvironment || (
-    isHomologation
-    && SUPABASE_URL.includes(`${HOMOLOGATION_PROJECT_REF}.supabase.co`)
-    && Boolean(configuredSupabaseAnonKey)
-);
+
+function getJwtPayload(token) {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) return null;
+
+    try {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+        return JSON.parse(atob(padded));
+    } catch {
+        return null;
+    }
+}
+
+function validateRuntimeConfiguration() {
+    if (!configuredEnvironment || !configuredSupabaseUrl || !configuredSupabaseAnonKey) {
+        return { valid: false, reason: 'As configuracoes obrigatorias do ambiente nao foram fornecidas.' };
+    }
+    if (!isHomologation) {
+        return { valid: false, reason: 'Este aplicativo aceita somente o ambiente de homologacao.' };
+    }
+    if (configuredSupabaseUrl !== HOMOLOGATION_SUPABASE_URL) {
+        return { valid: false, reason: 'A URL configurada nao pertence ao projeto de homologacao autorizado.' };
+    }
+
+    const keyPayload = getJwtPayload(configuredSupabaseAnonKey);
+    if (keyPayload?.ref !== HOMOLOGATION_PROJECT_REF || keyPayload?.role !== 'anon') {
+        return { valid: false, reason: 'A chave publica nao pertence ao projeto de homologacao autorizado.' };
+    }
+    return { valid: true, reason: '' };
+}
+
+const runtimeValidation = validateRuntimeConfiguration();
 
 function showEnvironmentIdentity() {
-    if (!isLocalEnvironment) return;
     document.documentElement.classList.add('app-environment-homologation');
     document.title = `[HML] ${document.title}`;
     const banner = document.getElementById('app-environment-banner');
     if (banner) {
-        banner.textContent = 'HOMOLOGAÇÃO • DADOS DE TESTE • LOCALHOST';
+        banner.textContent = 'HOMOLOGAÇÃO • DADOS DE TESTE';
         banner.hidden = false;
     }
 }
 
-function showUnsafeEnvironmentBlock() {
+function showUnsafeEnvironmentBlock(reason) {
     document.documentElement.classList.add('app-environment-blocked');
     document.title = '[BLOQUEADO] Configuração de ambiente';
     const app = document.getElementById('app');
@@ -42,22 +64,23 @@ function showUnsafeEnvironmentBlock() {
             <main class="environment-block-screen">
                 <section class="environment-block-card">
                     <span class="material-symbols-rounded">security</span>
-                    <h1>Acesso local bloqueado</h1>
-                    <p>O localhost não está configurado com o banco de homologação. Nenhum dado foi acessado.</p>
-                    <small>Confira o arquivo .env.local antes de continuar.</small>
+                    <h1>Acesso bloqueado</h1>
+                    <p>${reason} Nenhum cliente Supabase foi criado.</p>
+                    <small>Confira as variáveis VITE_APP_ENV, VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.</small>
                 </section>
             </main>`;
     }
 }
 
-showEnvironmentIdentity();
 window.supabaseClientReady = new Promise((resolve, reject) => {
-    if (!localConfigurationIsSafe) {
-        const error = new Error('Localhost sem configuração segura de homologação');
-        showUnsafeEnvironmentBlock();
+    if (!runtimeValidation.valid) {
+        const error = new Error(runtimeValidation.reason);
+        showUnsafeEnvironmentBlock(runtimeValidation.reason);
         reject(error);
         return;
     }
+
+    showEnvironmentIdentity();
     const startedAt = Date.now();
     const timeoutMs = 6000;
 
@@ -68,8 +91,8 @@ window.supabaseClientReady = new Promise((resolve, reject) => {
         }
 
         if (window.supabase?.createClient) {
-            window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('[Supabase] Client inicializado com URL:', SUPABASE_URL);
+            window.supabaseClient = window.supabase.createClient(configuredSupabaseUrl, configuredSupabaseAnonKey);
+            console.log('[Supabase] Client de homologacao inicializado.');
             resolve(window.supabaseClient);
             return;
         }

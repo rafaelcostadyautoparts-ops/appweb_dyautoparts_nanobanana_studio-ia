@@ -2034,7 +2034,13 @@ async function initApp() {
  );
  }
  } catch (readyError) {
- console.warn('[BOOT] Supabase client ainda indisponivel:', readyError.message);
+ clearTimeout(totalTimeout);
+ const failureMessage = readyError?.message || 'Falha desconhecida ao validar a configuracao do Supabase';
+ console.error('[BOOT] Inicializacao bloqueada pela configuracao do Supabase:', failureMessage);
+ addSyncTrace('initApp', 'BLOCK', `supabaseClientReady: ${failureMessage}`);
+ bootstrapState.completed = true;
+ bootstrapState.running = false;
+ return;
  }
 
  try {
