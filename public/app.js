@@ -691,16 +691,7 @@ if ('serviceWorker' in navigator) {
  const newWorker = reg.installing;
  newWorker.addEventListener('statechange', async () => {
  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
- const shouldUpdate = await showAppConfirm({
- title: 'Atencao',
- message: 'Revise os dados e tente novamente.',
- confirmLabel: 'Atualizar',
- cancelLabel: 'Depois'
- });
- if (shouldUpdate) {
- newWorker.postMessage({action: 'skipWaiting'});
- window.location.reload();
- }
+ newWorker.postMessage({ action: 'skipWaiting' });
  }
  });
  });
@@ -23373,7 +23364,7 @@ function toggleRomaneioReturnFields(value) {
  const panel = document.getElementById('romaneio-return-panel');
  if (panel) panel.hidden = !active;
  const qty = document.getElementById('romaneio-return-quantity');
- if (qty) qty.required = active;
+ if (qty) { qty.required = active; qty.disabled = !active; }
  if (!active) { if (qty) qty.value = '0'; clearRomaneioReturnPhoto(); }
  updateRomaneioReturnSummary();
 }
@@ -23416,7 +23407,7 @@ function renderRomaneioForm(metrics) {
  <div class="romaneio-photo-box romaneio-field-full romaneio-flex-package-photo"><div><strong>Foto dos pacotes entregues</strong><small>Opcional</small></div><label class="romaneio-photo-btn romaneio-icon-only" title="Adicionar foto" aria-label="Adicionar foto"><span class="material-symbols-rounded">photo_camera</span><input id="romaneio-package-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioPackagePhoto(this)"></label><img id="romaneio-package-photo-preview" class="romaneio-package-photo-preview" alt="Foto dos pacotes entregues" hidden></div>
  </section><section class="romaneio-flex-section romaneio-field-full romaneio-return-section"><header><span class="romaneio-step-number">3</span><div><strong>Devolucao</strong></div></header>
  <label class="romaneio-return-toggle romaneio-field-full"><input name="teve_devolucao" type="checkbox" value="sim" onchange="toggleRomaneioReturnFields(this.checked ? 'sim' : 'nao')"><span aria-hidden="true"></span><strong>Marcar devolucao</strong></label>
- <div id="romaneio-return-panel" class="romaneio-return-panel romaneio-field-full" hidden><label class="romaneio-field-full"><span>Quantidade devolvida *</span><input id="romaneio-return-quantity" name="quantidade_devolvida" type="number" inputmode="numeric" min="1" step="1" value="0" oninput="updateRomaneioReturnSummary()"></label>
+ <div id="romaneio-return-panel" class="romaneio-return-panel romaneio-field-full" hidden><label class="romaneio-field-full"><span>Quantidade devolvida *</span><input id="romaneio-return-quantity" name="quantidade_devolvida" type="number" inputmode="numeric" min="1" step="1" value="0" disabled oninput="updateRomaneioReturnSummary()"></label>
  <div class="romaneio-photo-box romaneio-field-full"><div><strong>Foto da devolucao</strong><small>Opcional</small></div><label class="romaneio-photo-btn romaneio-icon-only" title="Adicionar foto" aria-label="Adicionar foto"><span class="material-symbols-rounded">photo_camera</span><input id="romaneio-return-photo-input" type="file" accept="image/*" capture="environment" onchange="handleRomaneioReturnPhoto(this)"></label><img id="romaneio-return-photo-preview" class="romaneio-package-photo-preview" alt="Foto da devolucao" hidden></div></div>
  </section>` : ''}
  ${isCorreios ? `<section class="romaneio-tracking-panel" data-expected="${Number(packageTotal || 0)}"><div class="romaneio-tracking-head"><div><strong>Conferencia dos pacotes dos Correios</strong><small>Bipe cada codigo antes da assinatura.</small></div><span id="romaneio-tracking-counter">${formatRomaneioTrackingCounter(packageTotal)}</span></div><div class="romaneio-tracking-scan"><input id="romaneio-tracking-input" type="text" inputmode="text" autocomplete="off" placeholder="Bipe ou digite o rastreio" onkeydown="handleRomaneioTrackingKey(event)"><button type="button" onclick="addRomaneioTrackingCode()">Adicionar rastreio</button></div><div id="romaneio-tracking-list" class="romaneio-tracking-list">${renderRomaneioTrackingCodes()}</div></section><label class="romaneio-field-full"><span>E-mail para envio</span><input name="email_destino" type="email" required></label>` : ''}
@@ -23533,7 +23524,99 @@ function renderRomaneioDetail(item) {
  `;
 }
 
+
+var romaneioMonthlyViewMonth = '';
+
+function getRomaneioRecordMonthKey(item = {}) {
+ const created = String(item.createdAt || '').slice(0, 7);
+ if (/^\d{4}-\d{2}$/.test(created)) return created;
+ const parts = String(item.data || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+ if (!parts) return '';
+ const year = parts[3].length === 2 ? '20' + parts[3] : parts[3];
+ return year + '-' + String(parts[2]).padStart(2, '0');
+}
+
+function getRomaneioMonthlyDefaultMonth(records = []) {
+ const now = new Date();
+ const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+ const months = [...new Set(records.map(getRomaneioRecordMonthKey).filter(Boolean))].sort().reverse();
+ return months.includes(current) ? current : (months[0] || current);
+}
+
+function formatRomaneioMonthlyTitle(monthKey) {
+ const parts = String(monthKey || '').split('-').map(Number);
+ if (!parts[0] || !parts[1]) return 'Periodo mensal';
+ return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
+function setRomaneioMonthlyViewMonth(value) {
+ romaneioMonthlyViewMonth = String(value || '');
+ renderRomaneioScreen('', '__realizados__');
+}
+
+function setRomaneioMonthlyMonth(value) {
+ const year = String(romaneioMonthlyViewMonth || '').slice(0, 4) || String(new Date().getFullYear());
+ romaneioMonthlyViewMonth = year + '-' + String(value || '').padStart(2, '0');
+ renderRomaneioScreen('', '__realizados__');
+}
+
+function setRomaneioMonthlyYear(value) {
+ const month = String(romaneioMonthlyViewMonth || '').slice(5, 7) || String(new Date().getMonth() + 1).padStart(2, '0');
+ romaneioMonthlyViewMonth = String(value || new Date().getFullYear()) + '-' + month;
+ renderRomaneioScreen('', '__realizados__');
+}
+
+function closeRomaneioMonthlyMedia() {
+ document.getElementById('romaneio-monthly-media-modal')?.remove();
+}
+
+function openRomaneioMonthlyMedia(id) {
+ const item = getRomaneios().find(row => String(row.id) === String(id));
+ if (!item) return showToast('Romaneio nao encontrado.', 'warning');
+ const media = [
+  item.foto_pacote ? { title: 'Foto dos pacotes da separacao', src: item.foto_pacote } : null,
+  item.foto_devolucao ? { title: 'Foto da devolucao', src: item.foto_devolucao } : null
+ ].filter(Boolean);
+ if (!media.length) return showToast('Este romaneio nao possui fotos.', 'info');
+ const overlay = document.createElement('div');
+ overlay.id = 'romaneio-monthly-media-modal';
+ overlay.className = 'romaneio-monthly-media-overlay';
+ overlay.innerHTML = '<section role="dialog" aria-modal="true" aria-label="Imagens do romaneio"><header><div><small>' + escapeKitAttribute(item.data || '') + ' ' + escapeKitAttribute(item.hora || '') + '</small><h2>Imagens da retirada</h2></div><button type="button" onclick="closeRomaneioMonthlyMedia()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="romaneio-monthly-media-grid">' + media.map(photo => '<figure><figcaption>' + escapeKitAttribute(photo.title) + '</figcaption><img src="' + escapeKitAttribute(photo.src) + '" alt="' + escapeKitAttribute(photo.title) + '"></figure>').join('') + '</div></section>';
+ overlay.addEventListener('click', event => { if (event.target === overlay) closeRomaneioMonthlyMedia(); });
+ document.body.appendChild(overlay);
+}
+
+function renderRomaneioMonthlyFlexList(records = []) {
+ const flexRecords = (Array.isArray(records) ? records : []).filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX'));
+ if (!romaneioMonthlyViewMonth) romaneioMonthlyViewMonth = getRomaneioMonthlyDefaultMonth(flexRecords);
+ const rows = flexRecords.filter(item => getRomaneioRecordMonthKey(item) === romaneioMonthlyViewMonth)
+  .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+ const availableYears = [...new Set(flexRecords.map(getRomaneioRecordMonthKey).filter(Boolean).map(key => key.slice(0, 4)))].sort().reverse();
+ const selectedYear = romaneioMonthlyViewMonth.slice(0, 4);
+ const selectedMonth = romaneioMonthlyViewMonth.slice(5, 7);
+ if (!availableYears.includes(selectedYear)) availableYears.push(selectedYear);
+ const monthNames = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+ const total = rows.reduce((sum, item) => sum + Number(item.pacotes || 0), 0);
+ const returns = rows.reduce((sum, item) => sum + Number(item.quantidade_devolvida || 0), 0);
+ const body = rows.map(item => {
+  const signature = item.assinatura
+   ? '<img src="' + escapeKitAttribute(item.assinatura) + '" alt="Assinatura de ' + escapeKitAttribute(item.responsavel || 'coletor') + '">'
+   : '<span>Pendente</span>';
+  const hasMedia = Boolean(item.foto_pacote || item.foto_devolucao);
+  const mediaButton = '<button class="romaneio-monthly-media-button ' + (hasMedia ? 'has-media' : 'no-media') + '" type="button" onclick="openRomaneioMonthlyMedia(' + quotePackInlineArg(item.id) + ')" title="' + (hasMedia ? 'Abrir fotos da separacao e devolucao' : 'Nenhuma foto registrada') + '" aria-label="' + (hasMedia ? 'Abrir imagens do romaneio' : 'Nenhuma imagem neste romaneio') + '"' + (hasMedia ? '' : ' disabled') + '><span class="material-symbols-rounded">' + (hasMedia ? 'add' : 'image_not_supported') + '</span></button>';
+  return '<tr><td>' + escapeKitAttribute(item.data || '-') + '</td><td>' + escapeKitAttribute(item.hora || '-') + '</td><td><strong>' + formatStockNumber(item.pacotes || 0) + '</strong></td><td>' + formatStockNumber(item.pacotes_nao_lidos || 0) + '</td><td>' + escapeKitAttribute(item.responsavel || '-') + '</td><td>' + escapeKitAttribute(item.documento || '-') + '</td><td><strong>' + formatStockNumber(item.quantidade_devolvida || 0) + '</strong></td><td class="romaneio-monthly-signature">' + signature + '</td><td>' + mediaButton + '</td></tr>';
+ }).join('');
+ const monthOptions = monthNames.map((name, index) => {
+  const value = String(index + 1).padStart(2, '0');
+  return '<option value="' + value + '"' + (value === selectedMonth ? ' selected' : '') + '>' + name + '</option>';
+ }).join('');
+ const yearOptions = availableYears.map(year => '<option value="' + year + '"' + (year === selectedYear ? ' selected' : '') + '>' + year + '</option>').join('');
+ return '<section class="romaneio-monthly-sheet"><header class="romaneio-monthly-heading"><div class="romaneio-monthly-brand"><img src="' + escapeKitAttribute(LOGO_LIGHT_BG) + '" alt="DY Auto Parts"><h1>Controle de Coleta Flex</h1></div><div class="romaneio-monthly-period"><select aria-label="Selecionar mes" onchange="setRomaneioMonthlyMonth(this.value)">' + monthOptions + '</select><select aria-label="Selecionar ano" onchange="setRomaneioMonthlyYear(this.value)">' + yearOptions + '</select></div></header><div class="romaneio-monthly-summary ' + (returns > 0 ? 'has-returns' : 'only-packages') + '"><span><small>Pacotes</small><strong>' + formatStockNumber(total) + '</strong></span>' + (returns > 0 ? '<span><small>Devolucoes</small><strong>' + formatStockNumber(returns) + '</strong></span>' : '') + '</div><div class="romaneio-monthly-table"><table><thead><tr><th>Data</th><th>Hora</th><th>Qtde total</th><th>Qtde nao lida</th><th>Nome</th><th>RG/CPF</th><th>Qtde devolucao</th><th>Assinatura</th><th>Fotos</th></tr></thead><tbody>' + (body || '<tr><td class="romaneio-monthly-empty" colspan="9">Nenhuma coleta Flex registrada neste periodo.</td></tr>') + '</tbody></table></div><footer>Gerado automaticamente a partir dos romaneios diarios assinados no aplicativo.</footer></section>';
+}
+
+
 function renderRomaneiosCompletedList(records = []) {
+ if (isHomologationEnvironment()) return renderRomaneioMonthlyFlexList(records);
  const rows = Array.isArray(records) ? records : [];
  return `
  <section class="romaneio-completed-list">
@@ -27081,10 +27164,8 @@ function normalizeVersionPart(value) {
 function isRemoteAppVersionNewer(remote = {}) {
  const remoteVersion = normalizeVersionPart(remote.version);
  const remoteBuild = normalizeVersionPart(remote.build);
- const remoteCommit = normalizeVersionPart(remote.commit);
- if (remoteVersion && remoteVersion !== DY_APP_VERSION) return true;
- if (remoteBuild && remoteBuild !== DY_APP_BUILD) return true;
- if (remoteCommit && remoteCommit !== 'local' && DY_APP_COMMIT !== 'local' && remoteCommit !== DY_APP_COMMIT) return true;
+ if (remoteVersion && remoteVersion !== normalizeVersionPart(DY_APP_VERSION)) return true;
+ if (remoteBuild && remoteBuild !== normalizeVersionPart(DY_APP_BUILD)) return true;
  return false;
 }
 
@@ -27244,7 +27325,7 @@ async function detectAppUpdate({ renderConfig = false } = {}) {
  if (registration) {
  swChecked = true;
  await registration.update();
- hasUpdate = hasUpdate || !!(registration.waiting || registration.installing);
+ if (!remote) hasUpdate = !!(registration.waiting || registration.installing);
  }
  }
  } catch (error) {
@@ -32805,7 +32886,8 @@ async function handleDevolucaoProductSearchInput(value) {
  return [];
  }
  box.innerHTML = matches.map(product => {
- const identity = encodeURIComponent(String(product.id_interno || product.ean || product.sku_fornecedor || product.id || ''));
+ const identityField = product.id ? 'id' : product.id_interno ? 'id_interno' : product.ean ? 'ean' : product.sku_fornecedor ? 'sku_fornecedor' : 'sku';
+ const identity = encodeURIComponent(identityField + ':' + String(product[identityField] || ''));
  const name = escapeDevolucaoHTML(product.descricao_completa || product.descricao_base || product.descricao || product.nome || 'Produto sem descricao');
  const meta = escapeDevolucaoHTML([product.id_interno, product.ean, product.sku_fornecedor || product.sku, product.marca].filter(Boolean).join(' | '));
  return '<button type="button" onclick="selectDevolucaoProductFromSearch(\'' + identity + '\')"><strong>' + name + '</strong><small>' + (meta || 'Sem codigos cadastrados') + '</small></button>';
@@ -32814,13 +32896,38 @@ async function handleDevolucaoProductSearchInput(value) {
  return matches;
 }
 
-function isSameDevolucaoDraftProduct(item = {}, product = {}) {
- if (item.produto_id && product.id && String(item.produto_id) === String(product.id)) return true;
- if (item.id_interno && product.id_interno && String(item.id_interno).toLowerCase() === String(product.id_interno).toLowerCase()) return true;
- if (item.ean && product.ean && String(item.ean).toLowerCase() === String(product.ean).toLowerCase()) return true;
- return false;
+function normalizeDevolucaoProductIdentity(value) {
+ const normalized = String(value || '').trim().toLowerCase();
+ if (!normalized || ['0', '-', 'null', 'undefined', 'n/a', 'nao informado', 'não informado'].includes(normalized)) return '';
+ return normalized;
 }
 
+function findDevolucaoProductBySelectionIdentity(identity) {
+ const decoded = decodeURIComponent(String(identity || ''));
+ const separator = decoded.indexOf(':');
+ if (separator < 1) return findDevolucaoProductByIdentity(decoded);
+ const field = decoded.slice(0, separator);
+ const target = normalizeDevolucaoProductIdentity(decoded.slice(separator + 1));
+ if (!target || !['id', 'id_interno', 'ean', 'sku_fornecedor', 'sku'].includes(field)) return null;
+ return (appData.products || []).find(product => normalizeDevolucaoProductIdentity(product[field]) === target) || null;
+}
+
+function isSameDevolucaoDraftProduct(item = {}, product = {}) {
+ const itemProductId = normalizeDevolucaoProductIdentity(item.produto_id);
+ const productId = normalizeDevolucaoProductIdentity(product.id);
+ if (itemProductId && productId) return itemProductId === productId;
+
+ const itemInternalId = normalizeDevolucaoProductIdentity(item.id_interno);
+ const productInternalId = normalizeDevolucaoProductIdentity(product.id_interno);
+ const itemEan = normalizeDevolucaoProductIdentity(item.ean);
+ const productEan = normalizeDevolucaoProductIdentity(product.ean);
+ if (itemInternalId && productInternalId && itemEan && productEan) {
+  return itemInternalId === productInternalId && itemEan === productEan;
+ }
+ if (itemEan && productEan) return itemEan === productEan;
+ if (itemInternalId && productInternalId) return itemInternalId === productInternalId;
+ return false;
+}
 function addDevolucaoProductDirect(product, source = 'busca') {
  const existing = devolucaoMarketplaceState.draftItems.find(item => isSameDevolucaoDraftProduct(item, product));
  if (existing) {
@@ -32908,7 +33015,7 @@ async function openDevolucaoManualProduct() {
  }
 }
 async function selectDevolucaoProductFromSearch(identity) {
- const product = findDevolucaoProductByIdentity(decodeURIComponent(String(identity || '')));
+ const product = findDevolucaoProductBySelectionIdentity(identity);
  if (!product) return showToast('Produto nao encontrado na lista carregada.', 'warning');
  if (devolucaoMarketplaceState.manualSelectionRequested) {
   await prepareDevolucaoProductManual(product);
@@ -33009,7 +33116,7 @@ function addDevolucaoDraftItem() {
  const devolveuCorreto = document.getElementById('dev-item-correct')?.value === 'true';
  const custoProduto = getDevolucaoProductCost(product);
 
- devolucaoMarketplaceState.draftItems.push({
+ const draftItem = {
  localId: `dev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
  produto_id: product.id || null,
  id_interno: product.id_interno || '',
@@ -33028,12 +33135,19 @@ function addDevolucaoDraftItem() {
  estoque_movimento_id: '',
  observacoes: document.getElementById('dev-item-notes')?.value.trim() || '',
  destino: devolveuCorreto ? 'disponivel' : 'divergencia'
- });
+ };
+
+ const existing = devolucaoMarketplaceState.draftItems.find(item => isSameDevolucaoDraftProduct(item, product));
+ if (existing) {
+  existing.quantidade = Number(existing.quantidade || 0) + quantidade;
+ } else {
+  devolucaoMarketplaceState.draftItems.push(draftItem);
+ }
 
  devolucaoMarketplaceState.selectedProduct = null;
  devolucaoMarketplaceState.manualSelectionRequested = false;
  document.getElementById('dev-selected-product').innerHTML = '';
- document.getElementById('dev-product-feedback').textContent = 'Produto adicionado. Continue bipando, pesquisando ou salve a devolucao.';
+ document.getElementById('dev-product-feedback').textContent = existing ? 'Quantidade atualizada para o mesmo produto.' : 'Produto adicionado. Continue bipando, pesquisando ou salve a devolucao.';
  clearDevolucaoProductSuggestions();
  renderDevolucaoDraftItems();
  const searchInput = document.getElementById('dev-product-code');
@@ -33575,7 +33689,7 @@ function renderHistoricoDevolucaoList() {
   <div class="devolucao-summary-row metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 14h28M18 14V8h12v6M14 14l2 28h16l2-28M21 21v13M27 21v13"/></svg></span><div><small>Perda/Descarte</small><strong>${formatCurrency(financialTotals.prejuizo)}</strong></div></div>
  </article>
  <article class="devolucao-summary-card devolucao-summary-group">
-  <header class="metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m16 25 5 5 11-12"/></svg></span><div class="devolucao-summary-heading"><strong>Reputa\u00e7\u00e3o</strong><small>${percentualReputacaoRecuperada.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</small></div></header>
+  <header class="metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m16 25 5 5 11-12"/></svg></span><div class="devolucao-summary-heading"><strong>Reputa\u00e7\u00e3o Recuperada</strong><small>${percentualReputacaoRecuperada.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</small></div></header>
   <div class="devolucao-summary-row metric-red"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 6 44 41H4L24 6Z"/><path d="M24 17v12M24 36h.01"/></svg></span><div><small>Reputa\u00e7\u00e3o afetada</small><strong>${reputacaoAfetada}</strong></div></div>
   <div class="devolucao-summary-row metric-green"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m15 25 6 6 12-13"/></svg></span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></div>
  </article>

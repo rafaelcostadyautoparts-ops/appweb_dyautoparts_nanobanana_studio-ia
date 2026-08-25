@@ -74038,3 +74038,465 @@ html body:not(.login-active) #app > .dashboard-screen.product-search-screen .pro
 .pack-records-list{display:grid;gap:10px}.pack-records-list>button{align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:15px;color:var(--text);display:grid;grid-template-columns:auto 1fr auto;gap:12px;padding:14px;text-align:left}.pack-records-list>button>span{color:#4f46e5;font-size:28px}.pack-records-list>button>div{display:grid;gap:3px}.pack-records-list>button small{color:var(--muted)}.pack-records-list>button em{color:#b45309;font-style:normal;font-weight:750}.pack-records-list>button>b{background:#dcfce7;border-radius:999px;color:#166534;font-size:.7rem;padding:5px 9px}.pack-records-list>button>b.is-adjusted{background:#fef3c7;color:#92400e}
 .pack-daily-adjustment{align-items:flex-start;background:#fffbeb;border:1px solid #fbbf24;border-radius:14px;color:#78350f;display:flex;gap:12px;margin-bottom:14px;padding:14px}.pack-daily-adjustment>span{color:#d97706}.pack-daily-adjustment p{margin:3px 0}.pack-daily-consult-list article em{color:var(--muted);display:block;font-size:.72rem;font-style:normal;margin-top:4px}.pack-daily-consult-list article.has-adjustment{border-color:#f59e0b!important}
 @media(max-width:650px){.pack-home-card{border-radius:20px;padding:12px}.pack-home-card>button{grid-template-columns:40px 1fr auto;padding:10px}.pack-records-list>button{grid-template-columns:auto 1fr}.pack-records-list>button>b{grid-column:2;justify-self:start}}
+
+
+/* Homologacao: centralizacao do Flex e consulta mensal automatica. */
+html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-ui-shell,
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  box-sizing: border-box !important;
+  width: min(1320px, calc(100% - 40px)) !important;
+  max-width: 1320px !important;
+  margin-inline: auto !important;
+  padding-inline: 0 !important;
+}
+html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-form-card.is-flex-flow {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  margin-inline: auto !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet { overflow:hidden;width:100%;margin:8px auto 28px;border:1px solid #9ca3af;border-radius:4px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.08); }
+html.app-environment-homologation .romaneio-monthly-heading { display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px;border-bottom:2px solid #374151;text-align:center; }
+html.app-environment-homologation .romaneio-monthly-heading>div { flex:1; }
+html.app-environment-homologation .romaneio-monthly-heading small { color:#d97706;font-size:.68rem;font-weight:900;letter-spacing:.12em; }
+html.app-environment-homologation .romaneio-monthly-heading h1 { margin:4px 0 0;color:#111827;font:700 1.2rem/1.2 Arial,sans-serif; }
+html.app-environment-homologation .romaneio-monthly-heading p { margin:5px 0 0;color:#475569;font-size:.82rem;font-weight:800;text-transform:capitalize; }
+html.app-environment-homologation .romaneio-monthly-heading label { display:grid;gap:5px;min-width:165px;text-align:left; }
+html.app-environment-homologation .romaneio-monthly-heading label span { color:#64748b;font-size:.65rem;font-weight:900;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-heading input { min-height:40px;padding:0 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1f2937;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-summary { display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #9ca3af;background:#f8fafc; }
+html.app-environment-homologation .romaneio-monthly-summary span { display:grid;gap:3px;padding:10px;text-align:center;border-right:1px solid #d1d5db; }
+html.app-environment-homologation .romaneio-monthly-summary span:last-child { border-right:0; }
+html.app-environment-homologation .romaneio-monthly-summary small { color:#64748b;font-size:.65rem;font-weight:800;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-summary strong { color:#111827;font-size:1rem; }
+html.app-environment-homologation .romaneio-monthly-table { overflow-x:auto; }
+html.app-environment-homologation .romaneio-monthly-table table { width:100%;min-width:1050px;border-collapse:collapse;table-layout:fixed; }
+html.app-environment-homologation .romaneio-monthly-table :is(th,td) { border-right:1px solid #9ca3af;border-bottom:1px solid #9ca3af; }
+html.app-environment-homologation .romaneio-monthly-table :is(th,td):last-child { border-right:0; }
+html.app-environment-homologation .romaneio-monthly-table th { padding:9px 8px;background:#eef0f3;color:#1f2937;font-size:.68rem;font-weight:900;text-align:center;text-transform:uppercase; }
+html.app-environment-homologation .romaneio-monthly-table td { height:54px;padding:6px 8px;color:#1f2937;font-size:.78rem;text-align:center;vertical-align:middle; }
+html.app-environment-homologation .romaneio-monthly-table tbody tr:nth-child(even) { background:#fafafa; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(5),html.app-environment-homologation .romaneio-monthly-table td:nth-child(5) { width:18%; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(6),html.app-environment-homologation .romaneio-monthly-table td:nth-child(6) { width:15%; }
+html.app-environment-homologation .romaneio-monthly-table th:nth-child(8),html.app-environment-homologation .romaneio-monthly-table td:nth-child(8) { width:17%; }
+html.app-environment-homologation .romaneio-monthly-table th:last-child,html.app-environment-homologation .romaneio-monthly-table td:last-child { width:50px; }
+html.app-environment-homologation .romaneio-monthly-signature img { display:block;width:100%;height:42px;object-fit:contain; }
+html.app-environment-homologation .romaneio-monthly-signature span { color:#94a3b8;font-size:.68rem;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-empty { height:190px!important;color:#64748b!important;font-weight:800; }
+html.app-environment-homologation .romaneio-monthly-sheet>footer { padding:10px 16px;color:#64748b;background:#f8fafc;font-size:.67rem;text-align:center; }
+@media (max-width:700px) {
+ html.app-environment-homologation .romaneio-screen.romaneio-channel-flex .romaneio-ui-shell,
+ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell { width:calc(100% - 20px)!important; }
+ html.app-environment-homologation .romaneio-monthly-heading { align-items:stretch;flex-direction:column;padding:15px; }
+ html.app-environment-homologation .romaneio-monthly-heading label { min-width:0; }
+}
+
+
+/* Homologacao: refinamento visual da folha mensal Flex. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  align-self: center !important;
+  width: min(1240px, calc(100% - 48px)) !important;
+  max-width: 1240px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet {
+  width: min(1180px, 100%) !important;
+  margin: 24px auto 36px !important;
+  border: 1px solid rgba(217,119,6,.24) !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 24px 60px rgba(48,39,88,.16) !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading {
+  min-height: 88px !important;
+  padding: 18px 24px !important;
+  border-bottom: 0 !important;
+  background: linear-gradient(135deg,#fff 0%,#fffaf0 100%) !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading>div:first-child {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-width:0 !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading h1 {
+  margin:0 !important;
+  color:#272044 !important;
+  font:400 clamp(1.2rem,2vw,1.55rem)/1.15 'Fjalla One','Oswald',Arial,sans-serif !important;
+  letter-spacing:.025em !important;
+  text-transform:uppercase !important;
+}
+html.app-environment-homologation .romaneio-monthly-period {
+  display:grid !important;
+  grid-template-columns:minmax(138px,1fr) 100px !important;
+  gap:10px !important;
+  min-width:250px !important;
+}
+html.app-environment-homologation .romaneio-monthly-period label {
+  display:grid !important;
+  gap:5px !important;
+  min-width:0 !important;
+  text-align:left !important;
+}
+html.app-environment-homologation .romaneio-monthly-period label span {
+  color:#9a6700 !important;
+  font-size:.64rem !important;
+  font-weight:900 !important;
+  letter-spacing:.06em !important;
+  text-transform:uppercase !important;
+}
+html.app-environment-homologation .romaneio-monthly-period select {
+  min-height:42px !important;
+  padding:0 34px 0 12px !important;
+  border:1px solid #ead8b4 !important;
+  border-radius:10px !important;
+  color:#312e45 !important;
+  background:#fff !important;
+  font-weight:850 !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary {
+  gap:12px !important;
+  padding:14px 18px !important;
+  border:0 !important;
+  background:#f8f5ff !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary span {
+  border:1px solid #e7e1f4 !important;
+  border-radius:12px !important;
+  background:#fff !important;
+  box-shadow:0 7px 18px rgba(48,39,88,.06) !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary strong { color:#d97706 !important;font-size:1.15rem !important; }
+html.app-environment-homologation .romaneio-monthly-table { margin:0 18px 18px !important;border:1px solid #ddd7e8 !important;border-radius:12px !important;background:#fff !important; }
+html.app-environment-homologation .romaneio-monthly-table table { min-width:1040px !important; }
+html.app-environment-homologation .romaneio-monthly-table th {
+  padding:11px 8px !important;
+  border-color:#e1dbea !important;
+  color:#5b5274 !important;
+  background:#f5f2fa !important;
+}
+html.app-environment-homologation .romaneio-monthly-table td { border-color:#ebe6f0 !important;background:#fff !important; }
+html.app-environment-homologation .romaneio-monthly-table tbody tr:nth-child(even) td { background:#fcfbfe !important; }
+html.app-environment-homologation .romaneio-monthly-table tbody tr:hover td { background:#fffaf0 !important; }
+html.app-environment-homologation .romaneio-monthly-media-button {
+  display:grid !important;
+  width:38px !important;
+  min-width:38px !important;
+  height:38px !important;
+  min-height:38px !important;
+  margin:auto !important;
+  padding:0 !important;
+  place-items:center !important;
+  border:1px solid #f2bd78 !important;
+  border-radius:10px !important;
+  color:#c56a0a !important;
+  background:#fff8ed !important;
+  box-shadow:none !important;
+}
+html.app-environment-homologation .romaneio-monthly-media-button .material-symbols-rounded { font-size:20px !important; }
+html.app-environment-homologation .romaneio-monthly-media-button.has-media:hover { color:#fff !important;background:#d97706 !important;transform:translateY(-1px); }
+html.app-environment-homologation .romaneio-monthly-media-button.no-media { border-color:#e2e8f0 !important;color:#a7b0bf !important;background:#f8fafc !important;cursor:not-allowed !important; }
+html.app-environment-homologation .romaneio-monthly-sheet>footer { border-top:1px solid #eee9f3 !important;background:#faf9fc !important; }
+.romaneio-monthly-media-overlay {
+  position:fixed;z-index:10080;inset:0;display:grid;place-items:center;padding:24px;background:rgba(18,16,31,.72);backdrop-filter:blur(6px);
+}
+.romaneio-monthly-media-overlay>section {
+  overflow:hidden;width:min(940px,calc(100vw - 32px));max-height:calc(100dvh - 40px);border:1px solid rgba(255,255,255,.32);border-radius:18px;background:#fff;box-shadow:0 32px 90px rgba(0,0,0,.38);
+}
+.romaneio-monthly-media-overlay header { display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#fffaf0; }
+.romaneio-monthly-media-overlay header small { color:#9a6700;font-size:.68rem;font-weight:850; }
+.romaneio-monthly-media-overlay header h2 { margin:3px 0 0;color:#272044;font:400 1.25rem/1 'Fjalla One','Oswald',sans-serif;text-transform:uppercase; }
+.romaneio-monthly-media-overlay header button { display:grid;width:40px;height:40px;padding:0;place-items:center;border:1px solid #e5e7eb;border-radius:10px;color:#475569;background:#fff; }
+.romaneio-monthly-media-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;overflow:auto;max-height:calc(100dvh - 130px);padding:18px;background:#f6f4fa; }
+.romaneio-monthly-media-grid figure { margin:0;padding:12px;border:1px solid #ded8e8;border-radius:14px;background:#fff; }
+.romaneio-monthly-media-grid figcaption { margin-bottom:10px;color:#4b4460;font-size:.78rem;font-weight:900;text-align:center; }
+.romaneio-monthly-media-grid img { display:block;width:100%;max-height:62vh;object-fit:contain;border-radius:10px;background:#f8fafc; }
+@media(max-width:700px) {
+ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell { width:calc(100% - 20px)!important; }
+ html.app-environment-homologation .romaneio-monthly-sheet { margin-top:12px!important;border-radius:14px!important; }
+ html.app-environment-homologation .romaneio-monthly-heading { gap:16px!important;padding:16px!important; }
+ html.app-environment-homologation .romaneio-monthly-period { grid-template-columns:1fr 92px!important;min-width:0!important;width:100%!important; }
+ html.app-environment-homologation .romaneio-monthly-summary { gap:7px!important;padding:10px!important; }
+ html.app-environment-homologation .romaneio-monthly-table { margin:0 10px 10px!important; }
+ .romaneio-monthly-media-overlay { padding:10px; }
+ .romaneio-monthly-media-grid { grid-template-columns:1fr;padding:10px; }
+}
+
+
+/* Homologacao: composicao ampla e responsiva da consulta mensal Flex. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  align-self:center !important;
+  width:min(1460px,calc(100% - 24px)) !important;
+  max-width:1460px !important;
+  margin-inline:auto !important;
+  padding-top:4px !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet {
+  width:min(1400px,100%) !important;
+  margin:6px auto 24px !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  gap:24px !important;
+  min-height:86px !important;
+  padding:14px 22px !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading .romaneio-monthly-brand {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:18px !important;
+  min-width:0 !important;
+  text-align:left !important;
+}
+html.app-environment-homologation .romaneio-monthly-brand img {
+  display:block !important;
+  flex:0 0 auto !important;
+  width:132px !important;
+  max-width:30vw !important;
+  height:52px !important;
+  object-fit:contain !important;
+  object-position:left center !important;
+  padding-right:18px !important;
+  border-right:1px solid #ead8b4 !important;
+}
+html.app-environment-homologation .romaneio-monthly-brand h1 {
+  white-space:nowrap !important;
+}
+html.app-environment-homologation .romaneio-monthly-period {
+  flex:0 0 auto !important;
+  grid-template-columns:150px 88px !important;
+  gap:9px !important;
+  min-width:247px !important;
+  width:247px !important;
+}
+html.app-environment-homologation .romaneio-monthly-period select {
+  width:100% !important;
+  min-width:0 !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary { padding:12px 16px !important; }
+html.app-environment-homologation .romaneio-monthly-table { margin:0 16px 16px !important; }
+@media (min-width:1500px) {
+ html.app-environment-homologation .romaneio-monthly-sheet { width:100% !important; }
+ html.app-environment-homologation .romaneio-monthly-heading { padding-inline:30px !important; }
+ html.app-environment-homologation .romaneio-monthly-table { margin-inline:20px !important; }
+}
+@media (max-width:760px) {
+ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  width:calc(100% - 12px) !important;
+  padding-top:2px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-sheet {
+  width:100% !important;
+  margin:4px auto 14px !important;
+  border-radius:14px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-heading {
+  display:flex !important;
+  align-items:stretch !important;
+  flex-direction:column !important;
+  gap:14px !important;
+  min-height:0 !important;
+  padding:14px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-heading .romaneio-monthly-brand {
+  justify-content:center !important;
+  gap:12px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-brand img {
+  width:92px !important;
+  max-width:34vw !important;
+  height:42px !important;
+  padding-right:12px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-brand h1 {
+  font-size:clamp(1rem,5vw,1.28rem) !important;
+  white-space:normal !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-period {
+  grid-template-columns:minmax(0,1fr) 92px !important;
+  min-width:0 !important;
+  width:100% !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary {
+  gap:6px !important;
+  padding:9px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary span { padding:8px 4px !important; }
+ html.app-environment-homologation .romaneio-monthly-table {
+  overflow:visible !important;
+  margin:0 9px 9px !important;
+  border:0 !important;
+  background:transparent !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table table,
+ html.app-environment-homologation .romaneio-monthly-table tbody,
+ html.app-environment-homologation .romaneio-monthly-table tr,
+ html.app-environment-homologation .romaneio-monthly-table td {
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table thead { display:none !important; }
+ html.app-environment-homologation .romaneio-monthly-table tbody { display:grid !important;gap:10px !important; }
+ html.app-environment-homologation .romaneio-monthly-table tr {
+  display:grid !important;
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  overflow:hidden !important;
+  border:1px solid #e3ddec !important;
+  border-radius:12px !important;
+  background:#fff !important;
+  box-shadow:0 7px 18px rgba(48,39,88,.06) !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table td {
+  display:grid !important;
+  grid-template-columns:minmax(92px,.8fr) minmax(0,1fr) !important;
+  align-items:center !important;
+  min-height:44px !important;
+  height:auto !important;
+  padding:7px 9px !important;
+  border:0 !important;
+  border-bottom:1px solid #eee9f3 !important;
+  text-align:right !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(1)::before{content:'Data'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(2)::before{content:'Hora'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(3)::before{content:'Qtde total'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(4)::before{content:'Nao lida'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(5)::before{content:'Nome'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(6)::before{content:'RG/CPF'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(7)::before{content:'Devolucao'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(8)::before{content:'Assinatura'}
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(9)::before{content:'Fotos'}
+ html.app-environment-homologation .romaneio-monthly-table td::before {
+  color:#756b8d !important;
+  font-size:.62rem !important;
+  font-weight:900 !important;
+  letter-spacing:.04em !important;
+  text-align:left !important;
+  text-transform:uppercase !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(5),
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(6),
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(8),
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(9) {
+  grid-column:1/-1 !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(8),
+ html.app-environment-homologation .romaneio-monthly-table td:nth-child(9) { border-bottom:0 !important; }
+ html.app-environment-homologation .romaneio-monthly-signature img { width:min(190px,100%) !important;margin-left:auto !important; }
+ html.app-environment-homologation .romaneio-monthly-media-button { margin-left:auto !important;margin-right:0 !important; }
+ html.app-environment-homologation .romaneio-monthly-empty {
+  display:block !important;
+  grid-column:1/-1 !important;
+  height:auto !important;
+  min-height:130px !important;
+  padding:48px 16px !important;
+  text-align:center !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-empty::before { display:none !important; }
+}
+
+
+/* Homologacao: alinhamento final da folha com a barra superior. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:2px 0 24px !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet {
+  position:relative !important;
+  left:50% !important;
+  width:min(1440px,calc(100vw - 28px)) !important;
+  max-width:none !important;
+  margin:4px 0 22px !important;
+  transform:translateX(-50%) !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading {
+  grid-template-columns:minmax(0,1fr) auto !important;
+  padding-left:20px !important;
+  padding-right:20px !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading>div:first-child.romaneio-monthly-brand {
+  justify-content:flex-start !important;
+  text-align:left !important;
+}
+html.app-environment-homologation .romaneio-monthly-brand img {
+  width:142px !important;
+  max-width:28vw !important;
+}
+html.app-environment-homologation .romaneio-monthly-period {
+  display:grid !important;
+  grid-template-columns:142px 112px !important;
+  align-items:end !important;
+  gap:10px !important;
+  min-width:264px !important;
+  width:264px !important;
+}
+html.app-environment-homologation .romaneio-monthly-period>select {
+  box-sizing:border-box !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:44px !important;
+  padding:0 34px 0 12px !important;
+  border:1px solid #d9c9ed !important;
+  border-radius:11px !important;
+  color:#312e45 !important;
+  background:#fff !important;
+  font-size:.85rem !important;
+  font-weight:850 !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary {
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  justify-content:center !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary.only-packages {
+  grid-template-columns:minmax(260px,620px) !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary.only-packages>span {
+  width:100% !important;
+  max-width:620px !important;
+  justify-self:center !important;
+}
+@media(max-width:760px) {
+ html.app-environment-homologation .romaneio-monthly-sheet {
+  left:50% !important;
+  width:calc(100vw - 12px) !important;
+  margin-top:2px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-heading { padding:12px !important; }
+ html.app-environment-homologation .romaneio-monthly-heading>div:first-child.romaneio-monthly-brand {
+  justify-content:flex-start !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-brand img {
+  width:88px !important;
+  max-width:32vw !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-period {
+  grid-template-columns:minmax(0,1fr) 112px !important;
+  min-width:0 !important;
+  width:100% !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary {
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary.only-packages {
+  grid-template-columns:1fr !important;
+ }
+}
+
+
+/* Homologacao: corrige centralizacao pelo viewport, nao pelo container interno. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-monthly-sheet {
+  left:50vw !important;
+  transform:translateX(-50%) !important;
+}
+
+
+/* Homologacao: aproxima a consulta mensal da barra superior. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  align-self:start !important;
+}
