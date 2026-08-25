@@ -1,6 +1,6 @@
 {
-  "version": "2.2.6",
-  "build": "2026.08.24.02",
-  "commit": "preserva-data-criacao-separacao",
-  "deployDate": "2026-08-24T14:45:00-03:00"
+  "version": "2.2.7",
+  "build": "2026.08.25.01",
+  "commit": "corrige-cores-modos-e-renova-cache",
+  "deployDate": "2026-08-25T12:00:00-03:00"
 }

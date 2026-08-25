@@ -71849,6 +71849,8 @@ html body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick
 }
 /* Proporcao horizontal dos cards de modo, igual aos cards desktop de canais. */
 .pick-mode-clean-overlay .app-pick-mode-dialog {
+  border: 0 !important;
+  border-top: 0 !important;
   max-width: 1220px !important;
   width: min(1220px, calc(100vw - 56px)) !important;
 }
@@ -72038,10 +72040,10 @@ html.app-environment-homologation .pick-mode-clean-overlay .pick-mode-fast.stand
 
 /* Mantem a identificacao visual dos modos tambem em producao. */
 .pick-mode-clean-overlay .pick-mode-normal.standard-module-card {
-  background: #dbeafe !important;
+  background: #93c5fd !important;
 }
 .pick-mode-clean-overlay .pick-mode-fast.standard-module-card {
-  background: rgba(255, 237, 213, 0.5) !important;
+  background: #fde68a !important;
 }
 html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-workflow-header {
   align-self: center !important;
