@@ -74398,3 +74398,92 @@ html.app-environment-homologation .romaneio-monthly-table { margin:0 16px 16px !
  }
  html.app-environment-homologation .romaneio-monthly-empty::before { display:none !important; }
 }
+
+
+/* Homologacao: alinhamento final da folha com a barra superior. */
+html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:2px 0 24px !important;
+}
+html.app-environment-homologation .romaneio-monthly-sheet {
+  position:relative !important;
+  left:50% !important;
+  width:min(1440px,calc(100vw - 28px)) !important;
+  max-width:none !important;
+  margin:4px 0 22px !important;
+  transform:translateX(-50%) !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading {
+  grid-template-columns:minmax(0,1fr) auto !important;
+  padding-left:20px !important;
+  padding-right:20px !important;
+}
+html.app-environment-homologation .romaneio-monthly-heading>div:first-child.romaneio-monthly-brand {
+  justify-content:flex-start !important;
+  text-align:left !important;
+}
+html.app-environment-homologation .romaneio-monthly-brand img {
+  width:142px !important;
+  max-width:28vw !important;
+}
+html.app-environment-homologation .romaneio-monthly-period {
+  display:grid !important;
+  grid-template-columns:142px 112px !important;
+  align-items:end !important;
+  gap:10px !important;
+  min-width:264px !important;
+  width:264px !important;
+}
+html.app-environment-homologation .romaneio-monthly-period>select {
+  box-sizing:border-box !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:44px !important;
+  padding:0 34px 0 12px !important;
+  border:1px solid #d9c9ed !important;
+  border-radius:11px !important;
+  color:#312e45 !important;
+  background:#fff !important;
+  font-size:.85rem !important;
+  font-weight:850 !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary {
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  justify-content:center !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary.only-packages {
+  grid-template-columns:minmax(260px,620px) !important;
+}
+html.app-environment-homologation .romaneio-monthly-summary.only-packages>span {
+  width:100% !important;
+  max-width:620px !important;
+  justify-self:center !important;
+}
+@media(max-width:760px) {
+ html.app-environment-homologation .romaneio-monthly-sheet {
+  left:50% !important;
+  width:calc(100vw - 12px) !important;
+  margin-top:2px !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-heading { padding:12px !important; }
+ html.app-environment-homologation .romaneio-monthly-heading>div:first-child.romaneio-monthly-brand {
+  justify-content:flex-start !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-brand img {
+  width:88px !important;
+  max-width:32vw !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-period {
+  grid-template-columns:minmax(0,1fr) 112px !important;
+  min-width:0 !important;
+  width:100% !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary {
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+ }
+ html.app-environment-homologation .romaneio-monthly-summary.only-packages {
+  grid-template-columns:1fr !important;
+ }
+}
