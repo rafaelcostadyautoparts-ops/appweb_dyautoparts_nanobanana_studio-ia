@@ -1,6 +1,6 @@
 {
-  "version": "2.2.7",
-  "build": "2026.08.25.01",
-  "commit": "corrige-cores-modos-e-renova-cache",
-  "deployDate": "2026-08-25T12:00:00-03:00"
+  "version": "2.2.8",
+  "build": "2026.08.25.02",
+  "commit": "publica-online-e-sincronizacao",
+  "deployDate": "2026-08-25T12:30:00-03:00"
 }

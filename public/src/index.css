@@ -1210,23 +1210,23 @@
   box-sizing: border-box !important;
 }
 
-/* Homologacao: atalho de sincronizacao com contador no menu. */
+/* Producao: atalho de sincronizacao com contador no menu. */
 
-/* Homologacao: painel de separacoes e conferencias pendentes. */
-html.app-environment-homologation body:not(.login-active) #app > .pending-sync-screen {
+/* Producao: painel de separacoes e conferencias pendentes. */
+html body:not(.login-active) #app > .pending-sync-screen {
   --homolog-header-color: #64748b;
   min-height: 100vh !important;
   background: #f3f5f8 !important;
 }
 
-html.app-environment-homologation .pending-sync-screen .pending-sync-shell {
+html .pending-sync-screen .pending-sync-shell {
   width: min(1480px, calc(100% - 32px)) !important;
   max-width: 1480px !important;
   margin: 0 auto !important;
   padding: 14px 0 32px !important;
 }
 
-html.app-environment-homologation .pending-sync-panel {
+html .pending-sync-panel {
   overflow: hidden !important;
   border: 1px solid #d9dee7 !important;
   border-radius: 16px !important;
@@ -1234,7 +1234,7 @@ html.app-environment-homologation .pending-sync-panel {
   box-shadow: 0 14px 34px rgba(15, 23, 42, .08) !important;
 }
 
-html.app-environment-homologation .pending-sync-heading {
+html .pending-sync-heading {
   position: relative !important;
   display: flex !important;
   align-items: center !important;
@@ -1247,26 +1247,26 @@ html.app-environment-homologation .pending-sync-heading {
   border-bottom: 1px solid #e2e8f0 !important;
 }
 
-html.app-environment-homologation .pending-sync-heading > div,
-html.app-environment-homologation .pending-sync-heading > aside {
+html .pending-sync-heading > div,
+html .pending-sync-heading > aside {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
 }
 
-html.app-environment-homologation .pending-sync-heading > div {
+html .pending-sync-heading > div {
   justify-content: center !important;
   text-align: center !important;
 }
 
-html.app-environment-homologation .pending-sync-heading > aside {
+html .pending-sync-heading > aside {
   position: absolute !important;
   top: 50% !important;
   right: 18px !important;
   transform: translateY(-50%) !important;
 }
 
-html.app-environment-homologation .pending-sync-heading > div > .material-symbols-rounded {
+html .pending-sync-heading > div > .material-symbols-rounded {
   display: grid !important;
   place-items: center !important;
   width: 38px !important;
@@ -1278,17 +1278,17 @@ html.app-environment-homologation .pending-sync-heading > div > .material-symbol
   font-size: 23px !important;
 }
 
-html.app-environment-homologation .pending-sync-heading h1 {
+html .pending-sync-heading h1 {
   display: none !important;
 }
 
-html.app-environment-homologation .pending-sync-heading p {
+html .pending-sync-heading p {
   margin: 0 !important;
   color: #475569 !important;
   font: 700 .84rem/1.1 'PT Sans Narrow',Arial,sans-serif !important;
 }
 
-html.app-environment-homologation .pending-sync-heading button {
+html .pending-sync-heading button {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1299,31 +1299,31 @@ html.app-environment-homologation .pending-sync-heading button {
   font: 900 .75rem/1 'PT Sans Narrow',Arial,sans-serif !important;
 }
 
-html.app-environment-homologation .pending-sync-clear {
+html .pending-sync-clear {
   border: 1px solid #cbd5e1 !important;
   color: #475569 !important;
   background: #fff !important;
 }
 
-html.app-environment-homologation .pending-sync-now {
+html .pending-sync-now {
   border: 1px solid #475569 !important;
   color: #fff !important;
   background: #475569 !important;
 }
 
-html.app-environment-homologation .pending-sync-now:disabled {
+html .pending-sync-now:disabled {
   opacity: .48 !important;
   cursor: not-allowed !important;
 }
 
-html.app-environment-homologation .pending-sync-columns {
+html .pending-sync-columns {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   gap: 18px !important;
   padding: 20px !important;
 }
 
-html.app-environment-homologation .pending-sync-column {
+html .pending-sync-column {
   overflow: hidden !important;
   min-width: 0 !important;
   border: 1px solid #e1e6ee !important;
@@ -1331,7 +1331,7 @@ html.app-environment-homologation .pending-sync-column {
   background: #f8fafc !important;
 }
 
-html.app-environment-homologation .pending-sync-column > header {
+html .pending-sync-column > header {
   display: grid !important;
   grid-template-columns: 38px 1fr auto !important;
   align-items: center !important;
@@ -1341,10 +1341,10 @@ html.app-environment-homologation .pending-sync-column > header {
   background: #fff !important;
 }
 
-html.app-environment-homologation .pending-sync-column.separation-column { --pending-color: #2563eb; --pending-soft: #eff6ff; }
-html.app-environment-homologation .pending-sync-column.conference-column { --pending-color: #059669; --pending-soft: #ecfdf5; }
+html .pending-sync-column.separation-column { --pending-color: #2563eb; --pending-soft: #eff6ff; }
+html .pending-sync-column.conference-column { --pending-color: #059669; --pending-soft: #ecfdf5; }
 
-html.app-environment-homologation .pending-sync-column > header > .material-symbols-rounded {
+html .pending-sync-column > header > .material-symbols-rounded {
   display: grid !important;
   place-items: center !important;
   width: 38px !important;
@@ -1354,19 +1354,19 @@ html.app-environment-homologation .pending-sync-column > header > .material-symb
   background: var(--pending-color) !important;
 }
 
-html.app-environment-homologation .pending-sync-column > header h2 {
+html .pending-sync-column > header h2 {
   margin: 0 !important;
   color: #172033 !important;
   font: 900 1rem/1 'Fjalla One','Oswald',sans-serif !important;
 }
 
-html.app-environment-homologation .pending-sync-column > header p {
+html .pending-sync-column > header p {
   margin: 4px 0 0 !important;
   color: #64748b !important;
   font: 700 .75rem/1 'PT Sans Narrow',Arial,sans-serif !important;
 }
 
-html.app-environment-homologation .pending-sync-column > header b {
+html .pending-sync-column > header b {
   display: grid !important;
   place-items: center !important;
   min-width: 30px !important;
@@ -1377,13 +1377,13 @@ html.app-environment-homologation .pending-sync-column > header b {
   font: 900 .88rem/1 Arial,sans-serif !important;
 }
 
-html.app-environment-homologation .pending-sync-list {
+html .pending-sync-list {
   display: grid !important;
   gap: 10px !important;
   padding: 12px !important;
 }
 
-html.app-environment-homologation .pending-sync-task {
+html .pending-sync-task {
   overflow: hidden !important;
   border: 1px solid #dbe2eb !important;
   border-left: 4px solid var(--pending-color) !important;
@@ -1392,7 +1392,7 @@ html.app-environment-homologation .pending-sync-task {
   box-shadow: 0 5px 14px rgba(15,23,42,.05) !important;
 }
 
-html.app-environment-homologation .pending-sync-task > header {
+html .pending-sync-task > header {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1400,15 +1400,15 @@ html.app-environment-homologation .pending-sync-task > header {
   padding: 12px 13px 8px !important;
 }
 
-html.app-environment-homologation .pending-sync-task > header > div {
+html .pending-sync-task > header > div {
   text-align: center !important;
 }
 
-html.app-environment-homologation .pending-sync-task > header > .material-symbols-rounded { color: var(--pending-color) !important; }
-html.app-environment-homologation .pending-sync-task > header strong { display:block !important;color:#1e293b !important;font:900 .82rem/1 'PT Sans Narrow',Arial,sans-serif !important; }
-html.app-environment-homologation .pending-sync-task > header small { display:block !important;margin-top:4px !important;color:#64748b !important;font:700 .73rem/1 Arial,sans-serif !important;overflow-wrap:anywhere !important; }
+html .pending-sync-task > header > .material-symbols-rounded { color: var(--pending-color) !important; }
+html .pending-sync-task > header strong { display:block !important;color:#1e293b !important;font:900 .82rem/1 'PT Sans Narrow',Arial,sans-serif !important; }
+html .pending-sync-task > header small { display:block !important;margin-top:4px !important;color:#64748b !important;font:700 .73rem/1 Arial,sans-serif !important;overflow-wrap:anywhere !important; }
 
-html.app-environment-homologation .pending-sync-task dl {
+html .pending-sync-task dl {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
   gap: 1px !important;
@@ -1418,15 +1418,15 @@ html.app-environment-homologation .pending-sync-task dl {
   background: #e2e8f0 !important;
 }
 
-html.app-environment-homologation .pending-sync-task dl > div { padding:8px !important;text-align:center !important;background:#f8fafc !important; }
-html.app-environment-homologation .pending-sync-task dt { color:#64748b !important;font:700 .65rem/1 'PT Sans Narrow',Arial,sans-serif !important;text-transform:uppercase !important; }
-html.app-environment-homologation .pending-sync-task dd { margin:4px 0 0 !important;color:#172033 !important;font:900 1rem/1 Arial,sans-serif !important; }
-html.app-environment-homologation .pending-sync-task > p { margin:9px 12px 12px !important;padding:8px 10px !important;border-radius:7px !important;font:700 .72rem/1.25 'PT Sans Narrow',Arial,sans-serif !important; }
-html.app-environment-homologation .pending-sync-waiting { color:#475569 !important;background:#f1f5f9 !important; }
-html.app-environment-homologation .pending-sync-error { color:#991b1b !important;background:#fef2f2 !important;overflow-wrap:anywhere !important; }
-html.app-environment-homologation .pending-sync-task.has-error { border-left-color:#dc2626 !important; }
+html .pending-sync-task dl > div { padding:8px !important;text-align:center !important;background:#f8fafc !important; }
+html .pending-sync-task dt { color:#64748b !important;font:700 .65rem/1 'PT Sans Narrow',Arial,sans-serif !important;text-transform:uppercase !important; }
+html .pending-sync-task dd { margin:4px 0 0 !important;color:#172033 !important;font:900 1rem/1 Arial,sans-serif !important; }
+html .pending-sync-task > p { margin:9px 12px 12px !important;padding:8px 10px !important;border-radius:7px !important;font:700 .72rem/1.25 'PT Sans Narrow',Arial,sans-serif !important; }
+html .pending-sync-waiting { color:#475569 !important;background:#f1f5f9 !important; }
+html .pending-sync-error { color:#991b1b !important;background:#fef2f2 !important;overflow-wrap:anywhere !important; }
+html .pending-sync-task.has-error { border-left-color:#dc2626 !important; }
 
-html.app-environment-homologation .pending-sync-column-empty {
+html .pending-sync-column-empty {
   display: grid !important;
   place-items: center !important;
   min-height: 150px !important;
@@ -1435,18 +1435,18 @@ html.app-environment-homologation .pending-sync-column-empty {
   text-align: center !important;
 }
 
-html.app-environment-homologation .pending-sync-column-empty .material-symbols-rounded { font-size:34px !important; }
-html.app-environment-homologation .pending-sync-column-empty p { margin:7px 0 0 !important;font:700 .82rem/1.2 'PT Sans Narrow',Arial,sans-serif !important; }
+html .pending-sync-column-empty .material-symbols-rounded { font-size:34px !important; }
+html .pending-sync-column-empty p { margin:7px 0 0 !important;font:700 .82rem/1.2 'PT Sans Narrow',Arial,sans-serif !important; }
 
 @media (max-width: 780px) {
-  html.app-environment-homologation .pending-sync-screen .pending-sync-shell { width:calc(100% - 18px) !important;padding-top:9px !important; }
-  html.app-environment-homologation .pending-sync-heading { align-items:flex-start !important;flex-direction:column !important;padding:14px !important; }
-  html.app-environment-homologation .pending-sync-heading > aside { position:static !important;width:100% !important;transform:none !important; }
-  html.app-environment-homologation .pending-sync-heading button { flex:1 !important;padding:0 8px !important; }
-  html.app-environment-homologation .pending-sync-columns { grid-template-columns:1fr !important;padding:10px !important;gap:10px !important; }
+  html .pending-sync-screen .pending-sync-shell { width:calc(100% - 18px) !important;padding-top:9px !important; }
+  html .pending-sync-heading { align-items:flex-start !important;flex-direction:column !important;padding:14px !important; }
+  html .pending-sync-heading > aside { position:static !important;width:100% !important;transform:none !important; }
+  html .pending-sync-heading button { flex:1 !important;padding:0 8px !important; }
+  html .pending-sync-columns { grid-template-columns:1fr !important;padding:10px !important;gap:10px !important; }
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status {
   box-sizing: border-box !important;
   position: relative !important;
   display: inline-flex !important;
@@ -1464,17 +1464,17 @@ html.app-environment-homologation body.menu-active:not(.login-active) #app > .da
   box-shadow: 0 7px 16px rgba(15, 23, 42, .12) !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status.has-pending {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status.has-pending {
   color: #2563eb !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status :is(.app-inline-icon, svg) {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status :is(.app-inline-icon, svg) {
   display: block !important;
   width: 23px !important;
   height: 23px !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status svg {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status svg {
   fill: none !important;
   stroke: currentColor !important;
   stroke-width: 2 !important;
@@ -1482,7 +1482,7 @@ html.app-environment-homologation body.menu-active:not(.login-active) #app > .da
   stroke-linejoin: round !important;
 }
 
-html.app-environment-homologation .fab-sync-status .sync-pending-badge {
+html .fab-sync-status .sync-pending-badge {
   position: absolute !important;
   top: -5px !important;
   right: -5px !important;
@@ -1499,12 +1499,12 @@ html.app-environment-homologation .fab-sync-status .sync-pending-badge {
   font: 800 11px/1 Arial, sans-serif !important;
 }
 
-html.app-environment-homologation .fab-sync-status.has-pending .sync-pending-badge {
+html .fab-sync-status.has-pending .sync-pending-badge {
   display: inline-flex !important;
 }
 
 @media (max-width: 768px) {
-  html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status {
+  html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-sync-status {
     width: 38px !important;
     min-width: 38px !important;
     height: 38px !important;
@@ -1512,8 +1512,8 @@ html.app-environment-homologation .fab-sync-status.has-pending .sync-pending-bad
   }
 }
 
-/* Homologacao: indicador local de conectividade no menu principal. */
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status {
+/* Producao: indicador local de conectividade no menu principal. */
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status {
   box-sizing: border-box !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -1530,14 +1530,14 @@ html.app-environment-homologation body.menu-active:not(.login-active) #app > .da
   cursor: default !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .app-inline-icon,
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .app-inline-icon,
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
   display: block !important;
   width: 23px !important;
   height: 23px !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
   overflow: visible !important;
   fill: none !important;
   stroke: currentColor !important;
@@ -1546,46 +1546,46 @@ html.app-environment-homologation body.menu-active:not(.login-active) #app > .da
   stroke-linejoin: round !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-online {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-online {
   color: #16a34a !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-offline {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-offline {
   color: #dc2626 !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .connectivity-dot {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .connectivity-dot {
   fill: currentColor !important;
   stroke: none !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .connectivity-offline-slash {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .connectivity-offline-slash {
   display: none !important;
   stroke-width: 2.5 !important;
   paint-order: stroke !important;
 }
 
-html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-offline .connectivity-offline-slash {
+html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status.is-offline .connectivity-offline-slash {
   display: block !important;
 }
 
 @media (max-width: 768px) {
-  html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status {
+  html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status {
     width: 38px !important;
     min-width: 38px !important;
     height: 38px !important;
     min-height: 38px !important;
   }
 
-  html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .app-inline-icon,
-  html.app-environment-homologation body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
+  html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status .app-inline-icon,
+  html body.menu-active:not(.login-active) #app > .dashboard-screen.menu-screen > .top-action-group .fab-connectivity-status svg {
     width: 21px !important;
     height: 21px !important;
   }
 }
 
-/* Homologacao: aviso persistente durante operacoes sem internet. */
-html.app-environment-homologation .homologation-offline-banner {
+/* Producao: aviso persistente durante operacoes sem internet. */
+html .homologation-offline-banner {
   position: fixed !important;
   z-index: 1205 !important;
   top: calc(var(--app-header-height, 60px) + 8px) !important;
@@ -1606,12 +1606,12 @@ html.app-environment-homologation .homologation-offline-banner {
   transition: opacity .18s ease, transform .18s ease !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner.is-visible {
+html .homologation-offline-banner.is-visible {
   opacity: 1 !important;
   transform: translate(-50%, 0) !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner svg {
+html .homologation-offline-banner svg {
   flex: 0 0 22px !important;
   width: 22px !important;
   height: 22px !important;
@@ -1622,48 +1622,48 @@ html.app-environment-homologation .homologation-offline-banner svg {
   stroke-linejoin: round !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner svg circle {
+html .homologation-offline-banner svg circle {
   fill: currentColor !important;
   stroke: none !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner span {
+html .homologation-offline-banner span {
   display: flex !important;
   align-items: baseline !important;
   gap: 7px !important;
   min-width: 0 !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner :is(strong, small) {
+html .homologation-offline-banner :is(strong, small) {
   color: inherit !important;
   font-family: 'PT Sans Narrow', 'Arial Narrow', Arial, sans-serif !important;
   line-height: 1.05 !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner strong {
+html .homologation-offline-banner strong {
   font-size: .78rem !important;
   font-weight: 900 !important;
   white-space: nowrap !important;
 }
 
-html.app-environment-homologation .homologation-offline-banner small {
+html .homologation-offline-banner small {
   font-size: .72rem !important;
   font-weight: 700 !important;
 }
 
 @media (max-width: 620px) {
-  html.app-environment-homologation .homologation-offline-banner {
+  html .homologation-offline-banner {
     top: calc(var(--app-header-height, 60px) + 6px) !important;
     width: calc(100vw - 20px) !important;
     justify-content: center !important;
     padding: 7px 10px !important;
   }
 
-  html.app-environment-homologation .homologation-offline-banner span {
+  html .homologation-offline-banner span {
     display: block !important;
   }
 
-  html.app-environment-homologation .homologation-offline-banner small {
+  html .homologation-offline-banner small {
     display: block !important;
     margin-top: 2px !important;
   }

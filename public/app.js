@@ -2716,7 +2716,6 @@ function updateMenuStatusUI() {
 }
 
 function getHomologationConnectivityIndicatorHTML() {
- if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
  const isOnline = navigator.onLine;
  const stateClass = isOnline ? 'is-online' : 'is-offline';
  const connectionLabel = isOnline ? 'Conexao online' : 'Sem conexao';
@@ -2735,7 +2734,6 @@ function getHomologationConnectivityIndicatorHTML() {
 }
 
 function getHomologationOfflineBannerHTML() {
- if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
  const isOffline = !navigator.onLine;
  return `
  <div class="homologation-offline-banner ${isOffline ? 'is-visible' : ''}" role="status" aria-live="polite" aria-hidden="${isOffline ? 'false' : 'true'}">
@@ -2745,7 +2743,6 @@ function getHomologationOfflineBannerHTML() {
 }
 
 function getHomologationSyncIndicatorHTML() {
- if (!document.documentElement.classList.contains('app-environment-homologation')) return '';
  return `
  <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="renderPendingSyncScreen()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
  <span class="app-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7.2 18.5h10.4a4 4 0 0 0 .5-8 6.2 6.2 0 0 0-11.8-1.2 4.6 4.6 0 0 0 .9 9.2Z"/><path d="M12 16v-6m0 0-2.4 2.4M12 10l2.4 2.4"/></svg></span>
