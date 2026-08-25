@@ -34,7 +34,11 @@ DECLARE
     v_old text;
     v_new text;
 BEGIN
-    v_oid := 'public.finalizar_conferencia_com_estoque(text,text,jsonb,text)'::regprocedure;
+    IF to_regprocedure('public.finalizar_conferencia_com_estoque(text,text,jsonb,text)') IS NOT NULL THEN
+        v_oid := 'public.finalizar_conferencia_com_estoque(text,text,jsonb,text)'::regprocedure;
+    ELSE
+        v_oid := 'public.finalizar_conferencia(text,text,jsonb,text)'::regprocedure;
+    END IF;
     SELECT replace(pg_get_functiondef(v_oid), chr(13), '') INTO v_sql;
 
     v_old := '    v_allowed_locals text[] := ARRAY[''TERREO'', ''MOSTRUARIO''];';
@@ -76,8 +80,6 @@ BEGIN
 END
 $migration$;
 
-COMMENT ON FUNCTION public.finalizar_conferencia_com_estoque(text,text,jsonb,text)
-IS 'Finaliza os itens de catalogo, preserva separado x conferido e movimenta estoque pela quantidade conferida quando o ajuste e autorizado.';
 
 COMMENT ON COLUMN public.conferencia.divergencia_autorizada IS 'Indica finalizacao consciente com quantidades diferentes da separacao original.';
 COMMENT ON COLUMN public.conferencia.motivo_divergencia IS 'Motivo obrigatorio informado pelo conferente para autorizar a diferenca.';
