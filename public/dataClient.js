@@ -884,7 +884,7 @@ const DataClient = (function () {
                 const keyMap = {
                     'produtos': 'products',
                     'canais_envio': 'channels',
-                    'conferencia_itens': 'conferencia',
+                    'conferencia_itens': 'conferencia_itens',
                     'estoque_atual': 'estoque',
                     'movimentos': 'movimentacoes',
                     'inventarios': 'inventario',
@@ -1323,6 +1323,10 @@ const DataClient = (function () {
                 descricao: item.descricao || '',
                 qtd_solicitada: Number(item.qtd_solicitada || item.qtd_separada || 1),
                 qtd_separada: Number(item.qtd_separada || item.qtd_solicitada || 1),
+                ...(Object.prototype.hasOwnProperty.call(item, 'sem_movimento_estoque') ? {
+                    sem_movimento_estoque: item.sem_movimento_estoque === true,
+                    detalhes_operacionais: Array.isArray(item.detalhes_operacionais) ? item.detalhes_operacionais : []
+                } : {}),
                 atualizado_em: now
             };
 
@@ -1433,6 +1437,10 @@ const DataClient = (function () {
                 descricao: item.descricao || '',
                 qtd_solicitada: Number(item.qtd_solicitada || item.qtd_separada || 1),
                 qtd_separada: Number(item.qtd_separada || item.qtd_solicitada || 1),
+                ...(Object.prototype.hasOwnProperty.call(item, 'sem_movimento_estoque') ? {
+                    sem_movimento_estoque: item.sem_movimento_estoque === true,
+                    detalhes_operacionais: Array.isArray(item.detalhes_operacionais) ? item.detalhes_operacionais : []
+                } : {}),
                 atualizado_em: now
             }));
 

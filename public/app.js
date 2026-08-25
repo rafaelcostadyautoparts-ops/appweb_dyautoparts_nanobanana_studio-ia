@@ -407,6 +407,18 @@ function showPageSearchSignal(type) {
 }
 
 async function handleProductScan(rawValue, context = 'search') {
+ // Separacao e conferencia usam a mesma normalizacao e prioridade de campos,
+ // tanto no leitor fisico quanto na camera.
+ if (context === 'picking' || context === 'conference') {
+  const operationalCode = normalizePickCode(rawValue);
+  if (!operationalCode) {
+   showScanFeedback('error', 'Codigo invalido');
+   return null;
+  }
+  const operationalProduct = await findProductForPicking(operationalCode);
+  showScanFeedback(operationalProduct ? 'success' : 'error', operationalProduct ? 'Produto encontrado' : 'Produto nao encontrado');
+  return operationalProduct;
+ }
  const classification = classifyProductInput(rawValue);
  console.log('[INFO] Operacao registrada.');
 
@@ -1497,7 +1509,7 @@ function getPickAvailableStock(productId) {
 function getPickGroupedItemsForStock(items = []) {
  return Object.values((items || []).reduce((acc, item) => {
  const productId = getPickingProductId(item);
- if (!productId) return acc;
+ if (!productId || (isHomologationEnvironment() && isOperationalNoStockItem(item))) return acc;
  if (!acc[productId]) {
  acc[productId] = {
  ...item,
@@ -2147,6 +2159,7 @@ const OPERATIONAL_CACHE_DB = 'DYAUTO_OPERATIONAL_CACHE';
 const OPERATIONAL_CACHE_STORE = 'snapshots';
 const OPERATIONAL_CATALOG_KEY = 'product_catalog_v1';
 let productCodeIndex = new Map();
+let productCodeConflicts = new Set();
 
 function openOperationalCacheDB() {
  return new Promise((resolve, reject) => {
@@ -3070,15 +3083,36 @@ function hydrateProdutosForSearch(products) {
 
 function rebuildProductCodeIndex(products = appData.products) {
  const nextIndex = new Map();
+ const nextConflicts = new Set();
  (Array.isArray(products) ? products : []).forEach(product => {
- [product?.ean, product?.codigo_barras, product?.id_interno, product?.codigo_interno, product?.col_a, product?.col_A, product?.sku_fornecedor, product?.sku]
- .filter(isUsableProductScanCode)
- .map(normalizePickCode)
- .filter(Boolean)
- .forEach(code => nextIndex.set(code, product));
+ const codeGroups = [
+  { priority: 3, values: [product?.ean, product?.codigo_barras, product?.gtin] },
+  { priority: 2, values: [product?.id_interno, product?.codigo_interno, product?.col_a, product?.col_A] },
+  { priority: 1, values: [product?.sku_fornecedor, product?.sku] }
+ ];
+ codeGroups.forEach(group => group.values
+  .filter(isUsableProductScanCode)
+  .map(normalizePickCode)
+  .filter(Boolean)
+  .forEach(code => {
+   const current = nextIndex.get(code);
+   // EAN sempre prevalece sobre ID/SKU, evitando que outro cadastro
+   // sobrescreva silenciosamente o produto correto do codigo lido.
+   if (!current || group.priority > current.priority) {
+    nextIndex.set(code, { product, priority: group.priority });
+    nextConflicts.delete(code);
+   } else if (group.priority === current.priority && getPickingProductId(current.product) !== getPickingProductId(product)) {
+    nextConflicts.add(code);
+    console.error('[PRODUTOS] codigo duplicado no cadastro', {
+     code,
+     produtos: [getPickingProductId(current.product), getPickingProductId(product)]
+    });
+   }
+  }));
  });
- productCodeIndex = nextIndex;
- return nextIndex;
+ productCodeIndex = new Map([...nextIndex].map(([code, entry]) => [code, entry.product]));
+ productCodeConflicts = nextConflicts;
+ return productCodeIndex;
 }
 
 function useEmergencyProductsFallback(reason) {
@@ -4002,7 +4036,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  ${pendingSeparationsBadge}
  <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
  </button>
- <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-conferences ${pendingConferencesClass}" type="button" role="menuitem" onclick="toggleQuickActions();renderPackMenu()">
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-conferences ${pendingConferencesClass}" type="button" role="menuitem" onclick="openQuickActionConferenceMenu(event)">
  <img class="quick-action-icon quick-action-icon-conferences" src="/assets/icons/menu-conferencia.svg" alt="" aria-hidden="true">
  <span class="quick-action-label">CONFER&Ecirc;NCIA <small>(PACOTES)</small></span>
  ${pendingConferencesBadge}
@@ -10058,6 +10092,10 @@ function toInventoryLocationNumber(value) {
  return Number.isFinite(number) ? number : 0;
 }
 
+function isInventoryLocationHomologationExperience() {
+ return document.documentElement.classList.contains('app-environment-homologation');
+}
+
 async function fetchAllSupabaseRows(table, columns, orderColumn = null) {
  const client = await window.supabaseClientReady;
  const pageSize = 1000;
@@ -10250,16 +10288,22 @@ async function loadOpenInventoryLocationSession() {
  if (!client) return null;
 
  try {
- const { data: sessions, error } = await client
+ let openSessionQuery = client
  .from('inventarios')
  .select('*')
  .eq('tipo', 'localizacao')
  .eq('status', 'ABERTO')
  .eq('usuario_responsavel', currentUser)
  .eq('local', stockLocal)
- .gte('criado_em', getDataBrasilISO() + 'T00:00:00')
  .order('criado_em', { ascending: false })
  .limit(1);
+
+ // Homologacao: uma contagem salva continua recuperavel mesmo depois da virada do dia.
+ if (!isInventoryLocationHomologationExperience()) {
+  openSessionQuery = openSessionQuery.gte('criado_em', getDataBrasilISO() + 'T00:00:00');
+ }
+
+ const { data: sessions, error } = await openSessionQuery;
 
  if (error) throw error;
  const session = sessions?.[0];
@@ -10523,6 +10567,70 @@ function getInventoryLocationCountSummary() {
  counted: entries.length,
  divergences: entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0).length,
  units: entries.reduce((sum, entry) => sum + toInventoryLocationNumber(entry.saldo_fisico), 0)
+ };
+}
+
+async function refreshInventoryLocationReview(entries) {
+ if (!isInventoryLocationHomologationExperience()) return entries;
+ const client = window.supabaseClient;
+ if (!client || !entries.length) return entries;
+
+ const entriesByLocal = entries.reduce((groups, entry) => {
+  const local = normalizeLocal(entry.adjustLocal || inventoryLocationState.stockLocal || 'TERREO');
+  if (!groups.has(local)) groups.set(local, []);
+  groups.get(local).push(entry);
+  return groups;
+ }, new Map());
+
+ for (const [local, localEntries] of entriesByLocal) {
+  const ids = localEntries.map(entry => String(entry.id_interno || '').trim()).filter(Boolean);
+  if (!ids.length) continue;
+  const { data, error } = await client
+   .from('estoque_atual')
+   .select('id_interno,saldo_disponivel')
+   .eq('local', local)
+   .in('id_interno', ids);
+  if (error) throw error;
+
+  const currentById = new Map((data || []).map(row => [
+   String(row.id_interno || '').trim(),
+   toInventoryLocationNumber(row.saldo_disponivel)
+  ]));
+  localEntries.forEach(entry => {
+   const currentStock = currentById.get(String(entry.id_interno || '').trim()) || 0;
+   entry.saldo_sistema = currentStock;
+   entry.diferenca = toInventoryLocationNumber(entry.saldo_fisico) - currentStock;
+   entry.valor_diferenca = entry.diferenca * toInventoryLocationNumber(entry.valor_unitario);
+  });
+ }
+ return entries;
+}
+
+function buildInventoryLocationReviewSummary(entries) {
+ const divergences = entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0);
+ const positive = divergences.filter(entry => toInventoryLocationNumber(entry.diferenca) > 0);
+ const negative = divergences.filter(entry => toInventoryLocationNumber(entry.diferenca) < 0);
+ const positiveUnits = positive.reduce((sum, entry) => sum + toInventoryLocationNumber(entry.diferenca), 0);
+ const negativeUnits = negative.reduce((sum, entry) => sum + Math.abs(toInventoryLocationNumber(entry.diferenca)), 0);
+ const critical = divergences
+  .filter(entry => Math.abs(toInventoryLocationNumber(entry.diferenca)) >= 10)
+  .sort((a, b) => Math.abs(toInventoryLocationNumber(b.diferenca)) - Math.abs(toInventoryLocationNumber(a.diferenca)));
+ const criticalPreview = critical.slice(0, 5).map(entry => {
+  const diff = toInventoryLocationNumber(entry.diferenca);
+  return `${entry.id_interno}: ${diff > 0 ? '+' : ''}${formatInventoryLocationQty(diff)}`;
+ }).join(' | ');
+
+ return {
+  divergences,
+  critical,
+  text: [
+   `Produtos contados: ${entries.length}`,
+   `Sem divergencia: ${entries.length - divergences.length}`,
+   `Ajustes positivos: ${positive.length} produtos / +${formatInventoryLocationQty(positiveUnits)} unidades`,
+   `Ajustes negativos: ${negative.length} produtos / -${formatInventoryLocationQty(negativeUnits)} unidades`,
+   critical.length ? `Recontagem recomendada: ${critical.length} divergencias de 10+ unidades` : '',
+   criticalPreview ? `Maiores diferencas: ${criticalPreview}` : ''
+  ].filter(Boolean).join('\n')
  };
 }
 
@@ -10971,7 +11079,7 @@ function renderInventoryLocationSessionPanel() {
  const progress = Math.max(0, Math.min(100, visibleSummary.progress));
 
  return `
- <section class="inventory-location-session-panel is-active">
+ <section class="inventory-location-session-panel is-active${isInventoryLocationHomologationExperience() ? ' has-pending-stock-application' : ''}">
  <div class="inventory-location-session-main">
  <div class="inventory-location-session-title">
  <strong>Sessao ${escapeKitAttribute(session.id)}</strong>
@@ -10989,7 +11097,13 @@ function renderInventoryLocationSessionPanel() {
  <div class="inventory-location-progress" aria-label="Progresso ${progress}%">
  <span style="width: ${progress}%"></span>
  </div>
- <small class="inventory-location-autosave-note">As contagens sao salvas automaticamente. Finalize a sessao para aplicar os valores ao estoque.</small>
+ ${isInventoryLocationHomologationExperience() ? `
+ <small class="inventory-location-autosave-note">
+  <span class="material-symbols-rounded">pending_actions</span>
+  <strong>Contagem salva — estoque ainda nao atualizado.</strong>
+  Finalize a sessao para aplicar os valores e gerar os movimentos de inventario.
+ </small>` : `
+ <small class="inventory-location-autosave-note">As contagens sao salvas automaticamente. Finalize a sessao para aplicar os valores ao estoque.</small>`}
  </div>
  <div class="inventory-location-session-actions">
  <button type="button" onclick="finishInventoryLocationCountSession(false)">
@@ -11067,12 +11181,29 @@ async function finishInventoryLocationCountSession(applyAdjustments = true) {
  return;
  }
 
+ let review = null;
+ if (isInventoryLocationHomologationExperience()) {
+  try {
+   await refreshInventoryLocationReview(entries);
+   review = buildInventoryLocationReviewSummary(entries);
+  } catch (error) {
+   console.error('[INV_LOCALIZACAO] erro ao atualizar revisao:', error);
+   showToast('Nao foi possivel atualizar os saldos para revisao. Tente novamente.', 'error');
+   return;
+  }
+ }
  const divergences = entries.filter(entry => toInventoryLocationNumber(entry.diferenca) !== 0);
  const confirmed = await showAppConfirm({
- title: 'Finalizar sessao de contagem?',
- message: 'As contagens serao aplicadas ao estoque em uma unica operacao segura.',
- summary: `Produtos contados: ${entries.length}\nDivergencias: ${divergences.length}`,
- detail: 'Se qualquer produto falhar, nenhum saldo sera alterado e a sessao permanecera aberta.',
+  title: review?.critical.length ? 'Revise as divergencias antes de finalizar' : 'Finalizar sessao de contagem?',
+  message: review
+   ? 'Ao confirmar, as quantidades contadas passam a ser o saldo disponivel do estoque.'
+   : 'As contagens serao aplicadas ao estoque em uma unica operacao segura.',
+  summary: review?.text || `Produtos contados: ${entries.length}\nDivergencias: ${divergences.length}`,
+  detail: review?.critical.length
+   ? 'Existem divergencias relevantes. Confirme as contagens destacadas antes de aplicar. Se qualquer produto falhar, nenhum saldo sera alterado.'
+   : (review
+    ? 'Os saldos foram atualizados para esta revisao. Se qualquer produto falhar, nenhum saldo sera alterado e a sessao permanecera aberta.'
+    : 'Se qualquer produto falhar, nenhum saldo sera alterado e a sessao permanecera aberta.'),
  confirmLabel: 'Finalizar sessao',
  cancelLabel: 'Cancelar',
  danger: false
@@ -17909,8 +18040,62 @@ function buildPickingItemPayload(item) {
  ean: isUsableProductScanCode(item?.ean) ? String(item.ean).trim() : '',
  descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
  qtd_solicitada: qty,
- qtd_separada: qty
+ qtd_separada: qty,
+ ...(isHomologationEnvironment() && isOperationalNoStockItem(item) ? {
+ sem_movimento_estoque: true,
+ detalhes_operacionais: Array.isArray(item?.detalhes_operacionais) ? item.detalhes_operacionais : []
+ } : {})
  };
+}
+
+const OPERATIONAL_NO_STOCK_PRODUCT_ID = 'DY-000.000';
+
+function isHomologationEnvironment() {
+ return document.documentElement.classList.contains('app-environment-homologation');
+}
+
+function isOperationalNoStockItem(itemOrId) {
+ const productId = typeof itemOrId === 'string' ? normalizePickCode(itemOrId) : getPickingProductId(itemOrId);
+ return productId === OPERATIONAL_NO_STOCK_PRODUCT_ID;
+}
+
+function getLatestOperationalDetail(item) {
+ const details = Array.isArray(item?.detalhes_operacionais) ? item.detalhes_operacionais : [];
+ return details.length ? details[details.length - 1] : null;
+}
+
+function showOperationalItemModal() {
+ return new Promise(resolve => {
+ const overlay = document.createElement('div');
+ overlay.className = 'modal-overlay operational-item-modal-overlay fade-in';
+ overlay.innerHTML = `
+ <form class="operational-item-modal" novalidate>
+ <header><span class="material-symbols-rounded">edit_note</span><div><small>ITEM SEM CADASTRO</small><h2>Descrever item</h2></div></header>
+ <p>Este item entrara na separacao e na contagem de pacotes, sem alterar o estoque.</p>
+ <label>Descricao do item<input name="descricao" maxlength="160" autocomplete="off" placeholder="Ex.: agulha cirurgica" required></label>
+ <label>Motivo<input name="motivo" list="operational-item-reasons" maxlength="80" autocomplete="off" placeholder="Ex.: venda, troca ou defeito" required></label>
+ <datalist id="operational-item-reasons"><option value="Venda"><option value="Troca"><option value="Defeito"><option value="Produto parcial"></datalist>
+ <div class="operational-item-modal-error" aria-live="polite"></div>
+ <footer><button type="button" data-cancel>Cancelar</button><button type="submit" class="primary"><span class="material-symbols-rounded">add_circle</span>Adicionar na separacao</button></footer>
+ </form>`;
+ const finish = value => { document.removeEventListener('keydown', onKeyDown); overlay.remove(); resolve(value); };
+ const onKeyDown = event => { if (event.key === 'Escape') finish(null); };
+ overlay.querySelector('[data-cancel]').addEventListener('click', () => finish(null));
+ overlay.addEventListener('click', event => { if (event.target === overlay) finish(null); });
+ overlay.querySelector('form').addEventListener('submit', event => {
+ event.preventDefault();
+ const descricao = String(event.currentTarget.elements.descricao.value || '').trim();
+ const motivo = String(event.currentTarget.elements.motivo.value || '').trim();
+ if (!descricao || !motivo) {
+ overlay.querySelector('.operational-item-modal-error').textContent = 'Preencha a descricao e o motivo para continuar.';
+ return;
+ }
+ finish({ descricao, motivo, registrado_em: getDataHoraBrasil(), registrado_por: localStorage.getItem('currentUser') || 'N/A' });
+ });
+ document.body.appendChild(overlay);
+ document.addEventListener('keydown', onKeyDown);
+ requestAnimationFrame(() => overlay.querySelector('[name="descricao"]')?.focus());
+ });
 }
 
 function getPickingProductId(item) {
@@ -18027,6 +18212,8 @@ function triggerScanSuccessGlow() {
 }
 
 function getPickItemTitle(item) {
+ const operationalDetail = getLatestOperationalDetail(item);
+ if (isOperationalNoStockItem(item) && operationalDetail?.descricao) return operationalDetail.descricao;
  return item?.descricao_completa || item?.descricao_base || item?.descricao || item?.col_aa || 'PRODUTO';
 }
 
@@ -18034,6 +18221,12 @@ function getPickItemMetaHTML(item) {
  const id = item?.id_interno || item?.col_a || item?.col_A || '-';
  const ean = item?.ean || '-';
  const sku = item?.sku_fornecedor || item?.sku || '-';
+ const operationalDetail = getLatestOperationalDetail(item);
+ if (isOperationalNoStockItem(item)) return `
+ <div>ID operacional: ${id}</div>
+ <div>Motivo: ${escapeKitAttribute(operationalDetail?.motivo || '-')}</div>
+ <div>Sem movimentacao de estoque</div>
+ `;
  return `
  <div>ID interno: ${id}</div>
  <div>EAN: ${ean}</div>
@@ -18658,11 +18851,14 @@ function getPickTotalQuantity() {
  return getPickItemsTotal(currentSessionItems);
 }
 
-function getPickChannelDailyPackageTotal() {
- const channel = normalizeOperationalLabel(currentPickingContext?.channelLabel || '');
- if (!channel) return getCurrentPickPackageCount();
- const dateKey = getPickSessionDateKey(new Date());
- const currentSessionId = String(currentPickingContext?.sessionId || '').trim();
+function getPickChannelDailyPackageTotal(context = {}) {
+ const channelLabel = context.channelLabel ?? currentPickingContext?.channelLabel ?? '';
+ const currentSessionId = String(context.sessionId ?? currentPickingContext?.sessionId ?? '').trim();
+ const currentPackageCount = normalizePickPackageCount(context.packageCount ?? getCurrentPickPackageCount());
+ const channel = normalizeOperationalLabel(channelLabel);
+ if (!channel) return currentPackageCount;
+ const sessionDateMatch = currentSessionId.match(/-(\d{4})-/);
+ const dateKey = context.dateKey || sessionDateMatch?.[1] || getPickSessionDateKey(new Date());
  const totalsBySession = new Map();
  const sources = [...(appData.separacao || []), ...getLocalDraftPickSessionsList()];
  sources.forEach(session => {
@@ -18673,9 +18869,19 @@ function getPickChannelDailyPackageTotal() {
  if (!sessionId || sessionChannel !== channel || !sessionId.includes(`-${dateKey}-`)) return;
  totalsBySession.set(sessionId, Math.max(totalsBySession.get(sessionId) || 0, getPickPackageCountFrom(session)));
  });
- if (currentSessionId) totalsBySession.set(currentSessionId, getCurrentPickPackageCount());
- else totalsBySession.set('__current__', getCurrentPickPackageCount());
+ if (currentSessionId) totalsBySession.set(currentSessionId, currentPackageCount);
+ else totalsBySession.set('__current__', currentPackageCount);
  return [...totalsBySession.values()].reduce((sum, value) => sum + normalizePickPackageCount(value), 0);
+}
+
+function getConferenceChannelDailyPackageTotal() {
+ const sessionId = String(currentPackSession?.id || '').trim();
+ const pickingData = currentPackSession?.pickingData || {};
+ return getPickChannelDailyPackageTotal({
+  sessionId,
+  channelLabel: pickingData.canal_nome || currentPackSession?.channel || '',
+  packageCount: getPickPackageCountFrom(pickingData || currentPackSession || {})
+ });
 }
 
 function updatePickSummaryUI() {
@@ -19170,10 +19376,9 @@ function getOperationalProductSearchInput() {
 }
 
 function findOperationalProductSuggestions(query) {
- const suggestions = findPickProductSuggestions(query);
- if (!document.getElementById('pack-ean-input')) return suggestions;
- const expectedIds = new Set((currentPackSession?.conferenceRows || []).map(getPickingProductId).filter(Boolean));
- return suggestions.filter(product => expectedIds.has(getPickingProductId(product)));
+ // A conferencia e realmente as cegas: a busca usa todo o cadastro. Produtos
+ // que nao estavam na separacao precisam poder ser bipados para virar SOBRA.
+ return findPickProductSuggestions(query);
 }
 function renderPickSearchSuggestions(suggestions = [], emptyMessage = '') {
  const container = document.getElementById('pack-search-suggestions') || document.getElementById('pick-search-suggestions');
@@ -19312,6 +19517,10 @@ function findProductInLocalCacheByCode(cleanCode) {
  console.log('[SEP] buscando cache', cleanCode);
  const code = normalizePickCode(cleanCode);
  if (!productCodeIndex.size && appData.products?.length) rebuildProductCodeIndex(appData.products);
+ if (productCodeConflicts.has(code)) {
+  console.error('[PRODUTOS] leitura bloqueada por codigo duplicado', code);
+  return null;
+ }
  const product = productCodeIndex.get(code) || null;
 
  if (product) {
@@ -19347,6 +19556,7 @@ function upsertProductIntoLocalCache(product) {
 async function findProductForPicking(cleanCode) {
  let product = findProductInLocalCacheByCode(cleanCode);
  if (product) return product;
+ if (productCodeConflicts.has(normalizePickCode(cleanCode))) return null;
 
  if (!navigator.onLine) return null;
 
@@ -19620,7 +19830,7 @@ async function addPickItem(scannedEan = null) {
  return;
  }
 
- const product = await findProductForPicking(ean);
+ let product = await findProductForPicking(ean);
 
  if (product) {
  const productId = getPickingProductId(product);
@@ -19631,6 +19841,19 @@ async function addPickItem(scannedEan = null) {
  showInputFeedback('pick-ean-input', 'error');
  settlePickScannerInput(120);
  return;
+ }
+
+ let operationalDetail = null;
+ if (isHomologationEnvironment() && productId === OPERATIONAL_NO_STOCK_PRODUCT_ID) {
+ operationalDetail = await showOperationalItemModal();
+ if (!operationalDetail) {
+ if (input) input.value = '';
+ showScanFeedback('warning', 'Inclusao cancelada');
+ settlePickScannerInput(80);
+ return;
+ }
+ product = { ...product, descricao_base: operationalDetail.descricao, descricao_completa: operationalDetail.descricao,
+ descricao: operationalDetail.descricao, sem_movimento_estoque: true, detalhes_operacionais: [operationalDetail] };
  }
 
  const allowNegative = isSaidaEstoqueZeroPermitida();
@@ -19659,7 +19882,7 @@ async function addPickItem(scannedEan = null) {
  }
  }
 
- if (stock < (currentDraftQty + 1)) {
+ if (!(isHomologationEnvironment() && isOperationalNoStockItem(product)) && stock < (currentDraftQty + 1)) {
  console.log('[INFO] Estoque insuficiente na bipagem.', {
  permitir_estoque_negativo: allowNegative,
  produto: productId,
@@ -19715,6 +19938,13 @@ async function addPickItem(scannedEan = null) {
  const resumeScanTime = formatTimeBR();
  if (existingIndex >= 0) {
  const existingItem = currentSessionItems[existingIndex];
+ if (operationalDetail) {
+ existingItem.detalhes_operacionais = [...(Array.isArray(existingItem.detalhes_operacionais) ? existingItem.detalhes_operacionais : []), operationalDetail];
+ existingItem.descricao_base = operationalDetail.descricao;
+ existingItem.descricao_completa = operationalDetail.descricao;
+ existingItem.descricao = operationalDetail.descricao;
+ existingItem.sem_movimento_estoque = true;
+ }
  const packageAssignments = normalizePickPackageAssignments(existingItem);
  existingItem.qty = (existingItem.qty || 1) + 1;
  packageAssignments.push(activePickKitId || null);
@@ -20783,7 +21013,65 @@ function isPackSessionFinished(session = {}) {
  return status.includes('FINALIZ') || status.includes('CONFERID') || status.includes('CONCLUID');
 }
 
+async function loadPackConferenceWorkspace() {
+ try {
+  const data = await DataClient.loadModule('conferencia', true);
+  if (data) {
+   appData.separacao = data.separacao || appData.separacao || [];
+   appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+   appData.conferencia = data.conferencia || appData.conferencia || [];
+   appData.conferencia_itens = data.conferencia_itens || appData.conferencia_itens || [];
+  }
+ } catch (error) {
+  console.warn('[PACK] Falha ao atualizar area de conferencia:', error);
+ }
+}
+
 async function renderPackMenu() {
+ return renderPackPendingChannels();
+}
+
+async function renderPackConferenceRecords(scope = 'today', query = '') {
+ const currentUser = localStorage.getItem('currentUser');
+ await loadPackConferenceWorkspace();
+ const normalizedQuery = normalizeText(query || '');
+ const records = (appData.conferencia || [])
+  .filter(record => isPackSessionFinished(record))
+  .filter(record => scope !== 'today' || isPackRecordFromToday(record))
+  .filter(record => {
+   if (!normalizedQuery) return true;
+   const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === String(record.separacao_id || '')) || {};
+   return normalizeText([record.separacao_id, record.conferido_por, record.motivo_divergencia, session.canal_nome, session.canal].filter(Boolean).join(' ')).includes(normalizedQuery);
+  })
+  .sort((a, b) => new Date(b.conferido_em || b.atualizado_em || 0) - new Date(a.conferido_em || a.atualizado_em || 0));
+
+ app.innerHTML = `
+ <div class="dashboard-screen internal fade-in pack-screen module-screen">
+  ${getTopBarHTML(currentUser, 'renderPackMenu()')}
+  ${getModuleSidebarHTML('pack')}
+  <main class="container pack-records-shell">
+   <header class="pack-records-header">
+    <button type="button" onclick="renderPackMenu()">${getBackButtonStandardIconHTML()}</button>
+    <div><small>CONFERENCIA</small><h1>${scope === 'today' ? 'CONFERENCIAS DE HOJE' : 'HISTORICO COMPLETO'}</h1></div>
+   </header>
+   ${scope === 'history' ? `<label class="pack-records-search"><span class="material-symbols-rounded">search</span><input value="${escapeKitAttribute(query)}" placeholder="Separacao, canal, usuario ou motivo" onkeydown="if(event.key==='Enter')renderPackConferenceRecords('history',this.value)"><button type="button" onclick="renderPackConferenceRecords('history',this.previousElementSibling.value)">PESQUISAR</button></label>` : ''}
+   <section class="pack-records-list">
+    ${records.length ? records.map(record => {
+     const sessionId = String(record.separacao_id || '');
+     const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === sessionId) || {};
+     const adjusted = record.divergencia_autorizada === true;
+     return `<button type="button" onclick="renderPackDailyConsultation(${quotePackInlineArg(sessionId)})">
+      <span class="material-symbols-rounded">${adjusted ? 'rule' : 'task_alt'}</span>
+      <div><strong>${escapeKitAttribute(sessionId || record.conferencia_id || '-')}</strong><small>${escapeKitAttribute(session.canal_nome || session.canal || 'Canal')} · ${escapeKitAttribute(formatDateTimeBR(record.conferido_em || record.atualizado_em))}</small>${adjusted ? `<em>Ajuste autorizado: ${escapeKitAttribute(record.motivo_divergencia || '-')}</em>` : ''}</div>
+      <b class="${adjusted ? 'is-adjusted' : ''}">${adjusted ? 'AJUSTADA' : 'CORRETA'}</b>
+     </button>`;
+    }).join('') : '<div class="operational-empty-card"><span class="material-symbols-rounded">history</span><strong>Nenhuma conferencia encontrada.</strong></div>'}
+   </section>
+  </main>
+ </div>`;
+}
+
+async function renderPackPendingChannels() {
  const currentUser = localStorage.getItem('currentUser');
  // Texto validado em UTF-8.
  try {
@@ -21302,9 +21590,9 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
 
  <aside class="pack-blind-summary-panel pick-summary-panel pick-summary-single-line">
  <div class="pack-blind-summary-metrics pick-summary-line">
- <div class="pick-package-count-field"><span class="material-symbols-rounded">inventory_2</span><span>PRODUTOS BIPADOS</span><strong id="pack-summary-items">0</strong></div>
- <div class="pick-package-count-field"><span class="material-symbols-rounded">barcode_scanner</span><span>TOTAL DE BIPS</span><strong id="pack-summary-units">0</strong></div>
- <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
+ <div class="pick-package-count-field"><span class="material-symbols-rounded">package_2</span><span>NESTA SEPARACAO</span><strong id="pack-summary-packages">0</strong></div>
+ <div class="pick-package-count-field pick-channel-package-total"><span class="material-symbols-rounded">summarize</span><span>TOTAL DO CANAL HOJE</span><strong id="pack-summary-channel-packages">0</strong></div>
+  <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
  <span class="material-symbols-rounded">hub</span><span>AGRUPAMENTOS</span>
  </button>
  <button class="pack-blind-remove-btn pick-remove-scan-btn" id="conference-remove-scan-toggle" type="button" onclick="toggleConferenceRemovalMode()">
@@ -21348,11 +21636,13 @@ function focusPackManualInput() {
 function renderPackDailyConsultation(sessionId) {
  const currentUser = localStorage.getItem('currentUser');
  const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === String(sessionId)) || {};
- const rows = (appData.conferencia || []).filter(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '') === String(sessionId));
+ const rows = (appData.conferencia_itens || []).filter(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '') === String(sessionId));
+ const conference = (appData.conferencia || []).find(row => String(row.separacao_id || '') === String(sessionId)) || {};
  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
  app.innerHTML = `<div class="dashboard-screen internal fade-in pack-screen module-screen"><main class="container pack-daily-consult-shell">
  <header class="pack-daily-consult-header"><button type="button" onclick="renderPackMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button><div><small>CONFERENCIA FINALIZADA HOJE</small><h1>${escapeKitAttribute(getPackSeparationDisplayId(session) || sessionId)}</h1><p>${escapeKitAttribute(channelName)}</p></div><span class="material-symbols-rounded">task_alt</span></header>
- <section class="pack-daily-consult-list">${rows.length ? rows.map(row => `<article><span class="material-symbols-rounded">inventory_2</span><div><strong>${escapeKitAttribute(row.descricao || row.descricao_base || row.id_interno || 'Produto')}</strong><small>ID ${escapeKitAttribute(row.id_interno || '-')} &middot; EAN ${escapeKitAttribute(row.ean || '-')}</small></div><b>${formatStockNumber(Number(row.qtd_conferida || 0))}</b></article>`).join('') : '<div class="operational-empty-card"><span class="material-symbols-rounded">receipt_long</span><strong>Conferencia finalizada. Nao ha itens detalhados carregados para consulta.</strong></div>'}</section>
+ ${conference.divergencia_autorizada ? `<section class="pack-daily-adjustment"><span class="material-symbols-rounded">verified</span><div><strong>AJUSTE AUTORIZADO</strong><p>${escapeKitAttribute(conference.motivo_divergencia || '-')}</p><small>Por ${escapeKitAttribute(conference.conferido_por || '-')} em ${escapeKitAttribute(formatDateTimeBR(conference.conferido_em))}</small></div></section>` : ''}
+ <section class="pack-daily-consult-list">${rows.length ? rows.map(row => { const diff=Number(row.qtd_conferida||0)-Number(row.qtd_separada||0); return `<article class="${diff ? 'has-adjustment' : ''}"><span class="material-symbols-rounded">${diff ? 'rule' : 'inventory_2'}</span><div><strong>${escapeKitAttribute(row.descricao || row.descricao_base || row.id_interno || 'Produto')}</strong><small>ID ${escapeKitAttribute(row.id_interno || '-')} &middot; EAN ${escapeKitAttribute(row.ean || '-')}</small><em>Separado: ${formatStockNumber(Number(row.qtd_separada||0))} · Enviado: ${formatStockNumber(Number(row.qtd_conferida||0))}${diff ? ` · Diferenca: ${diff>0?'+':''}${formatStockNumber(diff)}` : ''}</em></div><b>${formatStockNumber(Number(row.qtd_conferida || 0))}</b></article>`; }).join('') : '<div class="operational-empty-card"><span class="material-symbols-rounded">receipt_long</span><strong>Conferencia finalizada. Nao ha itens detalhados carregados para consulta.</strong></div>'}</section>
  </main></div>`;
 }
 
@@ -21422,6 +21712,8 @@ function updatePackChrome() {
  const progress = expectedItems > 0 ? Math.min(100, Math.round((stats.checkedItems / expectedItems) * 100)) : 0;
  const itemsEl = document.getElementById('pack-summary-items');
  const unitsEl = document.getElementById('pack-summary-units');
+ const packagesEl = document.getElementById('pack-summary-packages');
+ const channelPackagesEl = document.getElementById('pack-summary-channel-packages');
  const progressEl = document.getElementById('pack-summary-progress');
  const ratioEl = document.getElementById('pack-summary-ratio');
  const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
@@ -21430,6 +21722,8 @@ function updatePackChrome() {
 
  if (itemsEl) itemsEl.textContent = String(stats.checkedItems);
  if (unitsEl) unitsEl.textContent = String(stats.checkedQty);
+ if (packagesEl) packagesEl.textContent = String(getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {}));
+ if (channelPackagesEl) channelPackagesEl.textContent = String(getConferenceChannelDailyPackageTotal());
  if (progressEl) progressEl.textContent = `${progress}%`;
  if (ratioEl) ratioEl.textContent = `${stats.checkedItems} / ${expectedItems} itens`;
  const filterCounts = { all: scannedRows.length, standalone: standaloneRows.length, kits: groupedRows.length };
@@ -21703,41 +21997,49 @@ async function openManualAddProductToSession(sessionId, type = 'PACK') {
  });
 }
 
+function createConferenceExtraRow(product) {
+ const productId = getPickingProductId(product);
+ if (!productId) return null;
+ return {
+  ...product,
+  separacao_id: currentPackSession?.pickingData?.separacao_id || currentPackSession?.id || '',
+  rom_id: currentPackSession?.id || '',
+  id_interno: productId,
+  ean: isUsableProductScanCode(product?.ean) ? String(product.ean).trim() : '',
+  descricao: product?.descricao_base || product?.descricao || productId,
+  qtd_separada: 0,
+  qtd_conferida: 0,
+  scanned_in_conference: false,
+  divergencia: 'FALTA',
+  expected_package_assignments: [],
+  conference_package_assignments: []
+ };
+}
+
 function manualAddItemToConference(product) {
  const productId = getPickingProductId(product);
  if (!productId) {
- showToast("Produto sem ID interno. Nao foi adicionado.", "error");
- return;
+  showToast('Produto sem ID interno. Nao foi adicionado.', 'error');
+  return;
  }
 
- let row = currentPackSession.conferenceRows.find(r => getPickingProductId(r) === productId);
- if (!row) { playBeep('error'); showAppModal({ type: 'error', title: 'Produto nao pertence a esta separacao', message: getPickItemTitle(product) + ' esta cadastrado, mas nao esta previsto nesta conferencia.', detail: 'O produto nao foi adicionado. Confira o codigo e o romaneio.', confirmText: 'Entendi' }); return; }
- if (row) {
- row.qtd_conferida++;
- } else {
- row = {
- separacao_id: currentPackSession.pickingData.separacao_id,
- rom_id: currentPackSession.id,
- id_interno: product.id_interno || '',
- ean: product.ean || '',
- descricao: product.descricao_base || 'Produto Adicionado',
- qtd_separada: 0,
- qtd_conferida: 1,
- divergencia: 'SOBRA'
- };
- currentPackSession.conferenceRows.push(row);
+ let row = currentPackSession.conferenceRows.find(item => getPickingProductId(item) === productId);
+ if (!row) {
+  row = createConferenceExtraRow(product);
+  currentPackSession.conferenceRows.push(row);
  }
- // Atualizar lista de conferidos
+ row.qtd_conferida = Number(row.qtd_conferida || 0) + 1;
+ row.scanned_in_conference = true;
+ row.pick_resume_last_scan_at = new Date().toISOString();
+ row.pick_resume_last_scan_time = formatTimeBR(new Date());
+ updateConferenceRowDivergence(row);
+ playBeep('success');
+ triggerScanFeedback('success');
+ persistPackSessionCache();
+
  const packList = document.getElementById('pack-items-list');
  if (packList) packList.innerHTML = renderPackItemsListHTML();
- 
- // Texto validado em UTF-8.
- const btnFinish = document.getElementById('btn-finish-pack');
- if (btnFinish) {
- btnFinish.style.opacity = '1';
- btnFinish.style.cursor = 'pointer';
- btnFinish.setAttribute('onclick', 'finishConferenceSession()');
- }
+ restoreScanFieldFocus('pack', 80);
 }
 
 
@@ -21759,6 +22061,10 @@ async function addPackScan(scannedEan = null) {
   const productId = getPickingProductId(product);
   if (productId) {
   row = currentPackSession.conferenceRows.find(r => getPickingProductId(r) === productId);
+  if (!row) {
+   row = createConferenceExtraRow(product);
+   currentPackSession.conferenceRows.push(row);
+  }
   }
   }
 
@@ -21806,15 +22112,18 @@ async function addPackScan(scannedEan = null) {
   restoreScanFieldFocus('pack', 80);
   return;
   }
-  product = product || await findProductForPicking(ean);
   playBeep('error');
   triggerScanFeedback('error');
   if (input) input.value = '';
   await showAppModal({
   type: 'error',
-  title: product ? 'Produto nao pertence a esta separacao' : 'Produto nao cadastrado',
-  message: product ? `${getPickItemTitle(product)} nao esta previsto nesta conferencia.` : `O codigo ${ean} nao foi encontrado no cadastro de produtos.`,
-  detail: product ? 'Confira o EAN bipado e o romaneio antes de continuar.' : 'Cadastre o produto ou informe um EAN, SKU ou codigo interno valido.',
+  title: productCodeConflicts.has(ean) ? 'Codigo duplicado no cadastro' : 'Produto nao cadastrado',
+  message: productCodeConflicts.has(ean)
+   ? `O codigo ${ean} esta vinculado a mais de um produto.`
+   : `O codigo ${ean} nao foi encontrado no cadastro de produtos.`,
+  detail: productCodeConflicts.has(ean)
+   ? 'Corrija o cadastro antes de continuar. A leitura foi bloqueada para evitar selecionar o produto errado.'
+   : 'Cadastre o produto ou informe um EAN, SKU ou codigo interno valido.',
   confirmText: 'Entendi'
   });
   restoreScanFieldFocus('pack', 80);
@@ -22129,8 +22438,9 @@ function openConferenceResultModal() {
    <p>Use os botoes − e + ou volte para bipar um produto que nao esteja na lista.</p>
    <button type="button" class="conference-result-review" onclick="returnToConferenceScanning()"><span class="material-symbols-rounded">barcode_scanner</span>Bipar ou incluir produto</button>
    ` : `
-   <p>Foi encontrada divergencia entre a separacao e os produtos bipados. Deseja corrigir?</p>
-   <button type="button" class="conference-result-review" onclick="enableConferenceResultCorrection()"><span class="material-symbols-rounded">edit</span>Sim, corrigir divergencias</button>
+   <p>Foi encontrada divergencia entre a separacao e os produtos bipados.</p>
+   <button type="button" class="conference-result-review" onclick="enableConferenceResultCorrection()"><span class="material-symbols-rounded">edit</span>Corrigir os bipes</button>
+   <button type="button" class="conference-result-confirm" onclick="authorizeConferenceDivergence()"><span class="material-symbols-rounded">verified</span>Confirmar ajuste e enviar</button>
    ` : `
    <p>Todos os produtos e quantidades conferem com a separa\u00e7\u00e3o.</p>
    <button type="button" class="conference-result-confirm" onclick="closeConferenceResultModal(); confirmFinishConference()"><span class="material-symbols-rounded">check_circle</span>Confirmar e finalizar</button>
@@ -22143,6 +22453,42 @@ function openConferenceResultModal() {
 function enableConferenceResultCorrection() {
  conferenceCorrectionModeActive = true;
  openConferenceResultModal();
+}
+
+async function authorizeConferenceDivergence() {
+ const divergentRows = (currentPackSession?.conferenceRows || []).filter(row =>
+  Number(row.qtd_conferida || 0) !== Number(row.qtd_separada || 0)
+ );
+ if (!divergentRows.length) return confirmFinishConference();
+
+ const reason = await showAppPrompt({
+  title: 'Autorizar ajuste da conferencia',
+  message: 'Explique por que o envio final ficara diferente da separacao original.',
+  detail: 'O estoque sera movimentado pela quantidade conferida. A separacao original e este motivo ficarao preservados no historico.',
+  label: 'Motivo obrigatorio',
+  confirmLabel: 'Continuar',
+  cancelLabel: 'Voltar',
+  inputType: 'text'
+ });
+ const cleanReason = String(reason || '').trim();
+ if (!cleanReason) {
+  if (reason !== null) showToast('Informe o motivo do ajuste para continuar.', 'warning');
+  return;
+ }
+
+ const additions = divergentRows.filter(row => Number(row.qtd_conferida || 0) > Number(row.qtd_separada || 0)).length;
+ const removals = divergentRows.filter(row => Number(row.qtd_conferida || 0) < Number(row.qtd_separada || 0)).length;
+ const confirmed = await showAppConfirm({
+  title: 'Finalizar com divergencia autorizada?',
+  message: 'A quantidade conferida sera considerada a quantidade realmente enviada.',
+  summary: `Produtos com acrescimo: ${additions}\nProdutos com reducao: ${removals}\nMotivo: ${cleanReason}`,
+  detail: 'Esta decisao sera registrada com usuario, data e hora. O estoque sera movimentado pelo conferido.',
+  confirmLabel: 'Autorizar e finalizar',
+  cancelLabel: 'Revisar bipes'
+ });
+ if (!confirmed) return;
+ closeConferenceResultModal();
+ await confirmFinishConference({ allowDivergence: true, divergenceReason: cleanReason });
 }
 
 function returnToConferenceScanning() {
@@ -22317,7 +22663,7 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  const now = getDataHoraBrasil();
  const executionId = payload.executionId || generateExecutionId();
  const conferenciaId = `CONF-${executionId}`;
- const rows = Object.values((payload.rows || []).filter(row => row?.id_interno && Number(row.qtd_conferida || 0) > 0).reduce((acc, row) => {
+ const rows = Object.values((payload.rows || []).filter(row => row?.id_interno).reduce((acc, row) => {
  const key = row.id_interno;
  if (!acc[key]) {
  acc[key] = {
@@ -22326,7 +22672,7 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  qtd_conferida: 0
  };
  }
- acc[key].qtd_separada += Number(row.qtd_separada || row.qtd_conferida || 0);
+ acc[key].qtd_separada += Number(row.qtd_separada ?? 0);
  acc[key].qtd_conferida += Number(row.qtd_conferida || 0);
  return acc;
  }, {}));
@@ -22371,7 +22717,19 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  status: 'conferido',
  conferido_por: payload.user,
  conferido_em: now,
- atualizado_em: now
+ atualizado_em: now,
+ divergencia_autorizada: payload.divergenceAuthorized === true,
+ motivo_divergencia: payload.divergenceAuthorized ? payload.divergenceReason : null,
+ resumo_divergencia: payload.divergenceAuthorized
+  ? rows.filter(row => Number(row.qtd_separada || 0) !== Number(row.qtd_conferida || 0)).map(row => ({
+    id_interno: row.id_interno,
+    ean: row.ean || null,
+    descricao: row.descricao || '',
+    qtd_separada: Number(row.qtd_separada || 0),
+    qtd_conferida: Number(row.qtd_conferida || 0),
+    diferenca: Number(row.qtd_conferida || 0) - Number(row.qtd_separada || 0)
+   }))
+  : []
  }]);
  if (confError) throw confError;
 
@@ -22388,8 +22746,29 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  const { error: itensError } = await client.from('conferencia_itens').insert(itensPayload);
  if (itensError) throw itensError;
 
+ if (payload.divergenceAuthorized === true) {
+  const adjustmentRows = itensPayload.filter(row => Number(row.qtd_separada || 0) !== Number(row.qtd_conferida || 0)).map(row => ({
+   conferencia_id: conferenciaId,
+   separacao_id: payload.sessionId,
+   id_interno: row.id_interno,
+   ean: row.ean || null,
+   descricao: row.descricao || '',
+   qtd_separada: Number(row.qtd_separada || 0),
+   qtd_conferida: Number(row.qtd_conferida || 0),
+   diferenca: Number(row.qtd_conferida || 0) - Number(row.qtd_separada || 0),
+   motivo: payload.divergenceReason,
+   autorizado_por: payload.user,
+   autorizado_em: now
+  }));
+  if (adjustmentRows.length) {
+   const { error: adjustmentError } = await client.from('conferencia_ajustes').insert(adjustmentRows);
+   if (adjustmentError) throw adjustmentError;
+  }
+ }
+
  let movimentos = 0;
  for (const row of rows) {
+ if (isHomologationEnvironment() && isOperationalNoStockItem(row)) continue;
  let needed = Number(row.qtd_conferida || 0);
  for (const local of LOCAIS_SAIDA) {
  if (needed <= 0) break;
@@ -22468,7 +22847,7 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
  };
 }
 
-async function confirmFinishConference() {
+async function confirmFinishConference(options = {}) {
  if (isFinalizing) return;
  isFinalizing = true;
 
@@ -22485,12 +22864,19 @@ async function confirmFinishConference() {
  const executionId = generateExecutionId();
 
  // Formatar linhas para o backend processar movimentos atomicos
+ const allowDivergence = options.allowDivergence === true;
+ const divergenceReason = String(options.divergenceReason || '').trim();
  const rows = currentPackSession.conferenceRows.map(row => ({
  id_interno: row.id_interno,
  ean: row.ean,
  descricao: row.descricao,
- qtd_separada: row.qtd_separada,
- qtd_conferida: row.qtd_conferida,
+ qtd_separada: Number(row.qtd_separada || 0),
+ qtd_conferida: Number(row.qtd_conferida || 0),
+ divergencia: Number(row.qtd_conferida || 0) > Number(row.qtd_separada || 0)
+  ? 'SOBRA'
+  : Number(row.qtd_conferida || 0) < Number(row.qtd_separada || 0) ? 'FALTA' : null,
+ divergencia_autorizada: allowDivergence,
+ motivo_divergencia: allowDivergence ? divergenceReason : null,
  separacao_id: sessionId
  }));
 
@@ -22499,8 +22885,10 @@ async function confirmFinishConference() {
  sessionId: sessionId,
  isFastMode: false,
  modo_rapido: false,
- observacao: PICK_MANUAL_OBSERVATION,
+ observacao: allowDivergence ? `${PICK_MANUAL_OBSERVATION} | AJUSTE AUTORIZADO: ${divergenceReason}` : PICK_MANUAL_OBSERVATION,
  user: currentUser,
+ divergenceAuthorized: allowDivergence,
+ divergenceReason,
  rows: rows,
  executionId
  });
@@ -22512,7 +22900,9 @@ async function confirmFinishConference() {
  ? 'CONFERENCIA salva localmente para sincronizar.'
  : (finalizationResult.negativeStockAllowed
  ? 'CONFERENCIA finalizada e estoque baixado. Um ou mais produtos ficaram com saldo negativo conforme conteudo.'
- : 'CONFERENCIA finalizada e estoque baixado.'),
+ : (allowDivergence
+ ? 'CONFERENCIA finalizada com ajuste autorizado. O estoque foi movimentado pela quantidade conferida.'
+ : 'CONFERENCIA finalizada e estoque baixado.')),
  confirmText: 'OK'
  });
  playBeep('success');
@@ -32369,10 +32759,10 @@ function scheduleDevolucaoProductSearch(value) {
   devolucaoMarketplaceState.productSearchTimer = null;
   handleDevolucaoProductSearchInput(query);
  }, 160);
+}
 
 function getDevolucaoProductSearchText(product) {
  return normalizeText([product?.descricao_completa, product?.descricao_base, product?.descricao, product?.nome, product?.id_interno, product?.ean, product?.sku_fornecedor, product?.sku, product?.marca, product?.categoria].filter(Boolean).join(' '));
-}
 }
 
 function clearDevolucaoProductSuggestions() {
@@ -33633,6 +34023,8 @@ function closeQuickActionSeparationMenu() {
  if (panel) panel.remove();
  const romaneioPanel = document.getElementById('quick-romaneio-submenu');
  if (romaneioPanel) romaneioPanel.remove();
+ const conferencePanel = document.getElementById('quick-conference-submenu');
+ if (conferencePanel) conferencePanel.remove();
  document.getElementById('quick-actions-menu')?.classList.remove('has-separation-submenu');
 }
 
@@ -33647,6 +34039,23 @@ function openQuickActionSeparationMenu(event) {
  panel.id = 'quick-separation-submenu';
  panel.className = 'quick-separation-submenu';
  panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>SEPARAÇÕES DE HOJE</strong><small>Finalizadas e criadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+ menu.appendChild(panel);
+}
+
+function openQuickActionConferenceMenu(event) {
+ event?.stopPropagation?.();
+ closeQuickActionSeparationMenu();
+ const menu = document.getElementById('quick-actions-menu');
+ if (!menu) return;
+ menu.classList.add('has-separation-submenu');
+ let pending = 0;
+ try {
+  pending = new Set((appData.separacao || []).filter(isSeparationPendingConferenceSession).map(getPackSeparationSessionId).filter(Boolean)).size;
+ } catch (error) {}
+ const panel = document.createElement('section');
+ panel.id = 'quick-conference-submenu';
+ panel.className = 'quick-separation-submenu quick-conference-submenu';
+ panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderPackPendingChannels()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar conferencias abertas</small></span><b>${pending}</b></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>CONFERENCIAS DE HOJE</strong><small>Finalizadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('history')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO COMPLETO</strong><small>Pesquisar conferencias anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
  menu.appendChild(panel);
 }
 
