@@ -16791,7 +16791,11 @@ function hasPendingConferenceForSession(sessionOrId) {
  ? String(getPackSeparationSessionId(sessionOrId) || '').trim()
  : String(sessionOrId || '').trim();
  if (!sessionId) return false;
- return (appData.conferencia || []).some(conf => {
+ const sessionConferences = (appData.conferencia || []).filter(conf => getConferenceSessionId(conf) === sessionId);
+ const finishedStatuses = new Set(['conferido', 'finalizada', 'finalizado', 'concluida', 'concluido']);
+ const hasFinishedConference = sessionConferences.some(conf => finishedStatuses.has(String(conf.status || '').trim().toLowerCase()));
+ if (hasFinishedConference) return false;
+ return sessionConferences.some(conf => {
  const confSessionId = getConferenceSessionId(conf);
  return confSessionId === sessionId && isPendingConferenceRow(conf);
  });
@@ -32611,7 +32615,8 @@ function getDevolucaoItemFinancialClass(item = {}) {
  const resultado = getDevolucaoItemResultado(item);
  if (resultado === 'apto') return 'recuperado';
  if (['defeito', 'garantia'].includes(resultado)) return 'em_analise';
- return 'prejuizo';
+ if (resultado === 'descarte') return 'prejuizo';
+ return 'pendente';
 }
 
 function getDevolucaoItemFinancialLabel() {
