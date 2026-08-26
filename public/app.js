@@ -3788,6 +3788,22 @@ function getNextInternalId() {
  return `${prefix}${paddedNum}`;
 }
 
+function getDashboardCompletedConference(session = {}) {
+ const sessionId = String(getPackSeparationSessionId(session) || '').trim();
+ if (!sessionId) return null;
+ return (appData.conferencia || []).find(record => String(record.separacao_id || '') === sessionId && isPackSessionFinished(record)) || null;
+}
+function isDashboardPackageSessionFinalized(session = {}) {
+ const status = normalizeOperationalLabel(session.status || session.situacao || '');
+ if (isPickingFastModeSource(session)) return status.includes('FINALIZ') || status.includes('CONCLUID');
+ return Boolean(getDashboardCompletedConference(session));
+}
+function getDashboardPackageFinishedAt(session = {}) {
+ if (isPickingFastModeSource(session)) return getSeparationFinishedAt(session);
+ const conference = getDashboardCompletedConference(session);
+ return conference?.conferido_em || conference?.atualizado_em || '';
+}
+
 async function renderAlerts() {
  const currentUser = localStorage.getItem('currentUser');
  app.innerHTML = `
@@ -3834,8 +3850,8 @@ async function renderAlerts() {
 
  const channelTotals = new Map();
  (appData.separacao || [])
- .filter(isFinalizedSeparationForHistory)
- .filter(session => isDateTodayBR(getSeparationFinishedAt(session)))
+ .filter(isDashboardPackageSessionFinalized)
+ .filter(session => isDateTodayBR(getDashboardPackageFinishedAt(session)))
  .forEach(session => {
  const packageCount = getPickPackageCountFrom(session);
  if (packageCount <= 0) return;
@@ -3872,7 +3888,7 @@ async function renderAlerts() {
 // ========================================================
 const menuModulesConfig = [
  { id: 'produtos', label: 'PRODUTOS', icon: 'produtos', order: 1, type: 'principal' },
- { id: 'kit_lampada', label: 'KIT L\u00C2MPADAS', icon: 'kit_lampada', order: 11, type: 'principal' },
+ { id: 'pedidos', label: 'PEDIDOS', icon: 'pedidos', order: 11, type: 'principal' },
  { id: 'pick', label: 'SEPARAÇÃO (PICK)', icon: 'pick', order: 3, type: 'principal' },
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
@@ -3886,6 +3902,7 @@ const menuModulesConfig = [
 const menu3DIcons = {
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+ pedidos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><path d="M21 19h22v28H21z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 17h10v5H27z" fill="#0EA5E9" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m26 31 3 3 6-7M26 41h12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
@@ -3969,7 +3986,7 @@ const menuRoutes = {
  nf: 'renderNFSubMenu()',
  financeiro: 'renderFinanceiroSubMenu()',
  configuracoes: 'renderConfigSubMenu()',
- kit_lampada: 'renderGuiaLampada()',
+ pedidos: 'renderPedidosPlaceholder()',
  ajuste: 'renderAjusteEstoqueScreen()'
 };
 
@@ -4018,6 +4035,11 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  <div id="quick-actions-menu" class="quick-actions-menu quick-actions-sheet hidden" role="menu" aria-label="Acoes rApidas">
  <span class="quick-sheet-grabber" aria-hidden="true"></span>
  <div class="quick-actions-list" role="none">
+ <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-kit-lampada" type="button" role="menuitem" onclick="toggleQuickActions();renderGuiaLampada()">
+ <img class="quick-action-icon quick-action-icon-kit-lampada" src="/assets/icons/quick-kit-lampada.svg" alt="" aria-hidden="true">
+ <span class="quick-action-label">KIT L&Acirc;MPADA <small>(CONSULTA)</small></span>
+ <span class="quick-action-arrow material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ </button>
  <button class="quick-action-item quick-action-card quick-action-priority quick-action-uniform quick-action-picking-drafts ${pendingSeparationsClass}" type="button" role="menuitem" onclick="openQuickActionSeparationMenu(event)">
  <img class="quick-action-icon quick-action-icon-picking-drafts" src="/assets/icons/menu-separacao.svg" alt="" aria-hidden="true">
  <span class="quick-action-label">SEPARA&Ccedil;&Atilde;O <small>(PEDIDOS)</small></span>
@@ -4116,6 +4138,26 @@ ${finalMenuItems.map(item => {
 
 async function renderDashboard() {
  await renderAlerts();
+}
+
+function renderPedidosPlaceholder(push = true) {
+ const currentUser = localStorage.getItem('currentUser');
+ if (!currentUser) return renderLogin();
+
+ currentScreen = 'pedidos';
+ if (push) pushNav('pedidos');
+ app.innerHTML = `
+ <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen">
+ ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+ <main class="container">
+ <div class="kit-premium-state">
+ <span class="material-symbols-rounded">receipt_long</span>
+ <h2>Pedidos</h2>
+ <p>M&oacute;dulo em prepara&ccedil;&atilde;o.</p>
+ </div>
+ </main>
+ </div>
+ `;
 }
 
 
@@ -21439,14 +21481,11 @@ async function renderPackSessionDetails(sessionId) {
  qtd_conferida: 0,
  scanned_in_conference: false,
  divergencia: 'FALTA',
- expected_package_assignments: []
+ conference_package_assignments: []
  };
  }
  const itemQty = parseFloat(item.quantidade ?? item.qty ?? item.qtd_separada ?? 0);
  acc[key].qtd_separada += itemQty;
- const sourcePackages = Array.isArray(item.pick_package_assignments) ? item.pick_package_assignments : (Array.isArray(item.package_assignments) ? item.package_assignments : []);
- if (sourcePackages.length) acc[key].expected_package_assignments.push(...sourcePackages);
- else { const packageId = item.pick_package_id || item.pacote_id || item.package_id || null; for (let unit = 0; unit < itemQty; unit++) acc[key].expected_package_assignments.push(packageId); }
  return acc;
  }, {});
 
@@ -21457,6 +21496,7 @@ async function renderPackSessionDetails(sessionId) {
  if (groupedExpected[key]) {
  groupedExpected[key].qtd_conferida = row.qtd_conferida;
  groupedExpected[key].scanned_in_conference = Boolean(row.scanned_in_conference || Number(row.qtd_conferida || 0) > 0);
+ groupedExpected[key].conference_package_assignments = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments.slice() : [];
  } else if (Number(row.qtd_conferida || 0) > 0) {
  groupedExpected[key] = { ...row, scanned_in_conference: true };
  }
@@ -21578,8 +21618,6 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
 
  <aside class="pack-blind-summary-panel pick-summary-panel pick-summary-single-line">
  <div class="pack-blind-summary-metrics pick-summary-line">
- <div class="pick-package-count-field"><span class="material-symbols-rounded">package_2</span><span>NESTA SEPARACAO</span><strong id="pack-summary-packages">0</strong></div>
- <div class="pick-package-count-field pick-channel-package-total"><span class="material-symbols-rounded">summarize</span><span>TOTAL DO CANAL HOJE</span><strong id="pack-summary-channel-packages">0</strong></div>
   <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
  <span class="material-symbols-rounded">hub</span><span>AGRUPAMENTOS</span>
  </button>
@@ -21751,6 +21789,11 @@ function getConferencePackageLabel(packageId) {
  const index = getConferencePackageIds().indexOf(String(packageId || ''));
  return index >= 0 ? `Pacote ${index + 1}` : 'Pacote';
 }
+function buildConferencePackagesSyncPayload(rows = currentPackSession?.conferenceRows || []) {
+ return buildPickPackagesSyncPayload((rows || []).map(row => ({ ...row, qty: Math.max(0, Number(row.qtd_conferida || 0)), pick_package_assignments: normalizeConferencePackageAssignments(row).slice() })));
+}
+function getConferencePackageCount() { return buildConferencePackagesSyncPayload().length; }
+function getPendingConferencePackageSelectionCount() { return [...conferenceKitSelection.values()].reduce((sum, selection) => sum + Number(selection.qty || 0), 0); }
 
 async function toggleConferenceItemSelection(index) {
  const row = currentPackSession?.conferenceRows?.[index];
@@ -21804,6 +21847,7 @@ function createConferencePackage() {
  persistPackSessionCache();
  renderConferenceKitSelection();
  showToast(`${getConferencePackageLabel(packageId)} criado com ${selectedUnits} unidade(s).`, 'success');
+ restoreScanFieldFocus('pack', 80);
 }
 
 function renderPackItemsListHTML() {
@@ -21999,7 +22043,6 @@ function createConferenceExtraRow(product) {
   qtd_conferida: 0,
   scanned_in_conference: false,
   divergencia: 'FALTA',
-  expected_package_assignments: [],
   conference_package_assignments: []
  };
 }
@@ -22084,7 +22127,7 @@ async function addPackScan(scannedEan = null) {
  const previousCheckedQty = parseStockQty(row.qtd_conferida);
  row.qtd_conferida = previousCheckedQty + 1;
  const assignments = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments : [];
- assignments[previousCheckedQty] = row.expected_package_assignments?.[previousCheckedQty] || null;
+ assignments[previousCheckedQty] = null;
  row.conference_package_assignments = assignments;
  row.scanned_in_conference = true;
  row.pick_resume_last_scan_at = new Date().toISOString();
@@ -22396,6 +22439,7 @@ function openConferenceResultModal() {
  });
  const divergentRows = resultRows.filter(item => item.status !== 'ok');
  const hasDivergence = divergentRows.length > 0;
+ const packageCount = getConferencePackageCount();
  document.getElementById('conference-result-modal')?.remove();
  const modal = document.createElement('div');
  modal.id = 'conference-result-modal';
@@ -22408,6 +22452,7 @@ function openConferenceResultModal() {
    <button type="button" onclick="closeConferenceResultModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
   </header>
   <div class="conference-result-summary">
+   <article><small>Pacotes</small><strong>${packageCount}</strong></article>
    <article><small>Corretos</small><strong>${resultRows.length - divergentRows.length}</strong></article>
    <article><small>Faltando</small><strong>${resultRows.filter(item => item.status === 'missing').length}</strong></article>
    <article><small>Excedentes</small><strong>${resultRows.filter(item => item.status === 'extra').length}</strong></article>
@@ -22483,6 +22528,13 @@ function adjustConferenceFromResult(index, delta) {
 }
 
 async function finishConferenceSession() {
+  const pendingPackageUnits = getPendingConferencePackageSelectionCount();
+  if (pendingPackageUnits > 0) {
+   playBeep('error');
+   await showAppModal({ type: 'warning', title: 'Pacote ainda nao criado', message: `${pendingPackageUnits} unidade(s) estao selecionada(s) para agrupamento.`, detail: 'Crie o pacote ou cancele a selecao antes de finalizar a conferencia.', confirmText: 'Voltar para criar' });
+   restoreScanFieldFocus('pack', 80);
+   return;
+  }
   const hasDivergence = currentPackSession.conferenceRows.some(row =>
   parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
   );
@@ -22802,6 +22854,12 @@ async function finalizeConferenceAllowingNegativeStock(payload, validation = nul
 
 async function confirmFinishConference(options = {}) {
  if (isFinalizing) return;
+ const pendingPackageUnits = getPendingConferencePackageSelectionCount();
+ if (pendingPackageUnits > 0) {
+  await showAppModal({ type: 'warning', title: 'Pacote ainda nao criado', message: `${pendingPackageUnits} unidade(s) estao selecionada(s) para agrupamento.`, detail: 'Crie o pacote ou cancele a selecao antes de finalizar a conferencia.', confirmText: 'Voltar para criar' });
+  restoreScanFieldFocus('pack', 80);
+  return;
+ }
  isFinalizing = true;
 
  const btn = document.getElementById('btn-finish-atomic');
@@ -22815,6 +22873,13 @@ async function confirmFinishConference(options = {}) {
  const currentUser = localStorage.getItem('currentUser');
  const sessionId = currentPackSession.id;
  const executionId = generateExecutionId();
+ const conferencePackages = buildConferencePackagesSyncPayload();
+ if (!conferencePackages.length) throw new Error('Nenhum pacote foi gerado pela conferencia. Confira os produtos bipados.');
+ const packageSyncPayload = { sessionId, pacotes: conferencePackages, usuario: currentUser || 'N/A', executionId: `pacotes-conferencia:${sessionId}:${executionId}` };
+ if (navigator.onLine) await DataClient.sincronizarPacotesSeparacaoSupabase(packageSyncPayload);
+ else await queueOperation('supabase_pick_packages', packageSyncPayload, { module: 'conferencia', sessionId });
+ currentPackSession.total_pacotes_montados = conferencePackages.length;
+ if (currentPackSession.pickingData) currentPackSession.pickingData.total_pacotes_montados = conferencePackages.length;
 
  // Formatar linhas para o backend processar movimentos atomicos
  const allowDivergence = options.allowDivergence === true;
