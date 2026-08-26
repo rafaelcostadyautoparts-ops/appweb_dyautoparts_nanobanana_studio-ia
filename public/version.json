@@ -1,6 +1,6 @@
 {
-  "version": "2.2.17",
-  "build": "2026.08.26.11",
-  "commit": "prod-export-devolucoes-conferencia",
-  "deployDate": "2026-08-26T10:30:00-03:00"
+  "version": "2.2.18",
+  "build": "2026.08.26.12",
+  "commit": "prod-export-devolucoes-nativo",
+  "deployDate": "2026-08-26T11:00:00-03:00"
 }

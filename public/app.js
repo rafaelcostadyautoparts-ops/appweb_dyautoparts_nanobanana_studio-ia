@@ -33308,7 +33308,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <button type="button" class="devolucao-app-bar-back back-button-standard ds-back-button" onclick="renderDevolucoesSubMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button>
  <h1>DEVOLU\u00c7\u00d5ES</h1>
  <div class="devolucao-app-bar-actions">
- <div class="app-export-menu devolucao-export-menu"><button type="button" class="devolucao-header-btn" onclick="toggleHistoricoDevolucoesExportMenu(event)" aria-haspopup="menu" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span class="app-export-label">Exportar</span><span class="material-symbols-rounded app-export-chevron">arrow_drop_down</span></button><div class="app-export-options" id="devolucao-export-options" role="menu" hidden><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha organizada</small></span></button><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesPDF()"><span class="material-symbols-rounded">picture_as_pdf</span><span><strong>PDF</strong><small>Relatorio para impressao</small></span></button></div></div>
+ <div class="devolucao-native-export"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><select id="devolucao-export-format" aria-label="Exportar relatorio de devolucoes" onchange="handleHistoricoDevolucoesExportChange(this)"><option value="" selected>Exportar</option><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><span class="material-symbols-rounded">expand_more</span></div>
  <div class="devolucao-month-filter">
 <button type="button" class="devolucao-month-filter-trigger" onclick="toggleDevolucaoMonthFilter(event)" aria-haspopup="true" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b><svg class="devolucao-filter-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg></button>
 <div id="dev-history-month-menu" class="devolucao-month-filter-menu" hidden>
@@ -33634,6 +33634,16 @@ function getHistoricoDevolucoesExportFilename(extension) {
    ? 'nenhum-canal'
    : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
  return `devolucoes-marketplace-${month}-${channel}.${extension}`;
+}
+
+function handleHistoricoDevolucoesExportChange(select) {
+ const format = String(select?.value || '').toLowerCase();
+ if (!format) return;
+ select.value = '';
+ if (format === 'xlsx') return exportHistoricoDevolucoesXLSX();
+ if (format === 'csv') return exportHistoricoDevolucoesCSV();
+ if (format === 'pdf') return exportHistoricoDevolucoesPDF();
+ showToast('Formato de exportacao invalido.', 'error');
 }
 
 function toggleHistoricoDevolucoesExportMenu(event) {
