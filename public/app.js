@@ -33303,7 +33303,7 @@ async function renderHistoricoDevolucoes(options = {}) {
  <button type="button" class="devolucao-app-bar-back back-button-standard ds-back-button" onclick="renderDevolucoesSubMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button>
  <h1>DEVOLU\u00c7\u00d5ES</h1>
  <div class="devolucao-app-bar-actions">
- <details class="app-export-menu devolucao-export-menu"><summary class="devolucao-header-btn"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span class="app-export-label">Exportar</span><span class="material-symbols-rounded app-export-chevron">arrow_drop_down</span></summary><div class="app-export-options"><button type="button" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportHistoricoDevolucoesXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha organizada</small></span></button></div></details>
+ <div class="app-export-menu devolucao-export-menu"><button type="button" class="devolucao-header-btn" onclick="toggleHistoricoDevolucoesExportMenu(event)" aria-haspopup="menu" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg><span class="app-export-label">Exportar</span><span class="material-symbols-rounded app-export-chevron">arrow_drop_down</span></button><div class="app-export-options" id="devolucao-export-options" role="menu" hidden><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha organizada</small></span></button><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" role="menuitem" onclick="exportHistoricoDevolucoesPDF()"><span class="material-symbols-rounded">picture_as_pdf</span><span><strong>PDF</strong><small>Relatorio para impressao</small></span></button></div></div>
  <div class="devolucao-month-filter">
 <button type="button" class="devolucao-month-filter-trigger" onclick="toggleDevolucaoMonthFilter(event)" aria-haspopup="true" aria-expanded="false"><svg class="devolucao-action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><b id="dev-history-month-label">${formatDevolucaoMonthShort(devolucaoHistoricoState.month)}</b><svg class="devolucao-filter-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg></button>
 <div id="dev-history-month-menu" class="devolucao-month-filter-menu" hidden>
@@ -33631,8 +33631,23 @@ function getHistoricoDevolucoesExportFilename(extension) {
  return `devolucoes-marketplace-${month}-${channel}.${extension}`;
 }
 
+function toggleHistoricoDevolucoesExportMenu(event) {
+ event?.stopPropagation();
+ const menu = document.getElementById('devolucao-export-options');
+ const trigger = event?.currentTarget || document.querySelector('.devolucao-export-menu .devolucao-header-btn');
+ if (!menu) return;
+ const willOpen = menu.hidden;
+ menu.hidden = !willOpen;
+ trigger?.setAttribute('aria-expanded', String(willOpen));
+ document.querySelector('.devolucao-export-menu')?.classList.toggle('is-open', willOpen);
+}
+
 function closeHistoricoDevolucoesExportMenu() {
- document.querySelector('.devolucao-export-menu')?.removeAttribute('open');
+ const menu = document.getElementById('devolucao-export-options');
+ if (menu) menu.hidden = true;
+ const trigger = document.querySelector('.devolucao-export-menu .devolucao-header-btn');
+ trigger?.setAttribute('aria-expanded', 'false');
+ document.querySelector('.devolucao-export-menu')?.classList.remove('is-open');
 }
 
 function exportHistoricoDevolucoesCSV() {
@@ -33677,6 +33692,47 @@ function exportHistoricoDevolucoesXLSX() {
  XLSX.writeFile(workbook, getHistoricoDevolucoesExportFilename('xlsx'), { compression: true, cellDates: true });
  showToast('Excel exportado com o filtro atual.', 'success');
 }
+async function exportHistoricoDevolucoesPDF() {
+ const exportData = getHistoricoDevolucoesExportData();
+ if (!exportData) return;
+ closeHistoricoDevolucoesExportMenu();
+ const { jsPDF } = window.jspdf || {};
+ if (!jsPDF) return showToast('A exportacao PDF nao foi carregada. Verifique a conexao.', 'error');
+ try {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  const generatedAt = new Date().toLocaleString('pt-BR');
+  doc.setFontSize(15);
+  doc.setTextColor(51, 65, 85);
+  doc.text('Historico de Devolucoes', 12, 12);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Filtro: ${devolucaoHistoricoState.month || 'todos os periodos'} | Gerado em: ${generatedAt}`, 12, 18);
+  const rows = exportData.rows.map(row => row.map((value, column) => {
+   if (value instanceof Date) return value.toLocaleDateString('pt-BR');
+   if ([10, 11, 12, 24, 28, 29].includes(column) && typeof value === 'number') return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+   return String(value ?? '');
+  }));
+  if (typeof doc.autoTable !== 'function') throw new Error('Componente de tabela PDF indisponivel.');
+  doc.autoTable({
+   head: [exportData.headers],
+   body: rows,
+   startY: 22,
+   theme: 'grid',
+   styles: { fontSize: 5.2, cellPadding: 1, overflow: 'linebreak', valign: 'middle' },
+   headStyles: { fillColor: [91, 33, 182], textColor: 255, fontStyle: 'bold' },
+   alternateRowStyles: { fillColor: [248, 250, 252] },
+   horizontalPageBreak: true,
+   horizontalPageBreakRepeat: [0, 1, 2, 3, 4, 13, 16],
+   margin: { top: 12, right: 8, bottom: 10, left: 8 }
+  });
+  doc.save(getHistoricoDevolucoesExportFilename('pdf'));
+  showToast('PDF exportado com o filtro atual.', 'success');
+ } catch (error) {
+  console.error('[DEVOLUCOES] exportar PDF:', error);
+  showToast(error.message || 'Nao foi possivel gerar o PDF.', 'error');
+ }
+}
+
 function renderHistoricoDevolucaoList() {
  const list = document.getElementById('dev-history-list');
  const metrics = document.getElementById('dev-history-metrics');
