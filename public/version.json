@@ -1,6 +1,6 @@
 {
-  "version": "2.2.18",
-  "build": "2026.08.26.12",
-  "commit": "prod-export-devolucoes-nativo",
-  "deployDate": "2026-08-26T11:00:00-03:00"
+  "version": "2.2.28",
+  "build": "2026.09.02.01",
+  "commit": "prod-release-2.2.28",
+  "deployDate": "2026-09-02T20:38:00-03:00"
 }

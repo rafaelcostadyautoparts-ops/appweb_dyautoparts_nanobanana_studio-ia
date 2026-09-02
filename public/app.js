@@ -18136,101 +18136,73 @@ function getPickingProductId(item) {
   return normalizePickCode(item?.id_interno || item?.produto_id_interno || item?.codigo_interno || item?.col_a || item?.col_A || '');
 }
 
+function renderPickProductFeedbackToast(type = 'add', item = null, quantity = 1) {
+  clearTimeout(scanCenterToastTimeout);
+  document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
+
+  const isAdd = type === 'add';
+  const title = item ? getPickItemTitle(item) : (isAdd ? 'Produto bipado' : 'Produto removido');
+  const sku = item ? (getPickItemSku(item) || '—') : '—';
+  const ean = item ? (getPickItemEan(item) || '—') : '—';
+  const color = item ? (getPickItemColor(item) || '—') : '—';
+  const idInterno = (item ? getPickingProductId(item) : '') || '—';
+  const image = item ? getPickProductImage(item) : '';
+  const currentQty = isAdd 
+    ? (Number(item?.qty || item?.qtd_separada || quantity || 1) || 1)
+    : (Number(quantity || 1) || 1);
+
+  const toastEl = document.createElement('div');
+  toastEl.className = `pick-feedback-toast ${isAdd ? 'is-add' : 'is-remove'}`;
+  toastEl.setAttribute('role', 'status');
+  toastEl.setAttribute('aria-live', 'polite');
+  toastEl.innerHTML = `
+  <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
+    <span class="material-symbols-rounded">close</span>
+  </button>
+  <div class="pick-feedback-header">
+    <div class="pick-feedback-icon-wrapper">
+      <div class="pick-feedback-icon">
+        <span class="material-symbols-rounded">${isAdd ? 'check' : 'close'}</span>
+      </div>
+    </div>
+    <strong class="pick-feedback-title">${isAdd ? 'Produto adicionado!' : 'Produto removido!'}</strong>
+    <p class="pick-feedback-subtitle">${isAdd ? 'O produto foi adicionado com sucesso.' : 'O produto foi removido com sucesso.'}</p>
+  </div>
+  <div class="pick-feedback-body">
+    <div class="pick-feedback-image">
+      ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+    </div>
+    <div class="pick-feedback-copy">
+      <b class="pick-feedback-product-name">${escapeKitAttribute(title)}</b>
+      <div class="pick-feedback-meta">
+        <span class="chip-item chip-id"><small>ID INTERNO</small><strong>${escapeKitAttribute(idInterno)}</strong></span>
+        <span class="chip-item chip-sku"><small>SKU</small><strong>${escapeKitAttribute(sku)}</strong></span>
+        <span class="chip-item chip-ean"><small>EAN</small><strong>${escapeKitAttribute(ean)}</strong></span>
+        <span class="chip-item chip-color"><small>COR</small><strong>${escapeKitAttribute(color)}</strong></span>
+      </div>
+    </div>
+  </div>
+  <div class="pick-feedback-footer">
+    <div class="pick-feedback-qty-box">
+      <span class="pick-feedback-qty-label">${isAdd ? 'QUANTIDADE ATUAL' : 'QUANTIDADE REMOVIDA'}</span>
+      <strong class="pick-feedback-qty-val">${currentQty}<small> un</small></strong>
+    </div>
+  </div>
+  `;
+  document.body.appendChild(toastEl);
+
+  scanCenterToastTimeout = setTimeout(() => {
+    toastEl.classList.add('is-hiding');
+    setTimeout(() => toastEl.remove(), 260);
+  }, 2600);
+}
+
 function showPickScanCenterToast(item = null, quantity = 1) {
- if (isPickMobileViewport()) return;
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto bipado';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
- const currentQty = Number(item?.qty || item?.qtd_separada || quantity || 1) || 1;
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-add';
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">check</span></div>
- <strong class="pick-feedback-title">PRODUTO ADICIONADO</strong>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span>SKU: ${escapeKitAttribute(sku)}</span>
- <span>EAN: ${escapeKitAttribute(ean)}</span>
- <span>COR: ${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade atual</span>
- <strong>${currentQty}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>Adicionado </em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('add', item, quantity);
 }
 
 function showPickRemovalFeedbackToast(item = null, quantity = 1) {
- if (isPickMobileViewport()) return;
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto removido';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-remove';
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">remove</span></div>
- <strong class="pick-feedback-title">PRODUTO REMOVIDO</strong>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span>SKU: ${escapeKitAttribute(sku)}</span>
- <span>EAN: ${escapeKitAttribute(ean)}</span>
- <span>COR: ${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade removida</span>
- <strong>${Number(quantity || 1)}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'} da sao</em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('remove', item, quantity);
 }
 
 function triggerScanSuccessGlow() {
@@ -27186,39 +27158,80 @@ function getStoredAvailableCommit() {
  return localStorage.getItem(DY_UPDATE_AVAILABLE_COMMIT_KEY) || '';
 }
 
+function parseVersionSegments(v) {
+  const clean = String(v || '').replace(/^v/i, '').split('-')[0].trim();
+  if (!clean) return [];
+  return clean.split('.').map(n => parseInt(n, 10) || 0);
+}
+
+function compareVersions(v1, v2) {
+  const p1 = parseVersionSegments(v1);
+  const p2 = parseVersionSegments(v2);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+function compareBuilds(b1, b2) {
+  const p1 = String(b1 || '').trim().split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = String(b2 || '').trim().split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+function isRemoteAppVersionNewer(remote = {}) {
+  const remoteVersion = normalizeVersionPart(remote.version);
+  const remoteBuild = normalizeVersionPart(remote.build);
+  const installedVersion = normalizeVersionPart(DY_APP_VERSION);
+  const installedBuild = normalizeVersionPart(DY_APP_BUILD);
+
+  if (!remoteVersion) return false;
+
+  const cmpVersion = compareVersions(remoteVersion, installedVersion);
+  if (cmpVersion > 0) return true;
+  if (cmpVersion < 0) return false;
+
+  if (remoteBuild && installedBuild) {
+    return compareBuilds(remoteBuild, installedBuild) > 0;
+  }
+  return false;
+}
+
+function storeUpdateCheckResult({ status = 'updated', remote = null } = {}) {
+  localStorage.setItem(DY_UPDATE_STATUS_KEY, status);
+  localStorage.setItem(DY_UPDATE_LAST_CHECK_KEY, new Date().toISOString());
+  if (status === 'available' && remote) {
+    if (remote.version) localStorage.setItem(DY_UPDATE_AVAILABLE_VERSION_KEY, String(remote.version));
+    if (remote.build) localStorage.setItem(DY_UPDATE_AVAILABLE_BUILD_KEY, String(remote.build));
+    if (remote.commit) localStorage.setItem(DY_UPDATE_AVAILABLE_COMMIT_KEY, String(remote.commit));
+    if (remote.deployDate) localStorage.setItem(DY_UPDATE_DEPLOY_DATE_KEY, String(remote.deployDate));
+  } else {
+    [
+      DY_UPDATE_AVAILABLE_VERSION_KEY,
+      DY_UPDATE_AVAILABLE_BUILD_KEY,
+      DY_UPDATE_AVAILABLE_COMMIT_KEY,
+      DY_UPDATE_DEPLOY_DATE_KEY
+    ].forEach(key => localStorage.removeItem(key));
+  }
+}
+
 function getStoredDeployDate() {
  return localStorage.getItem(DY_UPDATE_DEPLOY_DATE_KEY) || DY_APP_DEPLOY_DATE || '';
 }
 
 function normalizeVersionPart(value) {
  return String(value || '').trim();
-}
-
-function isRemoteAppVersionNewer(remote = {}) {
- const remoteVersion = normalizeVersionPart(remote.version);
- const remoteBuild = normalizeVersionPart(remote.build);
- if (remoteVersion && remoteVersion !== normalizeVersionPart(DY_APP_VERSION)) return true;
- if (remoteBuild && remoteBuild !== normalizeVersionPart(DY_APP_BUILD)) return true;
- return false;
-}
-
-function storeUpdateCheckResult({ status = 'updated', remote = null } = {}) {
- localStorage.setItem(DY_UPDATE_STATUS_KEY, status);
- localStorage.setItem(DY_UPDATE_LAST_CHECK_KEY, new Date().toISOString());
- if (remote) {
- if (remote.version) localStorage.setItem(DY_UPDATE_AVAILABLE_VERSION_KEY, String(remote.version));
- if (remote.build) localStorage.setItem(DY_UPDATE_AVAILABLE_BUILD_KEY, String(remote.build));
- if (remote.commit) localStorage.setItem(DY_UPDATE_AVAILABLE_COMMIT_KEY, String(remote.commit));
- if (remote.deployDate) localStorage.setItem(DY_UPDATE_DEPLOY_DATE_KEY, String(remote.deployDate));
- }
- if (status === 'updated') {
- [
- DY_UPDATE_AVAILABLE_VERSION_KEY,
- DY_UPDATE_AVAILABLE_BUILD_KEY,
- DY_UPDATE_AVAILABLE_COMMIT_KEY,
- DY_UPDATE_DEPLOY_DATE_KEY
- ].forEach(key => localStorage.removeItem(key));
- }
 }
 
 function getUpdateStatusLabel() {
@@ -27375,33 +27388,41 @@ async function detectAppUpdate({ renderConfig = false } = {}) {
 }
 
 async function handleDetectedAppUpdate({ source = 'manual', availableVersion = '', availableBuild = '', availableCommit = '', deployDate = '' } = {}) {
- if (document.getElementById('app-confirm-modal')) return false;
+  if (document.getElementById('app-confirm-modal')) return false;
 
- const installed = `v${DY_APP_VERSION}${DY_APP_BUILD ? ` (${DY_APP_BUILD})` : ''}`;
- const available = `v${availableVersion || getStoredAvailableVersion() || 'disponivel'}${availableBuild || getStoredAvailableBuild() ? ` (${availableBuild || getStoredAvailableBuild()})` : ''}`;
- const commit = availableCommit || getStoredAvailableCommit();
- const deploy = deployDate || getStoredDeployDate();
- const detail = [
- `Instalada: ${installed}`,
- `Disponivel: ${available}`,
- commit ? `Commit/build: ${commit}` : '',
- deploy ? `Deploy: ${formatConfigDate(deploy)}` : ''
- ].filter(Boolean).join('');
+  const candidateVersion = availableVersion || getStoredAvailableVersion();
+  const candidateBuild = availableBuild || getStoredAvailableBuild();
 
- const shouldUpdate = await showAppConfirm({
- title: 'Atualizacao disponivel',
- message: 'Existe uma nova versao do aplicativo.',
- detail,
- confirmLabel: 'Atualizar agora',
- cancelLabel: 'Continuar sem atualizar'
- });
+  if (!isRemoteAppVersionNewer({ version: candidateVersion, build: candidateBuild })) {
+    storeUpdateCheckResult({ status: 'updated' });
+    return false;
+  }
 
- addLocalAccessEvent('atualizacao_detectada', shouldUpdate ? `Atualizar agora (${source})` : `Continuou sem atualizar (${source})`);
- if (shouldUpdate) {
- await updateAppNow({ skipConfirm: true, source });
- return true;
- }
- return false;
+  const installed = `v${DY_APP_VERSION}${DY_APP_BUILD ? ` (${DY_APP_BUILD})` : ''}`;
+  const available = `v${candidateVersion || 'disponivel'}${candidateBuild ? ` (${candidateBuild})` : ''}`;
+  const commit = availableCommit || getStoredAvailableCommit();
+  const deploy = deployDate || getStoredDeployDate();
+  const detail = [
+    `Instalada: ${installed}`,
+    `Disponivel: ${available}`,
+    commit ? `Commit/build: ${commit}` : '',
+    deploy ? `Deploy: ${formatConfigDate(deploy)}` : ''
+  ].filter(Boolean).join('\n');
+
+  const shouldUpdate = await showAppConfirm({
+    title: 'Atualizacao disponivel',
+    message: 'Existe uma nova versao do aplicativo.',
+    detail,
+    confirmLabel: 'Atualizar agora',
+    cancelLabel: 'Continuar sem atualizar'
+  });
+
+  addLocalAccessEvent('atualizacao_detectada', shouldUpdate ? `Atualizar agora (${source})` : `Continuou sem atualizar (${source})`);
+  if (shouldUpdate) {
+    await updateAppNow({ skipConfirm: true, source });
+    return true;
+  }
+  return false;
 }
 
 async function checkAppUpdate() {
