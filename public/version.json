@@ -1,6 +1,6 @@
 {
-  "version": "2.2.18",
-  "build": "2026.08.26.12",
-  "commit": "prod-export-devolucoes-nativo",
-  "deployDate": "2026-08-26T11:00:00-03:00"
+  "version": "2.2.25",
+  "build": "2026.09.01.07",
+  "commit": "padroniza-agrupamento-layout-remocao-conferencia",
+  "deployDate": "2026-09-01T20:27:57.248-03:00"
 }

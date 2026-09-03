@@ -4,6 +4,7 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
+        "predev": "npm run sync:version",
         "dev": "tsx server.ts",
         "sync:version": "node scripts/sync-app-version.mjs",
         "build": "npm run sync:version && npm run check:encoding && vite build",

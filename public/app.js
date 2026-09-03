@@ -20,6 +20,14 @@ const toast = document.getElementById('toast');
 function repairMojibakeText(value) {
  return String(value ?? '');
 }
+function scrollOperationalWorkToTop(input) {
+ const screen = input?.closest('.pick-workflow-screen');
+ if (!screen) return;
+ screen.querySelectorAll('.pick-items-list, .pick-work-area').forEach(el => { el.scrollTop = 0; });
+ for (let el = input.parentElement; el; el = el.parentElement) el.scrollTop = 0;
+ window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
 function restoreScanFieldFocus(inputOrContext = 'search', delay = 50, { clear = true } = {}) {
  const inputIds = {
  search: 'search-input',
@@ -36,6 +44,7 @@ function restoreScanFieldFocus(inputOrContext = 'search', delay = 50, { clear = 
  const input = document.getElementById(inputId);
  if (!input) return;
  if (clear) input.value = '';
+ if (inputId === 'pick-ean-input' || inputId === 'pack-ean-input') scrollOperationalWorkToTop(input);
  if (inputId === 'pick-ean-input') preparePickScannerInput({ focus: true });
  else input.focus({ preventScroll: true });
  input.select?.();
@@ -513,6 +522,10 @@ let conferenceViewFilter = 'all';
 let conferenceRemovalModeActive = false;
 let conferenceCorrectionModeActive = false;
 const conferenceKitSelection = new Map();
+let conferenceProgressSyncTimer = null;
+let conferenceProgressSyncPromise = Promise.resolve();
+let conferenceProgressPendingOperations = [];
+window.addEventListener('online', () => scheduleConferenceProgressSync(true));
 
 // ==== NAVIGATION MANAGEMENT ====
 // Texto validado em UTF-8.
@@ -553,6 +566,7 @@ function renderScreenByName(name, push = true) {
  case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
  case 'login': renderLogin(push); break;
  case 'config': renderConfigSubMenu(push); break;
+ case 'anuncios': typeof renderAnunciosScreen === 'function' ? renderAnunciosScreen(push) : renderMenu(push); break;
  default: renderMenu(push);
  }
 }
@@ -1084,6 +1098,7 @@ const DY_UPDATE_AVAILABLE_VERSION_KEY = 'dy_update_available_version';
 const DY_UPDATE_AVAILABLE_BUILD_KEY = 'dy_update_available_build';
 const DY_UPDATE_AVAILABLE_COMMIT_KEY = 'dy_update_available_commit';
 const DY_UPDATE_DEPLOY_DATE_KEY = 'dy_update_deploy_date';
+try { sessionStorage.removeItem('dy_app_update_running'); } catch (error) { console.warn('[UPDATE] Falha ao liberar trava de atualizacao:', error); }
 const DY_LOCAL_HISTORY_KEY = 'dy_local_access_history';
 const DY_LOCAL_PIN_HASH_KEY = 'dy_local_pin_hash';
 const DY_LOCAL_PIN_SALT_KEY = 'dy_local_pin_salt';
@@ -1916,13 +1931,13 @@ window.addEventListener("online", atualizarStatusConexao);
 window.addEventListener("offline", atualizarStatusConexao);
 window.addEventListener("offline", () => {
  loadOperationalCatalog().finally(() => {
- if (currentScreen === 'menu') renderMenu(false);
+ if (currentScreen === 'menu' && app.querySelector(':scope > .menu-screen')) renderMenu(false);
  });
 });
 window.addEventListener("online", () => {
  processSyncQueue('connection_restored');
  ensureProdutosLoaded(true).catch(error => console.warn('[OFFLINE] Atualizacao do catalogo falhou:', error));
- if (currentScreen === 'menu') renderMenu(false);
+ if (currentScreen === 'menu' && app.querySelector(':scope > .menu-screen')) renderMenu(false);
 });
 
 // ==========================================
@@ -2223,6 +2238,54 @@ function openOperationOutboxDB() {
  });
 }
 
+// BEGIN PICK PACK SYNC
+const operationalWriteChains = new Map();
+let operationalQueueOrder = 0;
+function runOperationalWrite(key, work) {
+ const previous = operationalWriteChains.get(key) || Promise.resolve();
+ const current = previous.catch(() => {}).then(work);
+ operationalWriteChains.set(key, current);
+ const clear = () => { if (operationalWriteChains.get(key) === current) operationalWriteChains.delete(key); };
+ current.then(clear, clear);
+ return current;
+}
+function isPickPackOperation(operation) {
+ return ['separacao','conferencia'].includes(operation.meta?.module || operation.payload?.flow)
+  || /^supabase_pick_/.test(operation.type || '')
+  || (operation.type === 'supabase_rpc' && operation.meta?.rpcName === 'finalizar_conferencia');
+}
+async function preparePickPackResume(sessionId = '') {
+ try {
+  await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:')).map(([, promise]) => promise));
+  if (pickPackageCloudSyncTimer) { clearTimeout(pickPackageCloudSyncTimer); pickPackageCloudSyncTimer = null; const snapshot = pendingPickPackageSnapshot; pendingPickPackageSnapshot = null; if (snapshot) await syncPickPackagesWithCloud(snapshot); }
+  await pickPackageCloudSyncChain;
+  await flushConferenceProgressSync();
+  if (!navigator.onLine) return true;
+  const pending = (await getQueuedOperations()).filter(operation => isPickPackOperation(operation)
+   && String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
+  if (sessionId && pending.length) throw new Error('Há alterações deste aparelho aguardando envio. Resolva a pendência antes de recarregar esta operação.');
+  return true;
+ } catch (error) { showToast(error.message || 'Não foi possível sincronizar o andamento.', 'warning'); return false; }
+}
+async function syncPickingConferenceFromMenu() {
+ if (!navigator.onLine) { showToast('Sem conexão. As alterações permanecem neste aparelho.', 'warning'); return; }
+ if (!await preparePickPackResume()) return;
+ const pending = (await getQueuedOperations()).filter(isPickPackOperation);
+ if (pending.length) { renderPendingSyncScreen(); return; }
+ const data = await DataClient.loadModule('conferencia', true);
+ if (data) ['separacao','separacao_itens','conferencia','conferencia_itens'].forEach(key => { if (data[key]) appData[key] = data[key]; });
+ showToast('Separação e conferência sincronizadas. Abra a operação para continuar.', 'success');
+}
+function retryPickPackSync() {
+ if (!navigator.onLine || document.hidden || !localStorage.getItem('currentUser')) return;
+ if (!document.querySelector('.menu-screen,.picking-screen,.pick-drafts-screen,.pack-screen')) return;
+ syncOperationOutbox('pick_pack_retry', true).catch(error => console.warn('[PICK/PACK] Envio pendente.', error));
+}
+window.addEventListener('focus', retryPickPackSync);
+document.addEventListener('visibilitychange', retryPickPackSync);
+setInterval(retryPickPackSync, 30000);
+// END PICK PACK SYNC
+
 async function queueOperation(type, payload, meta = {}) {
  const executionId = payload.executionId || meta.executionId || generateExecutionId();
  const operationId = meta.queueKey || [type, executionId, meta.sessionId || '', meta.itemId || ''].join(':');
@@ -2236,6 +2299,7 @@ async function queueOperation(type, payload, meta = {}) {
  meta,
  status: 'pending',
  attempts: 0,
+ queueOrder: operationalQueueOrder = Math.max(Date.now(), operationalQueueOrder + 1),
  createdAt: getDataHoraBrasil(),
  updatedAt: getDataHoraBrasil(),
  lastError: ''
@@ -2276,7 +2340,7 @@ async function getQueuedOperations() {
  const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
  return [...operations, ...fallback]
  .filter(op => op.status === 'pending' || op.status === 'error')
- .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+ .sort((a, b) => (a.queueOrder || new Date(a.createdAt).getTime()) - (b.queueOrder || new Date(b.createdAt).getTime()));
 }
 
 async function markQueuedOperation(operation, status, error = '') {
@@ -2332,12 +2396,25 @@ async function executeQueuedOperation(operation) {
  return createPickingConferenceWithoutStock(operation.payload);
  }
 
+ if (operation.type === 'supabase_progress') {
+ return DataClient.aplicarOperacaoProgressoSupabase(operation.payload);
+ }
+
+ if (operation.type === 'supabase_romaneio') {
+ // Transfere a fila antiga somente após preservar o registro na nova fila durável.
+ return SharedWork.importLegacy('romaneio', String(operation.payload.id), operation.payload);
+ }
+
  if (operation.type === 'supabase_pick_draft') {
  return DataClient.savePickingDraftSupabase(operation.payload);
  }
 
  if (operation.type === 'supabase_pick_packages') {
  return DataClient.sincronizarPacotesSeparacaoSupabase(operation.payload);
+ }
+
+ if (operation.type === 'supabase_pick_draft_delete') {
+ return DataClient.deletePickingDraftSupabase(operation.payload);
  }
 
  if (operation.type === 'supabase_pick_draft_item_delete') {
@@ -2361,9 +2438,12 @@ async function executeQueuedOperation(operation) {
  throw new Error(`Tipo de operacao offline desconhecido: ${operation.type}`);
 }
 
-async function syncOperationOutbox(caller = 'unknown') {
+function syncOperationOutbox(caller = 'unknown', pickPackOnly = false) {
+ return runOperationalWrite('outbox', () => drainOperationOutbox(caller, pickPackOnly));
+}
+async function drainOperationOutbox(caller, pickPackOnly) {
  if (!navigator.onLine) return 0;
- const operations = await getQueuedOperations();
+ const operations = (await getQueuedOperations()).filter(operation => !pickPackOnly || isPickPackOperation(operation));
  let syncedCount = 0;
 
  for (const operation of operations) {
@@ -2735,7 +2815,7 @@ function getHomologationOfflineBannerHTML() {
 
 function getHomologationSyncIndicatorHTML() {
  return `
- <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="renderPendingSyncScreen()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
+ <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="syncPickingConferenceFromMenu()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
  <span class="app-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7.2 18.5h10.4a4 4 0 0 0 .5-8 6.2 6.2 0 0 0-11.8-1.2 4.6 4.6 0 0 0 .9 9.2Z"/><path d="M12 16v-6m0 0-2.4 2.4M12 10l2.4 2.4"/></svg></span>
  <b class="sync-pending-badge" data-sync-pending-count>${operacoesPendentes}</b>
  </button>`;
@@ -2836,7 +2916,9 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 
 // Texto validado em UTF-8.
 const MODULE_SIDEBAR_CONFIG = {
+ anuncios: { label: 'ANÚNCIOS', icon: 'storefront', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
  produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DB2777', colorTo: '#9D174D', shadow: '219,39,119' },
+ pedidos: { label: 'PEDIDOS', icon: 'receipt_long', colorFrom: '#0EA5E9', colorTo: '#0284C7', shadow: '14,165,233' },
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
  movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
  dashboard: { label: 'DASHBOARD', icon: 'dashboard', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
@@ -3418,6 +3500,10 @@ async function setUser(userName, userId, userProfile) {
  // Entrada INSTANTANEA no menu
  renderMenu();
 
+ refreshQuickActionsOperationalData().catch(error => {
+ console.warn('[MENU] Falha ao atualizar contadores operacionais:', error);
+ });
+
  // Texto validado em UTF-8.
  if (navigator.onLine) {
  addTechnicalLog('LOGIN', 'SILENT_SYNC_START', userName);
@@ -3627,10 +3713,15 @@ function renderLogin(push = true) {
  .trim()
  .toUpperCase();
  return normalizedId === 'homolog_admin'
+ || normalizedId === 'homolog_teste'
  || normalizedProfile === 'ADMIN'
- || normalizedName === 'ADMINISTRADOR HOMOLOGACAO';
+ || normalizedName === 'ADMINISTRADOR HOMOLOGACAO'
+ || normalizedName === 'USUARIO TESTE';
  })
- .map(user => ({ ...user, nome: 'ADM' }));
+ .map(user => ({
+ ...user,
+ nome: String(user.id || '').trim().toLowerCase() === 'homolog_admin' ? 'ADM' : user.nome
+ }));
  }
 
  // Texto validado em UTF-8.
@@ -3884,16 +3975,16 @@ async function renderAlerts() {
 // ========================================================
 // Texto validado em UTF-8.
 // Texto validado em UTF-8.
-// Preparado para migrar para tabela no Supabase
 // ========================================================
 const menuModulesConfig = [
  { id: 'produtos', label: 'PRODUTOS', icon: 'produtos', order: 1, type: 'principal' },
+ { id: 'anuncios', label: 'ANÚNCIOS', icon: 'anuncios', order: 2, type: 'principal' },
  { id: 'pedidos', label: 'PEDIDOS', icon: 'pedidos', order: 11, type: 'principal' },
  { id: 'pick', label: 'SEPARAÇÃO (PICK)', icon: 'pick', order: 3, type: 'principal' },
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
- { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 2, type: 'principal' },
+ { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
  { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' }
@@ -3901,6 +3992,7 @@ const menuModulesConfig = [
 
 const menu3DIcons = {
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
+ anuncios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 25 h24 v22 H20 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 17 L38 17 L44 25 L20 25 Z" fill="#fff" opacity="0.95"/><path d="M26 33 h12 M26 39 h8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="41" cy="39" r="2.5" fill="#fff"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  pedidos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><path d="M21 19h22v28H21z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 17h10v5H27z" fill="#0EA5E9" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m26 31 3 3 6-7M26 41h12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -3955,7 +4047,7 @@ function getMenuItemsFromConfig() {
  return menuModulesConfig
  .sort((a, b) => a.order - b.order)
  .map(module => {
- let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard'].includes(module.id);
+ let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard', 'anuncios'].includes(module.id);
  let badge = null;
  
  if (module.type === 'em_breve') {
@@ -3978,6 +4070,7 @@ function getMenuItemsFromConfig() {
 const menuRoutes = {
  dashboard: 'renderAlerts()',
  produtos: 'renderProductSubMenu()',
+ anuncios: 'renderAnunciosScreen()',
  pick: 'openPickModeChoice()',
  pack: 'renderPackMenu()',
  compras: 'renderComprasSubMenu()',
@@ -4021,9 +4114,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  } catch (error) {
  pendingEntradaNFCount = 0;
  }
- const pendingEntradaNFBadge = pendingEntradaNFCount > 0
- ? `<span class="quick-action-pending-badge" aria-label="${pendingEntradaNFCount} notas fiscais pendentes">${pendingEntradaNFCount}</span>`
- : '';
+ const pendingEntradaNFBadge = `<span data-shared-nf-count class="quick-action-pending-badge" aria-label="${pendingEntradaNFCount} notas fiscais pendentes" ${pendingEntradaNFCount ? '' : 'hidden'}>${pendingEntradaNFCount}</span>`;
  const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
  const pendingConferencesClass = pendingConferencesCount > 0 ? 'has-pending' : '';
  const pendingEntradaNFClass = pendingEntradaNFCount > 0 ? 'has-pending' : '';
@@ -4094,6 +4185,29 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  `;
 }
 
+let quickActionsOperationalRefreshPromise = null;
+
+async function refreshQuickActionsOperationalData() {
+ if (quickActionsOperationalRefreshPromise) return quickActionsOperationalRefreshPromise;
+ quickActionsOperationalRefreshPromise = Promise.all([
+ DataClient.loadModule('separacao', true),
+ DataClient.loadModule('conferencia', true)
+ ]).then(([separationData, conferenceData]) => {
+ if (separationData) {
+ appData.separacao = separationData.separacao || [];
+ appData.separacao_itens = separationData.separacao_itens || [];
+ }
+ if (conferenceData) {
+ appData.conferencia = conferenceData.conferencia || [];
+ appData.conferencia_itens = conferenceData.conferencia_itens || [];
+ }
+ if (currentScreen === 'menu' && app.querySelector(':scope > .menu-screen')) renderMenu(false);
+ return true;
+ }).finally(() => {
+ quickActionsOperationalRefreshPromise = null;
+ });
+ return quickActionsOperationalRefreshPromise;
+}
 function renderMenu(push = true) {
  stopScanner();
  currentScreen = 'menu';
@@ -4167,7 +4281,7 @@ function renderMovimentacoesSubMenu() {
  { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
  { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
  { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
- { id: 'relatorio_saida_devolucao', label: 'RELATORIO SAIDAS X DEVOLUCOES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar produtos separados, devolvidos e o percentual por item.' },
+ { id: 'relatorio_saida_devolucao', label: 'REL. VENDAS / DEVOLUÇÕES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar vendas, devoluções e tendências por período.' },
  { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
  { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
  { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
@@ -4947,6 +5061,8 @@ async function generateOrcamentoClientePDF() {
 }
 
 async function renderOrcamentoClienteScreen() {
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
  const currentUser = localStorage.getItem('currentUser');
  const emissao = getOrcamentoTodayISO();
  orcamentoClienteState = { numero: createOrcamentoNumber(), emissao, validade: addOrcamentoDays(emissao, 7), itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
@@ -5597,12 +5713,14 @@ function buildMovHistoryMovementKey(mov) {
  return `${type}:${obs || route}:${mov.usuario || ''}:${time}`;
 }
 
-function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set()) {
+function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set(), operationalSeparationIds = new Set()) {
  const groups = new Map();
  movimentos.forEach(mov => {
  const type = classifyMovHistoryMovement(mov);
  const nf = parseMovHistoryNF(mov.observacao);
  if (type === 'entrada_nf' && nf && entradaNumbers.has(String(nf))) return;
+ const sessionId = getMovHistorySessionIdFromText(`${mov.observacao || ''} ${mov.movimento_id || ''}`);
+ if (type === 'separacao' && sessionId && operationalSeparationIds.has(String(sessionId).toUpperCase())) return;
  const key = buildMovHistoryMovementKey(mov);
  if (!groups.has(key)) {
  const config = getMovHistoryTypeConfig(type);
@@ -5920,11 +6038,12 @@ async function loadMovHistoryOperations() {
 
  const entradaNumbers = new Set((entradas || []).map(entrada => String(entrada.numero_nf || '')).filter(Boolean));
  const movementSessionKeys = getMovHistoryMovementSessionKeys(movimentos);
+ const operationalSeparationIds = new Set((separacoes || []).map(getMovHistorySeparationId).filter(Boolean).map(id => String(id).toUpperCase()));
  const ops = [
  ...buildMovHistoryFromEntradas(entradas, lotes, movimentos),
  ...buildMovHistoryFromSeparacoes(separacoes, separacaoItens, movementSessionKeys),
  ...buildMovHistoryFromConferencias(conferencias, conferenciaItens, separacoes, movementSessionKeys),
- ...buildMovHistoryFromMovements(movimentos, entradaNumbers)
+ ...buildMovHistoryFromMovements(movimentos, entradaNumbers, operationalSeparationIds)
  ];
  movementHistoryState.operations = ops;
  movementHistoryState.loadedMovements = movimentos.length;
@@ -6315,7 +6434,8 @@ function showAppModal({
  selectPromptOnStep = true,
  onConfirm = null,
  onCancel = null,
- closeOnBackdrop = true
+ closeOnBackdrop = true,
+ modalClass = ''
 } = {}) {
  return new Promise(resolve => {
  const existing = document.getElementById('app-confirm-modal');
@@ -6353,7 +6473,7 @@ function showAppModal({
 
  const overlay = document.createElement('div');
  overlay.id = 'app-confirm-modal';
- overlay.className = `app-confirm-overlay app-standard-modal modal-${visualType}`;
+ overlay.className = `app-confirm-overlay app-standard-modal modal-${visualType}${modalClass ? ` ${modalClass}` : ''}`;
  overlay.innerHTML = `
  <div class="app-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
  <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
@@ -6458,7 +6578,7 @@ function showAppAlert({ title = 'Aviso', message = '', detail = '', summary = ''
  });
 }
 
-function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text', min = null, max = null, quantityStepper = false, selectPromptOnStep = true } = {}) {
+function showAppPrompt({ title = 'Informar dado', message = '', detail = '', label = '', defaultValue = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', inputType = 'text', min = null, max = null, quantityStepper = false, selectPromptOnStep = true, modalClass = '' } = {}) {
  return showAppModal({
  type: 'confirm',
  title,
@@ -6473,6 +6593,7 @@ function showAppPrompt({ title = 'Informar dado', message = '', detail = '', lab
  promptMax: max,
  quantityStepper,
  selectPromptOnStep,
+ modalClass,
  confirmText: confirmLabel,
  cancelText: cancelLabel,
  closeOnBackdrop: false
@@ -6637,93 +6758,62 @@ async function ensureCurrentDeviceRegistered({
  const client = getSecurityClient();
  const deviceId = getOrCreateDeviceId();
  if (!client) return { allowed: true, deviceId, degraded: true };
- console.log('[SECURITY] device_id', deviceId);
 
  try {
  const securityStatus = await verifySecurityInstalled();
  if (!securityStatus.installed) {
- showToast('Operacao concluida.', 'info');
  return { allowed: true, deviceId, degraded: true, error: securityStatus.error };
  }
 
- const { data: existingDevice, error: findError } = await client
- .from('dispositivos_autorizados')
- .select('*')
- .eq('device_id', deviceId)
- .maybeSingle();
+ const { data, error } = await client.rpc('solicitar_ou_atualizar_dispositivo', {
+ p_device_id: deviceId,
+ p_usuario_id: userId || null,
+ p_nome_usuario: userName || null,
+ p_nome_dispositivo: getFriendlyDeviceName()
+ });
+ if (error) throw error;
 
- if (findError) {
- logSecurityError('[SECURITY] select dispositivo', findError, { deviceId, source });
- throw findError;
+ const status = String(data?.status || '').trim().toLowerCase();
+ if (data?.allowed === true && status === 'aprovado') {
+ if (logUpdate) await logSecurityEvent('dispositivo_atualizado', `Acesso validado via ${source}.`, deviceId);
+ return { allowed: true, deviceId, row: data };
  }
 
- if (existingDevice && existingDevice.ativo === false) {
- console.log('[SECURITY] dispositivo encontrado', { deviceId, ativo: false, source });
- await logSecurityEvent('tentativa_dispositivo_bloqueado', 'Tentativa de acesso por dispositivo removido.', deviceId);
+ if (status === 'pendente') {
+ if (!silent) showToast('Este aparelho aguarda aprovação do administrador.', 'warning');
+ renderPendingDeviceScreen();
+ return { allowed: false, pending: true, deviceId, row: data };
+ }
+
+ await logSecurityEvent('tentativa_dispositivo_bloqueado', 'Tentativa de acesso por dispositivo bloqueado.', deviceId);
  renderBlockedDeviceScreen();
- return { allowed: false, deviceId, row: existingDevice };
- }
-
- if (existingDevice) {
- console.log('[SECURITY] dispositivo encontrado', { deviceId, source });
- }
-
- const payload = {
- usuario_id: userId || existingDevice?.usuario_id || null,
- nome_usuario: userName || existingDevice?.nome_usuario || 'Aguardando login',
- device_id: deviceId,
- nome_dispositivo: existingDevice?.nome_dispositivo || getFriendlyDeviceName(),
- ativo: true,
- ultimo_acesso: new Date().toISOString()
- };
-
- console.log('[SECURITY] payload dispositivo', payload);
- console.log('[INFO] Operacao registrada.');
-
- const { data: savedDevice, error: upsertError } = await client
- .from('dispositivos_autorizados')
- .upsert(payload, { onConflict: 'device_id' })
- .select('*')
- .maybeSingle();
-
- if (upsertError) {
- logSecurityError('[SECURITY] insert/upsert dispositivo erro', upsertError, { payload, deviceId, source });
- throw upsertError;
- }
-
- console.log('[SECURITY] dispositivo salvo com sucesso', savedDevice || payload);
- if (existingDevice) {
- console.log('[SECURITY] ultimo_acesso atualizado', { deviceId, ultimo_acesso: payload.ultimo_acesso, source });
- } else {
- console.log('[SECURITY] dispositivo criado', { deviceId, source });
- }
-
- if (logUpdate) {
- await logSecurityEvent(
- existingDevice ? 'dispositivo_atualizado' : 'dispositivo_cadastrado',
- existingDevice
- ? `Dispositivo atualizado via ${source}.`
- : `Dispositivo cadastrado automaticamente: ${payload.nome_dispositivo}`,
- deviceId
- );
- }
-
- return { allowed: true, deviceId, row: savedDevice || payload };
+ return { allowed: false, deviceId, row: data };
  } catch (error) {
- logSecurityError('[SECURITY] update dispositivo', error, { deviceId, source });
- if (isMissingSecurityTableError(error)) {
- console.log('[INFO] Operacao registrada.');
+ logSecurityError('[SECURITY] validação de dispositivo', error, { deviceId, source });
+ if (isMissingSecurityTableError(error) || !navigator.onLine) {
  return { allowed: true, deviceId, degraded: true, error };
  }
- console.log('[INFO] Operacao registrada.');
- return { allowed: true, deviceId, degraded: true, error };
+ renderPendingDeviceScreen('Não foi possível validar este aparelho. Tente novamente.');
+ return { allowed: false, deviceId, error };
  }
 }
-
 async function ensureAuthorizedDevice(options = {}) {
  return ensureCurrentDeviceRegistered(options);
 }
 
+function renderPendingDeviceScreen(message = 'Este aparelho solicitou acesso e aguarda aprovação do administrador.') {
+ hideSplash();
+ app.innerHTML = `
+ <div class="security-blocked-screen">
+ <div class="security-blocked-card">
+ <span class="material-symbols-rounded">pending_actions</span>
+ <h1>Acesso pendente</h1>
+ <p>${escapeKitAttribute(message)}</p>
+ <button type="button" onclick="location.reload()">Verificar novamente</button>
+ </div>
+ </div>
+ `;
+}
 function renderBlockedDeviceScreen() {
  hideSplash();
  app.innerHTML = `
@@ -16133,13 +16223,27 @@ function hydratePickItemsFromSavedSession(sessionId) {
  descricao_base: product.descricao_base || item.descricao || item.descricao_base || '',
  descricao_completa: product.descricao_completa || item.descricao || item.descricao_completa || '',
  qty,
+ _sync_qtd_separada: qty,
  scanTime: item.pick_resume_last_scan_time || (item.atualizado_em ? formatTimeBR(item.atualizado_em) : formatTimeBR())
  };
  });
 }
 
 async function resumePickingDraftFromServer(sessionId) {
- const session = (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
+ if (!await preparePickPackResume(sessionId)) return;
+ if (navigator.onLine) {
+  try {
+   const data = await DataClient.loadModule('separacao', true);
+   if (!data) throw new Error('Não foi possível obter a separação atualizada.');
+   appData.separacao = data.separacao || [];
+   appData.separacao_itens = data.separacao_itens || [];
+   const fresh = appData.separacao.find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
+   if (!fresh && getLocalDraftPickSession(sessionId)?.saveStatus === 'synced') { showToast('Esta separação não está mais disponível no servidor. A cópia local foi preservada.', 'warning'); return; }
+   if (fresh && !isDraftPickSession(fresh)) { showToast('Esta separação já foi encerrada ou mudou de etapa em outro aparelho.', 'warning'); await renderPickMenu(); return; }
+  } catch (error) { showToast('Não foi possível atualizar a separação. Sua cópia local foi preservada.', 'warning'); return; }
+ }
+ const localOfflineDraft = !navigator.onLine && getLocalDraftPickSession(sessionId);
+ const session = !localOfflineDraft && (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
  if (!session) {
  const localDraft = getLocalDraftPickSession(sessionId) || getDraftPickSession();
  if (String(localDraft?.sessionId || '') === String(sessionId || '')) {
@@ -16226,7 +16330,6 @@ async function resumePickingDraftFromServer(sessionId) {
  });
 
  renderPickingScreen(sessionId, channelId, channelLabel, channelColor);
- schedulePickPackagesCloudSync(0);
  if (!items.length) {
  showToast('Separacao retomada sem itens carregados. Confira antes de finalizar.', 'warning');
  }
@@ -16305,7 +16408,7 @@ function getSeparationItemTotal(session) {
  return Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
 }
 
-function getDraftPickSessionsWithLocalDraft() {
+function getDraftPickSessionsWithLocalDraft(remoteReadSucceeded = false) {
  const sessions = [...getDraftPickSessionsFromCache()];
  const localDrafts = getLocalDraftPickSessionsList();
  const legacyDraft = getDraftPickSession();
@@ -16313,6 +16416,9 @@ function getDraftPickSessionsWithLocalDraft() {
  localDrafts.unshift(legacyDraft);
  }
  localDrafts.forEach(localDraft => {
+ const remote = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(localDraft?.sessionId));
+ if (remote && !isDraftPickSession(remote)) return;
+ if (remoteReadSucceeded && !remote && localDraft?.saveStatus === 'synced') return;
  if (!localDraft?.sessionId || sessions.some(session => String(getPackSeparationSessionId(session)) === String(localDraft.sessionId))) {
  return;
  }
@@ -16440,6 +16546,10 @@ function setPickDraftFilter(filter) {
 }
 
 async function renderSeparacoesAndamentoScreen() {
+ if (!await preparePickPackResume()) return;
+ let remoteReadSucceeded = false;
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
  const currentUser = localStorage.getItem('currentUser');
  document.body.classList.remove('menu-active');
  app.innerHTML = `<div class="dashboard-screen internal fade-in pick-drafts-screen">${getTopBarHTML(currentUser, 'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container pick-drafts-shell"><header class="pick-drafts-header"><div><h1>SEPARAÇÕES EM ANDAMENTO</h1><p>Carregando separações pendentes...</p></div></header><section class="pick-drafts-loading"><span class="material-symbols-rounded">progress_activity</span><strong>ATUALIZANDO DADOS</strong></section></main></div>`;
@@ -16447,6 +16557,7 @@ async function renderSeparacoesAndamentoScreen() {
  try {
  const data = await DataClient.loadModule('separacao', true);
  if (data) {
+ remoteReadSucceeded = navigator.onLine;
  appData.separacao = data.separacao || appData.separacao || [];
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  }
@@ -16454,7 +16565,7 @@ async function renderSeparacoesAndamentoScreen() {
  console.warn('[SEP] Falha ao carregar separacoes em andamento:', error);
  }
 
- const sessions = getDraftPickSessionsWithLocalDraft();
+ const sessions = getDraftPickSessionsWithLocalDraft(remoteReadSucceeded);
  const viewModels = sessions.map(buildPickDraftViewModel);
  const summaryCards = getPickDraftSummaryCards(viewModels);
  const filters = [
@@ -16604,6 +16715,7 @@ async function renderSeparacoesAndamentoScreen() {
 }
 
 async function renderPickMenu(selectedMode = null) {
+ if (!await preparePickPackResume()) return;
  const currentUser = localStorage.getItem('currentUser');
  if (['fast', 'normal'].includes(selectedMode)) {
  pendingPickModeChoice = selectedMode;
@@ -16795,6 +16907,7 @@ function hasPendingConferenceForSession(sessionOrId) {
  const finishedStatuses = new Set(['conferido', 'finalizada', 'finalizado', 'concluida', 'concluido']);
  const hasFinishedConference = sessionConferences.some(conf => finishedStatuses.has(String(conf.status || '').trim().toLowerCase()));
  if (hasFinishedConference) return false;
+ if (sessionConferences.length === 0) return true;
  return sessionConferences.some(conf => {
  const confSessionId = getConferenceSessionId(conf);
  return confSessionId === sessionId && isPendingConferenceRow(conf);
@@ -17174,6 +17287,8 @@ function adjustPickPackageCount(delta) {
 }
 
 let pickPackageCloudSyncTimer = null;
+let pendingPickPackageSnapshot = null;
+let pickPackageCloudSyncChain = Promise.resolve();
 
 function buildPickPackagesSyncPayload(items = currentSessionItems) {
  const packages = new Map();
@@ -17212,17 +17327,26 @@ function restorePickPackagesFromCloud(items = currentSessionItems, packages = []
  return true;
 }
 
-async function syncPickPackagesWithCloud(options = {}) {
+async function performPickPackagesCloudSync(options = {}) {
  const sessionId = String(options.sessionId || currentPickingContext?.sessionId || '').trim();
  if (!sessionId || isTemporaryPickSessionId(sessionId) || !isValidPickSessionId(sessionId)) return { skipped: true };
  const payload = {
   sessionId,
   pacotes: buildPickPackagesSyncPayload(options.items || currentSessionItems),
   usuario: localStorage.getItem('currentUser') || 'N/A',
-  executionId: `pacotes:${sessionId}:${Date.now()}`
+  executionId: `pacotes:${sessionId}:${Date.now()}`,
+  validateComplete: options.validateComplete === true
  };
  const statusEl = document.getElementById('pick-package-sync-status');
  if (statusEl) { statusEl.textContent = navigator.onLine ? 'SALVANDO...' : 'PENDENTE'; statusEl.className = navigator.onLine ? 'is-saving' : 'is-pending'; }
+ if (!payload.validateComplete) {
+  const operation = await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
+  if (navigator.onLine) await syncOperationOutbox('pick_packages_progress', true);
+  const pending = (await getQueuedOperations()).find(row => row.id === operation.id);
+  if (statusEl) { statusEl.textContent = pending ? 'PENDENTE' : 'SINCRONIZADO'; statusEl.className = pending ? 'is-pending' : 'is-synced'; }
+  markDraftPickSaveStatus(pending ? 'queued' : 'synced');
+  return { queued: !!pending };
+ }
  if (!navigator.onLine) {
   await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
   markDraftPickSaveStatus('queued');
@@ -17246,10 +17370,20 @@ async function syncPickPackagesWithCloud(options = {}) {
  }
 }
 
+function syncPickPackagesWithCloud(options = {}) {
+ pickPackageCloudSyncChain = pickPackageCloudSyncChain
+  .catch(() => null)
+  .then(() => performPickPackagesCloudSync(options));
+ return pickPackageCloudSyncChain;
+}
+
 function schedulePickPackagesCloudSync(delay = 180) {
  clearTimeout(pickPackageCloudSyncTimer);
+ pendingPickPackageSnapshot = { sessionId: currentPickingContext?.sessionId, items: JSON.parse(JSON.stringify(currentSessionItems || [])) };
  pickPackageCloudSyncTimer = setTimeout(() => {
-  syncPickPackagesWithCloud().catch(error => showToast(error.message || 'Erro ao sincronizar pacotes.', 'error'));
+  pickPackageCloudSyncTimer = null;
+  const snapshot = pendingPickPackageSnapshot; pendingPickPackageSnapshot = null;
+  syncPickPackagesWithCloud(snapshot).catch(error => showToast(error.message || 'Erro ao sincronizar pacotes.', 'error'));
  }, delay);
 }
 
@@ -17437,19 +17571,20 @@ async function togglePickItemSelection(index, source = 'standalone') {
  let qty = 1;
  if (summary.standaloneUnits > 1) {
  const answer = await showAppPrompt({
- title: 'Quantidade para agrupar',
+ title: 'Agrupar itens',
  message: getPickItemTitle(item),
- detail: `${summary.standaloneUnits} unidade(s) avulsa(s) disponivel(is).`,
- label: 'Quantas unidades deseja selecionar?',
+ detail: `Você possui ${summary.standaloneUnits} unidade(s) avulsa(s) disponível(is).`,
+ label: 'Quantas unidades deseja agrupar?',
  defaultValue: '1',
  placeholder: `De 1 a ${summary.standaloneUnits}`,
- confirmLabel: 'Selecionar',
+ confirmLabel: 'Agrupar unidades',
  cancelLabel: 'Cancelar',
  inputType: 'number',
  min: 1,
  max: summary.standaloneUnits,
  quantityStepper: true,
- selectPromptOnStep: false
+ selectPromptOnStep: false,
+ modalClass: 'pick-quantity-modal'
  });
  if (answer === null) return settlePickScannerInput(60);
  qty = Math.floor(Number(answer));
@@ -17481,7 +17616,7 @@ function updatePickKitSelectionBar() {
  const selectedUnits = entries.reduce((total, entry) => total + Number(entry.selection.qty || 0), 0);
  const allStandalone = entries.every(entry => entry.selection.source === 'standalone');
  let action = '<span>Selecione ao menos 2 unidades avulsas</span>';
- if (allStandalone && selectedUnits >= 2) action = '<button type="button" onclick="transformPickSelectionIntoKit()"><span class="material-symbols-rounded">inventory_2</span>CRIAR PACOTE</button>';
+ if (allStandalone && selectedUnits >= 2) action = '<button type="button" onclick="transformPickSelectionIntoKit()"><span class="material-symbols-rounded">check_circle</span>FINALIZAR AGRUPAMENTO</button>';
  bar.innerHTML = `<strong>${selectedUnits} UNIDADE(S) SELECIONADA(S)</strong><div>${action}<button type="button" class="pick-kit-selection-cancel" onclick="clearPickKitSelection()">CANCELAR</button></div>`;
  bar.classList.remove('hidden');
 }
@@ -17774,17 +17909,15 @@ async function discardPickingDraft(sessionId, options = {}) {
 
  let remoteRemoved = false;
  let remoteError = null;
-
- await removeQueuedPickingDraftOperations(targetSessionId);
-
- if (navigator.onLine && window.DataClient?.deletePickingDraftSupabase) {
  try {
- await window.DataClient.deletePickingDraftSupabase({ sessionId: targetSessionId });
- remoteRemoved = true;
+  await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:' + targetSessionId + ':')).map(([, promise]) => promise));
+  await removeQueuedPickingDraftOperations(targetSessionId);
+  await queueOperation('supabase_pick_draft_delete', { sessionId: targetSessionId }, { module: 'separacao', sessionId: targetSessionId, queueKey: 'discard-pick:' + targetSessionId });
+  if (navigator.onLine) await syncOperationOutbox('discard_pick', true);
+  remoteRemoved = !(await getQueuedOperations()).some(row => row.id === 'discard-pick:' + targetSessionId);
  } catch (error) {
- remoteError = error;
- console.warn('[SEP] nao foi possivel excluir rascunho no servidor:', error);
- }
+  showToast('Não foi possível preservar a solicitação de exclusão. O rascunho foi mantido.', 'error');
+  return false;
  }
 
  if (!draft || String(draft.sessionId || '') === String(targetSessionId)) {
@@ -17812,7 +17945,7 @@ async function discardPickingDraft(sessionId, options = {}) {
  if (!options.silent) {
  if (remoteError) {
  showToast("Nao foi possivel excluir a separacao no servidor.", "error");
- } else if (remoteRemoved || !navigator.onLine) {
+ } else {
  showToast(remoteRemoved ? "Separacao excluida." : "Separacao removida deste aparelho. Sincronizacao pendente.", remoteRemoved ? "success" : "warning");
  }
  }
@@ -18055,6 +18188,7 @@ async function ensureOfficialPickSessionForFirstItem(product = {}) {
  const temporaryId = currentPickingContext.sessionId;
  currentPickingContext.sessionId = officialId;
  currentPickingContext.createdAt = result?.criado_em || currentPickingContext.createdAt || getDataHoraBrasil();
+ currentPickingContext._reservedFirstItemId = productId;
  const screen = document.querySelector('.pick-workflow-screen');
  if (screen) screen.dataset.sessionId = officialId;
  document.querySelectorAll('[data-pick-session-id], #pick-session-id-label').forEach(element => { element.textContent = officialId; });
@@ -18136,101 +18270,73 @@ function getPickingProductId(item) {
   return normalizePickCode(item?.id_interno || item?.produto_id_interno || item?.codigo_interno || item?.col_a || item?.col_A || '');
 }
 
+function renderPickProductFeedbackToast(type = 'add', item = null, quantity = 1) {
+  clearTimeout(scanCenterToastTimeout);
+  document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
+
+  const isAdd = type === 'add';
+  const title = item ? getPickItemTitle(item) : (isAdd ? 'Produto bipado' : 'Produto removido');
+  const sku = item ? (getPickItemSku(item) || '—') : '—';
+  const ean = item ? (getPickItemEan(item) || '—') : '—';
+  const color = item ? (getPickItemColor(item) || '—') : '—';
+  const idInterno = (item ? getPickingProductId(item) : '') || '—';
+  const image = item ? getPickProductImage(item) : '';
+  const currentQty = isAdd 
+    ? (Number(item?.qty || item?.qtd_separada || quantity || 1) || 1)
+    : (Number(quantity || 1) || 1);
+
+  const toastEl = document.createElement('div');
+  toastEl.className = `pick-feedback-toast ${isAdd ? 'is-add' : 'is-remove'}`;
+  toastEl.setAttribute('role', 'status');
+  toastEl.setAttribute('aria-live', 'polite');
+  toastEl.innerHTML = `
+  <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
+    <span class="material-symbols-rounded">close</span>
+  </button>
+  <div class="pick-feedback-header">
+    <div class="pick-feedback-icon-wrapper">
+      <div class="pick-feedback-icon">
+        <span class="material-symbols-rounded">${isAdd ? 'check' : 'close'}</span>
+      </div>
+    </div>
+    <strong class="pick-feedback-title">${isAdd ? 'Produto adicionado!' : 'Produto removido!'}</strong>
+    <p class="pick-feedback-subtitle">${isAdd ? 'O produto foi adicionado com sucesso.' : 'O produto foi removido com sucesso.'}</p>
+  </div>
+  <div class="pick-feedback-body">
+    <div class="pick-feedback-image">
+      ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+    </div>
+    <div class="pick-feedback-copy">
+      <b class="pick-feedback-product-name">${escapeKitAttribute(title)}</b>
+      <div class="pick-feedback-meta">
+        <span class="chip-item chip-id"><small>ID INTERNO</small><strong>${escapeKitAttribute(idInterno)}</strong></span>
+        <span class="chip-item chip-sku"><small>SKU</small><strong>${escapeKitAttribute(sku)}</strong></span>
+        <span class="chip-item chip-ean"><small>EAN</small><strong>${escapeKitAttribute(ean)}</strong></span>
+        <span class="chip-item chip-color"><small>COR</small><strong>${escapeKitAttribute(color)}</strong></span>
+      </div>
+    </div>
+  </div>
+  <div class="pick-feedback-footer">
+    <div class="pick-feedback-qty-box">
+      <span class="pick-feedback-qty-label">${isAdd ? 'QUANTIDADE ATUAL' : 'QUANTIDADE REMOVIDA'}</span>
+      <strong class="pick-feedback-qty-val">${currentQty}<small> un</small></strong>
+    </div>
+  </div>
+  `;
+  document.body.appendChild(toastEl);
+
+  scanCenterToastTimeout = setTimeout(() => {
+    toastEl.classList.add('is-hiding');
+    setTimeout(() => toastEl.remove(), 260);
+  }, 2600);
+}
+
 function showPickScanCenterToast(item = null, quantity = 1) {
- if (isPickMobileViewport()) return;
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto bipado';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
- const currentQty = Number(item?.qty || item?.qtd_separada || quantity || 1) || 1;
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-add';
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">check</span></div>
- <strong class="pick-feedback-title">PRODUTO ADICIONADO</strong>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span>SKU: ${escapeKitAttribute(sku)}</span>
- <span>EAN: ${escapeKitAttribute(ean)}</span>
- <span>COR: ${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade atual</span>
- <strong>${currentQty}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>Adicionado </em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('add', item, quantity);
 }
 
 function showPickRemovalFeedbackToast(item = null, quantity = 1) {
- if (isPickMobileViewport()) return;
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto removido';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-remove';
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">remove</span></div>
- <strong class="pick-feedback-title">PRODUTO REMOVIDO</strong>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span>SKU: ${escapeKitAttribute(sku)}</span>
- <span>EAN: ${escapeKitAttribute(ean)}</span>
- <span>COR: ${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade removida</span>
- <strong>${Number(quantity || 1)}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'} da sao</em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('remove', item, quantity);
 }
 
 function triggerScanSuccessGlow() {
@@ -18268,57 +18374,57 @@ function getPickItemMetaHTML(item) {
  `;
 }
 
-async function persistPickingDraftItem(draft, item) {
- const sessionPayload = buildPickingSessionPayload(
- draft.sessionId,
- draft.channelId,
- draft.channelLabel,
- PICK_STATUS_DRAFT,
- draft.createdAt
- );
+function persistPickingDraftItem(draft, item) {
+ return runOperationalWrite('pick:' + draft.sessionId + ':' + getPickingProductId(item), () => persistPickingDraftItemSerial(draft, item));
+}
+async function persistPickingDraftItemSerial(draft, item) {
+ const sessionPayload = buildPickingSessionPayload(draft.sessionId, draft.channelId, draft.channelLabel, PICK_STATUS_DRAFT, draft.createdAt);
  const itemPayload = buildPickingItemPayload(item);
- const payload = {
- session: sessionPayload,
- item: itemPayload,
- executionId: draft.executionId || draft.sessionId
+ if (String(itemPayload.id_interno || '').toUpperCase() === 'DY-000.000') {
+  const legacyPayload = { session: sessionPayload, item: itemPayload, executionId: draft.executionId || draft.sessionId };
+  if (!navigator.onLine) {
+   await queueOperation('supabase_pick_draft', legacyPayload, { module: 'separacao', sessionId: draft.sessionId, itemId: itemPayload.id_interno });
+   return { queued: true };
+  }
+  return DataClient.savePickingDraftSupabase(legacyPayload);
+ }
+ const currentQty = Math.max(0, Number(itemPayload.qtd_separada || 0));
+ const baselineQty = Math.max(0, Number(item._sync_qtd_separada || 0));
+ const delta = currentQty - baselineQty;
+ const sessionOnlyPayload = { session: sessionPayload, executionId: draft.executionId || draft.sessionId };
+ if (!delta) return { unchanged: true };
+ const progressPayload = {
+  operationId: createProgressOperationId('separacao', draft.sessionId, itemPayload.id_interno),
+  flow: 'separacao', sessionId: draft.sessionId, idInterno: itemPayload.id_interno, delta,
+  usuario: localStorage.getItem('currentUser') || 'N/A', deviceId: getProgressDeviceId(), item: itemPayload
  };
-
- console.log('[SEP] produto bipado', {
- separacao_id: draft.sessionId,
- id_interno: itemPayload.id_interno,
- ean: itemPayload.ean,
- qtd_separada: itemPayload.qtd_separada
- });
-
+ const confirmItemSync = () => {
+  item._sync_qtd_separada = currentQty;
+  saveDraftPickSession({ ...draft, items: currentSessionItems });
+ };
  if (!navigator.onLine) {
- await queueOperation('supabase_pick_draft', payload, {
- module: 'separacao',
- sessionId: draft.sessionId,
- itemId: itemPayload.id_interno
- });
- return { queued: true };
+  await queueOperation('supabase_pick_draft', sessionOnlyPayload, { module: 'separacao', sessionId: draft.sessionId });
+  await queueOperation('supabase_progress', progressPayload, { module: 'separacao', sessionId: draft.sessionId,
+   itemId: itemPayload.id_interno, queueKey: 'supabase_progress:' + progressPayload.operationId });
+  confirmItemSync();
+  return { queued: true };
  }
-
  try {
- return await withTimeout(
- DataClient.savePickingDraftSupabase(payload),
- 15000,
- 'salvar sessao de separacao'
- );
+  await withTimeout(DataClient.savePickingDraftSupabase(sessionOnlyPayload), 15000, 'salvar sessao de separacao');
+  const result = await sendOrQueueProgressOperation(progressPayload);
+  confirmItemSync();
+  return result;
  } catch (error) {
- if (isRetryableConferenceSyncError(error)) {
- await queueOperation('supabase_pick_draft', payload, {
- module: 'separacao',
- sessionId: draft.sessionId,
- itemId: itemPayload.id_interno,
- lastOnlineError: error.message || String(error)
- });
- return { queued: true, error };
- }
- throw error;
+  if (isRetryableConferenceSyncError(error)) {
+   await queueOperation('supabase_pick_draft', sessionOnlyPayload, { module: 'separacao', sessionId: draft.sessionId, lastOnlineError: error.message || String(error) });
+   await queueOperation('supabase_progress', progressPayload, { module: 'separacao', sessionId: draft.sessionId,
+    itemId: itemPayload.id_interno, queueKey: 'supabase_progress:' + progressPayload.operationId, lastOnlineError: error.message || String(error) });
+   confirmItemSync();
+   return { queued: true, error };
+  }
+  throw error;
  }
 }
-
 async function persistPickingDraftSession(draft) {
  if (!draft?.sessionId) return null;
  const sessionPayload = buildPickingSessionPayload(
@@ -18362,46 +18468,17 @@ async function persistPickingDraftSession(draft) {
 
 async function persistPickingDraftItemsBatch(draft, items = []) {
  if (!draft?.sessionId) return null;
- const sessionPayload = buildPickingSessionPayload(
- draft.sessionId,
- draft.channelId,
- draft.channelLabel,
- draft.status || PICK_STATUS_DRAFT,
- draft.createdAt
- );
- const itemPayloads = (items || []).map(buildPickingItemPayload).filter(item => item.id_interno);
- const payload = {
- session: sessionPayload,
- items: itemPayloads,
- executionId: draft.executionId || draft.sessionId
- };
-
- if (!navigator.onLine || !DataClient.savePickingDraftItemsBatchSupabase) {
  let queued = false;
+ if (!(items || []).length) {
+  const sessionResult = await persistPickingDraftSession(draft);
+  return { queued: sessionResult?.queued === true, items: [] };
+ }
  for (const item of items || []) {
- const result = await persistPickingDraftItem(draft, item);
- if (result?.queued) queued = true;
+  const result = await persistPickingDraftItem(draft, item);
+  if (result?.queued) queued = true;
  }
- return { queued, fallback: true };
- }
-
- try {
- return await withTimeout(
- DataClient.savePickingDraftItemsBatchSupabase(payload),
- 15000,
- 'salvar itens da separacao em lote'
- );
- } catch (error) {
- console.warn('[SEP] lote falhou, usando salvamento item a item', error);
- let queued = false;
- for (const item of items || []) {
- const result = await persistPickingDraftItem(draft, item);
- if (result?.queued) queued = true;
- }
- return { queued, fallback: true, error };
- }
+ return { queued, items: items || [] };
 }
-
 async function deletePickingDraftItemSupabaseDirect(payload = {}) {
  const client = window.supabaseClient;
  if (!client) throw new Error('Supabase client nao encontrado');
@@ -18911,11 +18988,17 @@ function getPickChannelDailyPackageTotal(context = {}) {
 function getConferenceChannelDailyPackageTotal() {
  const sessionId = String(currentPackSession?.id || '').trim();
  const pickingData = currentPackSession?.pickingData || {};
+ const expectedPackageCount = getPickPackageCountFrom(pickingData);
  return getPickChannelDailyPackageTotal({
   sessionId,
   channelLabel: pickingData.canal_nome || currentPackSession?.channel || '',
-  packageCount: getPickPackageCountFrom(pickingData || currentPackSession || {})
+  packageCount: Math.max(expectedPackageCount, getConferencePackageCount())
  });
+}
+
+function getConferenceDisplayedPackageCount() {
+ const expected = getPickPackageCountFrom(currentPackSession?.pickingData || {});
+ return Math.max(expected, getConferencePackageCount());
 }
 
 function updatePickSummaryUI() {
@@ -19013,8 +19096,7 @@ function settlePickScannerInput(delay = 60) {
  const input = getOperationalProductSearchInput();
  if (!input) return;
  input.value = '';
- const workArea = input.closest('.pick-scan-panel') || input;
- workArea.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+ scrollOperationalWorkToTop(input);
  preparePickScannerInput({ focus: true });
  }, delay);
 }
@@ -19686,35 +19768,10 @@ function getCurrentPickDraftForUpdate(saveStatus = 'saving') {
 
 async function persistPickingItemRemoval(draft, removedItem, removedAll) {
  if (!removedItem) return null;
- if (!removedAll) {
  const persistResult = await persistPickingDraftItem(draft, removedItem);
  markDraftPickSaveStatus(persistResult?.queued ? 'queued' : 'synced');
  return persistResult;
- }
-
- const payload = {
- sessionId: draft.sessionId,
- idInterno: removedItem.id_interno || removedItem.col_a || removedItem.col_A || getPickingProductId(removedItem),
- executionId: draft.executionId || draft.sessionId
- };
-
- if (!payload.sessionId || !payload.idInterno) return null;
-
- if (!navigator.onLine) {
- await queueOperation('supabase_pick_draft_item_delete', payload, {
- module: 'separacao',
- sessionId: payload.sessionId,
- itemId: payload.idInterno
- });
- markDraftPickSaveStatus('queued');
- return { queued: true };
- }
-
- const result = await deletePickingDraftItemSupabaseDirect(payload);
- markDraftPickSaveStatus('synced');
- return result;
 }
-
 async function removePickItemByScan(cleanCode, input) {
  const existingIndex = currentSessionItems.findIndex(item => pickItemMatchesCode(item, cleanCode));
 
@@ -19743,6 +19800,7 @@ async function removePickItemByScan(cleanCode, input) {
  if (!item.remove_scan_count) item.remove_scan_origin_qty = currentQty;
  const nextQty = Math.max(0, currentQty - 1);
  normalizePickPackageAssignments(item).pop();
+ item.qty = nextQty;
  let removedAll = nextQty <= 0;
  let removedFeedbackQty = 1;
 
@@ -19966,6 +20024,8 @@ async function addPickItem(scannedEan = null) {
  });
 
  const existingIndex = currentSessionItems.findIndex(item => getPickingProductId(item) === productId);
+ const firstItemAlreadyPersisted = officialContext?._reservedFirstItemId === productId;
+ if (firstItemAlreadyPersisted) delete officialContext._reservedFirstItemId;
  const wasAlreadySeparated = existingIndex >= 0;
  const previousTotalBeforeScan = wasAlreadySeparated ? Number(currentSessionItems[existingIndex]?.qty || 0) : 0;
  const resumeScanMs = Date.now();
@@ -20005,6 +20065,7 @@ async function addPickItem(scannedEan = null) {
  currentSessionItems.unshift({
  ...product,
  qty: 1,
+ _sync_qtd_separada: firstItemAlreadyPersisted ? 1 : 0,
  pick_package_assignments: [activePickKitId || null],
  scanTime: resumeScanTime,
  pick_resume_qty: 1,
@@ -20120,17 +20181,8 @@ async function addPickItem(scannedEan = null) {
 
  if (!pickPersistFailed) {
  const scannedItem = currentSessionItems.find(item => getPickingProductId(item) === productId) || product;
- showPickScanCenterToast(scannedItem);
- if (!roundCompletedNow && !roundOverflowNow) {
- const addedTotal = Number(scannedItem?.qty || 1);
- const resumeQty = getPickResumeQty(scannedItem);
- if (wasAlreadySeparated) {
- showScanFeedback('success', `${getPickItemTitle(scannedItem)} | J\u00e1 havia ${previousTotalBeforeScan} | Agora ${addedTotal}`);
- showToast(`J\u00e1 havia ${previousTotalBeforeScan}. +1 agora. Total ${addedTotal}. Nesta retomada: ${resumeQty}.`, 'success');
- } else {
- showScanFeedback('success', `${getPickItemTitle(scannedItem)} | Primeiro bip | Total ${addedTotal}`);
- }
- }
+ if (!roundCompletedNow && !roundOverflowNow) showPickScanCenterToast(scannedItem);
+ playFeedbackSound('success');
  triggerScanSuccessGlow();
  if (roundCompletedNow) {
  const completedRound = getPickItemRoundState(scannedItem);
@@ -20891,7 +20943,6 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  }
 
  clearTimeout(pickPackageCloudSyncTimer);
- await syncPickPackagesWithCloud({ sessionId, items: currentPickSession.items });
  await ensureProdutosLoaded(true);
  const now = getDataHoraBrasil();
  const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel) || {
@@ -20943,6 +20994,9 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
  totalPacotesMontados: stats.total_pacotes_montados
  }, currentPickSession.items);
  if (draftResult?.queued) draftPersistenceQueued = true;
+
+ // Os pacotes dependem dos itens ja registrados na separacao.
+ await syncPickPackagesWithCloud({ sessionId, items: currentPickSession.items, validateComplete: true });
 
  const conferencePayload = {
  sessionId,
@@ -21065,7 +21119,14 @@ async function renderPackMenu() {
  return renderPackPendingChannels();
 }
 
+function renderQuickDestinationLoading(title, screenClass) {
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
+ app.innerHTML = `<div class="dashboard-screen internal module-screen ${escapeKitAttribute(screenClass)}">${getTopBarHTML(localStorage.getItem('currentUser'), 'renderMenu()')}<main class="container"><h1>${escapeKitAttribute(title)}</h1><p role="status" aria-live="polite">Carregando dados...</p></main></div>`;
+}
+
 async function renderPackConferenceRecords(scope = 'today', query = '') {
+ renderQuickDestinationLoading(scope === 'today' ? 'Conferências de hoje' : 'Histórico de conferências', 'pack-screen');
  const currentUser = localStorage.getItem('currentUser');
  await loadPackConferenceWorkspace();
  const normalizedQuery = normalizeText(query || '');
@@ -21106,6 +21167,8 @@ async function renderPackConferenceRecords(scope = 'today', query = '') {
 }
 
 async function renderPackPendingChannels() {
+ if (!await preparePickPackResume()) return;
+ renderQuickDestinationLoading('Conferências em andamento', 'pack-screen');
  const currentUser = localStorage.getItem('currentUser');
  // Texto validado em UTF-8.
  try {
@@ -21119,7 +21182,9 @@ async function renderPackPendingChannels() {
  console.warn('[PACK] Falha ao atualizar separacoes do Supabase:', error);
  }
 
- const activeSessions = (appData.separacao || []).filter(s => isSeparationPendingConferenceSession(s));
+ const activeSessions = (appData.separacao || []).filter(s =>
+  isSeparationPendingConferenceSession(s) && !isSameConferenceOperator(s, currentUser)
+ );
  const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
   const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
   const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
@@ -21229,6 +21294,7 @@ function formatPackSeparationDate(value) {
 }
 
 async function renderPackSessionsList(channelName) {
+ if (!await preparePickPackResume()) return;
  const currentUser = localStorage.getItem('currentUser');
  let activeSessions = [];
  let usedFreshSupabase = false;
@@ -21257,13 +21323,17 @@ async function renderPackSessionsList(channelName) {
  if (!usedFreshSupabase && !activeSessions.length) {
  activeSessions = (appData.separacao || []).filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
-  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName) && isSeparationPendingConferenceSession(s);
+  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName)
+   && isSeparationPendingConferenceSession(s)
+   && !isSameConferenceOperator(s, currentUser);
  });
  }
 
  activeSessions = activeSessions.filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
-  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName) && isSeparationPendingConferenceSession(s);
+  return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName)
+   && isSeparationPendingConferenceSession(s)
+   && !isSameConferenceOperator(s, currentUser);
  });
 
  const channelConfig = getChannelConfig(channelName);
@@ -21386,8 +21456,16 @@ function setActivePickSessions(sessions) {
  localStorage.setItem('active_pick_sessions', JSON.stringify(Array.isArray(sessions) ? sessions : []));
 }
 
+function normalizeConferenceOperator(value) { return normalizeOperationalLabel(String(value || '').replace(/\s+/g, ' ').trim()); }
+function isSameConferenceOperator(separation, user) {
+ const separator = normalizeConferenceOperator(separation?.criado_por || separation?.usuario || separation?.operador || separation?.col_e);
+ const conferenceUser = normalizeConferenceOperator(user);
+ return Boolean(separator && conferenceUser && separator === conferenceUser);
+}
+
 // Global Session State moved to top for hoisting safety
 async function renderPackSessionDetails(sessionId) {
+ if (!await preparePickPackResume(sessionId)) return;
  const currentUser = localStorage.getItem('currentUser');
  conferenceViewFilter = 'all';
  conferenceRemovalModeActive = false;
@@ -21399,9 +21477,11 @@ async function renderPackSessionDetails(sessionId) {
  appData.separacao = data.separacao || [];
  appData.separacao_itens = data.separacao_itens || [];
  appData.conferencia = data.conferencia || [];
+ appData.conferencia_itens = data.conferencia_itens || [];
  }
  } catch (error) {
  console.warn('[PACK] Falha ao validar conferencia pendente:', error);
+ if (navigator.onLine) { showToast('Não foi possível atualizar a conferência. Tente novamente antes de continuar.', 'warning'); return; }
  }
 
  const activeSessions = getActivePickSessions();
@@ -21420,11 +21500,45 @@ async function renderPackSessionDetails(sessionId) {
  return;
  }
 
- const session = activeSessions.find(s =>
+ if (separacaoSession && isSameConferenceOperator(separacaoSession, currentUser)) {
+  await showAppModal({
+   type: 'warning',
+   title: 'Conferencia deve ser feita por outro usuario',
+   message: 'Voce realizou a separacao deste pedido e nao pode iniciar a conferencia.',
+   detail: 'Separado por ' + (separacaoSession.criado_por || currentUser) + '. Entre com outro usuario para conferir.',
+   confirmText: 'Entendi'
+  });
+  renderPackMenu();
+  return;
+ }
+
+ let session = activeSessions.find(s =>
  String(s.id) === String(packSessionId)
  || String(s.separacaoRowId || '') === String(separacaoRowId)
  || String(s.pickingData?.separacao_row_id || '') === String(separacaoRowId)
  );
+
+ const remoteConferenceQuantities = new Map();
+ if (navigator.onLine) {
+  try {
+   const remoteDraft = await DataClient.buscarConferenciaAndamentoSupabase(packSessionId);
+   (remoteDraft?.itens || []).forEach(row => remoteConferenceQuantities.set(String(row.id_interno), Number(row.qtd_conferida || 0)));
+   let remoteSession = remoteDraft?.estado_andamento && typeof remoteDraft.estado_andamento === 'object'
+    ? JSON.parse(JSON.stringify(remoteDraft.estado_andamento))
+    : (remoteDraft?.itens?.length ? { id: packSessionId, conferenceRows: [] } : null);
+   if (remoteSession) {
+    const byProduct = new Map((remoteSession.conferenceRows || []).map(row => [String(row.id_interno), row]));
+    (remoteDraft?.itens || []).forEach(saved => {
+     const key = String(saved.id_interno);
+     const row = byProduct.get(key);
+     if (row) Object.assign(row, saved, { scanned_in_conference: Number(saved.qtd_conferida || 0) > 0 });
+     else (remoteSession.conferenceRows ||= []).push({ ...saved, scanned_in_conference: Number(saved.qtd_conferida || 0) > 0, conference_package_assignments: [] });
+    });
+   }
+   // Sem fila local pendente, o servidor é a referência, inclusive quando a quantidade voltou a zero.
+   session = remoteSession;
+  } catch (error) { console.warn('[CONFERENCIA] Falha ao carregar andamento remoto.', error); showToast('Não foi possível atualizar o andamento. A cópia local foi preservada.', 'warning'); return; }
+ }
  
   // Texto validado em UTF-8.
  const channelName = separacaoSession ? (separacaoSession.canal_nome || separacaoSession.col_d || '') : '';
@@ -21446,6 +21560,9 @@ async function renderPackSessionDetails(sessionId) {
  },
  conferenceRows: []
  };
+ if (navigator.onLine) (currentPackSession.conferenceRows || []).forEach(row => {
+  row._sync_qtd_conferida = remoteConferenceQuantities.get(String(row.id_interno)) || 0;
+ });
  
  // Texto validado em UTF-8.
  renderPackSessionFrame(packSessionId, currentUser, channelColorClass, channelName);
@@ -21499,9 +21616,14 @@ async function renderPackSessionDetails(sessionId) {
  const key = getPickingProductId(row) || row.ean || row.id_interno;
  if (groupedExpected[key]) {
  groupedExpected[key].qtd_conferida = row.qtd_conferida;
+ groupedExpected[key]._sync_qtd_conferida = Number(row._sync_qtd_conferida || 0);
  groupedExpected[key].scanned_in_conference = Boolean(row.scanned_in_conference || Number(row.qtd_conferida || 0) > 0);
  groupedExpected[key].conference_package_assignments = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments.slice() : [];
- } else if (Number(row.qtd_conferida || 0) > 0) {
+ } else if (
+  Number(row.qtd_conferida || 0) > 0
+  && row.conference_extra_scan === true
+  && String(row.conference_session_id || '') === String(packSessionId)
+ ) {
  groupedExpected[key] = { ...row, scanned_in_conference: true };
  }
  });
@@ -21512,6 +21634,7 @@ async function renderPackSessionDetails(sessionId) {
  : (session && Array.isArray(session.conferenceRows) ? session.conferenceRows : []);
 
  currentPackSession = {
+ ...(session || {}),
  id: packSessionId,
  separacaoRowId,
  items: expectedItems,
@@ -21538,6 +21661,7 @@ async function renderPackSessionDetails(sessionId) {
  if (idx >= 0) activeSessions[idx] = currentPackSession;
  }
  setActivePickSessions(activeSessions);
+ persistPackSessionCache();
 
  // Texto validado em UTF-8.
  const packList = document.getElementById('pack-items-list');
@@ -21555,7 +21679,6 @@ async function renderPackSessionDetails(sessionId) {
  * Renderiza apenas a moldura da tela de conferencia para resposta imediata
  */
 function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
- const icon = getChannelConfig(channelName).svgIcon || menu3DIcons?.conferencia || '<span class="material-symbols-rounded">fact_check</span>';
  const title = channelName ? channelName.toUpperCase() : 'CONFERENCIA';
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen pick-workflow-screen conference-workflow-screen ${channelColorClass}" data-channel-color="conference">
@@ -21566,7 +21689,6 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </button>
 
  <div class="pack-blind-title pick-workflow-title">
- <span class="pack-blind-title-icon">${icon}</span>
  <h1>CONFER\u00caNCIA (PACK) <span>\u2022 ${escapeKitAttribute(title)}</span></h1>
  </div>
  <div class="pick-header-meta"><span><strong>${escapeKitAttribute(sessionId)}</strong></span><span><strong>${escapeKitAttribute(currentUser || '-')}</strong></span></div>
@@ -21591,6 +21713,14 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </div>
  </div>
  <div id="pack-search-suggestions" class="pick-search-suggestions hidden"></div>
+ <div id="conference-removal-badge" class="pick-removal-badge hidden">
+ <span class="material-symbols-rounded">warning</span>
+ MODO REMO\u00c7\u00c3O POR BIP
+ </div>
+ <div id="conference-removal-session-panel" class="conference-removal-session-panel hidden">
+ <div><strong>Cada leitura remove 1 unidade</strong><span>Bipe o produto que deseja retirar desta conferência.</span></div>
+ <p>Nenhuma unidade removida nesta operação.</p>
+ </div>
  </section>
 
  <div id="scanner-container-pack" class="hidden pack-blind-scanner-container">
@@ -21604,26 +21734,29 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  <div class="pack-blind-list-panel pick-list-panel">
  <div class="pack-blind-list-header pick-list-header">
  <h2>PRODUTOS BIPADOS</h2>
- <div class="pick-list-filters" role="group" aria-label="Filtrar produtos bipados">
- <button id="conference-filter-all" class="pick-filter-btn active" type="button" onclick="setConferenceViewFilter('all')">TODOS <strong id="conference-filter-all-count">0</strong></button>
- <button id="conference-filter-standalone" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('standalone')">AVULSOS <strong id="conference-filter-standalone-count">0</strong></button>
- <button id="conference-filter-kits" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('kits')">AGRUPADOS <strong id="conference-filter-kits-count">0</strong></button>
+ <div class="pick-resume-filters pick-package-filters" role="group" aria-label="Filtrar produtos bipados">
+ <button id="conference-filter-all" class="pick-filter-btn active" type="button" onclick="setConferenceViewFilter('all')">TODOS <span id="conference-filter-all-count">0</span></button>
+ <button id="conference-filter-standalone" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('standalone')">AVULSOS <span id="conference-filter-standalone-count">0</span></button>
+ <button id="conference-filter-kits" class="pick-filter-btn" type="button" onclick="setConferenceViewFilter('kits')">AGRUPADOS <span id="conference-filter-kits-count">0</span></button>
  </div>
  </div>
  <div id="conference-kit-selection-bar" class="pick-kit-selection-bar hidden"></div>
- <div class="pack-blind-table-head">
- <span>Produto</span>
- <span>Quantidade bipada</span>
- <span>Agrupamento</span>
- <span>A\u00e7\u00f5es</span>
- </div>
  <div id="pack-items-list" class="pack-blind-items-list pick-items-list"></div>
  </div>
 
+ </section>
  <aside class="pack-blind-summary-panel pick-summary-panel pick-summary-single-line">
  <div class="pack-blind-summary-metrics pick-summary-line">
+ <div class="pick-package-count-field">
+ <span class="material-symbols-rounded">inventory_2</span>
+ <div class="conference-summary-copy"><span>NESTA SEPARACAO</span><strong id="conference-summary-packages">0</strong></div>
+ </div>
+ <div class="pick-package-count-field pick-channel-package-total">
+ <span class="material-symbols-rounded">monitoring</span>
+ <div class="conference-summary-copy"><span>TOTAL DO CANAL HOJE</span><strong id="conference-summary-channel-packages">0</strong></div>
+ </div>
   <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
- <span class="material-symbols-rounded">hub</span><span>AGRUPAMENTOS</span>
+ <span class="material-symbols-rounded">account_tree</span><span>AGRUPAMENTOS</span>
  </button>
  <button class="pack-blind-remove-btn pick-remove-scan-btn" id="conference-remove-scan-toggle" type="button" onclick="toggleConferenceRemovalMode()">
  <span class="material-symbols-rounded">remove_circle</span><span id="conference-remove-scan-label">REMOVER</span>
@@ -21638,7 +21771,6 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </button>
  </div>
  </aside>
- </section>
 
  <footer class="pick-workflow-footer"><span>ID separa\u00e7\u00e3o: <strong>${escapeKitAttribute(sessionId)}</strong></span><span>Canal em confer\u00eancia: <strong>${escapeKitAttribute(title)}</strong></span></footer>
 
@@ -21666,8 +21798,17 @@ function focusPackManualInput() {
 function renderPackDailyConsultation(sessionId) {
  const currentUser = localStorage.getItem('currentUser');
  const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === String(sessionId)) || {};
- const rows = (appData.conferencia_itens || []).filter(row => String(row.separacao_id || row.rom_id || row.codigo_separacao || '') === String(sessionId));
- const conference = (appData.conferencia || []).find(row => String(row.separacao_id || '') === String(sessionId)) || {};
+ const completedStatuses = new Set(['conferido', 'finalizada', 'finalizado', 'concluida', 'concluido']);
+ const conferences = (appData.conferencia || [])
+  .filter(row => String(row.separacao_id || '') === String(sessionId))
+  .sort((a, b) => String(b.conferido_em || b.atualizado_em || '').localeCompare(String(a.conferido_em || a.atualizado_em || '')));
+ const conference = conferences.find(row => completedStatuses.has(String(row.status || '').toLowerCase())) || conferences[0] || {};
+ const conferenceId = String(conference.conferencia_id || '');
+ const rows = (appData.conferencia_itens || []).filter(row => {
+  if (conferenceId) return String(row.conferencia_id || '') === conferenceId;
+  const belongsToSeparation = String(row.separacao_id || row.rom_id || row.codigo_separacao || '') === String(sessionId);
+  return belongsToSeparation && Number(row.qtd_conferida || 0) > 0;
+ });
  const channelName = session.canal_nome || session.canal || session.col_c || 'Canal';
  app.innerHTML = `<div class="dashboard-screen internal fade-in pack-screen module-screen"><main class="container pack-daily-consult-shell">
  <header class="pack-daily-consult-header"><button type="button" onclick="renderPackMenu()" aria-label="Voltar">${getBackButtonStandardIconHTML()}</button><div><small>CONFERENCIA FINALIZADA HOJE</small><h1>${escapeKitAttribute(getPackSeparationDisplayId(session) || sessionId)}</h1><p>${escapeKitAttribute(channelName)}</p></div><span class="material-symbols-rounded">task_alt</span></header>
@@ -21676,7 +21817,7 @@ function renderPackDailyConsultation(sessionId) {
  </main></div>`;
 }
 
-function pauseConferenceSession() {
+async function pauseConferenceSession() {
  if (currentPackSession?.id) {
  const sessions = getActivePickSessions();
  const idx = sessions.findIndex(s => String(s.id) === String(currentPackSession.id));
@@ -21684,6 +21825,7 @@ function pauseConferenceSession() {
  else sessions.unshift(currentPackSession);
  setActivePickSessions(sessions);
  }
+ await flushConferenceProgressSync();
  showToast('Operacao concluida.', 'info');
  renderPackMenu();
 }
@@ -21742,8 +21884,8 @@ function updatePackChrome() {
  const progress = expectedItems > 0 ? Math.min(100, Math.round((stats.checkedItems / expectedItems) * 100)) : 0;
  const itemsEl = document.getElementById('pack-summary-items');
  const unitsEl = document.getElementById('pack-summary-units');
- const packagesEl = document.getElementById('pack-summary-packages');
- const channelPackagesEl = document.getElementById('pack-summary-channel-packages');
+ const packagesEl = document.getElementById('conference-summary-packages');
+ const channelPackagesEl = document.getElementById('conference-summary-channel-packages');
  const progressEl = document.getElementById('pack-summary-progress');
  const ratioEl = document.getElementById('pack-summary-ratio');
  const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
@@ -21752,7 +21894,7 @@ function updatePackChrome() {
 
  if (itemsEl) itemsEl.textContent = String(stats.checkedItems);
  if (unitsEl) unitsEl.textContent = String(stats.checkedQty);
- if (packagesEl) packagesEl.textContent = String(getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {}));
+ if (packagesEl) packagesEl.textContent = String(getConferenceDisplayedPackageCount());
  if (channelPackagesEl) channelPackagesEl.textContent = String(getConferenceChannelDailyPackageTotal());
  if (progressEl) progressEl.textContent = `${progress}%`;
  if (ratioEl) ratioEl.textContent = `${stats.checkedItems} / ${expectedItems} itens`;
@@ -21812,12 +21954,13 @@ async function toggleConferenceItemSelection(index) {
  if (summary.standaloneUnits < 1) return openConferencePackagesOverview();
  let qty = 1;
  if (summary.standaloneUnits > 1) {
- const answer = await showAppPrompt({ title: 'Quantidade para agrupar', message: getPickItemTitle(row), detail: `${summary.standaloneUnits} unidade(s) avulsa(s) disponivel(is).`, label: 'Quantas unidades deseja selecionar?', defaultValue: '1', confirmLabel: 'Selecionar', cancelLabel: 'Cancelar', inputType: 'number', min: 1, max: summary.standaloneUnits, quantityStepper: true });
+ const answer = await showAppPrompt({ title: 'Agrupar itens', message: getPickItemTitle(row), detail: `Você possui ${summary.standaloneUnits} unidade(s) avulsa(s) disponível(is).`, label: 'Quantas unidades deseja agrupar?', defaultValue: '1', confirmLabel: 'Agrupar unidades', cancelLabel: 'Cancelar', inputType: 'number', min: 1, max: summary.standaloneUnits, quantityStepper: true, selectPromptOnStep: false, modalClass: 'pick-quantity-modal' });
  if (answer === null) return;
  qty = Math.floor(Number(answer));
  if (!Number.isFinite(qty) || qty < 1 || qty > summary.standaloneUnits) return showToast('Quantidade invalida.', 'warning');
  }
  conferenceKitSelection.set(key, { qty });
+ restoreScanFieldFocus('pack', 60);
  renderConferenceKitSelection();
 }
 
@@ -21828,7 +21971,7 @@ function renderConferenceKitSelection() {
  if (!bar) return;
  const selectedUnits = [...conferenceKitSelection.values()].reduce((sum, selection) => sum + Number(selection.qty || 0), 0);
  if (!selectedUnits) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
- bar.innerHTML = `<strong>${selectedUnits} UNIDADE(S) SELECIONADA(S)</strong><div>${selectedUnits >= 2 ? '<button type="button" onclick="createConferencePackage()"><span class="material-symbols-rounded">hub</span>CRIAR PACOTE</button>' : '<span>Selecione ao menos 2 unidades avulsas</span>'}<button type="button" class="pick-kit-selection-cancel" onclick="clearConferenceKitSelection()">CANCELAR</button></div>`;
+ bar.innerHTML = `<strong>${selectedUnits} UNIDADE(S) SELECIONADA(S)</strong><div>${selectedUnits >= 2 ? '<button type="button" onclick="createConferencePackage()"><span class="material-symbols-rounded">check_circle</span>FINALIZAR AGRUPAMENTO</button>' : '<span>Selecione ao menos 2 unidades avulsas</span>'}<button type="button" class="pick-kit-selection-cancel" onclick="clearConferenceKitSelection()">CANCELAR</button></div>`;
  bar.classList.remove('hidden');
 }
 
@@ -21941,7 +22084,7 @@ async function removeConferenceItem(index) {
  row.qtd_conferida = 0; row.scanned_in_conference = false; row.conference_package_assignments = [];
  updateConferenceRowDivergence(row); conferenceKitSelection.delete(getPickSelectionKey(row));
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
- persistPackSessionCache(); showToast('Produto removido da conferencia.', 'success'); restoreScanFieldFocus('pack', 80);
+ persistPackSessionCache(); showPickRemovalFeedbackToast({ ...getProductForConferenceRow(row), ...row }, totalQty); restoreScanFieldFocus('pack', 80);
 }
 function adjustConferenceRowDirect(index, delta) {
  const row = currentPackSession.conferenceRows[index];
@@ -21970,17 +22113,80 @@ function updateConferenceRowDivergence(row) {
  }
 }
 
+function getProgressDeviceId() {
+ let id = localStorage.getItem('progress_device_id');
+ if (!id) {
+  id = 'device_' + generateExecutionId();
+  localStorage.setItem('progress_device_id', id);
+ }
+ return id;
+}
+
+function createProgressOperationId(flow, sessionId, itemId) {
+ return [flow, sessionId, itemId, generateExecutionId()].join(':');
+}
+
+async function sendOrQueueProgressOperation(payload) {
+ const operation = await queueOperation('supabase_progress', payload, {
+  module: payload.flow, sessionId: payload.sessionId, itemId: payload.idInterno,
+  queueKey: 'supabase_progress:' + payload.operationId
+ });
+ if (navigator.onLine) await syncOperationOutbox('pick_pack_progress', true);
+ const pending = (await getQueuedOperations()).some(row => row.id === operation.id);
+ return { queued: pending };
+}
+
+function buildConferenceProgressOperations(session = currentPackSession) {
+ if (!session?.id) return [];
+ const usuario = localStorage.getItem('currentUser') || 'N/A';
+ const estado = JSON.parse(JSON.stringify(session));
+ return (session.conferenceRows || []).flatMap(row => {
+  const current = Math.max(0, Number(row.qtd_conferida || 0));
+  const baseline = Math.max(0, Number(row._sync_qtd_conferida || 0));
+  const delta = current - baseline;
+  if (!row?.id_interno || !delta) return [];
+  row._sync_qtd_conferida = current;
+  return [{
+   operationId: createProgressOperationId('conferencia', session.id, row.id_interno),
+   flow: 'conferencia', sessionId: session.id, idInterno: row.id_interno, delta,
+   usuario, deviceId: getProgressDeviceId(), estado,
+   item: { id_interno: row.id_interno, ean: row.ean || '', descricao: row.descricao || row.descricao_base || '',
+    qtd_separada: Number(row.qtd_separada || 0), divergencia: row.divergencia || null }
+  }];
+ });
+}
+
 function persistPackSessionCache() {
  try {
- if (!currentPackSession?.id) return;
- const sessions = getActivePickSessions();
- const idx = sessions.findIndex(s => String(s.id) === String(currentPackSession.id));
- if (idx >= 0) sessions[idx] = currentPackSession;
- else sessions.unshift(currentPackSession);
- setActivePickSessions(sessions);
- } catch (error) {
- console.warn('[PACK] nao foi possivel atualizar cache local:', error);
- }
+  if (!currentPackSession?.id) return;
+  currentPackSession.conference_progress_updated_at = new Date().toISOString();
+  const operations = buildConferenceProgressOperations();
+  const sessions = getActivePickSessions();
+  const idx = sessions.findIndex(s => String(s.id) === String(currentPackSession.id));
+  if (idx >= 0) sessions[idx] = currentPackSession; else sessions.unshift(currentPackSession);
+  setActivePickSessions(sessions);
+  scheduleConferenceProgressSync(false, operations);
+ } catch (error) { console.warn('[PACK] nao foi possivel atualizar cache local:', error); }
+}
+
+function getConferenceProgressQuantity(session) {
+ return (session?.conferenceRows || []).reduce((total, row) => total + Math.max(0, Number(row?.qtd_conferida || 0)), 0);
+}
+
+function scheduleConferenceProgressSync(immediate = false, operations = null) {
+ const next = [...conferenceProgressPendingOperations.splice(0), ...(Array.isArray(operations) ? operations : buildConferenceProgressOperations())];
+ if (!next.length) return conferenceProgressSyncPromise;
+ // Persiste na fila imediatamente; não deixa leituras aguardando somente em um timer.
+ const batch = Promise.all(next.map(sendOrQueueProgressOperation));
+ conferenceProgressSyncPromise = Promise.all([conferenceProgressSyncPromise, batch])
+  .catch(error => { conferenceProgressPendingOperations.push(...next); console.warn('[CONFERENCIA] Falha ao preservar progresso.', error); showToast('Não foi possível salvar o andamento. Mantenha esta tela aberta e tente novamente.', 'warning'); });
+ return conferenceProgressSyncPromise;
+}
+
+async function flushConferenceProgressSync() {
+ await scheduleConferenceProgressSync(true);
+ if (conferenceProgressPendingOperations.length) throw new Error('Há leituras que não puderam ser preservadas. Mantenha a operação aberta e tente novamente.');
+ if (navigator.onLine) await syncOperationOutbox('conference_flush', true);
 }
 
 /**
@@ -22046,6 +22252,8 @@ function createConferenceExtraRow(product) {
   qtd_separada: 0,
   qtd_conferida: 0,
   scanned_in_conference: false,
+  conference_extra_scan: true,
+  conference_session_id: currentPackSession?.id || '',
   divergencia: 'FALTA',
   conference_package_assignments: []
  };
@@ -22118,7 +22326,7 @@ async function addPackScan(scannedEan = null) {
   updateConferenceRowDivergence(row);
   playBeep('success');
   triggerScanFeedback('success');
-  showToast('Produto removido.', 'success');
+  showPickRemovalFeedbackToast({ ...getProductForConferenceRow(row), ...row }, 1);
   if (input) input.value = '';
   document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
   persistPackSessionCache();
@@ -22165,7 +22373,7 @@ async function addPackScan(scannedEan = null) {
   return;
  }
 
- showPickScanCenterToast({ ...row, qty: Number(row.qtd_conferida || 1) }, Number(row.qtd_conferida || 1));
+ showPickScanCenterToast({ ...getProductForConferenceRow(row), ...row, qty: Number(row.qtd_conferida || 1) }, Number(row.qtd_conferida || 1));
 
  if ((Number(row.qtd_conferida || 0) === getHighQtyThreshold()) && !row.high_qty_prompted) {
  row.high_qty_prompted = true;
@@ -22319,8 +22527,7 @@ function renderConferenceCorrection() {
  </button>
  
   <button class="btn-action" id="btn-finish-atomic"
-  style="width: 100%; justify-content: center; background: #22c55e; ${hasDivergence ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
-  ${hasDivergence ? 'disabled' : 'onclick="confirmFinishConference()"'}>
+  style="width: 100%; justify-content: center; background: #22c55e;" onclick="${hasDivergence ? 'authorizeConferenceDivergence()' : 'confirmFinishConference()'}">
  <span class="material-symbols-rounded">check_circle</span>
  FINALIZAR E DAR BAIXA
  </button>
@@ -22328,8 +22535,8 @@ function renderConferenceCorrection() {
  ${hasDivergence ? `
  <div style="text-align: center; color: #ef4444; font-size: 0.75rem; font-weight: 800; padding: 18px; background: rgba(239, 68, 68, 0.1); border-radius: 12px; border: 2px solid rgba(239, 68, 68, 0.3);">
  <span class="material-symbols-rounded" style="vertical-align: middle; font-size: 24px; margin-bottom: 8px; display: block;">lock_clock</span>
- <span style="display: block; font-size: 1rem; letter-spacing: 0.1em;">CORRECAO PENDENTE</span>
- <p style="font-weight: 500; margin-top: 4px; opacity: 0.8;">Ajuste as quantidades para baterem com o esperado.</p>
+ <span style="display: block; font-size: 1rem; letter-spacing: 0.1em;">DIVERGENCIA IDENTIFICADA</span>
+ <p style="font-weight: 500; margin-top: 4px; opacity: 0.8;">Revise os bipes ou finalize autorizando a quantidade realmente conferida.</p>
  </div>
  ` : ''}
  </div>
@@ -22394,6 +22601,8 @@ function toggleConferenceRemovalMode() {
  const label = document.getElementById('conference-remove-scan-label');
  button?.classList.toggle('is-active', conferenceRemovalModeActive);
  document.querySelector('.conference-workflow-screen')?.classList.toggle('is-removal-mode', conferenceRemovalModeActive);
+ document.getElementById('conference-removal-badge')?.classList.toggle('hidden', !conferenceRemovalModeActive);
+ document.getElementById('conference-removal-session-panel')?.classList.toggle('hidden', !conferenceRemovalModeActive);
  if (label) label.textContent = conferenceRemovalModeActive ? 'REMOVENDO' : 'REMOVER';
  showToast(conferenceRemovalModeActive ? 'Modo remover ativado. Bipe o produto que deseja remover.' : 'Modo remover desativado.', 'info');
  restoreScanFieldFocus('pack', 80);
@@ -22408,7 +22617,7 @@ function openConferencePackagesOverview() {
  modal.id = 'conference-packages-overview-modal';
  modal.className = 'pick-grouping-modal';
  modal.innerHTML = `<div class="pick-grouping-dialog pick-packages-overview" role="dialog" aria-modal="true" aria-labelledby="conference-packages-title">
- <header class="pick-grouping-head"><div><span class="material-symbols-rounded">package_2</span><div><h2 id="conference-packages-title">AGRUPAMENTOS BIPADOS</h2><p>Somente produtos que ja passaram pela conferencia.</p></div></div><button type="button" onclick="closeConferencePackagesOverview()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header>
+ <header class="pick-grouping-head"><div><span class="material-symbols-rounded">inventory_2</span><div><h2 id="conference-packages-title">AGRUPAMENTOS BIPADOS</h2><p>Somente produtos que ja passaram pela conferencia.</p></div></div><button type="button" onclick="closeConferencePackagesOverview()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header>
  <div class="pick-packages-overview-summary"><span>${packageIds.length} PACOTE(S)</span><strong>${groupedRows.length} PRODUTO(S) BIPADO(S)</strong></div>
  <div class="pick-packages-overview-list">${packageIds.length ? packageIds.map(id => {
  const entries = groupedRows.map(row => ({ row, qty: normalizeConferencePackageAssignments(row).filter(value => value === id).length })).filter(entry => entry.qty > 0);
@@ -22877,16 +23086,18 @@ async function confirmFinishConference(options = {}) {
  const currentUser = localStorage.getItem('currentUser');
  const sessionId = currentPackSession.id;
  const executionId = generateExecutionId();
+ const allowDivergence = options.allowDivergence === true;
  const conferencePackages = buildConferencePackagesSyncPayload();
  if (!conferencePackages.length) throw new Error('Nenhum pacote foi gerado pela conferencia. Confira os produtos bipados.');
- const packageSyncPayload = { sessionId, pacotes: conferencePackages, usuario: currentUser || 'N/A', executionId: `pacotes-conferencia:${sessionId}:${executionId}` };
- if (navigator.onLine) await DataClient.sincronizarPacotesSeparacaoSupabase(packageSyncPayload);
- else await queueOperation('supabase_pick_packages', packageSyncPayload, { module: 'conferencia', sessionId });
- currentPackSession.total_pacotes_montados = conferencePackages.length;
- if (currentPackSession.pickingData) currentPackSession.pickingData.total_pacotes_montados = conferencePackages.length;
+ if (!allowDivergence) {
+  const packageSyncPayload = { sessionId, pacotes: conferencePackages, usuario: currentUser || 'N/A', executionId: `pacotes-conferencia:${sessionId}:${executionId}` };
+  if (navigator.onLine) await DataClient.sincronizarPacotesSeparacaoSupabase(packageSyncPayload);
+  else await queueOperation('supabase_pick_packages', packageSyncPayload, { module: 'conferencia', sessionId });
+  currentPackSession.total_pacotes_montados = conferencePackages.length;
+  if (currentPackSession.pickingData) currentPackSession.pickingData.total_pacotes_montados = conferencePackages.length;
+ }
 
  // Formatar linhas para o backend processar movimentos atomicos
- const allowDivergence = options.allowDivergence === true;
  const rows = currentPackSession.conferenceRows.map(row => ({
  id_interno: row.id_interno,
  ean: row.ean,
@@ -22913,6 +23124,9 @@ async function confirmFinishConference(options = {}) {
  rows: rows,
  executionId
  });
+ if (!finalizationResult.queued && navigator.onLine) {
+  await DataClient.removerConferenciaAndamentoSupabase(sessionId).catch(error => console.warn('[CONFERENCIA] Finalizada; limpeza do rascunho ficou pendente.', error));
+ }
 
  await showAppModal({
  type: 'success',
@@ -23016,6 +23230,8 @@ let romaneioTrackingState = { key: '', codes: [] };
 let romaneioPackageEditState = { key: '', values: {} };
 
 function getRomaneios() {
+ const shared = window.SharedWork?.list('romaneio');
+ if (shared) return shared;
  try {
  const parsed = JSON.parse(localStorage.getItem(ROMANEIO_STORAGE_KEY) || '[]');
  return Array.isArray(parsed) ? parsed : [];
@@ -23027,7 +23243,20 @@ function getRomaneios() {
 }
 
 function saveRomaneios(romaneios) {
+ // A fila compartilhada usa IndexedDB; não duplica fotos no limite menor do localStorage.
+ if (window.SharedWork?.list('romaneio')) return;
  localStorage.setItem(ROMANEIO_STORAGE_KEY, JSON.stringify(Array.isArray(romaneios) ? romaneios : []));
+}
+
+async function persistRomaneioShared(item) {
+ await SharedWork.capture('romaneio', String(item.id), item);
+ await SharedWork.refresh(true);
+ return { queued: !!SharedWork.status()?.pending };
+}
+
+async function syncRomaneiosWithCloud() {
+ await SharedWork.refresh(true);
+ return getRomaneios();
 }
 
 function isRomaneioPickupStatus(status) {
@@ -23189,8 +23418,10 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  }
  appData.movimentacoes = Array.isArray(movements) ? movements : [];
+ await syncRomaneiosWithCloud();
+ if (selectedId && selectedId !== '__realizados__') await SharedWork.detail('romaneio', selectedId);
  } catch (error) {
- console.warn('[ROMANEIO] Falha ao atualizar separações e movimentos:', error);
+ console.warn('[ROMANEIO] Falha ao atualizar dados compartilhados:', error);
  }
 
  const availableChannels = getRomaneioAvailableChannels();
@@ -23603,10 +23834,12 @@ function closeRomaneioMonthlyMedia() {
  document.getElementById('romaneio-monthly-media-modal')?.remove();
 }
 
-function openRomaneioMonthlyMedia(id) {
- const item = getRomaneios().find(row => String(row.id) === String(id));
+async function openRomaneioMonthlyMedia(id) {
+ let item;
+ try { item = await SharedWork.detail('romaneio', String(id)); } catch (error) { showToast(error.message, 'warning'); return; }
  if (!item) return showToast('Romaneio nao encontrado.', 'warning');
  const media = [
+  item.assinatura ? { title: 'Assinatura da retirada', src: item.assinatura } : null,
   item.foto_pacote ? { title: 'Foto dos pacotes da separacao', src: item.foto_pacote } : null,
   item.foto_devolucao ? { title: 'Foto da devolucao', src: item.foto_devolucao } : null
  ].filter(Boolean);
@@ -23619,8 +23852,27 @@ function openRomaneioMonthlyMedia(id) {
  document.body.appendChild(overlay);
 }
 
+function getRomaneioHomologationMockRecords() {
+ const dates = ['15/08/2026','17/08/2026','18/08/2026','19/08/2026','20/08/2026','21/08/2026','22/08/2026','24/08/2026','25/08/2026','26/08/2026'];
+ const names = ['Carlos Mendes','Fernanda Lima','Andrews Tovar','Juliana Alves','Marcos Ribeiro','Paulo Nunes','Camila Rocha','Renato Silva','Alexandre Kawai','Rafael Costa'];
+
+ return dates.map((data, index) => {
+  const signatureSvg = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 54"><path d="M${8+index} ${35-index} C${35+index*2} ${8+index},${55+index} ${47-index},${86+index*3} ${20+index} S${126-index} ${44-index},${151+index*2} ${16+index} S${192-index} ${39-index},${226-index*2} ${13+index}" fill="none" stroke="#30275f" stroke-width="2" stroke-linecap="round"/><path d="M${48+index*3} ${40-index%3} C${83+index} ${25+index},${116-index} ${45-index},${166+index*2} ${31+index%4}" fill="none" stroke="#30275f" stroke-width="1.4"/></svg>`)}`;
+  return {
+   id: `HML-ROM-FLEX-202608-${String(index + 1).padStart(2, '0')}`,
+   tipo_retirada: 'FLEX', canal: 'FLEX', data,
+   createdAt: `2026-08-${data.slice(0,2)}T${String(11 + (index % 4)).padStart(2,'0')}:${String(8 + index * 3).padStart(2,'0')}:00`,
+   hora: `${String(11 + (index % 4)).padStart(2,'0')}:${String(8 + index * 3).padStart(2,'0')}`,
+   pacotes: [18,24,21,29,16,31,27,23,26,34][index], pacotes_nao_lidos: index % 4 === 0 ? 1 : 0,
+   responsavel: names[index], documento: `000.000.00${index + 1}-00`, quantidade_devolvida: [0,1,0,2,0,1,0,0,1,0][index],
+   assinatura: signatureSvg
+  };
+ });
+}
+
 function renderRomaneioMonthlyFlexList(records = []) {
- const flexRecords = (Array.isArray(records) ? records : []).filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX'));
+ const sourceRecords = Array.isArray(records) ? records : [];
+ const flexRecords = sourceRecords.filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX'));
  if (!romaneioMonthlyViewMonth) romaneioMonthlyViewMonth = getRomaneioMonthlyDefaultMonth(flexRecords);
  const rows = flexRecords.filter(item => getRomaneioRecordMonthKey(item) === romaneioMonthlyViewMonth)
   .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
@@ -23634,8 +23886,8 @@ function renderRomaneioMonthlyFlexList(records = []) {
  const body = rows.map(item => {
   const signature = item.assinatura
    ? '<img src="' + escapeKitAttribute(item.assinatura) + '" alt="Assinatura de ' + escapeKitAttribute(item.responsavel || 'coletor') + '">'
-   : '<span>Pendente</span>';
-  const hasMedia = Boolean(item.foto_pacote || item.foto_devolucao);
+   : item.possui_assinatura ? '<button type="button" onclick="openRomaneioMonthlyMedia(' + quotePackInlineArg(item.id) + ')">Ver assinatura</button>' : '<span>Pendente</span>';
+  const hasMedia = Boolean(item.foto_pacote || item.foto_devolucao || item.possui_fotos);
   const mediaButton = '<button class="romaneio-monthly-media-button ' + (hasMedia ? 'has-media' : 'no-media') + '" type="button" onclick="openRomaneioMonthlyMedia(' + quotePackInlineArg(item.id) + ')" title="' + (hasMedia ? 'Abrir fotos da separacao e devolucao' : 'Nenhuma foto registrada') + '" aria-label="' + (hasMedia ? 'Abrir imagens do romaneio' : 'Nenhuma imagem neste romaneio') + '"' + (hasMedia ? '' : ' disabled') + '><span class="material-symbols-rounded">' + (hasMedia ? 'add' : 'image_not_supported') + '</span></button>';
   return '<tr><td>' + escapeKitAttribute(item.data || '-') + '</td><td>' + escapeKitAttribute(item.hora || '-') + '</td><td><strong>' + formatStockNumber(item.pacotes || 0) + '</strong></td><td>' + formatStockNumber(item.pacotes_nao_lidos || 0) + '</td><td>' + escapeKitAttribute(item.responsavel || '-') + '</td><td>' + escapeKitAttribute(item.documento || '-') + '</td><td><strong>' + formatStockNumber(item.quantidade_devolvida || 0) + '</strong></td><td class="romaneio-monthly-signature">' + signature + '</td><td>' + mediaButton + '</td></tr>';
  }).join('');
@@ -23648,8 +23900,11 @@ function renderRomaneioMonthlyFlexList(records = []) {
 }
 
 
-function renderRomaneiosCompletedList(records = []) {
- if (isHomologationEnvironment()) return renderRomaneioMonthlyFlexList(records);
+function renderRomaneiosCompletedList(records = [], tableOnly = false) {
+ if (isHomologationEnvironment() && !tableOnly) {
+  const others = records.filter(item => !normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX'));
+  return renderRomaneioMonthlyFlexList(records) + (others.length ? renderRomaneiosCompletedList(others, true) : '');
+ }
  const rows = Array.isArray(records) ? records : [];
  return `
  <section class="romaneio-completed-list">
@@ -23657,7 +23912,7 @@ function renderRomaneiosCompletedList(records = []) {
  <div class="romaneio-completed-table">
  <table>
  <thead><tr><th>Data</th><th>Hora</th><th>Quantidade</th><th>Nao bipados</th><th>Nome</th><th>CPF/RG</th><th>Assinatura</th><th aria-label="Visualizar"></th></tr></thead>
- <tbody>${rows.map(item => `<tr><td>${escapeKitAttribute(item.data || '-')}</td><td>${escapeKitAttribute(item.hora || '-')}</td><td><strong>${formatStockNumber(item.pacotes || 0)}</strong></td><td>${formatStockNumber(item.pacotes_nao_lidos || 0)}</td><td>${escapeKitAttribute(item.responsavel || '-')}</td><td>${escapeKitAttribute(item.documento || '-')}</td><td><span class="romaneio-signature-status ${item.assinatura ? 'is-signed' : ''}"><span class="material-symbols-rounded">${item.assinatura ? 'draw' : 'pending'}</span>${item.assinatura ? 'Assinado' : 'Pendente'}</span></td><td><button class="romaneio-view-button" type="button" onclick="renderRomaneioScreen('',${quotePackInlineArg(item.id)})" title="Visualizar romaneio" aria-label="Visualizar romaneio"><span class="material-symbols-rounded">visibility</span></button></td></tr>`).join('') || `<tr><td class="romaneio-completed-empty" colspan="8"><span class="material-symbols-rounded">inbox</span><strong>Nenhum romaneio realizado</strong><small>Os próximos romaneios salvos aparecerão aqui.</small></td></tr>`}</tbody>
+ <tbody>${rows.map(item => `<tr><td>${escapeKitAttribute(item.data || '-')}</td><td>${escapeKitAttribute(item.hora || '-')}</td><td><strong>${formatStockNumber(item.pacotes || 0)}</strong></td><td>${formatStockNumber(item.pacotes_nao_lidos || 0)}</td><td>${escapeKitAttribute(item.responsavel || '-')}</td><td>${escapeKitAttribute(item.documento || '-')}</td><td><span class="romaneio-signature-status ${(item.assinatura || item.possui_assinatura) ? 'is-signed' : ''}"><span class="material-symbols-rounded">${(item.assinatura || item.possui_assinatura) ? 'draw' : 'pending'}</span>${(item.assinatura || item.possui_assinatura) ? 'Assinado' : 'Pendente'}</span></td><td><button class="romaneio-view-button" type="button" onclick="renderRomaneioScreen('',${quotePackInlineArg(item.id)})" title="Visualizar romaneio" aria-label="Visualizar romaneio"><span class="material-symbols-rounded">visibility</span></button></td></tr>`).join('') || `<tr><td class="romaneio-completed-empty" colspan="8"><span class="material-symbols-rounded">inbox</span><strong>Nenhum romaneio realizado</strong><small>Os próximos romaneios salvos aparecerão aqui.</small></td></tr>`}</tbody>
  </table>
  </div>
  </section>`;
@@ -23880,7 +24135,7 @@ function getRomaneioText(item) {
  return `Romaneio ${item.id}\nData: ${item.data} ${item.hora}\nCanal: ${item.canal}\nProdutos diferentes: ${item.produtos}\nQuantidade movimentada: ${formatStockNumber(item.itens || 0)}\nPacotes: ${item.pacotes}\nRastreios: ${(item.rastreios || []).join(', ') || '-'}\nSeparacoes: ${item.separacoes || 0}\nFoto do pacote: ${item.foto_pacote ? 'Anexada' : 'Nao anexada'}\nResponsavel: ${item.responsavel}\nDocumento: ${item.documento || '-'}\nE-mail: ${item.email_destino || '-'}\nObservacao: ${item.observacao || '-'}\nStatus: ${item.status}`;
 }
 
-function saveRomaneioFromForm(withdrawalType) {
+async function saveRomaneioFromForm(withdrawalType) {
  const form = document.getElementById('romaneio-form');
  if (!form) return;
  const data = new FormData(form);
@@ -23980,14 +24235,15 @@ function saveRomaneioFromForm(withdrawalType) {
  };
 
  if (isFlex) saveRomaneioCollector(responsavel, documento);
- const romaneios = getRomaneios();
+ const syncResult = await persistRomaneioShared(romaneio);
+ const romaneios = getRomaneios().filter(item => String(item.id) !== String(romaneio.id));
  romaneios.unshift(romaneio);
  saveRomaneios(romaneios);
  romaneioTrackingState = { key: '', codes: [] };
  romaneioPackageEditState = { key: '', values: {} };
  romaneioPackagePhotoState = { dataUrl: '' };
  romaneioReturnPhotoState = { dataUrl: '' };
- showToast('Romaneio salvo.');
+ showToast(syncResult?.queued ? 'Romaneio salvo neste aparelho e pendente de sincronização.' : 'Romaneio salvo e sincronizado.');
  renderRomaneioScreen('', '__realizados__');
 }
 
@@ -23996,6 +24252,7 @@ function findRomaneioById(id) {
 }
 
 function updateRomaneio(item) {
+ SharedWork.capture('romaneio', String(item.id), item).catch(() => {});
  const romaneios = getRomaneios();
  const index = romaneios.findIndex(row => row.id === item.id);
  if (index >= 0) romaneios[index] = item;
@@ -24186,7 +24443,8 @@ function getRomaneioPDFFileName(item) {
 }
 
 async function generateRomaneioPDF(id) {
- const item = findRomaneioById(id);
+ let item;
+ try { item = await SharedWork.detail('romaneio', String(id)); } catch (error) { showToast(error.message, 'warning'); return; }
  if (!item) return;
  try {
  const doc = await createRomaneioPDF(item);
@@ -24208,7 +24466,8 @@ async function shareRomaneioWhatsApp(id) {
 }
 
 async function shareRomaneioEmail(id) {
- const item = findRomaneioById(id);
+ let item;
+ try { item = await SharedWork.detail('romaneio', String(id)); } catch (error) { showToast(error.message, 'warning'); return; }
  if (!item) return;
  try {
  showToast('Preparando PDF do romaneio...', 'info');
@@ -24416,6 +24675,7 @@ function getLabelCellPosition(cfg, index) {
 }
 async function quickActionGerarEtiquetas() {
  toggleQuickActions();
+ renderQuickDestinationLoading('Gerar etiquetas', 'label-generator-screen');
  if (!appData.products || appData.products.length === 0) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in label-generator-screen">
@@ -27434,6 +27694,11 @@ async function runStartupUpdateCheck() {
  const result = await detectAppUpdate({ renderConfig: false });
  addLocalAccessEvent('verificacao_inicial_atualizacao', result.hasUpdate ? 'Atualizacao disponivel antes do login' : getUpdateStatusLabel());
  if (result.hasUpdate) {
+ const target = JSON.stringify([result.remote?.version || getStoredAvailableVersion(), result.remote?.build || getStoredAvailableBuild()]);
+ if (sessionStorage.getItem('dy_app_update_attempt') === target) {
+ showToast('A atualizacao ainda nao foi concluida. Voce pode continuar e tentar novamente em Configuracoes.', 'warning');
+ return;
+ }
  await handleDetectedAppUpdate({
  source: 'startup',
  availableVersion: result.remote?.version || getStoredAvailableVersion(),
@@ -27441,6 +27706,8 @@ async function runStartupUpdateCheck() {
  availableCommit: result.remote?.commit || getStoredAvailableCommit(),
  deployDate: result.remote?.deployDate || getStoredDeployDate()
  });
+ } else if (result.status === 'updated') {
+ sessionStorage.removeItem('dy_app_update_attempt');
  }
  } catch (error) {
  console.warn('[UPDATE] Falha na verificacao inicial:', error);
@@ -27476,31 +27743,45 @@ async function updateAppNow(options = {}) {
  if (!skipConfirm) {
  const confirmed = await showAppConfirm({
  title: 'Atualizar aplicativo',
- message: 'O app vai limpar caches locais do PWA, atualizar o service worker e recarregar a pagina sem apagar sua sessao.',
+ message: 'O app vai limpar caches locais do PWA, ativar a nova versao e recarregar a pagina sem apagar sua sessao.',
  confirmLabel: 'Atualizar agora',
  cancelLabel: 'Cancelar',
  danger: true
  });
  if (!confirmed) return;
  }
- addLocalAccessEvent('atualizacao_app', `Atualizacao solicitada: ${options.source || 'manual'}`);
+ if (sessionStorage.getItem('dy_app_update_running') === '1') return;
+ sessionStorage.setItem('dy_app_update_running', '1');
+ addLocalAccessEvent('atualizacao_app', 'Atualizacao solicitada: ' + (options.source || 'manual'));
  try {
  await deleteAppCaches();
  if ('serviceWorker' in navigator) {
- const registrations = await navigator.serviceWorker.getRegistrations();
- await Promise.all(registrations.map(async registration => {
- if (registration.waiting) registration.waiting.postMessage({ action: 'skipWaiting' });
- await registration.update().catch(() => null);
- await registration.unregister().catch(() => null);
- }));
+ const registration = await navigator.serviceWorker.getRegistration();
+ if (registration) {
+  await registration.update();
+  const waiting = registration.waiting;
+  if (waiting) {
+   await new Promise(resolve => {
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; resolve(); };
+    navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+    waiting.postMessage({ action: 'skipWaiting' });
+    setTimeout(finish, 4000);
+   });
+  }
+ }
  }
  } catch (error) {
  console.warn('[UPDATE] Falha ao atualizar agora:', error);
- } finally {
+ sessionStorage.removeItem('dy_app_update_running');
+ showToast('Não foi possível atualizar. Verifique a conexão e tente novamente. A página foi mantida aberta.', 'warning');
+ return;
+ }
+ sessionStorage.setItem('dy_app_update_attempt', JSON.stringify([getStoredAvailableVersion(), getStoredAvailableBuild()]));
  const updateUrl = new URL(window.location.href);
  updateUrl.searchParams.set('app-update', Date.now().toString());
+ updateUrl.searchParams.set('v', getStoredAvailableVersion() || Date.now().toString());
  window.location.replace(updateUrl.toString());
- }
 }
 
 async function forceSystemSync() {
@@ -28099,39 +28380,38 @@ async function changeMasterPin() {
  await promptCreateMasterPin();
 }
 
-async function updateSecurityDeviceAccess(deviceId, payload, successMessage, logAction, logDetails) {
+async function updateSecurityDeviceAccess(deviceId, action, successMessage, logAction, logDetails) {
  const client = getSecurityClient();
- if (!client) {
- showToast('Operacao concluida.', 'info');
- return false;
- }
+ if (!client) return false;
+ const pin = await showAppPrompt({
+ title: 'PIN mestre',
+ message: 'Informe o PIN mestre para confirmar esta alteração de acesso.',
+ label: 'PIN',
+ inputType: 'password',
+ confirmLabel: 'Confirmar',
+ cancelLabel: 'Cancelar'
+ });
+ if (!pin) return false;
 
  try {
- const { error } = await client
- .from('dispositivos_autorizados')
- .update(payload)
- .eq('device_id', deviceId);
- if (error) {
- logSecurityError('[SECURITY] update dispositivo', error, { deviceId });
- throw error;
- }
+ const { data, error } = await client.rpc('alterar_acesso_dispositivo', {
+ p_solicitante_device_id: getOrCreateDeviceId(),
+ p_usuario: localStorage.getItem('currentUser') || '',
+ p_device_id_alvo: deviceId,
+ p_acao: action,
+ p_pin: String(pin).trim()
+ });
+ if (error) throw error;
+ if (data !== true) throw new Error('A alteração de acesso não foi confirmada.');
  await logSecurityEvent(logAction, logDetails, deviceId);
  showToast(successMessage, 'success');
  return true;
  } catch (error) {
- await showAppAlert({
- title: 'Atencao',
- message: error.message || String(error),
- danger: true,
- icon: 'error'
- });
+ await showAppAlert({ title: 'Acesso não alterado', message: error.message || String(error), danger: true, icon: 'error' });
  return false;
  }
 }
-
 async function endSecuritySession(deviceId) {
- const allowed = await requireMasterPin('encerrar sao de dispositivo');
- if (!allowed) return;
  const confirmed = await showAppConfirm({
  title: 'Atencao',
  message: 'Revise os dados e tente novamente.',
@@ -28143,7 +28423,7 @@ async function endSecuritySession(deviceId) {
 
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- { ativo: false, bloqueado_em: getSecurityTimestamp() },
+ 'bloquear',
  'Sesao encerrada.',
  'sessao_encerrada',
  'Sesao encerrada pela tela de Seguranca.'
@@ -28157,11 +28437,9 @@ async function endSecuritySession(deviceId) {
 }
 
 async function approveSecurityRequest(deviceId) {
- const allowed = await requireMasterPin('aprovar sao de acesso');
- if (!allowed) return;
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- { ativo: true, ultimo_acesso: getSecurityTimestamp(), bloqueado_em: null },
+ 'aprovar',
  'Solicitacao aprovada.',
  'solicitacao_acesso_aprovada',
  'Solicitacao de acesso aprovada pela tela de Seguranca.'
@@ -28170,8 +28448,6 @@ async function approveSecurityRequest(deviceId) {
 }
 
 async function denySecurityRequest(deviceId) {
- const allowed = await requireMasterPin('negar sao de acesso');
- if (!allowed) return;
  const confirmed = await showAppConfirm({
  title: 'Atencao',
  message: 'Revise os dados e tente novamente.',
@@ -28182,7 +28458,7 @@ async function denySecurityRequest(deviceId) {
  if (!confirmed) return;
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- { ativo: false, bloqueado_em: getSecurityTimestamp() },
+ 'negar',
  'Solicitacao negada.',
  'solicitacao_acesso_negada',
  'Solicitacao de acesso negada pela tela de Seguranca.'
@@ -28767,6 +29043,8 @@ function normalizeMoneyInputElement(input) {
 }
 
 function getEntradaNFXMLDraft() {
+ const shared = window.SharedWork?.list('nf');
+ if (shared) return shared.find(item => item.chave_acesso === entradaNfXmlState?.chave_acesso) || shared[0] || null;
  try {
  const draft = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFT_KEY) || 'null');
  if (draft && typeof draft === 'object') return draft;
@@ -28780,6 +29058,8 @@ function getEntradaNFXMLDraft() {
 }
 
 function getEntradaNFXMLDrafts() {
+ const shared = window.SharedWork?.list('nf');
+ if (shared) return shared.sort((a,b) => new Date(b.draftSavedAt || 0) - new Date(a.draftSavedAt || 0));
  try {
  const raw = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFTS_KEY) || '[]');
  const drafts = Array.isArray(raw) ? raw : [];
@@ -28814,18 +29094,27 @@ function saveEntradaNFXMLDraft() {
  };
  const drafts = getEntradaNFXMLDrafts().filter(item => item.chave_acesso !== draft.chave_acesso);
  drafts.unshift(draft);
- setEntradaNFXMLDrafts(drafts);
- localStorage.setItem(ENTRADA_NF_XML_DRAFT_KEY, JSON.stringify(draft));
+ try {
+  setEntradaNFXMLDrafts(drafts);
+  localStorage.setItem(ENTRADA_NF_XML_DRAFT_KEY, JSON.stringify(draft));
+ } catch (error) { console.warn('[NF] Cache legado indisponível; preservando no armazenamento compartilhado.'); }
+ return SharedWork.capture('nf', String(draft.chave_acesso), draft).then(() => true).catch(() => false);
 }
 
-function clearEntradaNFXMLDraft(chaveAcesso = entradaNfXmlState?.chave_acesso) {
- const draft = getEntradaNFXMLDraft();
+async function clearEntradaNFXMLDraft(chaveAcesso = entradaNfXmlState?.chave_acesso, sharedStatus = 'importado') {
+ if (chaveAcesso) {
+  const snapshot = getEntradaNFXMLDrafts().find(item => item.chave_acesso === chaveAcesso);
+  if (snapshot) await SharedWork.capture('nf', String(chaveAcesso), snapshot, sharedStatus);
+ }
+ try {
+ const draft = JSON.parse(localStorage.getItem(ENTRADA_NF_XML_DRAFT_KEY) || 'null');
  if (chaveAcesso) {
  setEntradaNFXMLDrafts(getEntradaNFXMLDrafts().filter(item => item.chave_acesso !== chaveAcesso));
  }
  if (!draft || !chaveAcesso || draft.chave_acesso === chaveAcesso) {
  localStorage.removeItem(ENTRADA_NF_XML_DRAFT_KEY);
  }
+ } catch (error) { console.warn('[NF] Rascunho encerrado na fila compartilhada; cache legado preservado.'); }
 }
 
 function resetEntradaNFXMLLocalFlow() {
@@ -28849,7 +29138,8 @@ function hasEntradaNFXMLDraft() {
  return getEntradaNFXMLDrafts().length > 0;
 }
 
-function resumeEntradaNFXMLDraft(chaveAcesso = '') {
+async function resumeEntradaNFXMLDraft(chaveAcesso = '') {
+ await SharedWork.refresh(true);
  const draft = chaveAcesso
  ? getEntradaNFXMLDrafts().find(item => String(item.chave_acesso) === String(chaveAcesso))
  : getEntradaNFXMLDraft();
@@ -28875,13 +29165,13 @@ async function confirmDiscardEntradaNFXMLDraft(chaveAcesso = '') {
  const confirmed = await showAppConfirm({
  title: 'Excluir rascunho?',
  message: `Excluir o rascunho da NF ${draft.numero_nf || '-'}?`,
- detail: 'Isso remove somente o rascunho local antes da importacao.',
+ detail: 'O rascunho será encerrado também nos outros aparelhos após a sincronização.',
  confirmLabel: 'Excluir',
  cancelLabel: 'Cancelar',
  danger: true
  });
  if (!confirmed) return;
- clearEntradaNFXMLDraft(chaveAcesso);
+ try { await clearEntradaNFXMLDraft(chaveAcesso, 'descartado'); } catch { return; }
  renderEntradaNFRascunhosList();
 }
 
@@ -29478,6 +29768,7 @@ function refreshNFXmlWizard() {
 }
 
 function renderNFXmlWizardScreen() {
+ if (entradaNfXmlState?.chave_acesso) SharedWork.beginEdit('nf', entradaNfXmlState.chave_acesso);
  const currentUser = localStorage.getItem('currentUser');
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
@@ -29813,13 +30104,14 @@ function renderNFXmlWizardActions() {
  `;
 }
 
-function saveEntradaNFXMLDraftAndGoList() {
+async function saveEntradaNFXMLDraftAndGoList() {
  if (!entradaNfXmlState?.chave_acesso) {
  showToast('Importe o XML antes de salvar rascunho.', 'warning');
  return;
  }
- saveEntradaNFXMLDraft();
- showToast('Rascunho de NF salvo.', 'success');
+ if (!await saveEntradaNFXMLDraft()) return;
+ await SharedWork.refresh(true);
+ showToast(SharedWork.status()?.pending ? 'Rascunho preservado neste aparelho. Há envio pendente.' : 'Rascunho salvo e sincronizado.', SharedWork.status()?.pending ? 'warning' : 'success');
  entradaNfXmlState = null;
  renderEntradaNFRascunhosList();
 }
@@ -29875,7 +30167,7 @@ async function hydrateNFXmlPreviewFromSupabase() {
  state.nfExistente = nfExistente || null;
  if (state.nfExistente) {
  state.savedEntradaId = state.nfExistente.id;
- clearEntradaNFXMLDraft(state.chave_acesso);
+ await clearEntradaNFXMLDraft(state.chave_acesso);
  state.tipo_lancamento = normalizeNFXmlTipoLancamento(state.nfExistente.tipo_lancamento);
  const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
  state.afeta_estoque = tipoConfig.afetaEstoque;
@@ -30943,6 +31235,8 @@ async function salvarEntradaNFXml() {
  if (!confirmedImport) return;
 
  try {
+ if (!await saveEntradaNFXMLDraft()) throw new Error('Não foi possível preservar o rascunho.');
+ await SharedWork.ensureSynced('nf', String(state.chave_acesso));
  console.log('[ENTRADA_NF_XML] salvando entrada');
  console.log('[ENTRADA_NF_TIPO_LANCAMENTO] salvando como', state.tipo_lancamento);
  recalcularCustosReaisEntradaNFXML({ log: true });
@@ -30994,7 +31288,7 @@ async function salvarEntradaNFXml() {
  if (entradaError) throw entradaError;
 
  state.savedEntradaId = entrada.id;
- clearEntradaNFXMLDraft(state.chave_acesso);
+ await clearEntradaNFXMLDraft(state.chave_acesso);
  state.status = status;
  state.afeta_estoque = tipoConfig.afetaEstoque;
  state.afeta_financeiro = tipoConfig.afetaFinanceiro;
@@ -31466,7 +31760,8 @@ function buildEntradaNFDraftViewModel(draft = {}) {
  return { draft, progress, fornecedor, statusLabel, updatedAt, missingLinks, searchText };
 }
 
-function renderEntradaNFRascunhosList() {
+function renderEntradaNFRascunhosList(skipCloud = false) {
+ if (!skipCloud) SharedWork.refresh(true);
  const currentUser = localStorage.getItem('currentUser');
  const drafts = getEntradaNFXMLDrafts();
  const viewModels = drafts.map(buildEntradaNFDraftViewModel);
@@ -32457,6 +32752,18 @@ function getDevolucaoToday() {
  return local.toISOString().slice(0, 10);
 }
 
+function normalizeDevolucaoPedido(value) {
+ return String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+}
+
+function findDevolucaoPedidoDuplicado(pedido, editingId = null) {
+ const normalized = normalizeDevolucaoPedido(pedido);
+ if (!normalized) return null;
+ return (devolucaoHistoricoState.records || []).find(row =>
+  String(row.id || '') !== String(editingId || '')
+  && normalizeDevolucaoPedido(row.pedido) === normalized
+ ) || null;
+}
 function getDevolucaoProductBrand(product) {
  if (!product) return '';
  return String(product.marca || product.marque || product.brand || product.fabricante || product.fornecedor || product.supplier || '').trim();
@@ -32715,6 +33022,7 @@ function buildDevolucaoMarketplacePayload(pedido, dataDevolucao) {
  remetente: document.getElementById('dev-remetente')?.value.trim() || '',
  data_devolucao: dataDevolucao,
  motivo: document.getElementById('dev-motivo')?.value || 'Devolucao',
+ observacoes: document.getElementById('dev-motivo-classificado')?.value || '',
  impactou_reputacao: document.getElementById('dev-reputacao')?.value === 'true',
  reputacao_revertida: false,
  marketplace_acionado: marketplaceAcionado,
@@ -32783,11 +33091,12 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  <label class="dev-field-order"><span>N\u00ba do pedido *</span><input id="dev-pedido" type="text" placeholder="Ex.: 2000016754821096" autocomplete="off"></label>
  <label class="dev-field-sender"><span>Remetente</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">person</span><input id="dev-remetente" type="text" placeholder="Nome do cliente"></span></label>
  <label class="dev-field-date"><span>Data da devolu\u00e7\u00e3o *</span><span class="dev-date-picker-wrap"><input id="dev-data" type="date"><button type="button" class="dev-date-picker-button" onclick="event.preventDefault(); event.stopPropagation(); openDevolucaoDatePicker()" title="Abrir calend\u00e1rio" aria-label="Abrir calend\u00e1rio"><span class="material-symbols-rounded">calendar_month</span></button></span></label>
- <label class="dev-field-reason"><span>Motivo da devolu\u00e7\u00e3o *</span><select id="dev-motivo"><option>Devolu\u00e7\u00e3o</option><option>Troca</option><option>Produto n\u00e3o entregue</option><option>Produto errado</option></select></label>
+
+ <label class="dev-field-reason"><span>Motivo da devolu\u00e7\u00e3o *</span><select id="dev-motivo"><option>Devolu\u00e7\u00e3o</option><option>Troca</option><option>Insucesso na entrega</option></select></label>
  <label class="dev-field-impact"><span>Afetou reputa\u00e7\u00e3o?</span><select id="dev-reputacao"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
  <label class="dev-field-action"><span>Acionado marketplace?</span><select id="dev-marketplace-acionado"><option value="false">N\u00e3o</option><option value="true">Sim</option></select></label>
  <label class="dev-saldo-field"><span>Saldo marketplace (R$)</span><span class="dev-input-with-icon"><span class="material-symbols-rounded">paid</span><input id="dev-saldo-marketplace" type="number" inputmode="decimal" step="0.01" value="0.00" oninput="updateDevolucaoSaldoFeedback()"></span><small id="dev-saldo-feedback" class="is-zero">Saldo zerado: opera\u00e7\u00e3o neutra.</small></label>
- <label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace <em>(opcional)</em></span><span class="dev-observation-input"><span class="material-symbols-rounded">chat_bubble</span><input id="dev-marketplace-observacao" type="text" maxlength="500" placeholder="Ex.: Protocolo, resposta recebida ou pr\u00f3xima a\u00e7\u00e3o..." oninput="document.getElementById('dev-observation-count').textContent = this.value.length + '/500'"><small id="dev-observation-count">${String(editRecord?.observacao_acompanhamento || '').length}/500</small></span></label>
+ <div class="dev-marketplace-details"><label class="dev-field-marketplace-note"><span>Observa\u00e7\u00e3o do marketplace <em>(opcional)</em></span><span class="dev-observation-input"><span class="material-symbols-rounded">chat_bubble</span><input id="dev-marketplace-observacao" type="text" maxlength="500" placeholder="O que o comprador informou..." oninput="document.getElementById('dev-observation-count').textContent = this.value.length + '/500'"><small id="dev-observation-count">${String(editRecord?.observacao_acompanhamento || '').length}/500</small></span></label><label class="dev-field-reason"><span>Motivo classificado <em>(opcional)</em></span><select id="dev-motivo-classificado"><option value="">Selecione...</option><option>Defeito</option><option>Erro comprador</option><option>Arrependimento</option><option>Destinat\u00e1rio n\u00e3o encontrado</option><option>Erro do marketplace/transportadora</option><option>Erro nosso</option><option>Atraso prestador</option><option>Incompatibilidade</option><option>Legisla\u00e7\u00e3o</option><option>Avaria</option></select></label></div>
  <input id="dev-tarifa-reembolso" type="hidden" value="${Math.abs(Number(editRecord?.tarifa_devolucao_reembolsada || 0)).toFixed(2)}">
  </div></section>
  <section class="devolucao-section-card devolucao-items-section devolucao-items-unified">
@@ -32821,6 +33130,7 @@ function openDevolucaoMarketplaceModal(recordOrId = null) {
  setDevolucaoModalValue('dev-remetente', editRecord.remetente || '');
  setDevolucaoModalValue('dev-data', String(editRecord.data_devolucao || '').slice(0, 10));
  setDevolucaoModalValue('dev-motivo', editRecord.motivo || 'Devolucao');
+ setDevolucaoModalValue('dev-motivo-classificado', editRecord.observacoes || '');
  setDevolucaoModalValue('dev-reputacao', editRecord.impactou_reputacao ? 'true' : 'false');
  setDevolucaoModalValue('dev-marketplace-acionado', editRecord.marketplace_acionado ? 'true' : 'false');
  setDevolucaoModalValue('dev-saldo-marketplace', Number(editRecord.saldo_marketplace || 0).toFixed(2));
@@ -33225,7 +33535,7 @@ function renderDevolucaoDraftItems() {
  container.innerHTML = `<div class="devolucao-draft-list">${devolucaoMarketplaceState.draftItems.map((item, index) => `
  <article class="devolucao-draft-item ${item.devolveu_correto ? '' : 'is-divergent'}">
  <span class="devolucao-item-number">${index + 1}</span>
- <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p><span>ID interno: ${escapeDevolucaoHTML(item.id_interno || item.ean || '-')}</span><span>Marca: ${escapeDevolucaoHTML(item.fornecedor || 'N\u00e3o informada')}</span>${(item.cor || findDevolucaoProductForItem(item)?.cor) ? `<span>Cor: ${escapeDevolucaoHTML(item.cor || findDevolucaoProductForItem(item)?.cor)}</span>` : ''}</p></div>
+ <div class="devolucao-draft-main"><small>${escapeDevolucaoHTML(item.categoria || 'Sem categoria')}</small><strong>${escapeDevolucaoHTML(item.descricao)}</strong><p><span>ID interno: ${escapeDevolucaoHTML(item.id_interno || item.ean || '-')}</span><span>SKU: ${escapeDevolucaoHTML(item.sku || findDevolucaoProductForItem(item)?.sku_fornecedor || '-')}</span><span>Marca: ${escapeDevolucaoHTML(item.fornecedor || 'N\u00e3o informada')}</span>${(item.cor || findDevolucaoProductForItem(item)?.cor) ? `<span>Cor: ${escapeDevolucaoHTML(item.cor || findDevolucaoProductForItem(item)?.cor)}</span>` : ''}</p></div>
  <div class="dev-draft-quantity"><small>Quantidade</small><span><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', -1)" aria-label="Diminuir quantidade">−</button><strong>${item.quantidade}</strong><button type="button" onclick="changeDevolucaoDraftItemQuantity('${item.localId}', 1)" aria-label="Aumentar quantidade">+</button></span></div>
  <div class="dev-draft-correct"><small>Produto correto</small><strong class="${item.devolveu_correto ? 'dev-yes' : 'dev-no'}">${item.devolveu_correto ? 'Sim' : 'N\u00e3o'}</strong></div>
  <label class="dev-draft-toggle"><span class="dev-draft-toggle-check"><input type="checkbox" ${item.apto_venda === false ? 'checked' : ''} onchange="toggleDevolucaoDraftItemApto('${item.localId}', this.checked)"><small>Não apto</small></span><strong class="${item.apto_venda !== false ? 'dev-yes' : 'dev-no'}">${getDevolucaoItemEstoqueLabel(item)}</strong></label>
@@ -33248,6 +33558,16 @@ async function saveDevolucaoMarketplace() {
 
  const errorBox = document.getElementById('dev-save-error');
  if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+ const duplicateOrder = findDevolucaoPedidoDuplicado(pedido, devolucaoMarketplaceState.editingId);
+ if (duplicateOrder) {
+  const message = `O pedido ${pedido} j\u00e1 possui uma devolu\u00e7\u00e3o registrada.`;
+  if (errorBox) { errorBox.textContent = message; errorBox.style.display = 'block'; }
+  showToast(message, 'warning');
+  const orderInput = document.getElementById('dev-pedido');
+  orderInput?.focus();
+  orderInput?.select();
+  return;
+ }
  const secureAccess = await ensureSupabaseAuthenticatedAccess();
  if (!secureAccess) {
   if (errorBox) {
@@ -33302,6 +33622,8 @@ async function saveDevolucaoMarketplace() {
 }
 
 async function renderHistoricoDevolucoes(options = {}) {
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in movimentos-screen module-screen devolucoes-screen devolucao-history-screen">
  <header class="devolucao-app-bar ds-app-header">
@@ -33769,6 +34091,7 @@ function renderHistoricoDevolucaoList() {
  const emAnalise = periodItems.filter(item => getDevolucaoItemFinancialClass(item) === 'em_analise');
  const perdas = periodItems.filter(item => getDevolucaoItemFinancialClass(item) === 'prejuizo');
  const quantidadeResultado = items => items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+ const resultadoFinanceiroMarketplace = reembolsos + saldoMarketplaceTotal;
  const recuperadoFinanceiro = reembolsos + Math.max(0, saldoMarketplaceTotal);
  const perdaMarketplace = Math.max(0, -saldoMarketplaceTotal);
  const prejuizoLiquidoProdutos = Math.max(0, financialTotals.prejuizo + perdaMarketplace - recuperadoFinanceiro);
@@ -33794,7 +34117,7 @@ function renderHistoricoDevolucaoList() {
   <div class="devolucao-summary-row metric-green"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5c6 5 12 6 17 7v12c0 10-7 16-17 20C14 40 7 34 7 24V12c5-1 11-2 17-7Z"/><path d="m15 25 6 6 12-13"/></svg></span><div><small>Reputa\u00e7\u00e3o revertida</small><strong>${reputacaoRevertida}</strong></div></div>
  </article>
  <article class="devolucao-summary-card devolucao-summary-group">
-  <header class="metric-green"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M29 16h-7a5 5 0 0 0 0 10h4a5 5 0 0 1 0 10h-8M24 12v28"/></svg></span><div class="devolucao-summary-heading"><strong>Financeiro</strong><small>${formatCurrency(recuperadoFinanceiro)}</small></div></header>
+  <header class="metric-green"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><path d="M29 16h-7a5 5 0 0 0 0 10h4a5 5 0 0 1 0 10h-8M24 12v28"/></svg></span><div class="devolucao-summary-heading"><strong>Financeiro</strong><small>${formatCurrency(resultadoFinanceiroMarketplace)}</small></div></header>
   <div class="devolucao-summary-row ${saldoMarketplaceTotal < 0 ? 'metric-red' : saldoMarketplaceTotal > 0 ? 'metric-green' : 'metric-neutral'}"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="6" y="11" width="36" height="28" rx="5"/><path d="M6 18h36M31 25h11v9H31a4.5 4.5 0 0 1 0-9Z"/><circle cx="34" cy="29.5" r="1"/></svg></span><div><small>Saldo marketplace</small><strong>${formatSignedMarketplaceSaldo(saldoMarketplaceTotal)}</strong></div></div>
   <div class="devolucao-summary-row metric-blue"><span class="devolucao-metric-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M13 18c-4 3-6 7-6 12 0 7 6 12 14 12h8c8 0 14-5 14-12 0-6-4-11-10-13l3-8c-5-2-9 1-12 5-3-4-7-7-12-5l4 9"/><path d="M20 23h9a4 4 0 0 1 0 8h-9a4 4 0 0 0 0 8h10M25 20v22"/></svg></span><div><small>Reembolsado ML</small><strong>${formatCurrency(reembolsos)}</strong></div></div>
  </article>`;
@@ -34081,7 +34404,7 @@ renderRomaneioScreen = async function(selectedType='', selectedId='') {
 /* Fluxo final de Romaneios: escolha exclusiva entre Flex e Correios. */
 renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  const currentUser = localStorage.getItem('currentUser');
- document.body.classList.remove('menu-active');
+ renderQuickDestinationLoading(selectedId === '__realizados__' ? 'Histórico de romaneios' : 'Romaneios', 'romaneio-screen');
  const requestedChannel = parseRomaneioSelectedChannels(selectedType)
  .find(channel => ['FLEX', 'CORREIOS'].includes(normalizeOperationalLabel(channel))) || '';
  const selectedChannels = requestedChannel ? [requestedChannel] : [];
@@ -34107,6 +34430,10 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  } catch (error) {
  console.warn('[ROMANEIO] Falha ao atualizar dados:', error);
  }
+ await SharedWork.refresh(true);
+ if (selectedId && !completedListRequested && !newRomaneioRequested) {
+  try { await SharedWork.detail('romaneio', selectedId); } catch (error) { showToast(error.message, 'warning'); }
+ }
  const allRecords = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
  const records = allRecords.filter(item => {
  const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
@@ -34128,39 +34455,82 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
 
 
 /* Relatorio operacional: saidas da separacao x entradas por devolucao. */
-var saidaDevolucaoReportState={mes:'todos',canal:'todos',busca:'',rows:[],mesesMedia:0};
+var saidaDevolucaoReportState={mes:'todos',canal:'todos',categoria:'todas',ordenacao:'percentual',busca:'',rows:[],mesesMedia:0};
 function reportDateInRange(value){const month=String(value||'').slice(0,7);return month&&(saidaDevolucaoReportState.mes==='todos'||month===saidaDevolucaoReportState.mes);}
 function reportRollingMonthKeys(){const base=saidaDevolucaoReportState.mes==='todos'?new Date():new Date(saidaDevolucaoReportState.mes+'-01T12:00:00');return Array.from({length:3},(_,i)=>{const d=new Date(base.getFullYear(),base.getMonth()-i,1);return d.toISOString().slice(0,7);});}
 function reportMovementChannel(movement,sessions,devolucoes){const ref=normalizeOperationalLabel([movement.observacao,movement.execution_id,movement.movimento_id].join(' '));const devId=String(movement.execution_id||'').split(':')[1]||'';const dev=devolucoes.find(x=>String(x.id)===devId);if(dev)return dev.canal||'Devolucao';const session=sessions.find(x=>{const id=normalizeOperationalLabel(getPackSeparationSessionId(x)||x.id||'');return id&&ref.includes(id);});return session?.canal_nome||session?.canal||session?.col_c||'Nao identificado';}
-function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),rolling=new Map(),months=reportRollingMonthKeys(),rollingMonths=new Set(),productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0));if(!id||!(qty>0))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' '));const saida=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO'));const retorno=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!saida&&!retorno)return;const canal=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(canal)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const month=String(m.data_hora||m.criado_em||'').slice(0,7);if(saida&&months.includes(month)){rolling.set(id,(rolling.get(id)||0)+qty);rollingMonths.add(month);}if(!reportDateInRange(m.data_hora||m.criado_em))return;const p=productMap.get(id.toUpperCase())||{};const row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',separado:0,devolvido:0,apto:0,defeito:0,canais:new Set()};row.canais.add(canal);if(saida)row.separado+=qty;if(retorno){row.devolvido+=qty;if(normalizeOperationalLabel(m.local_destino).includes('TERREO'))row.apto+=qty;else row.defeito+=qty;}map.set(id,row);});saidaDevolucaoReportState.mesesMedia=rollingMonths.size;return [...map.values()].map(r=>({...r,canais:[...r.canais],media3:(rolling.get(r.id_interno)||0)/3,percentual:r.separado?r.devolvido/r.separado*100:null})).sort((a,b)=>(b.percentual??-1)-(a.percentual??-1)||b.devolvido-a.devolvido);}
-function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca);return saidaDevolucaoReportState.rows.filter(r=>!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor].join(' ')).includes(q));}
-function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),sep=rows.reduce((s,r)=>s+r.separado,0),dev=rows.reduce((s,r)=>s+r.devolvido,0),pct=sep?dev/sep*100:0,mesesMedia=Math.min(3,Number(saidaDevolucaoReportState.mesesMedia||0));return `<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Quantidade enviada</small><strong>${formatStockNumber(sep)}</strong></article><article><small>Quantidade devolvida</small><strong>${formatStockNumber(dev)}</strong></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Percentual de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong></article></section>${mesesMedia<3?`<section class="sd-report-history-note"><strong>Media de saida - 3 meses</strong><span>${mesesMedia} de 3 meses com historico. A coluna sera exibida ao completar tres meses.</span></section>`:''}<section class="sd-report-table-card"><header><div><h2>Produtos no periodo</h2><small>Percentual = quantidade devolvida / quantidade enviada</small></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th><th>Enviado</th><th>Devolvido</th>${mesesMedia>=3?'<th>Media saida 3 meses</th>':''}<th>Percentual</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="sd-product-cell"><strong>${escapeKitAttribute(r.descricao)}</strong><span>ID: ${escapeKitAttribute(r.id_interno)}</span><small><b>Marca:</b> ${escapeKitAttribute(r.marca||'-')} <i></i> <b>SKU:</b> ${escapeKitAttribute(r.sku||'-')} <i></i> <b>Cor:</b> ${escapeKitAttribute(r.cor||'-')}</small></td><td>${formatStockNumber(r.separado)}</td><td>${formatStockNumber(r.devolvido)}</td>${mesesMedia>=3?`<td>${formatStockNumber(r.media3)}</td>`:''}<td><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'Sem saida':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td></tr>`).join('')||`<tr><td colspan="${mesesMedia>=3?5:4}" class="sd-empty">Nenhum movimento encontrado no periodo.</td></tr>`}</tbody></table></div></section>`;}
-async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>`;try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase()]);const sep=await DataClient.loadModule('separacao',true);const products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[];saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);const monthOptions=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(Boolean))].sort().reverse();const channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. SAIDAS X DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Mes de referencia</small><select onchange="saidaDevolucaoReportState.mes=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os meses</option>${monthOptions.map(m=>`<option value="${m}" ${saidaDevolucaoReportState.mes===m?'selected':''}>${new Date(m+'-01T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</option>`).join('')}</select></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;renderSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos do periodo. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo" title="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
+function buildSaidaDevolucaoRowsLegacy(movements,products,sessions,devolucoes){const map=new Map(),rolling=new Map(),months=reportRollingMonthKeys(),rollingMonths=new Set(),productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0));if(!id||!(qty>0))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' '));const saida=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO'));const retorno=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!saida&&!retorno)return;const canal=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(canal)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const month=String(m.data_hora||m.criado_em||'').slice(0,7);if(saida&&months.includes(month)){rolling.set(id,(rolling.get(id)||0)+qty);rollingMonths.add(month);}if(!reportDateInRange(m.data_hora||m.criado_em))return;const p=productMap.get(id.toUpperCase())||{};const row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',separado:0,devolvido:0,apto:0,defeito:0,canais:new Set()};row.canais.add(canal);if(saida)row.separado+=qty;if(retorno){row.devolvido+=qty;if(normalizeOperationalLabel(m.local_destino).includes('TERREO'))row.apto+=qty;else row.defeito+=qty;}map.set(id,row);});saidaDevolucaoReportState.mesesMedia=rollingMonths.size;return [...map.values()].map(r=>({...r,canais:[...r.canais],media3:(rolling.get(r.id_interno)||0)/3,percentual:r.separado?r.devolvido/r.separado*100:null}));}
+/* Visao comparativa mensal do Rel. Vendas / Devolucoes. */
+function sdMonthLabel(month,long=false){const date=new Date(month+'-01T12:00:00');return date.toLocaleDateString('pt-BR',long?{month:'long',year:'numeric'}:{month:'short',year:'2-digit'}).replace('.','');}
+function sdPeriodCount(period){return {mes:1,bimestre:2,trimestre:3,'6meses':6,'9meses':9,'12meses':12}[period]||0;}
+function setSaidaDevolucaoPeriod(period){saidaDevolucaoReportState.periodo=period;const count=sdPeriodCount(period);if(count)saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,count).sort();refreshSaidaDevolucaoReport();}
+function addSaidaDevolucaoMonth(month){if(!month)return;saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=[...new Set([...saidaDevolucaoReportState.meses,month])].sort();refreshSaidaDevolucaoReport();}
+function removeSaidaDevolucaoMonth(month){saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=saidaDevolucaoReportState.meses.filter(item=>item!==month);refreshSaidaDevolucaoReport();}
+function getSaidaDevolucaoDemoMonths(){const now=new Date();return Array.from({length:12},(_,index)=>{const date=new Date(now.getFullYear(),now.getMonth()-index,1);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;});}
+function buildSaidaDevolucaoDemoRows(){const months=saidaDevolucaoReportState.meses||[],allMonths=[...(saidaDevolucaoReportState.demoMonths||[])].sort(),products=(saidaDevolucaoReportState.products||[]).filter(product=>String(product.id_interno||product.col_A||product.col_a||'').trim()).slice(0,12),patterns=['up','down','stable','wave','zeros'];return products.map((product,index)=>{const id=String(product.id_interno||product.col_A||product.col_a).trim(),pattern=patterns[index%patterns.length],base=16+(index*7)%34,fullSales=allMonths.map((month,monthIndex)=>{let value=base;if(pattern==='up')value=base+monthIndex*4;if(pattern==='down')value=base+(11-monthIndex)*4;if(pattern==='stable')value=base+[0,1,-1,0,2,-1,1,0,-2,1,0,1][monthIndex];if(pattern==='wave')value=base+[2,15,-5,12,-2,18,-7,9,1,16,-4,11][monthIndex];if(pattern==='zeros')value=monthIndex%4===1?0:base+[3,-2,6,0,-4,8,1,-1,5,0,7,-3][monthIndex];return Math.max(0,Math.round(value));}),fullReturns=fullSales.map((sales,monthIndex)=>sales?Math.max(0,Math.round(sales*(0.015+((index+monthIndex)%5)*0.009))):0),sales=months.map(month=>fullSales[allMonths.indexOf(month)]||0),returns=months.map(month=>fullReturns[allMonths.indexOf(month)]||0),totalSales=sales.reduce((sum,value)=>sum+value,0),totalReturns=returns.reduce((sum,value)=>sum+value,0);return {id_interno:id,descricao:product.descricao_completa||product.descricao_base||product.descricao||product.nome||product.col_B||`Produto ${id}`,marca:product.marca||product.fabricante||'',sku:product.sku_fornecedor||product.sku||'',cor:product.cor||'',categoria:product.categoria||'Sem categoria',sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function toggleSaidaDevolucaoDemo(enabled){saidaDevolucaoReportState.demo=Boolean(enabled);saidaDevolucaoReportState.periodo='trimestre';saidaDevolucaoReportState.mesesDisponiveis=enabled?saidaDevolucaoReportState.demoMonths:saidaDevolucaoReportState.realMonths;saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,3).sort();saidaDevolucaoReportState.categoria='todas';refreshSaidaDevolucaoReport();const toggle=document.querySelector('.sd-demo-toggle input');if(toggle)toggle.checked=Boolean(enabled);const categoryLabel=[...document.querySelectorAll('.sd-report-filters label')].find(label=>label.querySelector('small')?.textContent==='Categoria');if(categoryLabel?.querySelector('select'))categoryLabel.querySelector('select').value='todas';document.querySelector('.sd-report-screen')?.classList.toggle('is-demo',Boolean(enabled));}
+function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=saidaDevolucaoReportState.demo?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=(saidaDevolucaoReportState.demo?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
+function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">x</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></section>`;}
+function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
+function renderSdSparkline(values,label){const w=184,h=34,p=5,max=Math.max(...values,1),min=Math.min(...values,0),range=max-min||1,x=i=>p+i*(w-p*2)/Math.max(values.length-1,1),y=v=>h-p-(v-min)/range*(h-p*2),first=Number(values[0]||0),last=Number(values[values.length-1]||0),average=values.length?values.reduce((sum,value)=>sum+Number(value||0),0)/values.length:0,tolerance=Math.max(1,average*.08),delta=last-first,trend=Math.abs(delta)<=tolerance?'stable':delta>0?'up':'down',title=saidaDevolucaoReportState.meses.map((m,i)=>`${sdMonthLabel(m)}: ${formatStockNumber(values[i]||0)}`).join(' - ');return `<svg class="sd-sparkline trend-${trend}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(title)}</title><polyline points="${values.map((v,i)=>`${x(i)},${y(v)}`).join(' ')}"/>${values.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="2"><title>${escapeKitAttribute(sdMonthLabel(saidaDevolucaoReportState.meses[i],true))}: ${formatStockNumber(v)}</title></circle>`).join('')}</svg>`;}
+function renderSdProductCell(row){return `<td class="sd-product-cell"><strong><b>${escapeKitAttribute(row.id_interno)}</b><i>-</i>${escapeKitAttribute(row.descricao)}</strong><small>${escapeKitAttribute(row.categoria||'Sem categoria')}</small></td>`;}
+function renderSdComparativeTable(rows){const months=saidaDevolucaoReportState.meses||[];return `<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Vendas, devolucoes e taxa por produto em uma unica linha</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table"><thead><tr><th rowspan="2">Produto</th>${months.map(month=>`<th colspan="3" class="sd-comparative-month"><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th rowspan="2">Total<br>Vendas</th><th rowspan="2">Total<br>Devolvido</th><th rowspan="2">Taxa<br>Geral</th><th rowspan="2">Tendencia</th></tr><tr>${months.map(()=>'<th>Vendas</th><th>Dev.</th><th>Taxa</th>').join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${months.map((month,index)=>{const sales=row.sales[index]||0,returns=row.returns[index]||0,rate=sales?returns/sales*100:null;return `<td>${formatStockNumber(sales)}</td><td>${formatStockNumber(returns)}</td><td><span class="sd-month-rate">${rate===null?'-':rate.toFixed(1).replace('.',',')+'%'}</span></td>`;}).join('')}<td><strong>${formatStockNumber(row.totalSales)}</strong></td><td><strong>${formatStockNumber(row.totalReturns)}</strong></td><td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td><td>${renderSdSparkline(row.sales,`Tendencia de vendas de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSdComparisonTable(rows,type){const months=saidaDevolucaoReportState.meses,isSales=type==='sales',title=isSales?'Vendas / Saidas':'Devolucoes',key=isSales?'sales':'returns',total=isSales?'totalSales':'totalReturns',average=isSales?'averageSales':'averageReturns',extra=isSales?'':'<th>Taxa</th>';return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">${isSales?'trending_up':'assignment_return'}</span><div><h2>${title}</h2><small>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'} - valores por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>${months.map(month=>`<th><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th>Total</th><th>Media</th>${extra}<th>Tendencia</th></tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${row[key].map(value=>`<td>${formatStockNumber(value)}</td>`).join('')}<td><strong>${formatStockNumber(row[total])}</strong></td><td>${formatStockNumber(row[average])}</td>${isSales?'':`<td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td>`}<td>${renderSdSparkline(row[key],`Tendencia de ${title.toLowerCase()} de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length+(isSales?4:5)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses,totalSales=rows.reduce((s,r)=>s+r.totalSales,0),totalReturns=rows.reduce((s,r)=>s+r.totalReturns,0),averageSales=months.length?totalSales/months.length:0,averageReturns=months.length?totalReturns/months.length:0,pct=totalSales?totalReturns/totalSales*100:0,tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTable(rows,'returns');return `${renderSaidaDevolucaoPeriodControls()}<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>${formatStockNumber(totalSales)}</strong><span>Media mensal: ${formatStockNumber(averageSales)}</span></article><article><small>Total devolvido</small><strong>${formatStockNumber(totalReturns)}</strong><span>Media mensal: ${formatStockNumber(averageReturns)}</span></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Taxa de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong><span>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</span></article></section><section class="sd-report-history-note ready"><strong>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</strong><span>Media mensal: ${formatStockNumber(averageSales)} - Total vendido: ${formatStockNumber(totalSales)} - Total devolvido: ${formatStockNumber(totalReturns)}</span></section>${tables}`;}
+async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML='<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>';try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes,sep]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase(),DataClient.loadModule('separacao',true)]),products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[],available=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse(),channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();Object.assign(saidaDevolucaoReportState,{periodo:saidaDevolucaoReportState.periodo||'trimestre',mesesDisponiveis:available,movements,products,sessions,devolucoes});if(!['venda_desc','venda_asc','devolucao_desc','percentual_desc','crescimento_desc','queda_desc'].includes(saidaDevolucaoReportState.ordenacao))saidaDevolucaoReportState.ordenacao='venda_desc';if(!Array.isArray(saidaDevolucaoReportState.meses)||!saidaDevolucaoReportState.meses.length)saidaDevolucaoReportState.meses=available.slice(0,3).sort();saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. VENDAS / DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;refreshSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos dos meses visiveis. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
 function getSaidaDevolucaoScrollContainer(){const shell=document.querySelector('.sd-report-shell');if(shell&&shell.scrollHeight>shell.clientHeight+8)return shell;return window;}
-function initializeSaidaDevolucaoScrollTop(){const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
+function initializeSaidaDevolucaoReportControls(){
+ const filters=document.querySelector('.sd-report-filters');
+ if(!filters||filters.querySelector('[data-sd-extra-filter]'))return;
+ saidaDevolucaoReportState.demo=false;
+ saidaDevolucaoReportState.viewMode=saidaDevolucaoReportState.viewMode||'separate';
+ saidaDevolucaoReportState.realMonths=[...(saidaDevolucaoReportState.mesesDisponiveis||[])];
+ saidaDevolucaoReportState.demoMonths=getSaidaDevolucaoDemoMonths();
+ const title=document.querySelector('.sd-report-screen .top-bar-label h1');
+ if(title)title.textContent='Rel. Vendas / Devoluções';
+ const createFilter=(labelText,value,options,onChange)=>{
+  const label=document.createElement('label');label.dataset.sdExtraFilter='true';
+  const caption=document.createElement('small');caption.textContent=labelText;
+  const select=document.createElement('select');
+  options.forEach(option=>select.add(new Option(option.label,option.value)));
+  select.value=value;select.addEventListener('change',()=>{onChange(select.value);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();});
+  label.append(caption,select);return label;
+ };
+ const categories=[...new Set(saidaDevolucaoReportState.rows.map(row=>String(row.categoria||'Sem categoria').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+ if(saidaDevolucaoReportState.categoria!=='todas'&&!categories.some(category=>normalizeOperationalLabel(category)===normalizeOperationalLabel(saidaDevolucaoReportState.categoria)))saidaDevolucaoReportState.categoria='todas';
+ const demoLabel=document.createElement('label');demoLabel.className='sd-demo-toggle';demoLabel.dataset.sdExtraFilter='true';demoLabel.innerHTML='<small>Visualizacao</small><span><input type="checkbox" onchange="toggleSaidaDevolucaoDemo(this.checked)"><i></i><b>Dados de demonstracao</b></span>';
+ filters.append(
+  createFilter('Modo',saidaDevolucaoReportState.viewMode,[{value:'separate',label:'Separado'},{value:'comparative',label:'Comparativo'}],value=>{saidaDevolucaoReportState.viewMode=value;}),
+  demoLabel,
+  createFilter('Categoria',saidaDevolucaoReportState.categoria,[{value:'todas',label:'Todas as categorias'},...categories.map(category=>({value:category,label:category}))],value=>{saidaDevolucaoReportState.categoria=value;}),
+  createFilter('Ordenar por',saidaDevolucaoReportState.ordenacao,[{value:'venda_desc',label:'Maior venda'},{value:'venda_asc',label:'Menor venda'},{value:'devolucao_desc',label:'Maior devolucao'},{value:'percentual_desc',label:'Maior percentual de devolucao'},{value:'crescimento_desc',label:'Maior crescimento'},{value:'queda_desc',label:'Maior queda'}],value=>{saidaDevolucaoReportState.ordenacao=value;})
+ );
+}
+function initializeSaidaDevolucaoScrollTop(){initializeSaidaDevolucaoReportControls();const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
 function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
 function filterSaidaDevolucaoReport(value){saidaDevolucaoReportState.busca=value;const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();document.querySelector('.sd-report-filters .search input')?.focus();}
 function getSaidaDevolucaoExportData() {
  const rows = getSaidaDevolucaoFilteredRows();
- const mostrarMedia = Number(saidaDevolucaoReportState.mesesMedia || 0) >= 3;
- const header = ['ID interno', 'Nome do produto', 'Marca', 'SKU', 'Cor', 'Enviado', 'Devolvido', ...(mostrarMedia ? ['Media saida 3 meses'] : []), 'Percentual'];
+ const months = saidaDevolucaoReportState.meses || [];
+ const header = ['ID interno', 'Nome do produto', 'Categoria', 'Marca', 'SKU', 'Cor', ...months.map(month=>`Vendas ${sdMonthLabel(month)}`), 'Total vendido', 'Media vendas', ...months.map(month=>`Devolucoes ${sdMonthLabel(month)}`), 'Total devolvido', 'Media devolucoes', 'Percentual'];
  const data = rows.map(row => [
   row.id_interno,
   row.descricao,
+  row.categoria,
   row.marca,
   row.sku,
   row.cor,
-  Number(row.separado || 0),
-  Number(row.devolvido || 0),
-  ...(mostrarMedia ? [Number(row.media3 || 0)] : []),
+  ...row.sales.map(Number), Number(row.totalSales || 0), Number(row.averageSales || 0),
+  ...row.returns.map(Number), Number(row.totalReturns || 0), Number(row.averageReturns || 0),
   row.percentual === null ? null : Number(row.percentual) / 100
  ]);
- return { header, data, mostrarMedia };
+ return { header, data, mostrarMedia: true };
 }
 
 function getSaidaDevolucaoExportFilename(extension) {
- const periodo = saidaDevolucaoReportState.mes === 'todos' ? 'todos-periodos' : saidaDevolucaoReportState.mes;
- return `saidas-devolucoes-${periodo}.${extension}`;
+ const periodo = (saidaDevolucaoReportState.meses || []).join('_') || 'sem-meses';
+ return `vendas-devolucoes-${periodo}.${extension}`;
 }
 
 function closeSaidaDevolucaoExportMenu() {
@@ -34207,14 +34577,11 @@ function exportSaidaDevolucaoXLSX() {
  const workbook = XLSX.utils.book_new();
  const lastColumn = XLSX.utils.encode_col(header.length - 1);
  worksheet['!autofilter'] = { ref: `A1:${lastColumn}${data.length + 1}` };
- worksheet['!cols'] = [
-  { wch: 16 }, { wch: 48 }, { wch: 20 }, { wch: 20 }, { wch: 16 },
-  { wch: 12 }, { wch: 12 }, ...(mostrarMedia ? [{ wch: 20 }] : []), { wch: 14 }
- ];
+ worksheet['!cols'] = header.map((_,index)=>({wch:index===1?48:index<6?18:16}));
  worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
  const firstDataRow = 2;
  const lastDataRow = data.length + 1;
- const numericStartColumn = 5;
+ const numericStartColumn = 6;
  const percentColumn = header.length - 1;
  for (let row = firstDataRow; row <= lastDataRow; row += 1) {
   for (let column = numericStartColumn; column < percentColumn; column += 1) {
@@ -34224,7 +34591,7 @@ function exportSaidaDevolucaoXLSX() {
   const percentCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: percentColumn })];
   if (percentCell) percentCell.z = '0.00%';
  }
- XLSX.utils.book_append_sheet(workbook, worksheet, 'Saidas x Devolucoes');
+ XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendas e Devolucoes');
  XLSX.writeFile(workbook, getSaidaDevolucaoExportFilename('xlsx'), { compression: true });
 }
 
@@ -34340,6 +34707,8 @@ function applyFinalizedSeparationFilters() {
 }
 
 async function renderFinalizedSeparationsScreen(scope = 'today') {
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
  const currentUser = localStorage.getItem('currentUser');
  document.body.classList.remove('menu-active');
  app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}<main class="container"><div class="finalized-separation-loading">Carregando separações...</div></main></div>`;
@@ -34515,4 +34884,140 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO' && String(row.status).toUpperCase()!=='CANCELADO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO' && String(row.status).toUpperCase()!=='CANCELADO').length;
  const cancelledProducts = cancelledByProduct.size;
  app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header tone-${view.channel.tone}"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')" aria-label="Voltar para separações finalizadas"><span class="material-symbols-rounded">arrow_back</span></button><div class="finalized-detail-title"><h1>SEPARAÇÃO <i>•</i> ${escapeKitAttribute(view.channel.label)}</h1><p>${escapeKitAttribute(view.sessionId)} <i>•</i> ${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} <i>•</i> Modo ${view.mode}</p></div><div class="finalized-detail-state"><span class="material-symbols-rounded">task_alt</span><strong>FINALIZADA</strong><small>Somente leitura</small></div></header><section class="finalized-detail-summary" aria-label="Resumo da separação"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span class="material-symbols-rounded">person</span><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span class="finalized-detail-conference">Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><div><small>HISTÓRICO DA OPERAÇÃO</small><h2>PRODUTOS SEPARADOS</h2></div><span><span class="material-symbols-rounded">visibility</span> CONSULTA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><span class="finalized-product-check material-symbols-rounded">check_circle</span><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
+ document.querySelector('.finalized-detail-state')?.insertAdjacentHTML('beforebegin', `<button class="finalized-grouping-edit" type="button" onclick="openFinalizedGroupingCorrection(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})"><span class="material-symbols-rounded">inventory_2</span>EDITAR AGRUPAMENTO</button>`);
 }
+
+let finalizedGroupingCorrectionState = null;
+
+function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
+ const units = [];
+ getSeparationItemsForSession(session).forEach(item => {
+  const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
+  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? 0) || 0);
+  for (let index = 0; index < quantity; index++) units.push({ key: `${productId}:${index + 1}`, id_interno: productId, descricao: getPickItemTitle(item), ean: item.ean || '', ordinal: index + 1, pacote_id: null, selected: false });
+ });
+ packages.filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO').forEach(pkg => {
+  (pkg.itens || []).forEach(pkgItem => {
+   let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
+   units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
+    if (remaining <= 0) return;
+    if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
+    remaining--;
+   });
+  });
+ });
+ return units;
+}
+
+async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today') {
+ if (!navigator.onLine) return showToast('A correção de agrupamento exige conexão com o Supabase.', 'warning');
+ const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
+ if (!pin) return;
+ if (!/^\d{4}$/.test(String(pin))) return showToast('O PIN deve ter exatamente 4 dígitos.', 'warning');
+ try {
+  const deviceId = getOrCreateDeviceId();
+  const auth = await DataClient.autorizarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId, pin, operador: localStorage.getItem('currentUser') || 'N/A', deviceId });
+  if (!auth?.ok) return showToast(auth?.motivo === 'TENTATIVAS_EXCEDIDAS' ? 'Muitas tentativas. Aguarde 15 minutos.' : 'PIN incorreto.', 'error');
+  const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
+  if (!session) throw new Error('Separação não encontrada na tela atual.');
+  const packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
+  finalizedGroupingCorrectionState = { sessionId, returnScope, token: auth.token, deviceId, expiraEm: auth.expira_em, units: buildFinalizedGroupingCorrectionUnits(session, packages) };
+  renderFinalizedGroupingCorrectionModal();
+ } catch (error) { showToast(error.message || 'Não foi possível autorizar a correção.', 'error'); }
+}
+
+function closeFinalizedGroupingCorrection() {
+ finalizedGroupingCorrectionState = null;
+ document.getElementById('finalized-grouping-correction-modal')?.remove();
+}
+
+function toggleFinalizedGroupingUnit(key) {
+ const unit = finalizedGroupingCorrectionState?.units.find(row => row.key === key);
+ if (unit) unit.selected = !unit.selected;
+ renderFinalizedGroupingCorrectionModal();
+}
+
+function groupSelectedFinalizedUnits() {
+ const selected = (finalizedGroupingCorrectionState?.units || []).filter(unit => unit.selected);
+ if (selected.length < 2) return showToast('Selecione pelo menos 2 unidades para agrupar.', 'warning');
+ const packageId = `CORR-PKG-${crypto?.randomUUID ? crypto.randomUUID() : Date.now()}`;
+ selected.forEach(unit => { unit.pacote_id = packageId; unit.selected = false; });
+ renderFinalizedGroupingCorrectionModal();
+}
+
+function ungroupFinalizedPackage(packageId) {
+ (finalizedGroupingCorrectionState?.units || []).forEach(unit => { if (unit.pacote_id === packageId) unit.pacote_id = null; });
+ renderFinalizedGroupingCorrectionModal();
+}
+
+function buildFinalizedGroupingCorrectionPayload() {
+ const state = finalizedGroupingCorrectionState;
+ const packages = new Map();
+ (state?.units || []).forEach((unit, index) => {
+  const packageId = unit.pacote_id || `CORR-AVL-${String(index + 1).padStart(4, '0')}-${String(state.token).slice(0, 8)}`;
+  if (!packages.has(packageId)) packages.set(packageId, { pacote_id: packageId, tipo: unit.pacote_id ? 'AGRUPADO' : 'AVULSO', itens: new Map() });
+  const row = packages.get(packageId);
+  row.itens.set(unit.id_interno, (row.itens.get(unit.id_interno) || 0) + 1);
+ });
+ return [...packages.values()].map(row => ({ pacote_id: row.pacote_id, tipo: row.tipo, itens: [...row.itens].map(([id_interno, quantidade]) => ({ id_interno, quantidade })) }));
+}
+
+function renderFinalizedGroupingCorrectionModal() {
+ const state = finalizedGroupingCorrectionState;
+ if (!state) return;
+ document.getElementById('finalized-grouping-correction-modal')?.remove();
+ const groupedIds = [...new Set(state.units.map(unit => unit.pacote_id).filter(Boolean))];
+ const modal = document.createElement('div');
+ modal.id = 'finalized-grouping-correction-modal';
+ modal.className = 'finalized-grouping-correction-modal';
+ modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title"><header><div><small>CORREÇÃO PÓS-FINALIZAÇÃO</small><h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2><p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p></div><button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="finalized-grouping-lock"><span class="material-symbols-rounded">lock</span><span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span></div><div class="finalized-grouping-units">${state.units.map(unit=>`<button type="button" class="${unit.selected?'is-selected':''}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})"><span class="material-symbols-rounded">${unit.selected?'check_box':'check_box_outline_blank'}</span><div><strong>${escapeKitAttribute(unit.descricao)}</strong><small>ID ${escapeKitAttribute(unit.id_interno)} · unidade ${unit.ordinal}</small></div><em>${unit.pacote_id?'AGRUPADO':'AVULSO'}</em></button>`).join('')}</div><div class="finalized-grouping-actions"><button type="button" onclick="groupSelectedFinalizedUnits()"><span class="material-symbols-rounded">inventory_2</span>AGRUPAR SELECIONADAS</button></div>${groupedIds.length?`<div class="finalized-grouping-current"><h3>AGRUPAMENTOS ATUAIS</h3>${groupedIds.map((id,index)=>{const members=state.units.filter(unit=>unit.pacote_id===id);return `<article><div><strong>Pacote agrupado ${index+1}</strong><small>${members.length} unidade(s) · ${[...new Set(members.map(unit=>unit.descricao))].map(escapeKitAttribute).join(', ')}</small></div><button type="button" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">DESFAZER</button></article>`;}).join('')}</div>`:''}<footer><button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button><button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button></footer></section>`;
+ document.body.appendChild(modal);
+}
+
+async function saveFinalizedGroupingCorrection() {
+ const state = finalizedGroupingCorrectionState;
+ if (!state) return;
+ const packages = buildFinalizedGroupingCorrectionPayload();
+ const confirmed = await showAppConfirm({ title: 'Salvar novo agrupamento?', message: `${packages.length} pacote(s) serão registrados.`, detail: 'Produtos, quantidades, estoque e movimentos permanecerão inalterados.', confirmLabel: 'Salvar correção', cancelLabel: 'Voltar' });
+ if (!confirmed) return;
+ try {
+  await DataClient.salvarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId: state.sessionId, token: state.token, pacotes: packages, operador: localStorage.getItem('currentUser') || 'N/A', deviceId: state.deviceId });
+  const sessionId = state.sessionId, returnScope = state.returnScope;
+  closeFinalizedGroupingCorrection();
+  const fresh = await DataClient.loadModule('separacao', true);
+  if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; }
+  showToast('Agrupamento corrigido e autorização encerrada.', 'success');
+  await renderFinalizedSeparationDetails(sessionId, returnScope);
+ } catch (error) { showToast(error.message || 'Não foi possível salvar a correção.', 'error'); }
+}
+
+/* Rel. Vendas / Devolucoes: contas multiplas e disponibilidade financeira real. */
+function sdGetAvailableAccounts(){return [...new Set([...(saidaDevolucaoReportState.sessions||[]).map(s=>s.canal_nome||s.canal||s.col_c),...(saidaDevolucaoReportState.devolucoes||[]).map(d=>d.conta||d.canal)].map(value=>String(value||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function buildSaidaDevolucaoRowsWithAccounts(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],selected=saidaDevolucaoReportState.contasSelecionadas,selectedKeys=Array.isArray(selected)?selected.map(normalizeOperationalLabel):null,productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(selectedKeys)&&(!selectedKeys.length||!selectedKeys.includes(normalizeOperationalLabel(account))))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,accounts:[...row.accounts],sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function renderSdAccountsFilter(){const accounts=saidaDevolucaoReportState.contasDisponiveis||[],selected=saidaDevolucaoReportState.contasSelecionadas,isAll=!Array.isArray(selected),summary=isAll?'Todas as contas':selected.length?`${selected.length} conta${selected.length===1?'':'s'} selecionada${selected.length===1?'':'s'}`:'Nenhuma conta';return `<details class="sd-account-filter" data-sd-extra-filter><summary><small>Contas</small><strong>${summary}</strong><span class="material-symbols-rounded">expand_more</span></summary><div class="sd-account-menu"><header><button type="button" onclick="sdSelectAllAccounts()">Todas</button><button type="button" onclick="sdClearAccounts()">Limpar selecao</button></header><div>${accounts.map(account=>{const checked=isAll||selected.includes(account);return `<label><input type="checkbox" ${checked?'checked':''} onchange="sdToggleAccount('${escapeKitAttribute(account)}',this.checked)"><span>${escapeKitAttribute(account)}</span></label>`}).join('')||'<p>Nenhuma conta encontrada nos dados atuais.</p>'}</div></div></details>`}
+function sdRefreshAccountFilter(){const current=document.querySelector('.sd-account-filter');if(current)current.outerHTML=renderSdAccountsFilter();refreshSaidaDevolucaoReport()}
+function sdSelectAllAccounts(){saidaDevolucaoReportState.contasSelecionadas=null;sdRefreshAccountFilter()}
+function sdClearAccounts(){saidaDevolucaoReportState.contasSelecionadas=[];sdRefreshAccountFilter()}
+function sdToggleAccount(account,checked){const available=saidaDevolucaoReportState.contasDisponiveis||[];let selected=Array.isArray(saidaDevolucaoReportState.contasSelecionadas)?[...saidaDevolucaoReportState.contasSelecionadas]:[...available];selected=checked?[...new Set([...selected,account])]:selected.filter(item=>item!==account);saidaDevolucaoReportState.contasSelecionadas=selected.length===available.length?null:selected;sdRefreshAccountFilter()}
+function renderSdFinanceModeFilter(){return `<div class="sd-finance-filter" data-sd-extra-filter><small>Devolucoes</small><div role="group" aria-label="Visualizacao financeira"><button type="button" class="active" aria-pressed="true">%</button><button type="button" disabled title="Valor real de venda nao esta disponivel nos dados deste relatorio">Valor</button><button type="button" disabled title="Valor real de venda nao esta disponivel nos dados deste relatorio">% + Valor</button></div><em>Valor real por item/pedido nao disponivel</em></div>`}
+buildSaidaDevolucaoRows=buildSaidaDevolucaoRowsWithAccounts;
+
+const initializeSaidaDevolucaoReportControlsBase=initializeSaidaDevolucaoReportControls;
+initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReportControlsBase();const filters=document.querySelector('.sd-report-filters');if(!filters||filters.querySelector('.sd-account-filter'))return;saidaDevolucaoReportState.financeMode='percent';saidaDevolucaoReportState.financeAvailable=false;saidaDevolucaoReportState.contasDisponiveis=sdGetAvailableAccounts();if(saidaDevolucaoReportState.contasSelecionadas===undefined)saidaDevolucaoReportState.contasSelecionadas=null;[...filters.querySelectorAll('label')].find(label=>label.querySelector('small')?.textContent==='Canal')?.remove();filters.insertAdjacentHTML('afterbegin',renderSdAccountsFilter());filters.insertAdjacentHTML('beforeend',renderSdFinanceModeFilter());};
+
+/* Rel. Vendas / Devolucoes: custo historico de cada devolucao. */
+function sdMoney(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function sdMovementCost(m,id,rows){const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i),dev=match&&(rows||[]).find(r=>String(r.id)===match[1]);if(!dev)return null;const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);return qty?Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty:null}
+function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
+function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(2).replace('.',',')+'%';return mode==='percent'?pct:mode==='cost'?sdMoney(cost):'<span class="sd-cost-metric"><strong>'+pct+'</strong><small>'+sdMoney(cost)+(missing?' · parcial':'')+'</small></span>'}
+function renderSdFinanceModeFilterCost(){const mode=saidaDevolucaoReportState.financeMode||'percent';return '<div class="sd-finance-filter" data-sd-extra-filter><small>Devolucoes</small><div role="group" aria-label="Visualizacao financeira">'+[['percent','%'],['cost','Valor'],['combined','% + Valor']].map(([v,l])=>'<button type="button" class="'+(mode===v?'active':'')+'" onclick="sdSetFinanceMode(\''+v+'\')">'+l+'</button>').join('')+'</div><em>Valor = custo do produto devolvido</em></div>'}
+function sdSetFinanceMode(mode){saidaDevolucaoReportState.financeMode=mode;const filter=document.querySelector('.sd-finance-filter');if(filter)filter.outerHTML=renderSdFinanceModeFilter();const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody()}
+function renderSdBodyCost(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',sold=rows.reduce((s,r)=>s+r.totalSales,0),returned=rows.reduce((s,r)=>s+r.totalReturns,0),cost=rows.reduce((s,r)=>s+(r.totalReturnCost||0),0),missing=rows.reduce((s,r)=>s+(r.missingCostQty||0),0),rate=sold?returned/sold*100:0;const displayRows=rows;const tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(displayRows):renderSdComparisonTable(displayRows,'sales')+renderSdComparisonTable(displayRows,'returns');return renderSaidaDevolucaoPeriodControls()+'<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>'+formatStockNumber(sold)+'</strong></article><article><small>Total devolvido</small><strong>'+formatStockNumber(returned)+'</strong></article>'+(mode!=='cost'?'<article><small>Taxa de devolucao</small><strong>'+rate.toFixed(2).replace('.',',')+'%</strong></article>':'')+(mode!=='percent'?'<article><small>Custo devolvido</small><strong>'+sdMoney(cost)+'</strong><span>'+(missing?'Total parcial':'Custo historico registrado')+'</span></article>':'')+'</section>'+(missing?'<aside class="sd-financial-warning"><strong>'+formatStockNumber(missing)+' unidade(s) sem custo registrado</strong><small> Entram na quantidade e taxa, mas nao no Custo devolvido.</small></aside>':'')+'<section class="sd-report-history-note ready"><strong>'+months.length+' meses selecionados</strong><span>Total vendido: '+formatStockNumber(sold)+' - Total devolvido: '+formatStockNumber(returned)+'</span></section>'+tables}
+buildSaidaDevolucaoRows=buildSdRowsCost;renderSdFinanceModeFilter=renderSdFinanceModeFilterCost;renderSaidaDevolucaoReportBody=renderSdBodyCost;
+initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReportControlsBase();const filters=document.querySelector('.sd-report-filters');if(!filters||filters.querySelector('.sd-account-filter'))return;if(!['percent','cost','combined'].includes(saidaDevolucaoReportState.financeMode))saidaDevolucaoReportState.financeMode='percent';saidaDevolucaoReportState.contasDisponiveis=sdGetAvailableAccounts();if(saidaDevolucaoReportState.contasSelecionadas===undefined)saidaDevolucaoReportState.contasSelecionadas=null;[...filters.querySelectorAll('label')].find(l=>l.querySelector('small')?.textContent==='Canal')?.remove();filters.insertAdjacentHTML('afterbegin',renderSdAccountsFilter());filters.insertAdjacentHTML('beforeend',renderSdFinanceModeFilter())};
+
+const renderSdComparisonTableQuantity=renderSdComparisonTable;
+function renderSdComparisonTableFinancial(rows,type){if(type==='sales'||saidaDevolucaoReportState.financeMode==='percent')return renderSdComparisonTableQuantity(rows,type);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined';return '<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">assignment_return</span><div><h2>Devolucoes</h2><small>Custo historico registrado em cada devolucao</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(sdMonthLabel).map(x=>'<th>'+x+'</th>').join('')+'<th>Custo devolvido</th><th>'+(combined?'Taxa / Custo':'Custo')+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td><strong>'+sdMoney(r.totalReturnCost)+'</strong></td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
+const renderSdComparativeTableQuantity=renderSdComparativeTable;
+function renderSdComparativeTableFinancial(rows){if(saidaDevolucaoReportState.financeMode==='percent')return renderSdComparativeTableQuantity(rows);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined',label=combined?'Taxa / Custo':'Custo devolvido';return '<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Quantidade e impacto em custo por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(m=>'<th colspan="3">'+sdMonthLabel(m)+'</th>').join('')+'<th>Total vendido</th><th>Total devolvido</th><th>'+label+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+formatStockNumber(r.sales[i])+'</td><td>'+formatStockNumber(r.returns[i])+'</td><td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td>'+formatStockNumber(r.totalSales)+'</td><td>'+formatStockNumber(r.totalReturns)+'</td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
+renderSdComparisonTable=renderSdComparisonTableFinancial;renderSdComparativeTable=renderSdComparativeTableFinancial;

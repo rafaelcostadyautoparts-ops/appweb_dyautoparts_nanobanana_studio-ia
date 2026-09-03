@@ -18,5 +18,9 @@ for (const [name, value] of replacements) {
   html = html.replace(pattern, `$1${value}$2`);
 }
 
+const assetVersion = [versionInfo.version, versionInfo.build].filter(Boolean).join('-').replace(/[^a-z0-9.-]+/gi, '-');
+html = html.replace(/(<script src="\/app\.js\?v=)[^"]+(">)/, '$1' + assetVersion + '$2');
+html = html.replace(/(<script src="\/dataClient\.js\?v=)[^"]+(">)/, '$1' + assetVersion + '$2');
+
 fs.writeFileSync(indexPath, html, 'utf8');
 console.log(`Versao sincronizada: v${versionInfo.version} (${versionInfo.build})`);
