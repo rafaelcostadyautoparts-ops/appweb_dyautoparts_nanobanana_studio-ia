@@ -1200,86 +1200,6 @@ const DataClient = (function () {
         return data || [];
     }
 
-    async function buscarConferenciaAndamentoSupabase(separacaoId) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const sessionId = String(separacaoId || '').trim();
-        if (!sessionId) return null;
-        const conferenciaId = `CONF-DRAFT-${sessionId}`;
-        const [header, items] = await Promise.all([
-            client.from('conferencia').select('*').eq('conferencia_id', conferenciaId).maybeSingle(),
-            client.from('conferencia_itens').select('*').eq('conferencia_id', conferenciaId)
-        ]);
-        if (header.error && header.error.code !== 'PGRST116') throw header.error;
-        if (items.error) throw items.error;
-        return header.data ? { ...header.data, itens: items.data || [] } : null;
-    }
-
-    async function salvarConferenciaAndamentoSupabase(payload = {}) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('salvar_conferencia_andamento', {
-            p_separacao_id: String(payload.sessionId || '').trim(), p_usuario: payload.usuario || 'N/A',
-            p_estado: payload.estado || {}, p_itens: payload.itens || []
-        });
-        if (error) throw error;
-        invalidateCache('conferencia');
-        return data;
-    }
-
-    async function aplicarOperacaoProgressoSupabase(payload = {}) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('aplicar_operacao_progresso', {
-            p_operacao_id: payload.operationId,
-            p_fluxo: payload.flow,
-            p_sessao_id: payload.sessionId,
-            p_id_interno: payload.idInterno,
-            p_delta: Number(payload.delta || 0),
-            p_usuario: payload.usuario || 'N/A',
-            p_dispositivo_id: payload.deviceId || null,
-            p_item: payload.item || {},
-            p_estado: payload.estado || null
-        });
-        if (error) throw error;
-        invalidateCache(payload.flow === 'conferencia' ? 'conferencia' : 'separacao');
-        return data;
-    }
-
-    async function removerConferenciaAndamentoSupabase(separacaoId) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('remover_conferencia_andamento', { p_separacao_id: String(separacaoId || '').trim() });
-        if (error) throw error;
-        invalidateCache('conferencia');
-        return data;
-    }
-
-    async function listarRomaneiosRetiradaSupabase() {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('listar_romaneios_retirada', {
-            p_device_id: getOrCreateDeviceId(),
-            p_usuario: localStorage.getItem('currentUser') || 'N/A'
-        });
-        if (error) throw error;
-        return (data || []).map(row => ({ ...row.dados, id: row.id }));
-    }
-
-    async function salvarRomaneioRetiradaSupabase(item = {}) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const id = String(item.id || '').trim();
-        if (!id) throw new Error('Romaneio sem identificador.');
-        const { data, error } = await client.rpc('salvar_romaneio_retirada', {
-            p_device_id: getOrCreateDeviceId(),
-            p_usuario: localStorage.getItem('currentUser') || item.usuario || 'N/A',
-            p_romaneio: { ...item, id }
-        });
-        if (error) throw error;
-        return data;
-    }
-
     function logSepSupabaseError(label, error, payload) {
         console.error(`[SEP] ${label}`, {
             message: error?.message,
@@ -1683,8 +1603,7 @@ const DataClient = (function () {
             p_separacao_id: String(payload.sessionId || '').trim(),
             p_pacotes: payload.pacotes || [],
             p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
-            p_execution_id: payload.executionId || `pacotes:${payload.sessionId}:${Date.now()}`,
-            p_validar_completo: payload.validateComplete === true
+            p_execution_id: payload.executionId || `pacotes:${payload.sessionId}:${Date.now()}`
         });
         if (error) {
             const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('sincronizar_pacotes_separacao');
@@ -1693,36 +1612,6 @@ const DataClient = (function () {
                 : (error.message || 'Erro ao sincronizar pacotes'));
         }
         invalidateCache('separacao');
-        return data;
-    }
-
-    async function autorizarCorrecaoAgrupamentoFinalizadoSupabase(payload = {}) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('autorizar_correcao_agrupamento_finalizado', {
-            p_separacao_id: String(payload.sessionId || '').trim(),
-            p_pin: String(payload.pin || '').trim(),
-            p_operador: payload.operador || localStorage.getItem('currentUser') || 'N/A',
-            p_device_id: String(payload.deviceId || '').trim()
-        });
-        if (error) throw new Error(error.message || 'Nao foi possivel autorizar a correcao.');
-        return data;
-    }
-
-    async function salvarCorrecaoAgrupamentoFinalizadoSupabase(payload = {}) {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('salvar_correcao_agrupamento_finalizado', {
-            p_separacao_id: String(payload.sessionId || '').trim(),
-            p_token: payload.token,
-            p_pacotes: payload.pacotes || [],
-            p_operador: payload.operador || localStorage.getItem('currentUser') || 'N/A',
-            p_device_id: String(payload.deviceId || '').trim(),
-            p_execution_id: payload.executionId || `correcao-agrupamento:${payload.sessionId}:${Date.now()}`
-        });
-        if (error) throw new Error(error.message || 'Nao foi possivel salvar a correcao de agrupamento.');
-        invalidateCache('separacao');
-        invalidateCache('conferencia');
         return data;
     }
     async function finalizePickingDraftSupabase(payload) {
@@ -2316,12 +2205,6 @@ const DataClient = (function () {
         if (error) {
             console.error('[DEVOLUCOES] erro no salvamento atomico:', error);
 
-            if (error.code === '23505' && String(error.message || '').includes('uq_devolucoes_pedido_normalizado')) {
-                const duplicateError = new Error('Este numero de pedido ja possui uma devolucao registrada.');
-                duplicateError.code = error.code;
-                throw duplicateError;
-            }
-
             const missingRpc = ['PGRST202', '42883'].includes(error.code)
                 || String(error.message || '').includes('salvar_devolucao_marketplace_atomica');
             if (missingRpc) {
@@ -2370,11 +2253,6 @@ const DataClient = (function () {
                 .update(stripDevolucaoReembolsoColumn(headerPayload))
                 .eq('id', id);
             headerError = retry.error;
-        }
-        if (headerError?.code === '23505' && String(headerError.message || '').includes('uq_devolucoes_pedido_normalizado')) {
-            const duplicateError = new Error('Este numero de pedido ja possui uma devolucao registrada.');
-            duplicateError.code = headerError.code;
-            throw duplicateError;
         }
         if (headerError) {
             console.error('[DEVOLUCOES] erro ao atualizar devolucao:', headerError);
@@ -2783,8 +2661,6 @@ const DataClient = (function () {
         esvaziarSeparacaoParaReutilizacaoSupabase,
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
-        autorizarCorrecaoAgrupamentoFinalizadoSupabase,
-        salvarCorrecaoAgrupamentoFinalizadoSupabase,
         cancelarSeparacaoAntesDespachoSupabase,
         cancelarItemSeparacaoFinalizadaSupabase,
         finalizePickingDraftSupabase,
@@ -2808,12 +2684,6 @@ const DataClient = (function () {
         fetchCanaisEnvioSupabase,
         fetchSeparacoesAbertasPorCanalSupabase,
         findProdutoByCodeSupabase,
-        buscarConferenciaAndamentoSupabase,
-        salvarConferenciaAndamentoSupabase,
-        aplicarOperacaoProgressoSupabase,
-        removerConferenciaAndamentoSupabase,
-        listarRomaneiosRetiradaSupabase,
-        salvarRomaneioRetiradaSupabase,
 
         // ETIQUETAS
         salvarEtiquetaLote,

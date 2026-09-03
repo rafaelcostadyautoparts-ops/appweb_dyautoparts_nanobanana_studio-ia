@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v225-2026090107';
+const CACHE_NAME = 'dy-sync-prod-20260902-02';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -114,7 +114,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Network-first para arquivos principais da aplicacao
-  if (url.includes('/sharedWorkSync.js') || url.includes('/sharedWorkSync.css') || url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
+  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();

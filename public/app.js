@@ -566,7 +566,6 @@ function renderScreenByName(name, push = true) {
  case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
  case 'login': renderLogin(push); break;
  case 'config': renderConfigSubMenu(push); break;
- case 'anuncios': typeof renderAnunciosScreen === 'function' ? renderAnunciosScreen(push) : renderMenu(push); break;
  default: renderMenu(push);
  }
 }
@@ -1098,7 +1097,6 @@ const DY_UPDATE_AVAILABLE_VERSION_KEY = 'dy_update_available_version';
 const DY_UPDATE_AVAILABLE_BUILD_KEY = 'dy_update_available_build';
 const DY_UPDATE_AVAILABLE_COMMIT_KEY = 'dy_update_available_commit';
 const DY_UPDATE_DEPLOY_DATE_KEY = 'dy_update_deploy_date';
-try { sessionStorage.removeItem('dy_app_update_running'); } catch (error) { console.warn('[UPDATE] Falha ao liberar trava de atualizacao:', error); }
 const DY_LOCAL_HISTORY_KEY = 'dy_local_access_history';
 const DY_LOCAL_PIN_HASH_KEY = 'dy_local_pin_hash';
 const DY_LOCAL_PIN_SALT_KEY = 'dy_local_pin_salt';
@@ -2238,54 +2236,6 @@ function openOperationOutboxDB() {
  });
 }
 
-// BEGIN PICK PACK SYNC
-const operationalWriteChains = new Map();
-let operationalQueueOrder = 0;
-function runOperationalWrite(key, work) {
- const previous = operationalWriteChains.get(key) || Promise.resolve();
- const current = previous.catch(() => {}).then(work);
- operationalWriteChains.set(key, current);
- const clear = () => { if (operationalWriteChains.get(key) === current) operationalWriteChains.delete(key); };
- current.then(clear, clear);
- return current;
-}
-function isPickPackOperation(operation) {
- return ['separacao','conferencia'].includes(operation.meta?.module || operation.payload?.flow)
-  || /^supabase_pick_/.test(operation.type || '')
-  || (operation.type === 'supabase_rpc' && operation.meta?.rpcName === 'finalizar_conferencia');
-}
-async function preparePickPackResume(sessionId = '') {
- try {
-  await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:')).map(([, promise]) => promise));
-  if (pickPackageCloudSyncTimer) { clearTimeout(pickPackageCloudSyncTimer); pickPackageCloudSyncTimer = null; const snapshot = pendingPickPackageSnapshot; pendingPickPackageSnapshot = null; if (snapshot) await syncPickPackagesWithCloud(snapshot); }
-  await pickPackageCloudSyncChain;
-  await flushConferenceProgressSync();
-  if (!navigator.onLine) return true;
-  const pending = (await getQueuedOperations()).filter(operation => isPickPackOperation(operation)
-   && String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
-  if (sessionId && pending.length) throw new Error('Há alterações deste aparelho aguardando envio. Resolva a pendência antes de recarregar esta operação.');
-  return true;
- } catch (error) { showToast(error.message || 'Não foi possível sincronizar o andamento.', 'warning'); return false; }
-}
-async function syncPickingConferenceFromMenu() {
- if (!navigator.onLine) { showToast('Sem conexão. As alterações permanecem neste aparelho.', 'warning'); return; }
- if (!await preparePickPackResume()) return;
- const pending = (await getQueuedOperations()).filter(isPickPackOperation);
- if (pending.length) { renderPendingSyncScreen(); return; }
- const data = await DataClient.loadModule('conferencia', true);
- if (data) ['separacao','separacao_itens','conferencia','conferencia_itens'].forEach(key => { if (data[key]) appData[key] = data[key]; });
- showToast('Separação e conferência sincronizadas. Abra a operação para continuar.', 'success');
-}
-function retryPickPackSync() {
- if (!navigator.onLine || document.hidden || !localStorage.getItem('currentUser')) return;
- if (!document.querySelector('.menu-screen,.picking-screen,.pick-drafts-screen,.pack-screen')) return;
- syncOperationOutbox('pick_pack_retry', true).catch(error => console.warn('[PICK/PACK] Envio pendente.', error));
-}
-window.addEventListener('focus', retryPickPackSync);
-document.addEventListener('visibilitychange', retryPickPackSync);
-setInterval(retryPickPackSync, 30000);
-// END PICK PACK SYNC
-
 async function queueOperation(type, payload, meta = {}) {
  const executionId = payload.executionId || meta.executionId || generateExecutionId();
  const operationId = meta.queueKey || [type, executionId, meta.sessionId || '', meta.itemId || ''].join(':');
@@ -2299,7 +2249,6 @@ async function queueOperation(type, payload, meta = {}) {
  meta,
  status: 'pending',
  attempts: 0,
- queueOrder: operationalQueueOrder = Math.max(Date.now(), operationalQueueOrder + 1),
  createdAt: getDataHoraBrasil(),
  updatedAt: getDataHoraBrasil(),
  lastError: ''
@@ -2340,7 +2289,7 @@ async function getQueuedOperations() {
  const fallback = JSON.parse(localStorage.getItem('operation_outbox_fallback') || '[]');
  return [...operations, ...fallback]
  .filter(op => op.status === 'pending' || op.status === 'error')
- .sort((a, b) => (a.queueOrder || new Date(a.createdAt).getTime()) - (b.queueOrder || new Date(b.createdAt).getTime()));
+ .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
 async function markQueuedOperation(operation, status, error = '') {
@@ -2401,7 +2350,6 @@ async function executeQueuedOperation(operation) {
  }
 
  if (operation.type === 'supabase_romaneio') {
- // Transfere a fila antiga somente após preservar o registro na nova fila durável.
  return SharedWork.importLegacy('romaneio', String(operation.payload.id), operation.payload);
  }
 
@@ -2411,10 +2359,6 @@ async function executeQueuedOperation(operation) {
 
  if (operation.type === 'supabase_pick_packages') {
  return DataClient.sincronizarPacotesSeparacaoSupabase(operation.payload);
- }
-
- if (operation.type === 'supabase_pick_draft_delete') {
- return DataClient.deletePickingDraftSupabase(operation.payload);
  }
 
  if (operation.type === 'supabase_pick_draft_item_delete') {
@@ -2438,12 +2382,9 @@ async function executeQueuedOperation(operation) {
  throw new Error(`Tipo de operacao offline desconhecido: ${operation.type}`);
 }
 
-function syncOperationOutbox(caller = 'unknown', pickPackOnly = false) {
- return runOperationalWrite('outbox', () => drainOperationOutbox(caller, pickPackOnly));
-}
-async function drainOperationOutbox(caller, pickPackOnly) {
+async function syncOperationOutbox(caller = 'unknown') {
  if (!navigator.onLine) return 0;
- const operations = (await getQueuedOperations()).filter(operation => !pickPackOnly || isPickPackOperation(operation));
+ const operations = await getQueuedOperations();
  let syncedCount = 0;
 
  for (const operation of operations) {
@@ -2815,7 +2756,7 @@ function getHomologationOfflineBannerHTML() {
 
 function getHomologationSyncIndicatorHTML() {
  return `
- <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="syncPickingConferenceFromMenu()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
+ <button class="fab-icon-btn fab-sync-status ${operacoesPendentes > 0 ? 'has-pending' : ''}" data-sync-pending-button type="button" onclick="renderPendingSyncScreen()" aria-label="${operacoesPendentes > 0 ? `${operacoesPendentes} operacoes aguardando sincronizacao` : 'Nenhuma operacao aguardando sincronizacao'}" title="${operacoesPendentes > 0 ? `${operacoesPendentes} pendente(s)` : 'Tudo sincronizado'}">
  <span class="app-inline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7.2 18.5h10.4a4 4 0 0 0 .5-8 6.2 6.2 0 0 0-11.8-1.2 4.6 4.6 0 0 0 .9 9.2Z"/><path d="M12 16v-6m0 0-2.4 2.4M12 10l2.4 2.4"/></svg></span>
  <b class="sync-pending-badge" data-sync-pending-count>${operacoesPendentes}</b>
  </button>`;
@@ -2916,7 +2857,6 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 
 // Texto validado em UTF-8.
 const MODULE_SIDEBAR_CONFIG = {
- anuncios: { label: 'ANÚNCIOS', icon: 'storefront', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
  produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DB2777', colorTo: '#9D174D', shadow: '219,39,119' },
  pedidos: { label: 'PEDIDOS', icon: 'receipt_long', colorFrom: '#0EA5E9', colorTo: '#0284C7', shadow: '14,165,233' },
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
@@ -3500,10 +3440,6 @@ async function setUser(userName, userId, userProfile) {
  // Entrada INSTANTANEA no menu
  renderMenu();
 
- refreshQuickActionsOperationalData().catch(error => {
- console.warn('[MENU] Falha ao atualizar contadores operacionais:', error);
- });
-
  // Texto validado em UTF-8.
  if (navigator.onLine) {
  addTechnicalLog('LOGIN', 'SILENT_SYNC_START', userName);
@@ -3713,15 +3649,10 @@ function renderLogin(push = true) {
  .trim()
  .toUpperCase();
  return normalizedId === 'homolog_admin'
- || normalizedId === 'homolog_teste'
  || normalizedProfile === 'ADMIN'
- || normalizedName === 'ADMINISTRADOR HOMOLOGACAO'
- || normalizedName === 'USUARIO TESTE';
+ || normalizedName === 'ADMINISTRADOR HOMOLOGACAO';
  })
- .map(user => ({
- ...user,
- nome: String(user.id || '').trim().toLowerCase() === 'homolog_admin' ? 'ADM' : user.nome
- }));
+ .map(user => ({ ...user, nome: 'ADM' }));
  }
 
  // Texto validado em UTF-8.
@@ -3975,16 +3906,16 @@ async function renderAlerts() {
 // ========================================================
 // Texto validado em UTF-8.
 // Texto validado em UTF-8.
+// Preparado para migrar para tabela no Supabase
 // ========================================================
 const menuModulesConfig = [
  { id: 'produtos', label: 'PRODUTOS', icon: 'produtos', order: 1, type: 'principal' },
- { id: 'anuncios', label: 'ANÚNCIOS', icon: 'anuncios', order: 2, type: 'principal' },
  { id: 'pedidos', label: 'PEDIDOS', icon: 'pedidos', order: 11, type: 'principal' },
  { id: 'pick', label: 'SEPARAÇÃO (PICK)', icon: 'pick', order: 3, type: 'principal' },
  { id: 'pack', label: 'CONFER\u00CANCIA (PACK)', icon: 'pack', order: 4, type: 'principal' },
  { id: 'movimentacoes', label: 'MOVIMENTACOES', icon: 'movimentacoes', order: 5, type: 'principal' },
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
- { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 7, type: 'principal' },
+ { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 2, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
  { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' }
@@ -3992,7 +3923,6 @@ const menuModulesConfig = [
 
 const menu3DIcons = {
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
- anuncios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 25 h24 v22 H20 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 17 L38 17 L44 25 L20 25 Z" fill="#fff" opacity="0.95"/><path d="M26 33 h12 M26 39 h8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="41" cy="39" r="2.5" fill="#fff"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  pedidos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><path d="M21 19h22v28H21z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 17h10v5H27z" fill="#0EA5E9" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m26 31 3 3 6-7M26 41h12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -4047,7 +3977,7 @@ function getMenuItemsFromConfig() {
  return menuModulesConfig
  .sort((a, b) => a.order - b.order)
  .map(module => {
- let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard', 'anuncios'].includes(module.id);
+ let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard'].includes(module.id);
  let badge = null;
  
  if (module.type === 'em_breve') {
@@ -4070,7 +4000,6 @@ function getMenuItemsFromConfig() {
 const menuRoutes = {
  dashboard: 'renderAlerts()',
  produtos: 'renderProductSubMenu()',
- anuncios: 'renderAnunciosScreen()',
  pick: 'openPickModeChoice()',
  pack: 'renderPackMenu()',
  compras: 'renderComprasSubMenu()',
@@ -4185,29 +4114,6 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  `;
 }
 
-let quickActionsOperationalRefreshPromise = null;
-
-async function refreshQuickActionsOperationalData() {
- if (quickActionsOperationalRefreshPromise) return quickActionsOperationalRefreshPromise;
- quickActionsOperationalRefreshPromise = Promise.all([
- DataClient.loadModule('separacao', true),
- DataClient.loadModule('conferencia', true)
- ]).then(([separationData, conferenceData]) => {
- if (separationData) {
- appData.separacao = separationData.separacao || [];
- appData.separacao_itens = separationData.separacao_itens || [];
- }
- if (conferenceData) {
- appData.conferencia = conferenceData.conferencia || [];
- appData.conferencia_itens = conferenceData.conferencia_itens || [];
- }
- if (currentScreen === 'menu' && app.querySelector(':scope > .menu-screen')) renderMenu(false);
- return true;
- }).finally(() => {
- quickActionsOperationalRefreshPromise = null;
- });
- return quickActionsOperationalRefreshPromise;
-}
 function renderMenu(push = true) {
  stopScanner();
  currentScreen = 'menu';
@@ -5061,8 +4967,6 @@ async function generateOrcamentoClientePDF() {
 }
 
 async function renderOrcamentoClienteScreen() {
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
  const currentUser = localStorage.getItem('currentUser');
  const emissao = getOrcamentoTodayISO();
  orcamentoClienteState = { numero: createOrcamentoNumber(), emissao, validade: addOrcamentoDays(emissao, 7), itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
@@ -6758,62 +6662,93 @@ async function ensureCurrentDeviceRegistered({
  const client = getSecurityClient();
  const deviceId = getOrCreateDeviceId();
  if (!client) return { allowed: true, deviceId, degraded: true };
+ console.log('[SECURITY] device_id', deviceId);
 
  try {
  const securityStatus = await verifySecurityInstalled();
  if (!securityStatus.installed) {
+ showToast('Operacao concluida.', 'info');
  return { allowed: true, deviceId, degraded: true, error: securityStatus.error };
  }
 
- const { data, error } = await client.rpc('solicitar_ou_atualizar_dispositivo', {
- p_device_id: deviceId,
- p_usuario_id: userId || null,
- p_nome_usuario: userName || null,
- p_nome_dispositivo: getFriendlyDeviceName()
- });
- if (error) throw error;
+ const { data: existingDevice, error: findError } = await client
+ .from('dispositivos_autorizados')
+ .select('*')
+ .eq('device_id', deviceId)
+ .maybeSingle();
 
- const status = String(data?.status || '').trim().toLowerCase();
- if (data?.allowed === true && status === 'aprovado') {
- if (logUpdate) await logSecurityEvent('dispositivo_atualizado', `Acesso validado via ${source}.`, deviceId);
- return { allowed: true, deviceId, row: data };
+ if (findError) {
+ logSecurityError('[SECURITY] select dispositivo', findError, { deviceId, source });
+ throw findError;
  }
 
- if (status === 'pendente') {
- if (!silent) showToast('Este aparelho aguarda aprovação do administrador.', 'warning');
- renderPendingDeviceScreen();
- return { allowed: false, pending: true, deviceId, row: data };
- }
-
- await logSecurityEvent('tentativa_dispositivo_bloqueado', 'Tentativa de acesso por dispositivo bloqueado.', deviceId);
+ if (existingDevice && existingDevice.ativo === false) {
+ console.log('[SECURITY] dispositivo encontrado', { deviceId, ativo: false, source });
+ await logSecurityEvent('tentativa_dispositivo_bloqueado', 'Tentativa de acesso por dispositivo removido.', deviceId);
  renderBlockedDeviceScreen();
- return { allowed: false, deviceId, row: data };
+ return { allowed: false, deviceId, row: existingDevice };
+ }
+
+ if (existingDevice) {
+ console.log('[SECURITY] dispositivo encontrado', { deviceId, source });
+ }
+
+ const payload = {
+ usuario_id: userId || existingDevice?.usuario_id || null,
+ nome_usuario: userName || existingDevice?.nome_usuario || 'Aguardando login',
+ device_id: deviceId,
+ nome_dispositivo: existingDevice?.nome_dispositivo || getFriendlyDeviceName(),
+ ativo: true,
+ ultimo_acesso: new Date().toISOString()
+ };
+
+ console.log('[SECURITY] payload dispositivo', payload);
+ console.log('[INFO] Operacao registrada.');
+
+ const { data: savedDevice, error: upsertError } = await client
+ .from('dispositivos_autorizados')
+ .upsert(payload, { onConflict: 'device_id' })
+ .select('*')
+ .maybeSingle();
+
+ if (upsertError) {
+ logSecurityError('[SECURITY] insert/upsert dispositivo erro', upsertError, { payload, deviceId, source });
+ throw upsertError;
+ }
+
+ console.log('[SECURITY] dispositivo salvo com sucesso', savedDevice || payload);
+ if (existingDevice) {
+ console.log('[SECURITY] ultimo_acesso atualizado', { deviceId, ultimo_acesso: payload.ultimo_acesso, source });
+ } else {
+ console.log('[SECURITY] dispositivo criado', { deviceId, source });
+ }
+
+ if (logUpdate) {
+ await logSecurityEvent(
+ existingDevice ? 'dispositivo_atualizado' : 'dispositivo_cadastrado',
+ existingDevice
+ ? `Dispositivo atualizado via ${source}.`
+ : `Dispositivo cadastrado automaticamente: ${payload.nome_dispositivo}`,
+ deviceId
+ );
+ }
+
+ return { allowed: true, deviceId, row: savedDevice || payload };
  } catch (error) {
- logSecurityError('[SECURITY] validação de dispositivo', error, { deviceId, source });
- if (isMissingSecurityTableError(error) || !navigator.onLine) {
+ logSecurityError('[SECURITY] update dispositivo', error, { deviceId, source });
+ if (isMissingSecurityTableError(error)) {
+ console.log('[INFO] Operacao registrada.');
  return { allowed: true, deviceId, degraded: true, error };
  }
- renderPendingDeviceScreen('Não foi possível validar este aparelho. Tente novamente.');
- return { allowed: false, deviceId, error };
+ console.log('[INFO] Operacao registrada.');
+ return { allowed: true, deviceId, degraded: true, error };
  }
 }
+
 async function ensureAuthorizedDevice(options = {}) {
  return ensureCurrentDeviceRegistered(options);
 }
 
-function renderPendingDeviceScreen(message = 'Este aparelho solicitou acesso e aguarda aprovação do administrador.') {
- hideSplash();
- app.innerHTML = `
- <div class="security-blocked-screen">
- <div class="security-blocked-card">
- <span class="material-symbols-rounded">pending_actions</span>
- <h1>Acesso pendente</h1>
- <p>${escapeKitAttribute(message)}</p>
- <button type="button" onclick="location.reload()">Verificar novamente</button>
- </div>
- </div>
- `;
-}
 function renderBlockedDeviceScreen() {
  hideSplash();
  app.innerHTML = `
@@ -16230,20 +16165,7 @@ function hydratePickItemsFromSavedSession(sessionId) {
 }
 
 async function resumePickingDraftFromServer(sessionId) {
- if (!await preparePickPackResume(sessionId)) return;
- if (navigator.onLine) {
-  try {
-   const data = await DataClient.loadModule('separacao', true);
-   if (!data) throw new Error('Não foi possível obter a separação atualizada.');
-   appData.separacao = data.separacao || [];
-   appData.separacao_itens = data.separacao_itens || [];
-   const fresh = appData.separacao.find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
-   if (!fresh && getLocalDraftPickSession(sessionId)?.saveStatus === 'synced') { showToast('Esta separação não está mais disponível no servidor. A cópia local foi preservada.', 'warning'); return; }
-   if (fresh && !isDraftPickSession(fresh)) { showToast('Esta separação já foi encerrada ou mudou de etapa em outro aparelho.', 'warning'); await renderPickMenu(); return; }
-  } catch (error) { showToast('Não foi possível atualizar a separação. Sua cópia local foi preservada.', 'warning'); return; }
- }
- const localOfflineDraft = !navigator.onLine && getLocalDraftPickSession(sessionId);
- const session = !localOfflineDraft && (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
+ const session = (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
  if (!session) {
  const localDraft = getLocalDraftPickSession(sessionId) || getDraftPickSession();
  if (String(localDraft?.sessionId || '') === String(sessionId || '')) {
@@ -16330,6 +16252,7 @@ async function resumePickingDraftFromServer(sessionId) {
  });
 
  renderPickingScreen(sessionId, channelId, channelLabel, channelColor);
+ schedulePickPackagesCloudSync(0);
  if (!items.length) {
  showToast('Separacao retomada sem itens carregados. Confira antes de finalizar.', 'warning');
  }
@@ -16408,7 +16331,7 @@ function getSeparationItemTotal(session) {
  return Number(session.total_itens || session.qtd_itens || session.itens || session.total_produtos_separados || 0) || 0;
 }
 
-function getDraftPickSessionsWithLocalDraft(remoteReadSucceeded = false) {
+function getDraftPickSessionsWithLocalDraft() {
  const sessions = [...getDraftPickSessionsFromCache()];
  const localDrafts = getLocalDraftPickSessionsList();
  const legacyDraft = getDraftPickSession();
@@ -16416,9 +16339,6 @@ function getDraftPickSessionsWithLocalDraft(remoteReadSucceeded = false) {
  localDrafts.unshift(legacyDraft);
  }
  localDrafts.forEach(localDraft => {
- const remote = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(localDraft?.sessionId));
- if (remote && !isDraftPickSession(remote)) return;
- if (remoteReadSucceeded && !remote && localDraft?.saveStatus === 'synced') return;
  if (!localDraft?.sessionId || sessions.some(session => String(getPackSeparationSessionId(session)) === String(localDraft.sessionId))) {
  return;
  }
@@ -16546,8 +16466,6 @@ function setPickDraftFilter(filter) {
 }
 
 async function renderSeparacoesAndamentoScreen() {
- if (!await preparePickPackResume()) return;
- let remoteReadSucceeded = false;
  currentScreen = 'internal';
  document.body.classList.remove('menu-active');
  const currentUser = localStorage.getItem('currentUser');
@@ -16557,7 +16475,6 @@ async function renderSeparacoesAndamentoScreen() {
  try {
  const data = await DataClient.loadModule('separacao', true);
  if (data) {
- remoteReadSucceeded = navigator.onLine;
  appData.separacao = data.separacao || appData.separacao || [];
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  }
@@ -16565,7 +16482,7 @@ async function renderSeparacoesAndamentoScreen() {
  console.warn('[SEP] Falha ao carregar separacoes em andamento:', error);
  }
 
- const sessions = getDraftPickSessionsWithLocalDraft(remoteReadSucceeded);
+ const sessions = getDraftPickSessionsWithLocalDraft();
  const viewModels = sessions.map(buildPickDraftViewModel);
  const summaryCards = getPickDraftSummaryCards(viewModels);
  const filters = [
@@ -16715,7 +16632,6 @@ async function renderSeparacoesAndamentoScreen() {
 }
 
 async function renderPickMenu(selectedMode = null) {
- if (!await preparePickPackResume()) return;
  const currentUser = localStorage.getItem('currentUser');
  if (['fast', 'normal'].includes(selectedMode)) {
  pendingPickModeChoice = selectedMode;
@@ -17287,7 +17203,6 @@ function adjustPickPackageCount(delta) {
 }
 
 let pickPackageCloudSyncTimer = null;
-let pendingPickPackageSnapshot = null;
 let pickPackageCloudSyncChain = Promise.resolve();
 
 function buildPickPackagesSyncPayload(items = currentSessionItems) {
@@ -17339,14 +17254,6 @@ async function performPickPackagesCloudSync(options = {}) {
  };
  const statusEl = document.getElementById('pick-package-sync-status');
  if (statusEl) { statusEl.textContent = navigator.onLine ? 'SALVANDO...' : 'PENDENTE'; statusEl.className = navigator.onLine ? 'is-saving' : 'is-pending'; }
- if (!payload.validateComplete) {
-  const operation = await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
-  if (navigator.onLine) await syncOperationOutbox('pick_packages_progress', true);
-  const pending = (await getQueuedOperations()).find(row => row.id === operation.id);
-  if (statusEl) { statusEl.textContent = pending ? 'PENDENTE' : 'SINCRONIZADO'; statusEl.className = pending ? 'is-pending' : 'is-synced'; }
-  markDraftPickSaveStatus(pending ? 'queued' : 'synced');
-  return { queued: !!pending };
- }
  if (!navigator.onLine) {
   await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
   markDraftPickSaveStatus('queued');
@@ -17379,11 +17286,8 @@ function syncPickPackagesWithCloud(options = {}) {
 
 function schedulePickPackagesCloudSync(delay = 180) {
  clearTimeout(pickPackageCloudSyncTimer);
- pendingPickPackageSnapshot = { sessionId: currentPickingContext?.sessionId, items: JSON.parse(JSON.stringify(currentSessionItems || [])) };
  pickPackageCloudSyncTimer = setTimeout(() => {
-  pickPackageCloudSyncTimer = null;
-  const snapshot = pendingPickPackageSnapshot; pendingPickPackageSnapshot = null;
-  syncPickPackagesWithCloud(snapshot).catch(error => showToast(error.message || 'Erro ao sincronizar pacotes.', 'error'));
+  syncPickPackagesWithCloud().catch(error => showToast(error.message || 'Erro ao sincronizar pacotes.', 'error'));
  }, delay);
 }
 
@@ -17595,6 +17499,11 @@ async function togglePickItemSelection(index, source = 'standalone') {
  }
 
  pickKitSelection.set(key, { source: 'standalone', kitId: '', qty });
+ const selectedUnits = getSelectedPickEntries().reduce((sum, entry) => sum + Number(entry.selection.qty || 0), 0);
+ if (selectedUnits >= 2) {
+ const confirmed = await showAppConfirm({ title: 'Finalizar agrupamento?', message: `${selectedUnits} unidade(s) estao selecionada(s).`, detail: 'Voce pode continuar selecionando outros itens antes de finalizar.', confirmLabel: 'Finalizar agrupamento', cancelLabel: 'Continuar agrupando' });
+ if (confirmed) return transformPickSelectionIntoKit();
+ }
  updatePickItemsList();
  settlePickScannerInput(60);
 }
@@ -17909,15 +17818,17 @@ async function discardPickingDraft(sessionId, options = {}) {
 
  let remoteRemoved = false;
  let remoteError = null;
+
+ await removeQueuedPickingDraftOperations(targetSessionId);
+
+ if (navigator.onLine && window.DataClient?.deletePickingDraftSupabase) {
  try {
-  await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:' + targetSessionId + ':')).map(([, promise]) => promise));
-  await removeQueuedPickingDraftOperations(targetSessionId);
-  await queueOperation('supabase_pick_draft_delete', { sessionId: targetSessionId }, { module: 'separacao', sessionId: targetSessionId, queueKey: 'discard-pick:' + targetSessionId });
-  if (navigator.onLine) await syncOperationOutbox('discard_pick', true);
-  remoteRemoved = !(await getQueuedOperations()).some(row => row.id === 'discard-pick:' + targetSessionId);
+ await window.DataClient.deletePickingDraftSupabase({ sessionId: targetSessionId });
+ remoteRemoved = true;
  } catch (error) {
-  showToast('Não foi possível preservar a solicitação de exclusão. O rascunho foi mantido.', 'error');
-  return false;
+ remoteError = error;
+ console.warn('[SEP] nao foi possivel excluir rascunho no servidor:', error);
+ }
  }
 
  if (!draft || String(draft.sessionId || '') === String(targetSessionId)) {
@@ -17945,7 +17856,7 @@ async function discardPickingDraft(sessionId, options = {}) {
  if (!options.silent) {
  if (remoteError) {
  showToast("Nao foi possivel excluir a separacao no servidor.", "error");
- } else {
+ } else if (remoteRemoved || !navigator.onLine) {
  showToast(remoteRemoved ? "Separacao excluida." : "Separacao removida deste aparelho. Sincronizacao pendente.", remoteRemoved ? "success" : "warning");
  }
  }
@@ -18270,73 +18181,107 @@ function getPickingProductId(item) {
   return normalizePickCode(item?.id_interno || item?.produto_id_interno || item?.codigo_interno || item?.col_a || item?.col_A || '');
 }
 
-function renderPickProductFeedbackToast(type = 'add', item = null, quantity = 1) {
-  clearTimeout(scanCenterToastTimeout);
-  document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
-  const isAdd = type === 'add';
-  const title = item ? getPickItemTitle(item) : (isAdd ? 'Produto bipado' : 'Produto removido');
-  const sku = item ? (getPickItemSku(item) || '—') : '—';
-  const ean = item ? (getPickItemEan(item) || '—') : '—';
-  const color = item ? (getPickItemColor(item) || '—') : '—';
-  const idInterno = (item ? getPickingProductId(item) : '') || '—';
-  const image = item ? getPickProductImage(item) : '';
-  const currentQty = isAdd 
-    ? (Number(item?.qty || item?.qtd_separada || quantity || 1) || 1)
-    : (Number(quantity || 1) || 1);
-
-  const toastEl = document.createElement('div');
-  toastEl.className = `pick-feedback-toast ${isAdd ? 'is-add' : 'is-remove'}`;
-  toastEl.setAttribute('role', 'status');
-  toastEl.setAttribute('aria-live', 'polite');
-  toastEl.innerHTML = `
-  <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
-    <span class="material-symbols-rounded">close</span>
-  </button>
-  <div class="pick-feedback-header">
-    <div class="pick-feedback-icon-wrapper">
-      <div class="pick-feedback-icon">
-        <span class="material-symbols-rounded">${isAdd ? 'check' : 'close'}</span>
-      </div>
-    </div>
-    <strong class="pick-feedback-title">${isAdd ? 'Produto adicionado!' : 'Produto removido!'}</strong>
-    <p class="pick-feedback-subtitle">${isAdd ? 'O produto foi adicionado com sucesso.' : 'O produto foi removido com sucesso.'}</p>
-  </div>
-  <div class="pick-feedback-body">
-    <div class="pick-feedback-image">
-      ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
-    </div>
-    <div class="pick-feedback-copy">
-      <b class="pick-feedback-product-name">${escapeKitAttribute(title)}</b>
-      <div class="pick-feedback-meta">
-        <span class="chip-item chip-id"><small>ID INTERNO</small><strong>${escapeKitAttribute(idInterno)}</strong></span>
-        <span class="chip-item chip-sku"><small>SKU</small><strong>${escapeKitAttribute(sku)}</strong></span>
-        <span class="chip-item chip-ean"><small>EAN</small><strong>${escapeKitAttribute(ean)}</strong></span>
-        <span class="chip-item chip-color"><small>COR</small><strong>${escapeKitAttribute(color)}</strong></span>
-      </div>
-    </div>
-  </div>
-  <div class="pick-feedback-footer">
-    <div class="pick-feedback-qty-box">
-      <span class="pick-feedback-qty-label">${isAdd ? 'QUANTIDADE ATUAL' : 'QUANTIDADE REMOVIDA'}</span>
-      <strong class="pick-feedback-qty-val">${currentQty}<small> un</small></strong>
-    </div>
-  </div>
-  `;
-  document.body.appendChild(toastEl);
-
-  scanCenterToastTimeout = setTimeout(() => {
-    toastEl.classList.add('is-hiding');
-    setTimeout(() => toastEl.remove(), 260);
-  }, 2600);
-}
-
 function showPickScanCenterToast(item = null, quantity = 1) {
-  renderPickProductFeedbackToast('add', item, quantity);
+ clearTimeout(scanCenterToastTimeout);
+ document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
+
+ const title = item ? getPickItemTitle(item) : 'Produto bipado';
+ const sku = item ? getPickItemSku(item) : '-';
+ const ean = item ? getPickItemEan(item) : '-';
+ const color = item ? getPickItemColor(item) : '-';
+ const image = item ? getPickProductImage(item) : '';
+ const currentQty = Number(item?.qty || item?.qtd_separada || quantity || 1) || 1;
+
+ const toastEl = document.createElement('div');
+ toastEl.className = 'pick-feedback-toast is-add';
+ toastEl.setAttribute('role', 'status');
+ toastEl.setAttribute('aria-live', 'polite');
+ toastEl.innerHTML = `
+ <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
+ <span class="material-symbols-rounded">close</span>
+ </button>
+ <div class="pick-feedback-icon"><span class="material-symbols-rounded">check</span></div>
+ <strong class="pick-feedback-title">Produto adicionado!</strong>
+ <p class="pick-feedback-subtitle">O produto foi adicionado com sucesso.</p>
+ <div class="pick-feedback-body">
+ <div class="pick-feedback-image">
+ ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+ </div>
+ <div class="pick-feedback-copy">
+ <b>${escapeKitAttribute(title)}</b>
+ <div class="pick-feedback-meta">
+ <span><small>ID INTERNO</small>${escapeKitAttribute(getPickingProductId(item) || "-")}</span>
+ <span><small>SKU</small>${escapeKitAttribute(sku)}</span>
+ <span><small>EAN</small>${escapeKitAttribute(ean)}</span>
+ <span><small>COR</small>${escapeKitAttribute(color)}</span>
+ </div>
+ </div>
+ </div>
+ <div class="pick-feedback-footer">
+ <div>
+ <span>Quantidade atual</span>
+ <strong>${currentQty}<small> un</small></strong>
+ </div>
+ <em><span class="material-symbols-rounded">check_circle</span>Adicionado </em>
+ </div>
+ `;
+ document.body.appendChild(toastEl);
+
+ scanCenterToastTimeout = setTimeout(() => {
+ toastEl.classList.add('is-hiding');
+ setTimeout(() => toastEl.remove(), 260);
+ }, 2600);
 }
 
 function showPickRemovalFeedbackToast(item = null, quantity = 1) {
-  renderPickProductFeedbackToast('remove', item, quantity);
+ clearTimeout(scanCenterToastTimeout);
+ document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
+
+ const title = item ? getPickItemTitle(item) : 'Produto removido';
+ const sku = item ? getPickItemSku(item) : '-';
+ const ean = item ? getPickItemEan(item) : '-';
+ const color = item ? getPickItemColor(item) : '-';
+ const image = item ? getPickProductImage(item) : '';
+
+ const toastEl = document.createElement('div');
+ toastEl.className = 'pick-feedback-toast is-remove';
+ toastEl.setAttribute('role', 'status');
+ toastEl.setAttribute('aria-live', 'polite');
+ toastEl.innerHTML = `
+ <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
+ <span class="material-symbols-rounded">close</span>
+ </button>
+ <div class="pick-feedback-icon"><span class="material-symbols-rounded">remove</span></div>
+ <strong class="pick-feedback-title">Produto removido!</strong>
+ <p class="pick-feedback-subtitle">O produto foi removido desta operação.</p>
+ <div class="pick-feedback-body">
+ <div class="pick-feedback-image">
+ ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+ </div>
+ <div class="pick-feedback-copy">
+ <b>${escapeKitAttribute(title)}</b>
+ <div class="pick-feedback-meta">
+ <span><small>ID INTERNO</small>${escapeKitAttribute(getPickingProductId(item) || "-")}</span>
+ <span><small>SKU</small>${escapeKitAttribute(sku)}</span>
+ <span><small>EAN</small>${escapeKitAttribute(ean)}</span>
+ <span><small>COR</small>${escapeKitAttribute(color)}</span>
+ </div>
+ </div>
+ </div>
+ <div class="pick-feedback-footer">
+ <div>
+ <span>Quantidade removida</span>
+ <strong>${Number(quantity || 1)}<small> un</small></strong>
+ </div>
+ <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'}</em>
+ </div>
+ `;
+ document.body.appendChild(toastEl);
+
+ scanCenterToastTimeout = setTimeout(() => {
+ toastEl.classList.add('is-hiding');
+ setTimeout(() => toastEl.remove(), 260);
+ }, 2600);
 }
 
 function triggerScanSuccessGlow() {
@@ -18374,10 +18319,7 @@ function getPickItemMetaHTML(item) {
  `;
 }
 
-function persistPickingDraftItem(draft, item) {
- return runOperationalWrite('pick:' + draft.sessionId + ':' + getPickingProductId(item), () => persistPickingDraftItemSerial(draft, item));
-}
-async function persistPickingDraftItemSerial(draft, item) {
+async function persistPickingDraftItem(draft, item) {
  const sessionPayload = buildPickingSessionPayload(draft.sessionId, draft.channelId, draft.channelLabel, PICK_STATUS_DRAFT, draft.createdAt);
  const itemPayload = buildPickingItemPayload(item);
  if (String(itemPayload.id_interno || '').toUpperCase() === 'DY-000.000') {
@@ -21167,7 +21109,6 @@ async function renderPackConferenceRecords(scope = 'today', query = '') {
 }
 
 async function renderPackPendingChannels() {
- if (!await preparePickPackResume()) return;
  renderQuickDestinationLoading('Conferências em andamento', 'pack-screen');
  const currentUser = localStorage.getItem('currentUser');
  // Texto validado em UTF-8.
@@ -21294,7 +21235,6 @@ function formatPackSeparationDate(value) {
 }
 
 async function renderPackSessionsList(channelName) {
- if (!await preparePickPackResume()) return;
  const currentUser = localStorage.getItem('currentUser');
  let activeSessions = [];
  let usedFreshSupabase = false;
@@ -21465,7 +21405,6 @@ function isSameConferenceOperator(separation, user) {
 
 // Global Session State moved to top for hoisting safety
 async function renderPackSessionDetails(sessionId) {
- if (!await preparePickPackResume(sessionId)) return;
  const currentUser = localStorage.getItem('currentUser');
  conferenceViewFilter = 'all';
  conferenceRemovalModeActive = false;
@@ -21481,7 +21420,6 @@ async function renderPackSessionDetails(sessionId) {
  }
  } catch (error) {
  console.warn('[PACK] Falha ao validar conferencia pendente:', error);
- if (navigator.onLine) { showToast('Não foi possível atualizar a conferência. Tente novamente antes de continuar.', 'warning'); return; }
  }
 
  const activeSessions = getActivePickSessions();
@@ -21535,9 +21473,14 @@ async function renderPackSessionDetails(sessionId) {
      else (remoteSession.conferenceRows ||= []).push({ ...saved, scanned_in_conference: Number(saved.qtd_conferida || 0) > 0, conference_package_assignments: [] });
     });
    }
-   // Sem fila local pendente, o servidor é a referência, inclusive quando a quantidade voltou a zero.
-   session = remoteSession;
-  } catch (error) { console.warn('[CONFERENCIA] Falha ao carregar andamento remoto.', error); showToast('Não foi possível atualizar o andamento. A cópia local foi preservada.', 'warning'); return; }
+   const localChecked = getConferenceProgressQuantity(session);
+   const remoteChecked = getConferenceProgressQuantity(remoteSession);
+   const localUpdated = Date.parse(session?.conference_progress_updated_at || 0) || 0;
+   const remoteUpdated = Date.parse(remoteSession?.conference_progress_updated_at || remoteDraft?.atualizado_em || 0) || 0;
+   if (!session || remoteChecked > 0 || localChecked === 0) {
+    if (remoteSession && ((remoteChecked > 0 && localChecked === 0) || remoteUpdated >= localUpdated)) session = remoteSession;
+   }
+  } catch (error) { console.warn('[CONFERENCIA] Falha ao carregar andamento remoto; usando cache local.', error); }
  }
  
   // Texto validado em UTF-8.
@@ -21560,9 +21503,10 @@ async function renderPackSessionDetails(sessionId) {
  },
  conferenceRows: []
  };
- if (navigator.onLine) (currentPackSession.conferenceRows || []).forEach(row => {
+ (currentPackSession.conferenceRows || []).forEach(row => {
   row._sync_qtd_conferida = remoteConferenceQuantities.get(String(row.id_interno)) || 0;
  });
+ if (getConferenceProgressQuantity(currentPackSession) > 0) persistPackSessionCache();
  
  // Texto validado em UTF-8.
  renderPackSessionFrame(packSessionId, currentUser, channelColorClass, channelName);
@@ -21960,6 +21904,11 @@ async function toggleConferenceItemSelection(index) {
  if (!Number.isFinite(qty) || qty < 1 || qty > summary.standaloneUnits) return showToast('Quantidade invalida.', 'warning');
  }
  conferenceKitSelection.set(key, { qty });
+ const selectedUnits = getPendingConferencePackageSelectionCount();
+ if (selectedUnits >= 2) {
+ const confirmed = await showAppConfirm({ title: 'Finalizar agrupamento?', message: `${selectedUnits} unidade(s) estao selecionada(s).`, detail: 'Voce pode continuar selecionando outros itens antes de finalizar.', confirmLabel: 'Finalizar agrupamento', cancelLabel: 'Continuar agrupando' });
+ if (confirmed) return createConferencePackage();
+ }
  restoreScanFieldFocus('pack', 60);
  renderConferenceKitSelection();
 }
@@ -22127,13 +22076,23 @@ function createProgressOperationId(flow, sessionId, itemId) {
 }
 
 async function sendOrQueueProgressOperation(payload) {
- const operation = await queueOperation('supabase_progress', payload, {
-  module: payload.flow, sessionId: payload.sessionId, itemId: payload.idInterno,
-  queueKey: 'supabase_progress:' + payload.operationId
- });
- if (navigator.onLine) await syncOperationOutbox('pick_pack_progress', true);
- const pending = (await getQueuedOperations()).some(row => row.id === operation.id);
- return { queued: pending };
+ if (!navigator.onLine) {
+  await queueOperation('supabase_progress', payload, {
+   module: payload.flow, sessionId: payload.sessionId, itemId: payload.idInterno,
+   queueKey: 'supabase_progress:' + payload.operationId
+  });
+  return { queued: true };
+ }
+ try {
+  return await withTimeout(DataClient.aplicarOperacaoProgressoSupabase(payload), 15000, 'sincronizar progresso');
+ } catch (error) {
+  if (!isRetryableConferenceSyncError(error)) throw error;
+  await queueOperation('supabase_progress', payload, {
+   module: payload.flow, sessionId: payload.sessionId, itemId: payload.idInterno,
+   queueKey: 'supabase_progress:' + payload.operationId, lastOnlineError: error.message || String(error)
+  });
+  return { queued: true, error };
+ }
 }
 
 function buildConferenceProgressOperations(session = currentPackSession) {
@@ -22174,19 +22133,24 @@ function getConferenceProgressQuantity(session) {
 }
 
 function scheduleConferenceProgressSync(immediate = false, operations = null) {
- const next = [...conferenceProgressPendingOperations.splice(0), ...(Array.isArray(operations) ? operations : buildConferenceProgressOperations())];
- if (!next.length) return conferenceProgressSyncPromise;
- // Persiste na fila imediatamente; não deixa leituras aguardando somente em um timer.
- const batch = Promise.all(next.map(sendOrQueueProgressOperation));
- conferenceProgressSyncPromise = Promise.all([conferenceProgressSyncPromise, batch])
-  .catch(error => { conferenceProgressPendingOperations.push(...next); console.warn('[CONFERENCIA] Falha ao preservar progresso.', error); showToast('Não foi possível salvar o andamento. Mantenha esta tela aberta e tente novamente.', 'warning'); });
+ const next = Array.isArray(operations) ? operations : buildConferenceProgressOperations();
+ if (next.length) conferenceProgressPendingOperations.push(...next);
+ if (!conferenceProgressPendingOperations.length) return conferenceProgressSyncPromise;
+ const run = () => {
+  conferenceProgressSyncTimer = null;
+  const pending = conferenceProgressPendingOperations.splice(0);
+  conferenceProgressSyncPromise = Promise.all(pending.map(sendOrQueueProgressOperation))
+   .catch(error => console.warn('[CONFERENCIA] Progresso mantido localmente; sincronizacao pendente.', error));
+  return conferenceProgressSyncPromise;
+ };
+ if (immediate) return run();
+ if (conferenceProgressSyncTimer) clearTimeout(conferenceProgressSyncTimer);
+ conferenceProgressSyncTimer = setTimeout(run, 150);
  return conferenceProgressSyncPromise;
 }
-
 async function flushConferenceProgressSync() {
- await scheduleConferenceProgressSync(true);
- if (conferenceProgressPendingOperations.length) throw new Error('Há leituras que não puderam ser preservadas. Mantenha a operação aberta e tente novamente.');
- if (navigator.onLine) await syncOperationOutbox('conference_flush', true);
+ if (currentPackSession?.id) await scheduleConferenceProgressSync(true);
+ if (navigator.onLine) await syncOperationOutbox('conference_flush');
 }
 
 /**
@@ -23418,11 +23382,11 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  }
  appData.movimentacoes = Array.isArray(movements) ? movements : [];
- await syncRomaneiosWithCloud();
- if (selectedId && selectedId !== '__realizados__') await SharedWork.detail('romaneio', selectedId);
  } catch (error) {
- console.warn('[ROMANEIO] Falha ao atualizar dados compartilhados:', error);
+ console.warn('[ROMANEIO] Falha ao atualizar separações e movimentos:', error);
  }
+ await SharedWork.refresh(true);
+ if(selectedId && selectedId !== '__realizados__') await SharedWork.detail('romaneio',selectedId);
 
  const availableChannels = getRomaneioAvailableChannels();
  const selectedChannels = parseRomaneioSelectedChannels(selectedType);
@@ -24675,7 +24639,6 @@ function getLabelCellPosition(cfg, index) {
 }
 async function quickActionGerarEtiquetas() {
  toggleQuickActions();
- renderQuickDestinationLoading('Gerar etiquetas', 'label-generator-screen');
  if (!appData.products || appData.products.length === 0) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in label-generator-screen">
@@ -28380,38 +28343,39 @@ async function changeMasterPin() {
  await promptCreateMasterPin();
 }
 
-async function updateSecurityDeviceAccess(deviceId, action, successMessage, logAction, logDetails) {
+async function updateSecurityDeviceAccess(deviceId, payload, successMessage, logAction, logDetails) {
  const client = getSecurityClient();
- if (!client) return false;
- const pin = await showAppPrompt({
- title: 'PIN mestre',
- message: 'Informe o PIN mestre para confirmar esta alteração de acesso.',
- label: 'PIN',
- inputType: 'password',
- confirmLabel: 'Confirmar',
- cancelLabel: 'Cancelar'
- });
- if (!pin) return false;
+ if (!client) {
+ showToast('Operacao concluida.', 'info');
+ return false;
+ }
 
  try {
- const { data, error } = await client.rpc('alterar_acesso_dispositivo', {
- p_solicitante_device_id: getOrCreateDeviceId(),
- p_usuario: localStorage.getItem('currentUser') || '',
- p_device_id_alvo: deviceId,
- p_acao: action,
- p_pin: String(pin).trim()
- });
- if (error) throw error;
- if (data !== true) throw new Error('A alteração de acesso não foi confirmada.');
+ const { error } = await client
+ .from('dispositivos_autorizados')
+ .update(payload)
+ .eq('device_id', deviceId);
+ if (error) {
+ logSecurityError('[SECURITY] update dispositivo', error, { deviceId });
+ throw error;
+ }
  await logSecurityEvent(logAction, logDetails, deviceId);
  showToast(successMessage, 'success');
  return true;
  } catch (error) {
- await showAppAlert({ title: 'Acesso não alterado', message: error.message || String(error), danger: true, icon: 'error' });
+ await showAppAlert({
+ title: 'Atencao',
+ message: error.message || String(error),
+ danger: true,
+ icon: 'error'
+ });
  return false;
  }
 }
+
 async function endSecuritySession(deviceId) {
+ const allowed = await requireMasterPin('encerrar sao de dispositivo');
+ if (!allowed) return;
  const confirmed = await showAppConfirm({
  title: 'Atencao',
  message: 'Revise os dados e tente novamente.',
@@ -28423,7 +28387,7 @@ async function endSecuritySession(deviceId) {
 
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- 'bloquear',
+ { ativo: false, bloqueado_em: getSecurityTimestamp() },
  'Sesao encerrada.',
  'sessao_encerrada',
  'Sesao encerrada pela tela de Seguranca.'
@@ -28437,9 +28401,11 @@ async function endSecuritySession(deviceId) {
 }
 
 async function approveSecurityRequest(deviceId) {
+ const allowed = await requireMasterPin('aprovar sao de acesso');
+ if (!allowed) return;
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- 'aprovar',
+ { ativo: true, ultimo_acesso: getSecurityTimestamp(), bloqueado_em: null },
  'Solicitacao aprovada.',
  'solicitacao_acesso_aprovada',
  'Solicitacao de acesso aprovada pela tela de Seguranca.'
@@ -28448,6 +28414,8 @@ async function approveSecurityRequest(deviceId) {
 }
 
 async function denySecurityRequest(deviceId) {
+ const allowed = await requireMasterPin('negar sao de acesso');
+ if (!allowed) return;
  const confirmed = await showAppConfirm({
  title: 'Atencao',
  message: 'Revise os dados e tente novamente.',
@@ -28458,7 +28426,7 @@ async function denySecurityRequest(deviceId) {
  if (!confirmed) return;
  const updated = await updateSecurityDeviceAccess(
  deviceId,
- 'negar',
+ { ativo: false, bloqueado_em: getSecurityTimestamp() },
  'Solicitacao negada.',
  'solicitacao_acesso_negada',
  'Solicitacao de acesso negada pela tela de Seguranca.'
@@ -33622,8 +33590,6 @@ async function saveDevolucaoMarketplace() {
 }
 
 async function renderHistoricoDevolucoes(options = {}) {
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in movimentos-screen module-screen devolucoes-screen devolucao-history-screen">
  <header class="devolucao-app-bar ds-app-header">
