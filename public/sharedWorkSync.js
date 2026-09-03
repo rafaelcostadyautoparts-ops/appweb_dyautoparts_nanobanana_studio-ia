@@ -214,16 +214,31 @@
   }
   function relevant() {return document.querySelector('.menu-screen,.entrada-nf-screen,.romaneio-screen');}
   function paint() {
-    if(!service||!relevant())return;
-    let bar=document.getElementById('shared-work-status');
-    if(!bar){bar=document.createElement('section');bar.id='shared-work-status';bar.className='shared-work-status';bar.setAttribute('aria-live','polite');const main=document.querySelector('#app main');if(!main)return;main.prepend(bar);}
-    const status=service.status();bar.replaceChildren();
-    const label=document.createElement('span');
-    label.textContent=!status.ready?'Preparando sincronização…':status.running?'Sincronizando entradas e romaneios…':status.error||
-      (status.conflicts.length?`${status.conflicts.length} conflito(s): cópias locais preservadas.`:status.pending?`${status.pending} registro(s) pendente(s) de envio.`:'Entradas e romaneios sincronizados.');bar.append(label);
-    const button=document.createElement('button');button.type='button';button.textContent=status.approved?'Sincronizar agora':'Autorizar este aparelho';
-    button.onclick=()=>status.approved?refresh(true):authorize();bar.append(button);
-    if(status.conflicts.length){const review=document.createElement('button');review.type='button';review.textContent='Revisar conflitos';review.onclick=reviewConflicts;bar.append(review);}
+    document.getElementById('shared-work-status')?.remove();
+    const connection=document.querySelector('.fab-connectivity-status');
+    if(!connection||!localStorage.getItem('currentUser'))return;
+    let button=document.getElementById('shared-work-icon');
+    if(!button){
+      button=document.createElement('button');button.id='shared-work-icon';
+      button.className='fab-icon-btn shared-work-icon';button.type='button';
+      connection.after(button);
+      button.onclick=async()=>{
+        if(!service?.status().approved){await authorize();return;}
+        await refresh(true);
+        const current=service.status();
+        if(current.conflicts.length){await reviewConflicts();return;}
+        showToast(current.error||(!navigator.onLine?'Sem conexão. Os registros serão enviados quando a internet voltar.':current.pending?'Há registros aguardando envio.':'Entradas e romaneios sincronizados.'),current.error||current.pending||!navigator.onLine?'warning':'success');
+      };
+    }
+    const status=service?.status()||{ready:false,running:false,approved:false,pending:0,conflicts:[]};
+    const count=Math.max(status.pending,status.conflicts.length);
+    const label=!status.ready?'Preparando sincronização':status.running?'Sincronizando entradas e romaneios':!status.approved?'Autorizar este aparelho com o PIN':status.conflicts.length?'Revisar conflitos de sincronização':status.error||(!navigator.onLine?'Sem conexão. Sincronização pendente':count?count+' registro(s) pendente(s). Sincronizar agora':'Sincronizar entradas e romaneios');
+    button.title=label;button.setAttribute('aria-label',label);
+    button.disabled=status.running||!status.ready;
+    button.dataset.state=status.running?'syncing':!status.approved?'unauthorized':count||status.error||!navigator.onLine?'attention':'synced';
+    button.setAttribute('aria-busy',String(status.running));
+    const glyph=status.approved?'<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/>':'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>';
+    button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+glyph+'</svg>'+(count?'<span class="shared-work-count" aria-hidden="true">'+(count>9?'9+':count)+'</span>':'');
   }
   function updateLists() {
     // Nunca redesenha o formulário que o operador está preenchendo.
@@ -238,7 +253,7 @@
     }
   }
   async function authorize(){
-    const pin=await showAppPrompt({title:'Autorizar sincronização',message:'Um administrador deve informar o PIN mestre existente uma vez neste aparelho.',label:'PIN mestre',inputType:'password',confirmLabel:'Autorizar',cancelLabel:'Cancelar'});
+    const pin=await showAppPrompt({title:'Autorizar sincronização',message:'Informe o PIN mestre para autorizar o compartilhamento neste aparelho.',label:'PIN mestre',inputType:'password',confirmLabel:'Autorizar',cancelLabel:'Cancelar'});
     if(!pin)return;
     try{await getService().authorize(localStorage.getItem('currentUser')||'',String(pin).trim());paint();updateLists();}catch(error){showToast(error.message,'warning');}
   }
@@ -268,6 +283,6 @@
     paint();if(relevant())refresh();
   }).observe(appNode,{childList:true});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
-  root.addEventListener('online',()=>refresh(true));root.addEventListener('focus',()=>refresh());
+  root.addEventListener('offline',()=>paint());root.addEventListener('online',()=>refresh(true));root.addEventListener('focus',()=>refresh());
   setInterval(()=>{if(!document.hidden&&relevant())refresh();},30000);
 })(typeof window==='undefined'?globalThis:window);
