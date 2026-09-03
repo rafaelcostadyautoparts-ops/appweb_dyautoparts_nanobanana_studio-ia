@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v283';
+const CACHE_NAME = 'dy-sync-prod-20260902-02';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -6,6 +6,8 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/app.js',
+  '/sharedWorkSync.js',
+  '/src/sharedWorkSync.css',
   '/dataClient.js',
   '/purchasePlanning.js',
   '/supabaseClient.js',
@@ -30,6 +32,7 @@ const ASSETS_TO_CACHE = [
   '/assets/images/logo/logo_dybranco_app.png',
   '/assets/images/logo/logo_dypreto_app.png',
   '/manifest.json',
+  '/version.json',
   '/assets/images/logo/maskable_icon_preto.png',
   '/assets/images/logo/maskable_icon_preto_x192.png',
   '/assets/images/logo/maskable_icon_preto_x384.png',
@@ -71,7 +74,7 @@ self.addEventListener('fetch', (event) => {
   const url = event.request.url;
   const requestUrl = new URL(url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
-  const forceRefresh = event.request.cache === 'reload' || event.request.cache === 'no-cache';
+  const forceRefresh = event.request.cache === 'reload' || event.request.cache === 'no-cache' || event.request.cache === 'no-store' || (event.request.mode === 'navigate' && requestUrl.searchParams.has('app-update'));
 
   // Ctrl+F5/recarregamento forte deve ignorar inclusive o cache do service worker.
   if (forceRefresh && isSameOrigin) {
@@ -110,20 +113,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bypass total de cache do SW para version.json (busca sempre atualizada da rede sem salvar no cache)
-  if (url.includes('/version.json')) {
-    event.respondWith(
-      fetch(new Request(event.request, { cache: 'no-store' })).catch(() => {
-        return new Response(JSON.stringify({ version: '', build: '' }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      })
-    );
-    return;
-  }
-
   // Network-first para arquivos principais da aplicacao
-  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('index.html')) {
+  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();
