@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-autoparts-v282';
+const CACHE_NAME = 'dy-sync-prod-20260902-02';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -6,6 +6,8 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/app.js',
+  '/sharedWorkSync.js',
+  '/src/sharedWorkSync.css',
   '/dataClient.js',
   '/purchasePlanning.js',
   '/supabaseClient.js',
@@ -72,7 +74,7 @@ self.addEventListener('fetch', (event) => {
   const url = event.request.url;
   const requestUrl = new URL(url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
-  const forceRefresh = event.request.cache === 'reload' || event.request.cache === 'no-cache';
+  const forceRefresh = event.request.cache === 'reload' || event.request.cache === 'no-cache' || event.request.cache === 'no-store' || (event.request.mode === 'navigate' && requestUrl.searchParams.has('app-update'));
 
   // Ctrl+F5/recarregamento forte deve ignorar inclusive o cache do service worker.
   if (forceRefresh && isSameOrigin) {
