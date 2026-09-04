@@ -563,6 +563,7 @@ function renderScreenByName(name, push = true) {
  switch (name) {
  case 'menu': renderMenu(push); break;
  case 'search': renderSearchScreen(push); break;
+ case 'anuncios': typeof renderAnunciosScreen === 'function' ? renderAnunciosScreen(push) : renderMenu(push); break;
  case 'inventario-localizacao': renderInventarioLocalizacao(false); break;
  case 'login': renderLogin(push); break;
  case 'config': renderConfigSubMenu(push); break;
@@ -2911,6 +2912,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
 // Texto validado em UTF-8.
 const MODULE_SIDEBAR_CONFIG = {
  produtos: { label: 'PRODUTOS', icon: 'inventory_2', colorFrom: '#DB2777', colorTo: '#9D174D', shadow: '219,39,119' },
+ anuncios: { label: 'ANÚNCIOS', icon: 'storefront', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
  pedidos: { label: 'PEDIDOS', icon: 'receipt_long', colorFrom: '#0EA5E9', colorTo: '#0284C7', shadow: '14,165,233' },
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
  movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
@@ -3971,11 +3973,13 @@ const menuModulesConfig = [
  { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 2, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
- { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' }
+ { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' },
+ { id: 'anuncios', label: 'ANÚNCIOS', icon: 'anuncios', order: 10, type: 'principal' }
 ];
 
 const menu3DIcons = {
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
+ anuncios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 25 h24 v22 H20 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 17 L38 17 L44 25 L20 25 Z" fill="#fff" opacity="0.95"/><path d="M26 33 h12 M26 39 h8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="41" cy="39" r="2.5" fill="#fff"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  pedidos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><path d="M21 19h22v28H21z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 17h10v5H27z" fill="#0EA5E9" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m26 31 3 3 6-7M26 41h12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -4053,6 +4057,7 @@ function getMenuItemsFromConfig() {
 const menuRoutes = {
  dashboard: 'renderAlerts()',
  produtos: 'renderProductSubMenu()',
+ anuncios: 'renderAnunciosScreen()',
  pick: 'openPickModeChoice()',
  pack: 'renderPackMenu()',
  compras: 'renderComprasSubMenu()',
