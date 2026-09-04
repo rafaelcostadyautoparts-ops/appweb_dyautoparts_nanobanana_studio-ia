@@ -2236,6 +2236,59 @@ function openOperationOutboxDB() {
  });
 }
 
+const operationalWriteChains = new Map();
+function runOperationalWrite(key, work) {
+  const previous = operationalWriteChains.get(key) || Promise.resolve();
+  const current = previous.catch(() => {}).then(work);
+  operationalWriteChains.set(key, current);
+  const clear = () => { if (operationalWriteChains.get(key) === current) operationalWriteChains.delete(key); };
+  current.then(clear, clear);
+  return current;
+}
+
+function isPickPackOperation(operation) {
+  return ['separacao', 'conferencia'].includes(operation.meta?.module || operation.payload?.flow)
+    || /^supabase_pick_/.test(operation.type || '')
+    || (operation.type === 'supabase_rpc' && operation.meta?.rpcName === 'finalizar_conferencia');
+}
+
+async function preparePickPackResume(sessionId = '') {
+  try {
+    await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:')).map(([, promise]) => promise));
+    if (pickPackageCloudSyncTimer) {
+      clearTimeout(pickPackageCloudSyncTimer);
+      pickPackageCloudSyncTimer = null;
+      const snapshot = pendingPickPackageSnapshot;
+      pendingPickPackageSnapshot = null;
+      if (snapshot) await syncPickPackagesWithCloud(snapshot);
+    }
+    await pickPackageCloudSyncChain;
+    if (sessionId && navigator.onLine) {
+      const localDraft = getLocalDraftPickSession(sessionId);
+      const ownPending = (await getQueuedOperations()).filter(operation =>
+        String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
+      const draftOnly = ownPending.every(operation =>
+        ['supabase_pick_draft', 'supabase_pick_draft_item_delete'].includes(operation.type)
+        || (operation.type === 'supabase_progress' && operation.payload?.flow === 'separacao')
+        || (operation.type === 'supabase_pick_packages' && operation.payload?.validateComplete !== true));
+      if (localDraft && Array.isArray(localDraft.items) && draftOnly
+        && ownPending.some(operation => operation.type === 'supabase_pick_packages')) {
+        await persistPickingDraftItemsBatch(localDraft, localDraft.items);
+        await syncPickPackagesWithCloud({ sessionId, items: localDraft.items });
+      }
+    }
+    await flushConferenceProgressSync();
+    if (!navigator.onLine) return true;
+    const pending = (await getQueuedOperations()).filter(operation => isPickPackOperation(operation)
+      && String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
+    if (sessionId && pending.length) throw new Error('H├í altera├º├Áes deste aparelho aguardando envio. Resolva a pend├¬ncia antes de recarregar esta opera├º├úo.');
+    return true;
+  } catch (error) {
+    showToast(error.message || 'N├úo foi poss├¡vel sincronizar o andamento.', 'warning');
+    return false;
+  }
+}
+
 async function queueOperation(type, payload, meta = {}) {
  const executionId = payload.executionId || meta.executionId || generateExecutionId();
  const operationId = meta.queueKey || [type, executionId, meta.sessionId || '', meta.itemId || ''].join(':');
@@ -17254,7 +17307,15 @@ async function performPickPackagesCloudSync(options = {}) {
  };
  const statusEl = document.getElementById('pick-package-sync-status');
  if (statusEl) { statusEl.textContent = navigator.onLine ? 'SALVANDO...' : 'PENDENTE'; statusEl.className = navigator.onLine ? 'is-saving' : 'is-pending'; }
- if (!navigator.onLine) {
+ if (!payload.validateComplete) {
+  const operation = await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
+  if (navigator.onLine && typeof syncOperationOutbox === 'function') await syncOperationOutbox('pick_packages_progress', true);
+  const pending = (await getQueuedOperations()).find(row => row.id === operation.id);
+  if (statusEl) { statusEl.textContent = pending ? 'PENDENTE' : 'SINCRONIZADO'; statusEl.className = pending ? 'is-pending' : 'is-synced'; }
+  markDraftPickSaveStatus(pending ? 'queued' : 'synced');
+  return { queued: !!pending };
+ }
+ if (!navigator.onLine || options.forceQueue === true) {
   await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId });
   markDraftPickSaveStatus('queued');
   return { queued: true };
@@ -17265,7 +17326,7 @@ async function performPickPackagesCloudSync(options = {}) {
   markDraftPickSaveStatus('synced');
   return result;
  } catch (error) {
-  if (isRetryableConferenceSyncError(error)) {
+  if (typeof isRetryableConferenceSyncError === 'function' && isRetryableConferenceSyncError(error)) {
    await queueOperation('supabase_pick_packages', payload, { module: 'separacao', sessionId, lastOnlineError: error.message || String(error) });
    if (statusEl) { statusEl.textContent = 'PENDENTE'; statusEl.className = 'is-pending'; }
    markDraftPickSaveStatus('queued', error);
@@ -17499,11 +17560,6 @@ async function togglePickItemSelection(index, source = 'standalone') {
  }
 
  pickKitSelection.set(key, { source: 'standalone', kitId: '', qty });
- const selectedUnits = getSelectedPickEntries().reduce((sum, entry) => sum + Number(entry.selection.qty || 0), 0);
- if (selectedUnits >= 2) {
- const confirmed = await showAppConfirm({ title: 'Finalizar agrupamento?', message: `${selectedUnits} unidade(s) estao selecionada(s).`, detail: 'Voce pode continuar selecionando outros itens antes de finalizar.', confirmLabel: 'Finalizar agrupamento', cancelLabel: 'Continuar agrupando' });
- if (confirmed) return transformPickSelectionIntoKit();
- }
  updatePickItemsList();
  settlePickScannerInput(60);
 }
@@ -17956,174 +18012,156 @@ function generatePickSessionId(channelLabel) {
 }
 
 function isTemporaryPickSessionId(sessionId) {
- return /^SEP-TEMP?-/.test(String(sessionId || '').trim().toUpperCase());
+  return /^SEP-TEMP?-/i.test(String(sessionId || '').trim());
+}
+
+function isDraftPickSessionId(sessionId) {
+  return /^SEP-DRAFT-/i.test(String(sessionId || '').trim()) || isTemporaryPickSessionId(sessionId);
+}
+
+function isValidOfficialPickSessionId(sessionId) {
+  return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(String(sessionId || '').trim());
 }
 
 function isValidPickSessionId(sessionId) {
- return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/.test(String(sessionId || '').trim().toUpperCase());
+  return isValidOfficialPickSessionId(sessionId) || isDraftPickSessionId(sessionId);
 }
 
 function getSafePickSessionId(sessionId, channelLabel) {
- const currentId = String(sessionId || '').trim();
- if (currentId && !isTemporaryPickSessionId(currentId) && isValidPickSessionId(currentId)) return currentId;
- return generatePickSessionId(channelLabel);
+  const currentId = String(sessionId || '').trim();
+  if (currentId && !isTemporaryPickSessionId(currentId) && isValidPickSessionId(currentId)) return currentId;
+  return generatePickSessionId(channelLabel);
 }
 
 function sanitizePickSessionIdForChannel(sessionId, channelLabel, context = 'separacao') {
- const currentId = String(sessionId || '').trim();
- const safeId = getSafePickSessionId(currentId, channelLabel);
- if (currentId && currentId !== safeId) {
- console.warn('[SEP] separacao_id fora do padrao substituido', {
- context,
- antigo: currentId,
- novo: safeId,
- canal: channelLabel || ''
- });
- }
- return safeId;
+  const currentId = String(sessionId || '').trim();
+  const safeId = getSafePickSessionId(currentId, channelLabel);
+  if (currentId && currentId !== safeId) {
+    console.warn('[SEP] separacao_id fora do padrao substituido', {
+      context,
+      antigo: currentId,
+      novo: safeId,
+      canal: channelLabel || ''
+    });
+  }
+  return safeId;
 }
 
 function assertValidPickSessionForPersist(sessionId, channelLabel, context = 'separacao') {
- const cleanSessionId = String(sessionId || '').trim();
- const cleanChannelLabel = String(channelLabel || '').trim();
- if (!cleanChannelLabel) {
- throw new Error(`Canal da separacao nao informado para ${context}. Volte e selecione o canal novamente.`);
- }
- if (!cleanSessionId) {
- throw new Error(`Codigo da separacao nao informado para ${context}.`);
- }
- if (isTemporaryPickSessionId(cleanSessionId) || !isValidPickSessionId(cleanSessionId)) {
- throw new Error(`Codigo de separacao invalido (${cleanSessionId}). Volte ao menu de Separacao e selecione o canal novamente.`);
- }
+  const cleanSessionId = String(sessionId || '').trim();
+  const cleanChannelLabel = String(channelLabel || '').trim();
+  if (!cleanChannelLabel) {
+    throw new Error(`Canal da separacao nao informado para ${context}. Volte e selecione o canal novamente.`);
+  }
+  if (!cleanSessionId) {
+    throw new Error(`Codigo da separacao nao informado para ${context}.`);
+  }
+  if (!isValidPickSessionId(cleanSessionId)) {
+    throw new Error(`Codigo de separacao invalido (${cleanSessionId}). Volte ao menu de Separacao e selecione o canal novamente.`);
+  }
 }
 
 function buildPickingSessionPayload(sessionId, channelId, channelLabel, status = PICK_STATUS_DRAFT, createdAt = null) {
- assertValidPickSessionForPersist(sessionId, channelLabel, 'montar payload');
- const now = getDataHoraBrasil();
- const currentUser = localStorage.getItem('currentUser') || 'N/A';
- const stats = getPickingOperationalStats();
- const isFastMode = getActivePickingFastMode(getDraftPickSession());
- return {
- separacao_id: sessionId,
- pedido_referencia: '',
- canal_id: channelId || '',
- canal_nome: channelLabel || '',
- status,
- criado_por: currentUser,
- criado_em: createdAt || now,
- atualizado_em: now,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- observacao: appendPickPackageStateObservation(isFastMode ? PICK_FAST_OBSERVATION : PICK_MANUAL_OBSERVATION)
- };
+  assertValidPickSessionForPersist(sessionId, channelLabel, 'montar payload');
+  const now = getDataHoraBrasil();
+  const currentUser = localStorage.getItem('currentUser') || 'N/A';
+  const stats = getPickingOperationalStats();
+  const isFastMode = getActivePickingFastMode(getDraftPickSession());
+  return {
+    separacao_id: sessionId,
+    pedido_referencia: '',
+    canal_id: channelId || '',
+    canal_nome: channelLabel || '',
+    status,
+    criado_por: currentUser,
+    criado_em: createdAt || now,
+    atualizado_em: now,
+    total_produtos_separados: stats.total_produtos_separados,
+    total_itens_separados: stats.total_itens_separados,
+    total_pacotes_montados: stats.total_pacotes_montados,
+    observacao: appendPickPackageStateObservation(isFastMode ? PICK_FAST_OBSERVATION : PICK_MANUAL_OBSERVATION)
+  };
 }
 
 function getPickingScreenDataset() {
- const screen = document.querySelector('.pick-workflow-screen');
- return {
- sessionId: screen?.dataset.sessionId || '',
- channelId: screen?.dataset.channelId || '',
- channelLabel: screen?.dataset.channelLabel || '',
- channelColor: screen?.dataset.channelColor || '',
- createdAt: screen?.dataset.createdAt || ''
- };
+  const screen = document.querySelector('.pick-workflow-screen');
+  return {
+    sessionId: screen?.dataset.sessionId || '',
+    channelId: screen?.dataset.channelId || '',
+    channelLabel: screen?.dataset.channelLabel || '',
+    channelColor: screen?.dataset.channelColor || '',
+    createdAt: screen?.dataset.createdAt || ''
+  };
 }
 
 async function ensureActivePickingContext() {
- if (currentPickingContext?.channelLabel && (!currentPickingContext.sessionId || isValidPickSessionId(currentPickingContext.sessionId))) {
- return currentPickingContext;
- }
+  if (currentPickingContext?.channelLabel && (!currentPickingContext.sessionId || isValidPickSessionId(currentPickingContext.sessionId))) {
+    return currentPickingContext;
+  }
 
- const data = getPickingScreenDataset();
- if (data.sessionId && data.channelLabel && (isValidPickSessionId(data.sessionId) || isTemporaryPickSessionId(data.sessionId))) {
- currentPickingContext = {
- sessionId: isTemporaryPickSessionId(data.sessionId) ? data.sessionId : sanitizePickSessionIdForChannel(data.sessionId, data.channelLabel, 'retomar contexto de separacao'),
- channelId: data.channelId,
- channelLabel: data.channelLabel,
- channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
- executionId: currentPickingContext?.executionId || generateExecutionId(),
- createdAt: data.createdAt || currentPickingContext?.createdAt || getDataHoraBrasil(),
- total_pacotes_montados: getCurrentPickPackageCount(data.sessionId, data.channelId, data.channelLabel),
- totalPacotesMontados: getCurrentPickPackageCount(data.sessionId, data.channelId, data.channelLabel)
- };
- return currentPickingContext;
- }
+  const data = getPickingScreenDataset();
+  if (data.sessionId && data.channelLabel && (isValidPickSessionId(data.sessionId) || isTemporaryPickSessionId(data.sessionId))) {
+    currentPickingContext = {
+      sessionId: isTemporaryPickSessionId(data.sessionId) ? data.sessionId : sanitizePickSessionIdForChannel(data.sessionId, data.channelLabel, 'retomar contexto de separacao'),
+      channelId: data.channelId,
+      channelLabel: data.channelLabel,
+      channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
+      executionId: currentPickingContext?.executionId || generateExecutionId(),
+      createdAt: data.createdAt || currentPickingContext?.createdAt || getDataHoraBrasil(),
+      total_pacotes_montados: getCurrentPickPackageCount(data.sessionId, data.channelId, data.channelLabel),
+      totalPacotesMontados: getCurrentPickPackageCount(data.sessionId, data.channelId, data.channelLabel)
+    };
+    return currentPickingContext;
+  }
 
- if (data.channelLabel) {
- currentPickingContext = {
- sessionId: '',
- channelId: data.channelId || data.channelLabel,
- channelLabel: data.channelLabel,
- channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
- executionId: currentPickingContext?.executionId || generateExecutionId(),
- createdAt: data.createdAt || getDataHoraBrasil(),
- total_pacotes_montados: 0,
- totalPacotesMontados: 0
- };
- return currentPickingContext;
- }
+  if (data.channelLabel) {
+    currentPickingContext = {
+      sessionId: '',
+      channelId: data.channelId || data.channelLabel,
+      channelLabel: data.channelLabel,
+      channelColor: data.channelColor || getChannelConfig(data.channelLabel).color || 'pdv',
+      executionId: currentPickingContext?.executionId || generateExecutionId(),
+      createdAt: data.createdAt || getDataHoraBrasil(),
+      total_pacotes_montados: 0,
+      totalPacotesMontados: 0
+    };
+    return currentPickingContext;
+  }
 
- return null;
+  return null;
 }
 
 async function ensureOfficialPickSessionForFirstItem(product = {}) {
- if (currentPickingContext?.sessionId && isValidPickSessionId(currentPickingContext.sessionId)) return currentPickingContext;
- if (!currentPickingContext?.channelLabel) return null;
- if (!navigator.onLine) {
- const dateKey = getPickSessionDateKey(new Date());
- const prefix = getPickSessionChannelPrefix(currentPickingContext.channelLabel);
- currentPickingContext.sessionId = `SEP-${prefix}-${dateKey}-${Date.now()}`;
- currentPickingContext.createdAt = currentPickingContext.createdAt || getDataHoraBrasil();
- const screen = document.querySelector('.pick-workflow-screen');
- if (screen) screen.dataset.sessionId = currentPickingContext.sessionId;
- document.querySelectorAll('[data-pick-session-id], #pick-session-id-label').forEach(element => { element.textContent = currentPickingContext.sessionId; });
- showToast('Separacao iniciada offline. Aguardando sincronizacao.', 'info');
- return currentPickingContext;
- }
- const productId = getPickingProductId(product);
- if (!productId) return null;
- try {
- const result = await DataClient.reservePickingSessionSupabase({
- prefixo: getPickSessionChannelPrefix(currentPickingContext.channelLabel),
- canalId: currentPickingContext.channelId,
- canalNome: currentPickingContext.channelLabel,
- criadoPor: localStorage.getItem('currentUser') || 'N/A',
- modoRapido: getActivePickingFastMode(),
- idInterno: productId,
- ean: product.ean || '',
- descricao: getPickItemTitle(product)
- });
- const officialId = String(result?.separacao_id || '').trim();
- if (!isValidPickSessionId(officialId)) throw new Error('O Supabase nao retornou um codigo de separacao valido.');
- const temporaryId = currentPickingContext.sessionId;
- currentPickingContext.sessionId = officialId;
- currentPickingContext.createdAt = result?.criado_em || currentPickingContext.createdAt || getDataHoraBrasil();
- currentPickingContext._reservedFirstItemId = productId;
- const screen = document.querySelector('.pick-workflow-screen');
- if (screen) screen.dataset.sessionId = officialId;
- document.querySelectorAll('[data-pick-session-id], #pick-session-id-label').forEach(element => { element.textContent = officialId; });
- if (temporaryId && temporaryId !== officialId) removeLocalDraftPickSession(temporaryId);
- return currentPickingContext;
- } catch (error) {
- console.error('[SEP] Falha ao reservar sequencia no primeiro bip:', error);
- await showAppModal({ type: 'error', title: 'Nao foi possivel iniciar a separacao', message: 'Nenhum numero foi consumido e nenhum produto foi salvo.', detail: error?.message || String(error), confirmText: 'Entendi' });
- return null;
- }
+  if (currentPickingContext?.sessionId && isValidPickSessionId(currentPickingContext.sessionId)) {
+    return currentPickingContext;
+  }
+  if (!currentPickingContext?.channelLabel) return null;
+
+  const deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : 'dev';
+  const draftId = `SEP-DRAFT-${deviceId}-${Date.now()}`;
+  currentPickingContext.sessionId = draftId;
+  currentPickingContext.createdAt = currentPickingContext.createdAt || getDataHoraBrasil();
+  const screen = document.querySelector('.pick-workflow-screen');
+  if (screen) screen.dataset.sessionId = draftId;
+  document.querySelectorAll('[data-pick-session-id], #pick-session-id-label').forEach(element => {
+    element.textContent = 'Rascunho em andamento';
+  });
+  return currentPickingContext;
 }
 
 function buildPickingItemPayload(item) {
- const qty = Number(item?.qty || item?.qtd_separada || 1);
+ const rawQty = item?.qty ?? item?.qtd_separada;
+ const qty = Number.isFinite(Number(rawQty)) ? Number(rawQty) : 1;
  return {
- id_interno: item?.id_interno || item?.col_a || item?.col_A || '',
- ean: isUsableProductScanCode(item?.ean) ? String(item.ean).trim() : '',
- descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
- qtd_solicitada: qty,
- qtd_separada: qty,
- ...(isHomologationEnvironment() && isOperationalNoStockItem(item) ? {
- sem_movimento_estoque: true,
- detalhes_operacionais: Array.isArray(item?.detalhes_operacionais) ? item.detalhes_operacionais : []
- } : {})
+  id_interno: item?.id_interno || item?.col_a || item?.col_A || '',
+  ean: isUsableProductScanCode(item?.ean) ? String(item.ean).trim() : '',
+  descricao: item?.descricao_base || item?.descricao_completa || item?.col_aa || item?.descricao || '',
+  qtd_solicitada: qty,
+  qtd_separada: qty,
+  ...(isHomologationEnvironment() && isOperationalNoStockItem(item) ? {
+   sem_movimento_estoque: true,
+   detalhes_operacionais: Array.isArray(item?.detalhes_operacionais) ? item.detalhes_operacionais : []
+  } : {})
  };
 }
 
@@ -18173,7 +18211,7 @@ function showOperationalItemModal() {
  });
  document.body.appendChild(overlay);
  document.addEventListener('keydown', onKeyDown);
- requestAnimationFrame(() => overlay.querySelector('[name="descricao"]')?.focus());
+  requestAnimationFrame(() => overlay.querySelector('[name="descricao"]')?.focus());
  });
 }
 
@@ -18181,107 +18219,73 @@ function getPickingProductId(item) {
   return normalizePickCode(item?.id_interno || item?.produto_id_interno || item?.codigo_interno || item?.col_a || item?.col_A || '');
 }
 
+function renderPickProductFeedbackToast(type = 'add', item = null, quantity = 1) {
+  clearTimeout(scanCenterToastTimeout);
+  document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
+
+  const isAdd = type === 'add';
+  const title = item ? getPickItemTitle(item) : (isAdd ? 'Produto bipado' : 'Produto removido');
+  const sku = item ? (getPickItemSku(item) || '—') : '—';
+  const ean = item ? (getPickItemEan(item) || '—') : '—';
+  const color = item ? (getPickItemColor(item) || '—') : '—';
+  const idInterno = (item ? getPickingProductId(item) : '') || '—';
+  const image = item ? getPickProductImage(item) : '';
+  const currentQty = isAdd 
+    ? (Number(item?.qty || item?.qtd_separada || quantity || 1) || 1)
+    : (Number(quantity || 1) || 1);
+
+  const toastEl = document.createElement('div');
+  toastEl.className = `pick-feedback-toast ${isAdd ? 'is-add' : 'is-remove'}`;
+  toastEl.setAttribute('role', 'status');
+  toastEl.setAttribute('aria-live', 'polite');
+  toastEl.innerHTML = `
+  <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
+    <span class="material-symbols-rounded">close</span>
+  </button>
+  <div class="pick-feedback-header">
+    <div class="pick-feedback-icon-wrapper">
+      <div class="pick-feedback-icon">
+        <span class="material-symbols-rounded">${isAdd ? 'check' : 'close'}</span>
+      </div>
+    </div>
+    <strong class="pick-feedback-title">${isAdd ? 'Produto adicionado!' : 'Produto removido!'}</strong>
+    <p class="pick-feedback-subtitle">${isAdd ? 'O produto foi adicionado com sucesso.' : 'O produto foi removido com sucesso.'}</p>
+  </div>
+  <div class="pick-feedback-body">
+    <div class="pick-feedback-image">
+      ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
+    </div>
+    <div class="pick-feedback-copy">
+      <b class="pick-feedback-product-name">${escapeKitAttribute(title)}</b>
+      <div class="pick-feedback-meta">
+        <span class="chip-item chip-id"><small>ID INTERNO</small><strong>${escapeKitAttribute(idInterno)}</strong></span>
+        <span class="chip-item chip-sku"><small>SKU</small><strong>${escapeKitAttribute(sku)}</strong></span>
+        <span class="chip-item chip-ean"><small>EAN</small><strong>${escapeKitAttribute(ean)}</strong></span>
+        <span class="chip-item chip-color"><small>COR</small><strong>${escapeKitAttribute(color)}</strong></span>
+      </div>
+    </div>
+  </div>
+  <div class="pick-feedback-footer">
+    <div class="pick-feedback-qty-box">
+      <span class="pick-feedback-qty-label">${isAdd ? 'QUANTIDADE ATUAL' : 'QUANTIDADE REMOVIDA'}</span>
+      <strong class="pick-feedback-qty-val">${currentQty}<small> un</small></strong>
+    </div>
+  </div>
+  `;
+  document.body.appendChild(toastEl);
+
+  scanCenterToastTimeout = setTimeout(() => {
+    toastEl.classList.add('is-hiding');
+    setTimeout(() => toastEl.remove(), 260);
+  }, 2600);
+}
+
 function showPickScanCenterToast(item = null, quantity = 1) {
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto bipado';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
- const currentQty = Number(item?.qty || item?.qtd_separada || quantity || 1) || 1;
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-add';
- toastEl.setAttribute('role', 'status');
- toastEl.setAttribute('aria-live', 'polite');
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">check</span></div>
- <strong class="pick-feedback-title">Produto adicionado!</strong>
- <p class="pick-feedback-subtitle">O produto foi adicionado com sucesso.</p>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span><small>ID INTERNO</small>${escapeKitAttribute(getPickingProductId(item) || "-")}</span>
- <span><small>SKU</small>${escapeKitAttribute(sku)}</span>
- <span><small>EAN</small>${escapeKitAttribute(ean)}</span>
- <span><small>COR</small>${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade atual</span>
- <strong>${currentQty}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>Adicionado </em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('add', item, quantity);
 }
 
 function showPickRemovalFeedbackToast(item = null, quantity = 1) {
- clearTimeout(scanCenterToastTimeout);
- document.querySelectorAll('.scan-center-toast, .pick-feedback-toast').forEach(el => el.remove());
-
- const title = item ? getPickItemTitle(item) : 'Produto removido';
- const sku = item ? getPickItemSku(item) : '-';
- const ean = item ? getPickItemEan(item) : '-';
- const color = item ? getPickItemColor(item) : '-';
- const image = item ? getPickProductImage(item) : '';
-
- const toastEl = document.createElement('div');
- toastEl.className = 'pick-feedback-toast is-remove';
- toastEl.setAttribute('role', 'status');
- toastEl.setAttribute('aria-live', 'polite');
- toastEl.innerHTML = `
- <button class="pick-feedback-close" type="button" aria-label="Fechar" onclick="this.closest('.pick-feedback-toast')?.remove()">
- <span class="material-symbols-rounded">close</span>
- </button>
- <div class="pick-feedback-icon"><span class="material-symbols-rounded">remove</span></div>
- <strong class="pick-feedback-title">Produto removido!</strong>
- <p class="pick-feedback-subtitle">O produto foi removido desta operação.</p>
- <div class="pick-feedback-body">
- <div class="pick-feedback-image">
- ${image ? `<img src="${escapeKitAttribute(image)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <div class="pick-feedback-copy">
- <b>${escapeKitAttribute(title)}</b>
- <div class="pick-feedback-meta">
- <span><small>ID INTERNO</small>${escapeKitAttribute(getPickingProductId(item) || "-")}</span>
- <span><small>SKU</small>${escapeKitAttribute(sku)}</span>
- <span><small>EAN</small>${escapeKitAttribute(ean)}</span>
- <span><small>COR</small>${escapeKitAttribute(color)}</span>
- </div>
- </div>
- </div>
- <div class="pick-feedback-footer">
- <div>
- <span>Quantidade removida</span>
- <strong>${Number(quantity || 1)}<small> un</small></strong>
- </div>
- <em><span class="material-symbols-rounded">check_circle</span>${Number(quantity || 1)} ${Number(quantity || 1) === 1 ? 'unidade removida' : 'unidades removidas'}</em>
- </div>
- `;
- document.body.appendChild(toastEl);
-
- scanCenterToastTimeout = setTimeout(() => {
- toastEl.classList.add('is-hiding');
- setTimeout(() => toastEl.remove(), 260);
- }, 2600);
+  renderPickProductFeedbackToast('remove', item, quantity);
 }
 
 function triggerScanSuccessGlow() {
@@ -19710,7 +19714,8 @@ function getCurrentPickDraftForUpdate(saveStatus = 'saving') {
 
 async function persistPickingItemRemoval(draft, removedItem, removedAll) {
  if (!removedItem) return null;
- const persistResult = await persistPickingDraftItem(draft, removedItem);
+ const itemToPersist = removedAll ? { ...removedItem, qty: 0 } : removedItem;
+ const persistResult = await persistPickingDraftItem(draft, itemToPersist);
  markDraftPickSaveStatus(persistResult?.queued ? 'queued' : 'synced');
  return persistResult;
 }
@@ -20750,280 +20755,383 @@ async function createPickingConferenceWithoutStock(payload = {}) {
  };
 }
 
+async function flushPickingItemsBeforeFinalization(sessionId) {
+  await Promise.all([...operationalWriteChains].filter(([key]) => key.startsWith('pick:' + sessionId + ':')).map(([, promise]) => promise));
+  await pickPackageCloudSyncChain.catch(() => null);
+  if (!navigator.onLine) return { queued: true };
+  return runOperationalWrite('outbox', async () => {
+    const operations = (await getQueuedOperations()).filter(operation =>
+      String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
+    for (const operation of operations) {
+      if (operation.type === 'supabase_pick_packages' && operation.payload?.validateComplete !== true) continue;
+      const isItemWrite = ['supabase_pick_draft', 'supabase_pick_draft_item_delete'].includes(operation.type)
+        || (operation.type === 'supabase_progress' && operation.payload?.flow === 'separacao');
+      if (!isItemWrite) throw new Error('Esta separacao tem uma finalizacao ou exclusao pendente. Sincronize antes de tentar novamente.');
+      try {
+        await executeQueuedOperation(operation);
+        await markQueuedOperation(operation, 'synced');
+      } catch (error) {
+        await markQueuedOperation(operation, 'error', error.message || error);
+        if (isRetryableConferenceSyncError(error)) return { queued: true };
+        throw error;
+      }
+    }
+    await refreshOutboxPendingCount();
+    return { queued: false };
+  });
+}
+
 async function finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now) {
- const currentUser = localStorage.getItem('currentUser');
- const stats = getPickingOperationalStats(currentPickSession.items);
- let draftPersistenceQueued = false;
+  const currentUser = localStorage.getItem('currentUser');
+  const stats = getPickingOperationalStats(currentPickSession.items);
 
- const draftResult = await persistPickingDraftItemsBatch({
- ...draft,
- sessionId,
- channelId,
- channelLabel,
- channelColor,
- status: PICK_STATUS_DRAFT,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- totalPacotesMontados: stats.total_pacotes_montados
- }, currentPickSession.items);
- if (draftResult?.queued) draftPersistenceQueued = true;
+  if (isDraftPickSessionId(sessionId) || !isValidOfficialPickSessionId(sessionId)) {
+    if (navigator.onLine) {
+      try {
+        const alloc = await DataClient.alocarNumeroSeparacaoDefinitivaSupabase({
+          draftId: sessionId,
+          canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
+          canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
+          criadoPor: currentUser || localStorage.getItem('currentUser') || 'N/A'
+        });
+        if (alloc?.separacao_id) {
+          const oldDraftId = sessionId;
+          sessionId = alloc.separacao_id;
+          currentPickingContext.sessionId = sessionId;
+          if (currentPickSession) {
+            currentPickSession.sessionId = sessionId;
+            if (currentPickSession.items) currentPickSession.items.forEach(it => { it.separacao_id = sessionId; });
+          }
+          removeLocalDraftPickSession(oldDraftId);
+        }
+      } catch (err) {
+        console.warn('[SEP] Erro ao alocar numero definitivo online:', err);
+      }
+    }
+  }
 
- const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
- if (rows.length === 0) {
- throw new Error('Nenhum item valido para finalizar no modo rapido.');
- }
+  await flushPickingItemsBeforeFinalization(sessionId);
 
- const fastPayload = {
- sessionId,
- channelLabel,
- isFastMode: true,
- modo_rapido: true,
- observacao: PICK_FAST_OBSERVATION,
- user: currentUser,
- rows,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- executionId: draft.executionId || generateExecutionId()
- };
+  let draftPersistenceQueued = false;
 
- let finalizationResult;
- if (!navigator.onLine || draftPersistenceQueued) {
- await queueOperation('supabase_pick_fast_finalize', fastPayload, {
- module: 'separacao',
- sessionId
- });
- finalizationResult = { queued: true };
- } else {
- finalizationResult = await finalizeFastPickingWithoutConference(fastPayload);
- }
+  const draftResult = await persistPickingDraftItemsBatch({
+    ...draft,
+    sessionId,
+    channelId,
+    channelLabel,
+    channelColor,
+    status: PICK_STATUS_DRAFT,
+    total_produtos_separados: stats.total_produtos_separados,
+    total_itens_separados: stats.total_itens_separados,
+    total_pacotes_montados: stats.total_pacotes_montados,
+    totalPacotesMontados: stats.total_pacotes_montados
+  }, currentPickSession.items);
+  if (draftResult?.queued) draftPersistenceQueued = true;
 
- if (!appData.separacao) appData.separacao = [];
- const localSession = {
- ...buildPickingSessionPayload(
- sessionId,
- channelId,
- channelLabel,
- finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
- draft.createdAt || currentPickSession?.pickingData?.criado_em || now
- ),
- separacao_id: sessionId,
- canal_nome: channelLabel,
- status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
- finalizado_em: now,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- observacao: PICK_FAST_OBSERVATION,
- isFastMode: true,
- modo_rapido: true
- };
- const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
- if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
- else appData.separacao.unshift(localSession);
- rememberPickPackageTotal(sessionId, localSession);
- saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
+  const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
+  if (rows.length === 0) {
+    throw new Error('Nenhum item valido para finalizar no modo rapido.');
+  }
 
- const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
- setActivePickSessions(activeSessions);
- await clearFinishedPickingDraftState(sessionId, {
- keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
- });
+  const fastPayload = {
+    sessionId,
+    channelLabel,
+    isFastMode: true,
+    modo_rapido: true,
+    observacao: PICK_FAST_OBSERVATION,
+    user: currentUser,
+    rows,
+    total_produtos_separados: stats.total_produtos_separados,
+    total_itens_separados: stats.total_itens_separados,
+    total_pacotes_montados: stats.total_pacotes_montados,
+    executionId: draft.executionId || generateExecutionId()
+  };
 
- showToast(finalizationResult?.queued
- ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
- : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
- await showAppModal({
- type: 'success',
- title: 'Saida rapida finalizada',
- message: finalizationResult?.queued
- ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
- : `Saida rapida ${sessionId} finalizada e estoque baixado.`,
- detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
- confirmText: 'OK'
- });
- playBeep('success');
- renderMenu();
+  let finalizationResult;
+  if (!navigator.onLine || draftPersistenceQueued) {
+    await queueOperation('supabase_pick_fast_finalize', fastPayload, {
+      module: 'separacao',
+      sessionId
+    });
+    finalizationResult = { queued: true };
+  } else {
+    finalizationResult = await finalizeFastPickingWithoutConference(fastPayload);
+  }
+
+  if (!appData.separacao) appData.separacao = [];
+  const localSession = {
+    ...buildPickingSessionPayload(
+      sessionId,
+      channelId,
+      channelLabel,
+      finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
+      draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+    ),
+    separacao_id: sessionId,
+    canal_nome: channelLabel,
+    status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
+    finalizado_em: now,
+    total_produtos_separados: stats.total_produtos_separados,
+    total_itens_separados: stats.total_itens_separados,
+    total_pacotes_montados: stats.total_pacotes_montados,
+    observacao: PICK_FAST_OBSERVATION,
+    isFastMode: true,
+    modo_rapido: true
+  };
+  const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+  if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
+  else appData.separacao.unshift(localSession);
+  rememberPickPackageTotal(sessionId, localSession);
+  saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
+
+  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+  setActivePickSessions(activeSessions);
+  await clearFinishedPickingDraftState(sessionId, {
+    keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
+  });
+
+  showToast(finalizationResult?.queued
+    ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
+    : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
+  await showAppModal({
+    type: 'success',
+    title: 'Saida rapida finalizada',
+    message: finalizationResult?.queued
+      ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
+      : `Saida rapida ${sessionId} finalizada e estoque baixado.`,
+    detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
+    confirmText: 'OK'
+  });
+  playBeep('success');
+  renderMenu();
 }
 
 async function savePickResultFinal(sessionId, channelId, channelLabel, channelColor) {
- if (isFinalizing) return;
- isFinalizing = true;
- showToast('Operacao concluida.', 'info');
+  if (isFinalizing) return;
+  isFinalizing = true;
+  showToast('Operacao concluida.', 'info');
 
- try {
- channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || '';
- channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '';
- channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
- sessionId = sanitizePickSessionIdForChannel(currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id || sessionId, channelLabel, 'salvar resultado da separacao');
- assertValidPickSessionForPersist(sessionId, channelLabel, 'salvar resultado da separacao');
- if (currentPickingContext) currentPickingContext.sessionId = sessionId;
- if (currentPickSession?.pickingData) currentPickSession.pickingData.separacao_id = sessionId;
- if (currentPickSession) currentPickSession.id = sessionId;
+  try {
+    channelLabel = channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || '';
+    channelId = channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '';
+    channelColor = channelColor || currentPickingContext?.channelColor || currentPickSession?.channelColor || '';
+    sessionId = sanitizePickSessionIdForChannel(currentPickingContext?.sessionId || currentPickSession?.pickingData?.separacao_id || sessionId, channelLabel, 'salvar resultado da separacao');
+    assertValidPickSessionForPersist(sessionId, channelLabel, 'salvar resultado da separacao');
+    if (currentPickingContext) currentPickingContext.sessionId = sessionId;
+    if (currentPickSession?.pickingData) currentPickSession.pickingData.separacao_id = sessionId;
+    if (currentPickSession) currentPickSession.id = sessionId;
 
- if (!currentPickSession?.items || currentPickSession.items.length === 0) {
- await showAppModal({
- type: 'warning',
- title: 'Atencao',
- message: 'Adicione pelo menos um item para finalizar.',
- confirmText: 'OK'
- });
- return;
- }
+    if (!currentPickSession?.items || currentPickSession.items.length === 0) {
+      await showAppModal({
+        type: 'warning',
+        title: 'Atencao',
+        message: 'Adicione pelo menos um item para finalizar.',
+        confirmText: 'OK'
+      });
+      return;
+    }
 
- const stats = getPickingOperationalStats(currentPickSession.items);
- if (stats.total_produtos_separados > 0 && stats.total_pacotes_montados === 0) {
- const confirmed = await showAppModal({
- type: 'warning',
- title: 'Nenhum pacote marcado',
- message: 'Revise os dados e tente novamente.',
- confirmText: 'Finalizar mesmo assim',
- cancelText: 'Voltar'
- });
- if (!confirmed) return;
- }
+    const stats = getPickingOperationalStats(currentPickSession.items);
+    if (stats.total_produtos_separados > 0 && stats.total_pacotes_montados === 0) {
+      const confirmed = await showAppModal({
+        type: 'warning',
+        title: 'Nenhum pacote marcado',
+        message: 'Revise os dados e tente novamente.',
+        confirmText: 'Finalizar mesmo assim',
+        cancelText: 'Voltar'
+      });
+      if (!confirmed) return;
+    }
 
- clearTimeout(pickPackageCloudSyncTimer);
- await ensureProdutosLoaded(true);
- const now = getDataHoraBrasil();
- const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel) || {
- sessionId,
- channelId,
- channelLabel,
- channelColor,
- createdAt: currentPickSession?.pickingData?.criado_em || now,
- executionId: generateExecutionId()
- };
- const modoRapidoAtivo = getActivePickingFastMode(draft);
- console.log('[SEPARACAO] modo selecionado', {
- sessionId,
- modo: modoRapidoAtivo ? 'rapido' : 'normal'
- });
+    clearTimeout(pickPackageCloudSyncTimer);
+    await ensureProdutosLoaded(true);
+    const now = getDataHoraBrasil();
+    const draft = getScopedDraftPickSession(sessionId, channelId, channelLabel) || {
+      sessionId,
+      channelId,
+      channelLabel,
+      channelColor,
+      createdAt: currentPickSession?.pickingData?.criado_em || now,
+      executionId: generateExecutionId()
+    };
+    const modoRapidoAtivo = getActivePickingFastMode(draft);
+    console.log('[SEPARACAO] modo selecionado', {
+      sessionId,
+      modo: modoRapidoAtivo ? 'rapido' : 'normal'
+    });
 
- if (modoRapidoAtivo) {
- const stockValidation = validatePickingStockForExit(currentPickSession.items, 'finalizar_separacao_rapida');
- const canContinueStock = await confirmPickingNegativeStockIfNeeded(stockValidation, 'finalizar_separacao_rapida');
- if (!canContinueStock) return;
- await finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now);
- return;
- }
+    if (modoRapidoAtivo) {
+      const stockValidation = validatePickingStockForExit(currentPickSession.items, 'finalizar_separacao_rapida');
+      const canContinueStock = await confirmPickingNegativeStockIfNeeded(stockValidation, 'finalizar_separacao_rapida');
+      if (!canContinueStock) return;
+      await finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now);
+      return;
+    }
 
- const pickingData = {
- ...buildPickingSessionPayload(
- sessionId,
- channelId,
- channelLabel,
- PICK_STATUS_READY_FOR_PACK,
- draft.createdAt || currentPickSession?.pickingData?.criado_em || now
- ),
- finalizado_em: now
- };
+    const isDraft = (typeof isDraftPickSessionId === 'function' && isDraftPickSessionId(sessionId))
+      || (typeof DataClient !== 'undefined' && DataClient.isDraftPickingSessionId && DataClient.isDraftPickingSessionId(sessionId))
+      || String(sessionId).startsWith('SEP-DRAFT-');
+    if (isDraft && typeof DataClient !== 'undefined' && typeof DataClient.alocarNumeroSeparacaoDefinitivaSupabase === 'function' && navigator.onLine) {
+      try {
+        await flushPickingItemsBeforeFinalization(sessionId);
+        const alloc = await DataClient.alocarNumeroSeparacaoDefinitivaSupabase({
+          draftId: sessionId,
+          canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
+          canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
+          criadoPor: localStorage.getItem('currentUser') || 'N/A'
+        });
+        if (alloc?.separacao_id) {
+          const oldDraftId = sessionId;
+          sessionId = alloc.separacao_id;
+          if (currentPickingContext) currentPickingContext.sessionId = sessionId;
+          if (currentPickSession?.pickingData) currentPickSession.pickingData.separacao_id = sessionId;
+          if (currentPickSession) {
+            currentPickSession.id = sessionId;
+            currentPickSession.sessionId = sessionId;
+            if (currentPickSession.items) currentPickSession.items.forEach(it => { it.separacao_id = sessionId; });
+          }
+          if (typeof removeLocalDraftPickSession === 'function') removeLocalDraftPickSession(oldDraftId);
+        } else {
+          throw new Error('O Supabase nao retornou o numero oficial definitivo. O rascunho foi preservado.');
+        }
+      } catch (err) {
+        console.error('[SEP] Erro ao alocar numero definitivo online:', err);
+        throw new Error(`Falha ao alocar numero oficial no Supabase: ${err?.message || String(err)}. A separacao permanece como rascunho.`);
+      }
+    }
 
- console.log("[savePickResultFinal] currentPickSession.items:", currentPickSession.items);
+    const pickingData = {
+      ...buildPickingSessionPayload(
+        sessionId,
+        channelId,
+        channelLabel,
+        PICK_STATUS_READY_FOR_PACK,
+        draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+      ),
+      finalizado_em: now
+    };
 
- let draftPersistenceQueued = false;
- const draftResult = await persistPickingDraftItemsBatch({
- ...draft,
- sessionId,
- channelId,
- channelLabel,
- channelColor,
- status: PICK_STATUS_DRAFT,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- totalPacotesMontados: stats.total_pacotes_montados
- }, currentPickSession.items);
- if (draftResult?.queued) draftPersistenceQueued = true;
+    console.log("[savePickResultFinal] currentPickSession.items:", currentPickSession.items);
 
- // Os pacotes dependem dos itens ja registrados na separacao.
- await syncPickPackagesWithCloud({ sessionId, items: currentPickSession.items, validateComplete: true });
+    let draftPersistenceQueued = false;
+    const draftResult = await persistPickingDraftItemsBatch({
+      ...draft,
+      sessionId,
+      channelId,
+      channelLabel,
+      channelColor,
+      status: PICK_STATUS_DRAFT,
+      total_produtos_separados: stats.total_produtos_separados,
+      total_itens_separados: stats.total_itens_separados,
+      total_pacotes_montados: stats.total_pacotes_montados,
+      totalPacotesMontados: stats.total_pacotes_montados
+    }, currentPickSession.items);
+    if (draftResult?.queued) draftPersistenceQueued = true;
 
- const conferencePayload = {
- sessionId,
- channelLabel,
- isFastMode: false,
- modo_rapido: false,
- observacao: PICK_MANUAL_OBSERVATION,
- user: localStorage.getItem('currentUser') || 'N/A',
- rows: (currentPickSession.conferenceRows?.length
- ? currentPickSession.conferenceRows
- : buildFastPickingFinalRows(currentPickSession.items, sessionId)).map(row => ({
- ...row,
- qtd_conferida: 0,
- divergencia: 'FALTA'
- })),
- executionId: draft.executionId || generateExecutionId()
- };
+    // Envia primeiro os itens, mesmo quando um rascunho antigo de pacotes esta pendente.
+    const itemSync = await flushPickingItemsBeforeFinalization(sessionId);
+    draftPersistenceQueued = itemSync?.queued === true;
+    const packageResult = await runOperationalWrite('outbox', async () => {
+      const obsoletePackages = (await getQueuedOperations()).filter(operation =>
+        operation.type === 'supabase_pick_packages' && operation.payload?.validateComplete !== true
+        && String(operation.payload?.sessionId || '') === String(sessionId));
+      const syncFn = typeof performPickPackagesCloudSync === 'function' ? performPickPackagesCloudSync : syncPickPackagesWithCloud;
+      const result = await syncFn({
+        sessionId,
+        items: currentPickSession.items,
+        validateComplete: true,
+        forceQueue: draftPersistenceQueued
+      });
+      // Substitui rascunhos antigos somente depois de preservar o retrato completo.
+      for (const operation of obsoletePackages) await markQueuedOperation(operation, 'synced');
+      return result;
+    });
+    draftPersistenceQueued = draftPersistenceQueued || packageResult?.queued === true;
 
- if (!navigator.onLine) {
- await queueOperation('supabase_pick_create_conference', conferencePayload, {
- module: 'conferencia',
- sessionId
- });
- } else {
- await createPickingConferenceWithoutStock(conferencePayload);
- }
- const finalResult = await persistPickingFinal(sessionId);
+    const conferencePayload = {
+      sessionId,
+      channelLabel,
+      isFastMode: false,
+      modo_rapido: false,
+      observacao: PICK_MANUAL_OBSERVATION,
+      user: localStorage.getItem('currentUser') || 'N/A',
+      rows: (currentPickSession.conferenceRows?.length
+        ? currentPickSession.conferenceRows
+        : buildFastPickingFinalRows(currentPickSession.items, sessionId)).map(row => ({
+          ...row,
+          qtd_conferida: 0,
+          divergencia: 'FALTA'
+        })),
+      executionId: draft.executionId || generateExecutionId()
+    };
 
- if (!appData.separacao) appData.separacao = [];
- const localSession = {
- ...pickingData,
- separacao_id: sessionId,
- canal_nome: channelLabel,
- total_produtos_separados: stats.total_produtos_separados,
- total_itens_separados: stats.total_itens_separados,
- total_pacotes_montados: stats.total_pacotes_montados,
- status: PICK_STATUS_READY_FOR_PACK
- };
- const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
- if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
- else appData.separacao.unshift(localSession);
- rememberPickPackageTotal(sessionId, localSession);
- saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
+    if (!navigator.onLine || draftPersistenceQueued) {
+      await queueOperation('supabase_pick_create_conference', conferencePayload, {
+        module: 'conferencia',
+        sessionId
+      });
+    } else {
+      await createPickingConferenceWithoutStock(conferencePayload);
+    }
+    const finalResult = await persistPickingFinal(sessionId, draftPersistenceQueued);
 
- const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
- activeSessions.unshift({
- ...currentPickSession,
- id: sessionId,
- pickingData: localSession,
- status: PICK_STATUS_READY_FOR_PACK
- });
- setActivePickSessions(activeSessions);
+    if (!appData.separacao) appData.separacao = [];
+    const localSession = {
+      ...pickingData,
+      separacao_id: sessionId,
+      canal_nome: channelLabel,
+      total_produtos_separados: stats.total_produtos_separados,
+      total_itens_separados: stats.total_itens_separados,
+      total_pacotes_montados: stats.total_pacotes_montados,
+      status: PICK_STATUS_READY_FOR_PACK
+    };
+    const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+    if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
+    else appData.separacao.unshift(localSession);
+    rememberPickPackageTotal(sessionId, localSession);
+    saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
 
- await clearFinishedPickingDraftState(sessionId, {
- keepQueuedDraftOperations: Boolean(finalResult?.queued || !navigator.onLine || draftPersistenceQueued)
- });
- await showAppModal({
- type: 'success',
- title: 'Atencao',
- message: finalResult?.queued
- ? `Separacao ${sessionId} salva localmente para sincronizar.`
- : `Separacao ${sessionId} enviada para conferencia.`,
- detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
- confirmText: 'OK'
- });
- renderMenu();
- } catch (e) {
- console.error('[SEPARACAO] erro ao finalizar', {
- message: e?.message,
- details: e?.details,
- hint: e?.hint,
- code: e?.code,
- sessionId,
- channelId,
- channelLabel
- });
- await showAppModal({
- type: 'error',
- title: 'Atencao',
- message: e?.message || String(e),
- confirmText: 'Entendi'
- });
- } finally {
- isFinalizing = false;
- }
+    const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+    activeSessions.unshift({
+      ...currentPickSession,
+      id: sessionId,
+      pickingData: localSession,
+      status: PICK_STATUS_READY_FOR_PACK
+    });
+    setActivePickSessions(activeSessions);
+
+    await clearFinishedPickingDraftState(sessionId, {
+      keepQueuedDraftOperations: Boolean(finalResult?.queued || !navigator.onLine || draftPersistenceQueued)
+    });
+    await showAppModal({
+      type: 'success',
+      title: 'Atencao',
+      message: finalResult?.queued
+        ? `Separacao ${sessionId} salva localmente para sincronizar.`
+        : `Separacao ${sessionId} enviada para conferencia.`,
+      detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
+      confirmText: 'OK'
+    });
+    renderMenu();
+  } catch (e) {
+    console.error('[SEPARACAO] erro ao finalizar', {
+      message: e?.message,
+      details: e?.details,
+      hint: e?.hint,
+      code: e?.code,
+      sessionId,
+      channelId,
+      channelLabel
+    });
+    await showAppModal({
+      type: 'error',
+      title: 'Atencao',
+      message: e?.message || String(e),
+      confirmText: 'Entendi'
+    });
+  } finally {
+    isFinalizing = false;
+  }
 }
 
 function isPackRecordFromToday(record = {}) {
@@ -21904,11 +22012,6 @@ async function toggleConferenceItemSelection(index) {
  if (!Number.isFinite(qty) || qty < 1 || qty > summary.standaloneUnits) return showToast('Quantidade invalida.', 'warning');
  }
  conferenceKitSelection.set(key, { qty });
- const selectedUnits = getPendingConferencePackageSelectionCount();
- if (selectedUnits >= 2) {
- const confirmed = await showAppConfirm({ title: 'Finalizar agrupamento?', message: `${selectedUnits} unidade(s) estao selecionada(s).`, detail: 'Voce pode continuar selecionando outros itens antes de finalizar.', confirmLabel: 'Finalizar agrupamento', cancelLabel: 'Continuar agrupando' });
- if (confirmed) return createConferencePackage();
- }
  restoreScanFieldFocus('pack', 60);
  renderConferenceKitSelection();
 }

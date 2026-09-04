@@ -31543,9 +31543,11 @@ body:not(.login-active) #app > .product-submenu-screen > main.container {
 #app > .dashboard-screen.menu-screen button.quick-action-card {
   width: 100% !important;
   min-height: 82px !important;
-  display: grid !important;
-  grid-template-columns: 64px minmax(0, 1fr) 58px !important;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: center !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
   gap: 18px !important;
   padding: 13px 16px !important;
   border: 1px solid rgba(20, 24, 32, 0.07) !important;
@@ -52003,27 +52005,31 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
 html body:not(.login-active) #app > .dashboard-screen.menu-screen button.quick-action-card {
   position: relative !important;
   min-height: 62px !important;
-  grid-template-columns: 52px minmax(0, 1fr) 34px !important;
-  gap: 13px !important;
-  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  padding: 10px 14px !important;
   border-radius: 18px !important;
   border: 1px solid rgba(15, 23, 42, .07) !important;
   background: #ffffff !important;
   box-shadow: 0 10px 24px rgba(15, 23, 42, .075) !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
 }
 
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-priority {
-  min-height: 94px !important;
-  grid-template-columns: 66px minmax(0, 1fr) auto !important;
-  gap: 16px !important;
-  padding: 18px 17px !important;
+  min-height: 78px !important;
+  padding: 12px 16px !important;
   box-shadow: 0 18px 38px rgba(15, 23, 42, .12) !important;
 }
 
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-priority.has-pending,
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-picking-drafts.has-pending {
-  grid-template-columns: 66px minmax(0, 1fr) auto 34px !important;
+  gap: 12px !important;
 }
 
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-fast {
@@ -52122,6 +52128,7 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
 }
 
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-arrow,
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card .quick-action-arrow,
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card .quick-action-arrow.material-symbols-rounded,
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-romaneio .quick-action-arrow,
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-romaneio .quick-action-arrow.material-symbols-rounded,
@@ -52130,8 +52137,20 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-picking-drafts .quick-action-arrow,
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-picking-drafts .quick-action-arrow.material-symbols-rounded {
   color: #2563eb !important;
-  font-size: 29px !important;
-  justify-self: end !important;
+  font-size: 28px !important;
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  align-self: center !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card .quick-action-pending-badge:not([hidden]) + .quick-action-arrow,
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-pending-badge:not([hidden]) + .quick-action-arrow {
+  margin-left: 0 !important;
 }
 
 html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-toggle {
@@ -52149,7 +52168,8 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
   transform: translateX(24px) !important;
 }
 
-html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-pending-badge {
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-pending-badge,
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card .quick-action-pending-badge {
   align-items: center !important;
   background: #2563eb !important;
   border-radius: 999px !important;
@@ -52158,14 +52178,22 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
   display: inline-flex !important;
   font-size: .86rem !important;
   font-weight: 950 !important;
-  height: 30px !important;
+  height: 28px !important;
   justify-content: center !important;
-  min-width: 30px !important;
-  padding: 0 9px !important;
+  min-width: 28px !important;
+  padding: 0 8px !important;
+  box-sizing: border-box !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
 }
 
-html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-pending-badge + .quick-action-arrow {
-  margin-left: 4px !important;
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-pending-badge[hidden],
+html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card .quick-action-pending-badge[hidden] {
+  display: none !important;
 }
 
 @media (max-width: 640px) {
@@ -52182,22 +52210,25 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-
   }
 
   html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card,
-  html body:not(.login-active) #app > .dashboard-screen.menu-screen button.quick-action-card {
-    grid-template-columns: 46px minmax(0, 1fr) 28px !important;
+  html body:not(.login-active) #app > .dashboard-screen.menu-screen button.quick-action-card,
+  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-priority,
+  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-uniform {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
     gap: 10px !important;
-    min-height: 58px !important;
-    padding: 9px 10px !important;
-  }
-
-  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-priority {
-    grid-template-columns: 54px minmax(0, 1fr) auto !important;
-    min-height: 82px !important;
-    padding: 13px 12px !important;
+    min-height: 60px !important;
+    padding: 8px 12px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
   }
 
   html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-priority.has-pending,
-  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-picking-drafts.has-pending {
-    grid-template-columns: 54px minmax(0, 1fr) auto 28px !important;
+  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-picking-drafts.has-pending,
+  html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-card.quick-action-uniform.has-pending {
+    gap: 10px !important;
   }
 
   html body:not(.login-active) #app > .dashboard-screen.menu-screen .quick-action-label,
@@ -73747,10 +73778,15 @@ html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action
 html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action-icon-romaneio{background:#d97706!important;box-shadow:0 0 0 3px rgba(217,119,6,.09),0 4px 11px rgba(217,119,6,.13)!important}
 html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action-icon-labels{background:#0284c7!important;box-shadow:0 0 0 3px rgba(2,132,199,.08),0 4px 10px rgba(2,132,199,.12)!important}
 html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action-icon-kit-lampada{background:#d97706!important;box-shadow:0 0 0 3px rgba(217,119,6,.09),0 4px 11px rgba(217,119,6,.13)!important}
-html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform{min-height:70px!important;grid-template-columns:54px minmax(0,1fr) 30px!important;gap:12px!important;padding:10px 14px!important;border-radius:16px!important;box-shadow:0 9px 22px rgba(15,23,42,.075)!important}
-html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform.has-pending{grid-template-columns:54px minmax(0,1fr) auto 30px!important}
-html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform img.quick-action-icon{width:44px!important;height:44px!important;padding:10px!important}
-html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-label{display:flex!important;align-items:baseline!important;gap:6px!important;min-width:0!important;flex-wrap:wrap!important}html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-label small{color:#7b8798!important;font:700 .64rem/1 'PT Sans Narrow',Arial,sans-serif!important;letter-spacing:.025em!important;white-space:nowrap!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform{min-height:70px!important;display:flex!important;flex-direction:row!important;align-items:center!important;flex-wrap:nowrap!important;justify-content:flex-start!important;gap:12px!important;padding:10px 14px!important;border-radius:16px!important;box-shadow:0 9px 22px rgba(15,23,42,.075)!important;box-sizing:border-box!important;width:100%!important;overflow:hidden!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform.has-pending{gap:12px!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform img.quick-action-icon{width:44px!important;height:44px!important;padding:10px!important;flex:0 0 auto!important;align-self:center!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-label{display:flex!important;align-items:baseline!important;gap:6px!important;min-width:0!important;flex:1 1 auto!important;flex-wrap:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-label small{color:#7b8798!important;font:700 .64rem/1 'PT Sans Narrow',Arial,sans-serif!important;letter-spacing:.025em!important;white-space:nowrap!important;flex:0 1 auto!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-pending-badge{flex:0 0 auto!important;align-self:center!important;margin-left:auto!important;margin-right:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;line-height:1!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-pending-badge[hidden]{display:none!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-arrow{flex:0 0 auto!important;margin-left:auto!important;margin-right:0!important;align-self:center!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;line-height:1!important}
+html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-uniform .quick-action-pending-badge:not([hidden])+.quick-action-arrow{margin-left:0!important}
 html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action-icon-devolucao{background:#7c3aed!important;box-shadow:0 0 0 3px rgba(124,58,237,.08),0 4px 11px rgba(124,58,237,.12)!important}
 html body:not(.login-active) #app>.dashboard-screen.menu-screen img.quick-action-icon-orcamentos{background:#475569!important;box-shadow:0 0 0 3px rgba(71,85,105,.09),0 4px 11px rgba(71,85,105,.13)!important}
 html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-devolucao{border-color:rgba(124,58,237,.2)!important}html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-card.quick-action-orcamentos{border-color:rgba(71,85,105,.18)!important}
@@ -74508,4 +74544,343 @@ html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) 
 /* Homologacao: aproxima a consulta mensal da barra superior. */
 html.app-environment-homologation .romaneio-screen:has(.romaneio-monthly-sheet) .romaneio-ui-shell {
   align-self:start !important;
+}
+
+/* Agrupamento: modal proprio sem afetar os demais avisos do sistema (v2.2.31). */
+.pick-quantity-modal .app-confirm-dialog{border:10px solid #514878;border-radius:34px;box-shadow:inset 0 4px 0 #16a085,0 26px 70px rgba(15,23,42,.34);max-width:480px;padding:30px 28px 24px;text-align:center}.pick-quantity-modal .app-confirm-icon{background:#dff4ef;border:1px solid #52b9a5;color:#12866f;height:50px;margin:0 auto 12px;width:50px}.pick-quantity-modal .app-confirm-icon .material-symbols-rounded{font-size:30px}.pick-quantity-modal .app-confirm-dialog h3{color:#272348;font-size:1.45rem;margin-bottom:6px;text-transform:none}.pick-quantity-modal .app-confirm-dialog>p{color:#2d294d;font-size:.72rem;font-weight:800}.pick-quantity-modal .app-confirm-detail{background:#f2efff;border-color:#e2dcfa;color:#514b75;margin-top:14px;padding:12px 14px}.pick-quantity-modal .app-confirm-prompt{background:#fff;border-radius:12px;box-shadow:0 10px 26px rgba(70,56,120,.16);margin:14px auto 0;max-width:305px;padding:12px 18px}.pick-quantity-modal .app-confirm-prompt>span{text-align:center}.pick-quantity-modal .app-quantity-stepper{border:0;gap:12px;grid-template-columns:44px minmax(90px,1fr) 44px;overflow:visible}.pick-quantity-modal .app-quantity-stepper button{background:#e8f4f2;border:1px solid #b8ddd6!important;border-radius:50%;color:#16927c;height:44px;width:44px}.pick-quantity-modal .app-confirm-prompt .app-quantity-stepper input{border:1px solid #b8ddd6!important;border-radius:10px!important;color:#159274;font-size:2rem;height:58px}.pick-quantity-modal .app-confirm-actions{margin-top:20px}.pick-quantity-modal .app-confirm-btn.confirm{background:#14966f!important}.pick-quantity-modal .app-confirm-btn.cancel{background:#f4f2fa;border:1px solid #d8d2e8;color:#3c365b}
+@media(max-width:768px){.pick-quantity-modal .app-confirm-dialog{border-width:7px;border-radius:26px;padding:24px 16px 18px}}
+
+/* Redesign visual compacto do popup/modal de feedback de adicao e remocao de produto (v2.2.31) */
+body:not(.login-active) .pick-feedback-toast {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 10000 !important;
+  width: min(540px, calc(100vw - 32px)) !important;
+  max-width: min(540px, calc(100vw - 32px)) !important;
+  min-width: 0 !important;
+  max-height: calc(100dvh - 24px) !important;
+  box-sizing: border-box !important;
+  border-radius: 20px !important;
+  padding: 16px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 10px !important;
+  border: 1px solid rgba(0, 0, 0, 0.04) !important;
+  box-shadow: 0 16px 40px -8px rgba(15, 23, 42, 0.14), 0 6px 18px -4px rgba(15, 23, 42, 0.08) !important;
+  animation: pickFeedbackIn 180ms ease-out both !important;
+  overflow: auto !important;
+}
+
+body:not(.login-active) .pick-feedback-toast.is-add {
+  --fb-accent: #15803d;
+  --fb-title-color: #166534;
+  --fb-bg: #edf8f2;
+  --fb-icon-ring: rgba(34, 197, 94, 0.2);
+  --fb-icon-bg: #22c55e;
+  --fb-img-bg: #e6f4ed;
+  background: #edf8f2 !important;
+  color: #1e293b !important;
+}
+
+body:not(.login-active) .pick-feedback-toast.is-remove {
+  --fb-accent: #dc2626;
+  --fb-title-color: #991b1b;
+  --fb-bg: #fdf0f0;
+  --fb-icon-ring: rgba(239, 68, 68, 0.2);
+  --fb-icon-bg: #ef4444;
+  --fb-img-bg: #fce8e8;
+  background: #fdf0f0 !important;
+  color: #1e293b !important;
+}
+
+/* Botao de fechar (top right) */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-close {
+  position: absolute !important;
+  top: 10px !important;
+  right: 10px !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #64748b !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease !important;
+}
+body:not(.login-active) .pick-feedback-toast .pick-feedback-close:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  color: #0f172a !important;
+}
+
+/* Header centralizado */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  width: 100% !important;
+}
+
+/* Icone com halo suave */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-icon-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px !important;
+  border-radius: 50% !important;
+  background: var(--fb-icon-ring) !important;
+  margin-bottom: 4px !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-icon {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  background: var(--fb-icon-bg) !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-icon .material-symbols-rounded {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+}
+
+/* Titulo & Subtitulo */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-title {
+  color: var(--fb-title-color) !important;
+  font-family: 'PT Sans Narrow', system-ui, -apple-system, sans-serif !important;
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  margin-bottom: 2px !important;
+  text-align: center !important;
+  display: block !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-subtitle {
+  color: #64748b !important;
+  font-size: 0.82rem !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+  text-align: center !important;
+}
+
+/* Card interno do produto (Box branco) */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-body {
+  background: #ffffff !important;
+  border-radius: 14px !important;
+  padding: 10px 14px !important;
+  width: 100% !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03) !important;
+  display: grid !important;
+  grid-template-columns: 64px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+/* Container de imagem */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-image {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 10px !important;
+  background: var(--fb-img-bg) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-image img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-image .material-symbols-rounded {
+  font-size: 28px !important;
+  color: #94a3b8 !important;
+}
+
+/* Nome do produto e metadata com mais destaque */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-copy {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-product-name {
+  color: #0f172a !important;
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  word-break: break-word !important;
+}
+
+/* Grid/Flex de Chips coloridos */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  margin-top: 1px !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item {
+  display: inline-flex !important;
+  flex-direction: column !important;
+  padding: 3px 8px !important;
+  border-radius: 7px !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item small {
+  font-size: 0.62rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.1 !important;
+  opacity: 0.9 !important;
+  margin-bottom: 1px !important;
+  text-transform: uppercase !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item strong {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Cores padronizadas dos Chips (iguais em adicao e remocao) */
+/* ID INTERNO -> Teal / Verde */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-id {
+  background: #e6f4ea !important;
+  color: #0d9488 !important;
+}
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-id small {
+  color: #0f766e !important;
+}
+
+/* SKU -> Azul */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-sku {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-sku small {
+  color: #1d4ed8 !important;
+}
+
+/* EAN -> Roxo */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-ean {
+  background: #f3e8ff !important;
+  color: #7e22ce !important;
+}
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-ean small {
+  color: #6b21a8 !important;
+}
+
+/* COR -> Laranja */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-color {
+  background: #fff7ed !important;
+  color: #ea580c !important;
+}
+body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item.chip-color small {
+  color: #c2410c !important;
+}
+
+/* Footer com quantidade */
+body:not(.login-active) .pick-feedback-toast .pick-feedback-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  padding-top: 0 !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-label {
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  margin-bottom: 1px !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-val {
+  font-size: 1.65rem !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+}
+
+body:not(.login-active) .pick-feedback-toast.is-add .pick-feedback-qty-val {
+  color: #16a34a !important;
+}
+
+body:not(.login-active) .pick-feedback-toast.is-remove .pick-feedback-qty-val {
+  color: #dc2626 !important;
+}
+
+body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-val small {
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  margin-left: 2px !important;
+}
+
+/* Media Query Mobile */
+@media (max-width: 640px) {
+  body:not(.login-active) .pick-feedback-toast {
+    width: calc(100vw - 24px) !important;
+    padding: 14px 14px !important;
+    gap: 8px !important;
+  }
+
+  body:not(.login-active) .pick-feedback-toast .pick-feedback-body {
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+  }
+
+  body:not(.login-active) .pick-feedback-toast .pick-feedback-image {
+    width: 54px !important;
+    height: 54px !important;
+  }
+
+  body:not(.login-active) .pick-feedback-toast .pick-feedback-product-name {
+    font-size: 0.95rem !important;
+  }
+
+  body:not(.login-active) .pick-feedback-toast .pick-feedback-meta {
+    gap: 3px !important;
+  }
+
+  body:not(.login-active) .pick-feedback-toast .pick-feedback-meta .chip-item {
+    padding: 2px 5px !important;
+  }
 }

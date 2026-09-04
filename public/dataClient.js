@@ -1226,11 +1226,19 @@ const DataClient = (function () {
     }
 
     function isTemporaryPickingSessionId(sessionId) {
-        return /^SEP-TEMP?-/.test(String(sessionId || '').trim().toUpperCase());
+        return /^SEP-TEMP?-/i.test(String(sessionId || '').trim());
+    }
+
+    function isDraftPickingSessionId(sessionId) {
+        return /^SEP-DRAFT-/i.test(String(sessionId || '').trim()) || isTemporaryPickingSessionId(sessionId);
+    }
+
+    function isValidOfficialPickingSessionId(sessionId) {
+        return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(String(sessionId || '').trim());
     }
 
     function isValidPickingSessionId(sessionId) {
-        return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/.test(String(sessionId || '').trim().toUpperCase());
+        return isValidOfficialPickingSessionId(sessionId) || isDraftPickingSessionId(sessionId);
     }
 
     function validatePickingSessionBeforeSave(session = {}) {
@@ -1238,7 +1246,7 @@ const DataClient = (function () {
         const channelLabel = String(session.canal_nome || '').trim();
         if (!sessionId) throw new Error('separacao_id nao informado');
         if (!channelLabel) throw new Error('canal_nome nao informado para separacao');
-        if (isTemporaryPickingSessionId(sessionId) || !isValidPickingSessionId(sessionId)) {
+        if (!isValidPickingSessionId(sessionId)) {
             throw new Error(`separacao_id invalido para gravacao: ${sessionId}`);
         }
     }
@@ -1274,8 +1282,8 @@ const DataClient = (function () {
         const separacaoRow = {
             separacao_id: session.separacao_id,
             pedido_referencia: session.pedido_referencia || null,
-            canal_id: session.canal_id || '',
-            canal_nome: session.canal_nome || '',
+            canal_id: session.canal_id || session.canal_nome || 'GERAL',
+            canal_nome: session.canal_nome || session.canal_id || 'GERAL',
             status: session.status || 'em_separacao',
             criado_por: session.criado_por || localStorage.getItem('currentUser') || 'N/A',
             criado_em: session.criado_em || now,
@@ -1612,6 +1620,88 @@ const DataClient = (function () {
                 : (error.message || 'Erro ao sincronizar pacotes'));
         }
         invalidateCache('separacao');
+        return data;
+    }
+
+    async function aplicarOperacaoProgressoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('aplicar_operacao_progresso', {
+            p_operacao_id: payload.operationId,
+            p_fluxo: payload.flow,
+            p_sessao_id: payload.sessionId,
+            p_id_interno: payload.idInterno,
+            p_delta: Number(payload.delta || 0),
+            p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
+            p_dispositivo_id: payload.deviceId || null,
+            p_item: payload.item || {},
+            p_estado: payload.estado || null
+        });
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || error.code === '42883'
+                || String(error.message || '').includes('aplicar_operacao_progresso');
+            if (missingRpc) {
+                console.warn('[PROGRESS] RPC aplicar_operacao_progresso ausente, prosseguindo');
+                return { ok: true, fallback: true };
+            }
+            throw error;
+        }
+        invalidateCache(payload.flow === 'conferencia' ? 'conferencia' : 'separacao');
+        return data;
+    }
+
+    async function alocarNumeroSeparacaoDefinitivaSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const draftId = String(payload.draftId || payload.sessionId || '').trim();
+        const canalId = String(payload.canalId || '').trim();
+        const canalNome = String(payload.canalNome || payload.channelLabel || '').trim();
+        const criadoPor = String(payload.criadoPor || localStorage.getItem('currentUser') || 'N/A').trim();
+
+        try {
+            const { data, error } = await client.rpc('alocar_numero_separacao_definitiva', {
+                p_draft_id: draftId,
+                p_canal_id: canalId,
+                p_canal_nome: canalNome,
+                p_criado_por: criadoPor
+            });
+            if (error) throw error;
+            invalidateCache('separacao');
+            invalidateCache('conferencia');
+            return data;
+        } catch (error) {
+            console.error('[SEP] Falha ao alocar numero definitivo via RPC:', error);
+            throw new Error(`Falha ao alocar numero oficial da separacao via Supabase: ${error?.message || error?.details || String(error)}. O rascunho foi preservado para nova tentativa.`);
+        }
+    }
+
+    async function autorizarCorrecaoAgrupamentoFinalizadoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('autorizar_correcao_agrupamento_finalizado', {
+            p_separacao_id: String(payload.sessionId || '').trim(),
+            p_pin: String(payload.pin || '').trim(),
+            p_operador: payload.operador || localStorage.getItem('currentUser') || 'N/A',
+            p_device_id: String(payload.deviceId || '').trim()
+        });
+        if (error) throw new Error(error.message || 'Nao foi possivel autorizar a correcao.');
+        return data;
+    }
+
+    async function salvarCorrecaoAgrupamentoFinalizadoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('salvar_correcao_agrupamento_finalizado', {
+            p_separacao_id: String(payload.sessionId || '').trim(),
+            p_token: payload.token,
+            p_pacotes: payload.pacotes || [],
+            p_operador: payload.operador || localStorage.getItem('currentUser') || 'N/A',
+            p_device_id: String(payload.deviceId || '').trim(),
+            p_execution_id: payload.executionId || `correcao-agrupamento:${payload.sessionId}:${Date.now()}`
+        });
+        if (error) throw new Error(error.message || 'Nao foi possivel salvar a correcao de agrupamento.');
+        invalidateCache('separacao');
+        invalidateCache('conferencia');
         return data;
     }
     async function finalizePickingDraftSupabase(payload) {
@@ -2661,6 +2751,10 @@ const DataClient = (function () {
         esvaziarSeparacaoParaReutilizacaoSupabase,
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
+        aplicarOperacaoProgressoSupabase,
+        alocarNumeroSeparacaoDefinitivaSupabase,
+        autorizarCorrecaoAgrupamentoFinalizadoSupabase,
+        salvarCorrecaoAgrupamentoFinalizadoSupabase,
         cancelarSeparacaoAntesDespachoSupabase,
         cancelarItemSeparacaoFinalizadaSupabase,
         finalizePickingDraftSupabase,
