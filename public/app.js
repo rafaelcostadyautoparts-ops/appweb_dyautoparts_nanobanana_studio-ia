@@ -4117,20 +4117,19 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  let pendingConferencesCount = 0;
  let pendingEntradaNFCount = 0;
  try {
- pendingSeparationsCount = getDraftPickSessionsWithLocalDraft().length;
+  pendingSeparationsCount = getDraftPickSessionsWithLocalDraft().length;
+  const currentUser = localStorage.getItem('currentUser');
+  pendingConferencesCount = new Set((appData.separacao || []).filter(s => isSessionPendingConferenceForUser(s, currentUser)).map(getPackSeparationSessionId).filter(Boolean)).size;
+  pendingEntradaNFCount = getEntradaNFQuickPendingCount();
  } catch (error) {
- pendingSeparationsCount = 0;
+  pendingSeparationsCount = 0;
+  pendingConferencesCount = 0;
+  pendingEntradaNFCount = 0;
  }
  const pendingSeparationsBadge = pendingSeparationsCount > 0
  ? `<span class="quick-action-pending-badge" aria-label="${pendingSeparationsCount} separacoes pendentes">${pendingSeparationsCount}</span>`
  : '';
- try { pendingConferencesCount = new Set((appData.separacao || []).filter(isSeparationPendingConferenceSession).map(getPackSeparationSessionId).filter(Boolean)).size; } catch (error) { pendingConferencesCount = 0; }
  const pendingConferencesBadge = pendingConferencesCount > 0 ? `<span class="quick-action-pending-badge" aria-label="${pendingConferencesCount} conferencias pendentes">${pendingConferencesCount}</span>` : '';
- try {
- pendingEntradaNFCount = getEntradaNFQuickPendingCount();
- } catch (error) {
- pendingEntradaNFCount = 0;
- }
  const pendingEntradaNFBadge = `<span data-shared-nf-count class="quick-action-pending-badge" aria-label="${pendingEntradaNFCount} notas fiscais pendentes" ${pendingEntradaNFCount ? '' : 'hidden'}>${pendingEntradaNFCount}</span>`;
  const pendingSeparationsClass = pendingSeparationsCount > 0 ? 'has-pending' : '';
  const pendingConferencesClass = pendingConferencesCount > 0 ? 'has-pending' : '';
@@ -4241,7 +4240,66 @@ ${finalMenuItems.map(item => {
  </div>
  `;
  refreshOutboxPendingCount().catch(error => console.warn('[OUTBOX] Falha ao atualizar indicador:', error));
+ refreshQuickActionsConferenceBadge().catch(error => console.warn('[PACK] Falha ao atualizar indicador de conferencia:', error));
  updateMenuStatusUI();
+}
+
+async function refreshQuickActionsConferenceBadge() {
+  try {
+    const data = await DataClient.loadModule('conferencia', true);
+    if (data) {
+      appData.separacao = data.separacao || appData.separacao || [];
+      appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+      appData.conferencia = data.conferencia || appData.conferencia || [];
+      appData.conferencia_itens = data.conferencia_itens || appData.conferencia_itens || [];
+    }
+    reconcileActivePickSessions(appData.separacao, appData.conferencia);
+    updateQuickActionsConferenceUI();
+  } catch (error) {
+    console.warn('[PACK] Falha ao sincronizar conferencia para acao rapida:', error);
+  }
+}
+
+function updateQuickActionsConferenceUI() {
+  try {
+    const currentUser = localStorage.getItem('currentUser');
+    const pendingConferencesCount = new Set(
+      (appData.separacao || [])
+        .filter(s => isSessionPendingConferenceForUser(s, currentUser))
+        .map(getPackSeparationSessionId)
+        .filter(Boolean)
+    ).size;
+
+    const confBtn = document.querySelector('.quick-action-conferences');
+    if (confBtn) {
+      if (pendingConferencesCount > 0) {
+        confBtn.classList.add('has-pending');
+      } else {
+        confBtn.classList.remove('has-pending');
+      }
+      let badge = confBtn.querySelector('.quick-action-pending-badge');
+      if (pendingConferencesCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'quick-action-pending-badge';
+          const arrow = confBtn.querySelector('.quick-action-arrow');
+          if (arrow) confBtn.insertBefore(badge, arrow);
+          else confBtn.appendChild(badge);
+        }
+        badge.textContent = String(pendingConferencesCount);
+        badge.setAttribute('aria-label', `${pendingConferencesCount} conferencias pendentes`);
+      } else if (badge) {
+        badge.remove();
+      }
+    }
+
+    const subMenuCount = document.querySelector('#quick-conference-submenu b');
+    if (subMenuCount) {
+      subMenuCount.textContent = String(pendingConferencesCount);
+    }
+  } catch (err) {
+    console.warn('[PACK] Falha ao atualizar UI do badge de conferencia:', err);
+  }
 }
 
 async function renderDashboard() {
@@ -16929,10 +16987,138 @@ function hasPendingConferenceForSession(sessionOrId) {
  });
 }
 
-function isSeparationPendingConferenceSession(session = {}) {
- const status = String(session.status || '').toLowerCase();
- const isReadyStatus = status === 'aberta' || status === 'pendente' || status === 'pronta_conferencia';
- return isReadyStatus && !isPickingFastModeSource(session) && hasPendingConferenceForSession(session);
+function normalizeConferenceOperator(value) {
+  return normalizeOperationalLabel(String(value || '').replace(/\s+/g, ' ').trim());
+}
+
+function isSameConferenceOperator(separation, user) {
+  const separator = normalizeConferenceOperator(separation?.criado_por || separation?.usuario || separation?.operador || separation?.col_e);
+  const conferenceUser = normalizeConferenceOperator(user);
+  return Boolean(separator && conferenceUser && separator === conferenceUser);
+}
+
+function isSessionPendingConferenceForUser(session = {}, currentUser = null) {
+  if (!session || typeof session !== 'object') return false;
+  const effectiveUser = currentUser !== null ? currentUser : (typeof localStorage !== 'undefined' ? localStorage.getItem('currentUser') : null);
+  const status = String(session.status || '').toLowerCase().trim();
+  const isReadyStatus = status === 'aberta' || status === 'pendente' || status === 'pronta_conferencia';
+  if (!isReadyStatus) return false;
+  if (status === 'cancelada' || status === 'finalizada' || status === 'concluida') return false;
+  if (isPickingFastModeSource(session)) return false;
+  if (!hasPendingConferenceForSession(session)) return false;
+  if (effectiveUser && isSameConferenceOperator(session, effectiveUser)) return false;
+  return true;
+}
+
+function isSeparationPendingConferenceSession(session = {}, currentUser = null) {
+  return isSessionPendingConferenceForUser(session, currentUser);
+}
+
+function reconcileActivePickSessions(freshSeparacoes = null, freshConferencias = null) {
+  try {
+    const separacoes = Array.isArray(freshSeparacoes) ? freshSeparacoes : (appData.separacao || []);
+    const conferencias = Array.isArray(freshConferencias) ? freshConferencias : (appData.conferencia || []);
+    if (!separacoes.length && !conferencias.length) return;
+
+    const finishedConfStatuses = new Set(['conferido', 'finalizada', 'finalizado', 'concluida', 'concluido']);
+    const finishedOrCancelledSepIds = new Set();
+    const validOpenSepIds = new Set();
+
+    for (const sep of separacoes) {
+      const id = String(sep.separacao_id || sep.col_a || sep.id || '').trim();
+      if (!id) continue;
+      const st = String(sep.status || '').toLowerCase().trim();
+      if (st === 'cancelada' || st === 'finalizada' || st === 'concluida') {
+        finishedOrCancelledSepIds.add(id);
+      } else if (st === 'aberta' || st === 'pendente' || st === 'pronta_conferencia') {
+        validOpenSepIds.add(id);
+      }
+    }
+
+    for (const conf of conferencias) {
+      const confSessionId = String(conf.separacao_id || conf.codigo_separacao || '').trim();
+      const status = String(conf.status || '').toLowerCase().trim();
+      if (confSessionId && finishedConfStatuses.has(status)) {
+        finishedOrCancelledSepIds.add(confSessionId);
+        validOpenSepIds.delete(confSessionId);
+      }
+    }
+
+    const rawSessions = getActivePickSessions();
+    if (rawSessions.length > 0) {
+      const filteredSessions = rawSessions.filter(s => {
+        const sId = String(s.id || s.separacao_id || '').trim();
+        if (!sId) return false;
+        if (finishedOrCancelledSepIds.has(sId)) return false;
+        if (separacoes.length > 0 && !validOpenSepIds.has(sId)) {
+          if (!sId.startsWith('SEP-DRAFT-')) return false;
+        }
+        return true;
+      });
+      if (filteredSessions.length !== rawSessions.length) {
+        setActivePickSessions(filteredSessions);
+      }
+    }
+
+    if (Array.isArray(appData.separacao)) {
+      for (const sep of appData.separacao) {
+        const id = String(sep.separacao_id || sep.col_a || sep.id || '').trim();
+        if (finishedOrCancelledSepIds.has(id) && sep.status === 'aberta') {
+          sep.status = 'finalizada';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[PACK] Erro ao reconciliar active_pick_sessions:', err);
+  }
+}
+
+function isConferenceInProgress(sessionId) {
+  const sId = String(sessionId || '').trim();
+  if (!sId) return false;
+
+  const hasRemoteDraft = (appData.conferencia || []).some(conf => {
+    const confSessionId = getConferenceSessionId(conf);
+    const confId = String(conf.conferencia_id || '').trim();
+    const status = String(conf.status || '').trim().toLowerCase();
+    return (confSessionId === sId || confId === `CONF-DRAFT-${sId}`) && status === 'em_conferencia';
+  });
+  if (hasRemoteDraft) return true;
+
+  const activeSessions = getActivePickSessions();
+  const localSession = activeSessions.find(s => String(s.id) === sId);
+  if (localSession && getConferenceProgressQuantity(localSession) > 0) return true;
+
+  return false;
+}
+
+function getConferenceCardState(session) {
+  const sessionId = getPackSeparationSessionId(session);
+  const status = String(session?.status || '').trim().toLowerCase();
+
+  if (status === 'cancelada' || status === 'finalizada' || status === 'concluida') {
+    return { shouldRender: false };
+  }
+
+  if (!hasPendingConferenceForSession(session)) {
+    return { shouldRender: false };
+  }
+
+  if (isConferenceInProgress(sessionId)) {
+    return {
+      shouldRender: true,
+      badgeText: 'Em andamento',
+      badgeClass: 'active',
+      statusText: 'Conferência em andamento'
+    };
+  }
+
+  return {
+    shouldRender: true,
+    badgeText: 'Aberta',
+    badgeClass: 'ready',
+    statusText: 'Pronta para iniciar a conferência'
+  };
 }
 
 function getActivePickingFastMode(draft = null) {
@@ -21270,12 +21456,13 @@ async function renderPackPendingChannels() {
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  appData.conferencia = data.conferencia || appData.conferencia || [];
  }
+ reconcileActivePickSessions(appData.separacao, appData.conferencia);
  } catch (error) {
  console.warn('[PACK] Falha ao atualizar separacoes do Supabase:', error);
  }
 
  const activeSessions = (appData.separacao || []).filter(s =>
-  isSeparationPendingConferenceSession(s) && !isSameConferenceOperator(s, currentUser)
+  isSessionPendingConferenceForUser(s, currentUser)
  );
  const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
   const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
@@ -21396,6 +21583,7 @@ async function renderPackSessionsList(channelName) {
  appData.separacao_itens = data.separacao_itens || [];
  appData.conferencia = data.conferencia || [];
  }
+ reconcileActivePickSessions(appData.separacao, appData.conferencia);
  if (DataClient.fetchSeparacoesAbertasPorCanalSupabase) {
  activeSessions = await DataClient.fetchSeparacoesAbertasPorCanalSupabase(channelName);
  usedFreshSupabase = true;
@@ -21415,16 +21603,14 @@ async function renderPackSessionsList(channelName) {
  activeSessions = (appData.separacao || []).filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
   return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName)
-   && isSeparationPendingConferenceSession(s)
-   && !isSameConferenceOperator(s, currentUser);
+   && isSessionPendingConferenceForUser(s, currentUser);
  });
  }
 
  activeSessions = activeSessions.filter(s => {
  const chan = s.canal_nome || s.col_c || s.canal || 'Outros';
   return normalizeOperationalLabel(chan) === normalizeOperationalLabel(channelName)
-   && isSeparationPendingConferenceSession(s)
-   && !isSameConferenceOperator(s, currentUser);
+   && isSessionPendingConferenceForUser(s, currentUser);
  });
 
  const channelConfig = getChannelConfig(channelName);
@@ -21470,11 +21656,11 @@ async function renderPackSessionsList(channelName) {
  ` : `
  <div class="pack-sessions-list">
  ${activeSessions.map(session => {
+ const cardState = getConferenceCardState(session);
+ if (!cardState.shouldRender) return '';
  const uniqueId = getPackSeparationUniqueId(session);
  const displayId = getPackSeparationDisplayId(session);
  const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
- const status = session.status || 'aberta';
- const statusClass = getSessionStatusClass(status);
   return `
  <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
  <div class="pack-session-card-main">
@@ -21485,11 +21671,11 @@ async function renderPackSessionsList(channelName) {
  <span class="pack-session-card-kicker">Separacao</span>
  <strong>${displayId}</strong>
  <small>${createdAt}</small>
-  <small>Pronta para iniciar a confer\u00eancia</small>
+  <small>${cardState.statusText}</small>
  </div>
  </div>
  <div class="pack-session-card-meta">
- <div class="pack-session-pill ${statusClass}">Aberta</div>
+ <div class="pack-session-pill ${cardState.badgeClass}">${cardState.badgeText}</div>
  </div>
  <button class="pack-session-action" onclick="event.stopPropagation(); renderPackSessionDetails(${quotePackInlineArg(uniqueId)})" title="Conferir">
  <span class="material-symbols-rounded">fact_check</span>
@@ -21545,13 +21731,6 @@ function getActivePickSessions() {
 
 function setActivePickSessions(sessions) {
  localStorage.setItem('active_pick_sessions', JSON.stringify(Array.isArray(sessions) ? sessions : []));
-}
-
-function normalizeConferenceOperator(value) { return normalizeOperationalLabel(String(value || '').replace(/\s+/g, ' ').trim()); }
-function isSameConferenceOperator(separation, user) {
- const separator = normalizeConferenceOperator(separation?.criado_por || separation?.usuario || separation?.operador || separation?.col_e);
- const conferenceUser = normalizeConferenceOperator(user);
- return Boolean(separator && conferenceUser && separator === conferenceUser);
 }
 
 // Global Session State moved to top for hoisting safety
