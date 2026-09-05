@@ -23855,6 +23855,8 @@ function quickActionGerarRomaneio(event) {
 }
 
 const ROMANEIO_STORAGE_KEY = 'dyRomaneiosRetiradaV2';
+let isSavingRomaneio = false;
+let currentRomaneioOperationId = null;
 let romaneioSignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioDeliverySignatureState = { dataUrl: '', redoDataUrl: '' };
 let romaneioPackagePhotoState = { dataUrl: '' };
@@ -24062,8 +24064,11 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  const isFlexFlow = selectedChannels.length === 1 && selectedChannels.some(channel => normalizeOperationalLabel(channel).includes('FLEX'));
  const allRomaneios = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
  const romaneios = isFlexFlow ? allRomaneios.filter(item => normalizeOperationalLabel(item.tipo_retirada || item.canal).includes('FLEX')) : allRomaneios;
- const selected = selectedId ? romaneios.find(item => item.id === selectedId) : null;
  const metrics = selectedChannels.length ? getRomaneioTodayMetrics(selectedChannels, selectedChannels) : null;
+ if ((!selectedId || selectedId === '__realizados__') && !currentRomaneioOperationId) {
+    currentRomaneioOperationId = `ROM-${isFlexFlow ? 'FLE' : 'RET'}-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+ }
+ const selected = selectedId ? romaneios.find(item => item.id === selectedId) : null;
 
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in module-screen romaneio-screen">
@@ -24769,6 +24774,7 @@ function getRomaneioText(item) {
 }
 
 async function saveRomaneioFromForm(withdrawalType) {
+ if (isSavingRomaneio) return;
  const form = document.getElementById('romaneio-form');
  if (!form) return;
  const data = new FormData(form);
@@ -24798,7 +24804,7 @@ async function saveRomaneioFromForm(withdrawalType) {
  return;
  }
  if (!responsavel) {
- showToast('Operacao concluida.', 'info');
+ showToast('Informe o responsável pela retirada.', 'warning');
  return;
  }
  if (isFlex && pacotesNaoLidos > pacotesEntregues) {
@@ -24830,54 +24836,97 @@ async function saveRomaneioFromForm(withdrawalType) {
  showToast('Colete a assinatura de quem retira antes de salvar.', 'warning');
  return;
  }
- const now = new Date();
- const romaneio = {
- id: `ROM-${normalizeOperationalLabel(finalChannel || type).slice(0, 3)}-${Date.now()}`,
- data: metrics.data,
- hora: formatTimeBR(now),
- canal: finalChannel || metrics.canal,
- canais: finalChannels,
- tipo_retirada: type,
- produtos: metrics.produtos,
- itens: metrics.itens,
- pacotes: isCorreios ? romaneioTrackingState.codes.length : (isFlex ? pacotesEntregues : metrics.pacotes),
- pacotes_preparados: Number(metrics.pacotes || 0),
- pacotes_nao_lidos: pacotesNaoLidos,
- motivo_nao_lidos: motivoNaoLidos,
- teve_devolucao: teveDevolucao,
- quantidade_devolvida: quantidadeDevolvida,
- observacao_devolucao: teveDevolucao ? String(data.get('observacao_devolucao') || '').trim() : '',
- rastreios: isCorreios ? [...romaneioTrackingState.codes] : [],
- email_destino: isCorreios ? String(data.get('email_destino') || '').trim() : '',
- separacoes: metrics.separacoes,
- sessoes: metrics.sessoes || [],
- responsavel,
- documento,
- observacao: String(data.get('observacao') || '').trim(),
- agencia_correios: 'AGF Eng. Armando de Arruda',
- cliente: 'DY Auto Parts',
- responsavel_entrega: 'Alexandre',
- horario_coleta: '15:00',
- assinatura_entrega: isFlex ? '' : romaneioDeliverySignatureState.dataUrl,
- assinatura: romaneioSignatureState.dataUrl,
- foto_pacote: romaneioPackagePhotoState.dataUrl || '',
- foto_devolucao: teveDevolucao ? (romaneioReturnPhotoState.dataUrl || '') : '',
- usuario: localStorage.getItem('currentUser') || '',
- status: 'Assinado',
- createdAt: now.toISOString()
- };
 
- if (isFlex) saveRomaneioCollector(responsavel, documento);
- const syncResult = await persistRomaneioShared(romaneio);
- const romaneios = getRomaneios().filter(item => String(item.id) !== String(romaneio.id));
- romaneios.unshift(romaneio);
- saveRomaneios(romaneios);
- romaneioTrackingState = { key: '', codes: [] };
- romaneioPackageEditState = { key: '', values: {} };
- romaneioPackagePhotoState = { dataUrl: '' };
- romaneioReturnPhotoState = { dataUrl: '' };
- showToast(syncResult?.queued ? 'Romaneio salvo neste aparelho e pendente de sincronização.' : 'Romaneio salvo e sincronizado.');
- renderRomaneioScreen('', '__realizados__');
+ isSavingRomaneio = true;
+ const saveBtn = form.querySelector('.romaneio-save-btn');
+ const originalBtnHTML = saveBtn ? saveBtn.innerHTML : '';
+ if (saveBtn) {
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="material-symbols-rounded spin">sync</span> Salvando...';
+ }
+
+ try {
+  const now = new Date();
+  const romaneioId = currentRomaneioOperationId || `ROM-${normalizeOperationalLabel(finalChannel || type).slice(0, 3)}-${Date.now()}`;
+  const romaneio = {
+  id: romaneioId,
+  data: metrics.data,
+  hora: formatTimeBR(now),
+  canal: finalChannel || metrics.canal,
+  canais: finalChannels,
+  tipo_retirada: type,
+  produtos: metrics.produtos,
+  itens: metrics.itens,
+  pacotes: isCorreios ? romaneioTrackingState.codes.length : (isFlex ? pacotesEntregues : metrics.pacotes),
+  pacotes_preparados: Number(metrics.pacotes || 0),
+  pacotes_nao_lidos: pacotesNaoLidos,
+  motivo_nao_lidos: motivoNaoLidos,
+  teve_devolucao: teveDevolucao,
+  quantidade_devolvida: quantidadeDevolvida,
+  observacao_devolucao: teveDevolucao ? String(data.get('observacao_devolucao') || '').trim() : '',
+  rastreios: isCorreios ? [...romaneioTrackingState.codes] : [],
+  email_destino: isCorreios ? String(data.get('email_destino') || '').trim() : '',
+  separacoes: metrics.separacoes,
+  sessoes: metrics.sessoes || [],
+  responsavel,
+  documento,
+  observacao: String(data.get('observacao') || '').trim(),
+  agencia_correios: 'AGF Eng. Armando de Arruda',
+  cliente: 'DY Auto Parts',
+  responsavel_entrega: 'Alexandre',
+  horario_coleta: '15:00',
+  assinatura_entrega: isFlex ? '' : romaneioDeliverySignatureState.dataUrl,
+  assinatura: romaneioSignatureState.dataUrl,
+  foto_pacote: romaneioPackagePhotoState.dataUrl || '',
+  foto_devolucao: teveDevolucao ? (romaneioReturnPhotoState.dataUrl || '') : '',
+  usuario: localStorage.getItem('currentUser') || '',
+  status: 'Assinado',
+  createdAt: now.toISOString()
+  };
+
+  if (isFlex) saveRomaneioCollector(responsavel, documento);
+  const syncResult = await persistRomaneioShared(romaneio);
+  const romaneios = getRomaneios().filter(item => String(item.id) !== String(romaneio.id));
+  romaneios.unshift(romaneio);
+  saveRomaneios(romaneios);
+  romaneioTrackingState = { key: '', codes: [] };
+  romaneioPackageEditState = { key: '', values: {} };
+  romaneioPackagePhotoState = { dataUrl: '' };
+  romaneioReturnPhotoState = { dataUrl: '' };
+  currentRomaneioOperationId = null;
+
+  if (isFlex) {
+   await showAppModal({
+    type: 'success',
+    title: 'Romaneio salvo!',
+    message: 'Registro gravado com sucesso.',
+    hideButtons: true,
+    autoCloseDelay: 1800
+   });
+   renderRomaneioScreen('', '__realizados__');
+  } else {
+   showToast(syncResult?.queued ? 'Romaneio salvo neste aparelho e pendente de sincronização.' : 'Romaneio salvo e sincronizado.');
+   renderRomaneioScreen('', '__realizados__');
+  }
+ } catch (err) {
+  console.error('[ROMANEIO] Erro ao salvar:', err);
+  await showAppModal({
+   type: 'error',
+   title: 'Não foi possível salvar o romaneio',
+   message: 'Ocorreu um erro no sistema.',
+   detail: 'Tente novamente em alguns instantes.',
+   confirmText: 'Tentar novamente',
+   onConfirm: async () => {
+    await saveRomaneioFromForm(withdrawalType);
+   }
+  });
+ } finally {
+  isSavingRomaneio = false;
+  if (saveBtn) {
+   saveBtn.disabled = false;
+   saveBtn.innerHTML = originalBtnHTML;
+  }
+ }
 }
 
 function findRomaneioById(id) {
@@ -25140,10 +25189,14 @@ let labelPreviewResizeBound = false;
 let labelPreviewResizeTimer = null;
 const LABEL_DRAFT_STORAGE_KEY = 'labelGeneratorDraft';
 const LABEL_TEMPLATE_CALIBRATION_DEFAULTS = {
- A4356: {
- offsetX: 0,
- offsetY: -1
- }
+	A4251: {
+		offsetX: -2.5,
+		offsetY: -5.3
+	},
+	A4356: {
+		offsetX: 0,
+		offsetY: -1
+	}
 };
 
 let labelGeneratorState = {
@@ -25169,8 +25222,8 @@ let labelGeneratorState = {
  gapY: 0,
  marginTop: 0,
  marginLeft: 0,
- offsetX: 0,
- offsetY: 0,
+ offsetX: -2.5,
+ offsetY: -5.3,
  items: []
 };
 
@@ -25209,8 +25262,8 @@ function normalizeLabelTemplateRow(row = {}) {
   gapY: Math.max(0, pitchY - labelHeight),
   marginTop: Number(row.margem_superior_cm || 0) * 10,
   marginLeft: Number(row.margem_lateral_cm || 0) * 10,
-  offsetX: Number(calibration.offsetX || 0),
-  offsetY: Number(calibration.offsetY || 0),
+  offsetX: Number.isFinite(calibration.offsetX) ? Number(calibration.offsetX) : 0,
+  offsetY: Number.isFinite(calibration.offsetY) ? Number(calibration.offsetY) : 0,
   totalLabels: Number(row.total_etiquetas || 0),
   isDefault: row.padrao === true
  };
@@ -25272,10 +25325,13 @@ function loadLabelDraft() {
   const items = Array.isArray(saved.items) ? saved.items : [];
   labelGeneratorState = { ...labelGeneratorState, ...saved, items };
   if (saved.template && labelTemplateOptions.some(item => item.key === saved.template)) {
-   const custom = { offsetX: Number(saved.offsetX || 0), offsetY: Number(saved.offsetY || 0) };
+   const hasExplicitOffset = Number.isFinite(Number(saved.offsetX)) && Number.isFinite(Number(saved.offsetY));
+   const isOldZeroDefault = saved.template === 'A4251' && Number(saved.offsetX) === 0 && Number(saved.offsetY) === 0;
    applyLabelTemplate(saved.template);
-   labelGeneratorState.offsetX = custom.offsetX;
-   labelGeneratorState.offsetY = custom.offsetY;
+   if (hasExplicitOffset && !isOldZeroDefault) {
+    labelGeneratorState.offsetX = Number(saved.offsetX);
+    labelGeneratorState.offsetY = Number(saved.offsetY);
+   }
   }
  } catch (error) {
   console.warn('[ETIQUETAS] rascunho local invalido:', error?.message || error);
@@ -25963,9 +26019,6 @@ function renderLabelPrintPages(labels, cfg) {
  <div class="label-print-grid" style="
  width:${cfg.pageWidth}mm;
  height:${cfg.pageHeight}mm;
- transform: translate(${cfg.offsetX}mm, ${cfg.offsetY}mm);
- margin-left: ${cfg.marginLeft}mm;
- margin-top: ${cfg.marginTop}mm;
  ">
  ${cells.join('')}
  </div>
@@ -26193,7 +26246,8 @@ function updateLabelItem(index, field, value) {
 }
 
 function updateLabelOffsetMm(key, value) {
- labelGeneratorState[key] = Number(value) || 0;
+ const num = Number(value);
+ labelGeneratorState[key] = Number.isFinite(num) ? num : 0;
  saveLabelDraft();
  refreshLabelPreview();
 }
@@ -27309,8 +27363,8 @@ async function downloadLabelPdf() {
  const label = labels[page * totalCells + index];
  if (!label) continue;
  const position = getLabelCellPosition(cfg, index);
- const x = cfg.marginLeft + cfg.offsetX + position.x;
- const y = cfg.marginTop + cfg.offsetY + position.y;
+ const x = position.x;
+ const y = position.y;
  drawPdfLabelCell(doc, label, cfg, x, y, fonts);
  }
  }
