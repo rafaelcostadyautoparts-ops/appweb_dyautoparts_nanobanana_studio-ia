@@ -1,6 +1,6 @@
 {
-  "version": "2.2.27",
-  "build": "2026.09.02.02",
-  "commit": "sincronizacao-nf-romaneios",
-  "deployDate": "2026-09-02T19:08:32.279Z"
+  "version": "2.2.28",
+  "build": "2026.09.04.01",
+  "commit": "v2.2.28-estavel-pre-pedidos",
+  "deployDate": "2026-09-04T23:00:00.000Z"
 }
