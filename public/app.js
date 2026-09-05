@@ -2282,10 +2282,10 @@ async function preparePickPackResume(sessionId = '') {
     if (!navigator.onLine) return true;
     const pending = (await getQueuedOperations()).filter(operation => isPickPackOperation(operation)
       && String(operation.meta?.sessionId || operation.payload?.sessionId || operation.payload?.session?.separacao_id || '') === String(sessionId));
-    if (sessionId && pending.length) throw new Error('H├í altera├º├Áes deste aparelho aguardando envio. Resolva a pend├¬ncia antes de recarregar esta opera├º├úo.');
+    if (sessionId && pending.length) throw new Error('Há alterações deste aparelho aguardando envio. Resolva a pendência antes de recarregar esta operação.');
     return true;
   } catch (error) {
-    showToast(error.message || 'N├úo foi poss├¡vel sincronizar o andamento.', 'warning');
+    showToast(error.message || 'Não foi possível sincronizar o andamento.', 'warning');
     return false;
   }
 }
@@ -6397,6 +6397,8 @@ function showAppModal({
  onConfirm = null,
  onCancel = null,
  closeOnBackdrop = true,
+ hideButtons = false,
+ autoCloseDelay = 0,
  modalClass = ''
 } = {}) {
  return new Promise(resolve => {
@@ -6408,8 +6410,8 @@ function showAppModal({
  const normalizedType = ['success', 'error', 'warning', 'confirm', 'info'].includes(type) ? type : 'info';
  const visualType = normalizedType === 'confirm' ? 'success' : normalizedType;
  const iconMap = {
- success: 'check_circle',
- error: 'error',
+ success: 'check',
+ error: 'close',
  warning: 'warning',
  confirm: 'help',
  info: 'info'
@@ -6435,24 +6437,27 @@ function showAppModal({
 
  const overlay = document.createElement('div');
  overlay.id = 'app-confirm-modal';
- overlay.className = `app-confirm-overlay app-standard-modal modal-${visualType}${modalClass ? ` ${modalClass}` : ''}`;
+ overlay.className = `app-confirm-overlay app-standard-modal modal-${visualType}${modalClass ? ` ${modalClass}` : ''} open`;
  overlay.innerHTML = `
  <div class="app-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
  <button type="button" class="app-modal-x" data-action="cancel" aria-label="Fechar">
  <span class="material-symbols-rounded">close</span>
  </button>
  <div class="app-confirm-icon ${visualType}">
+ <div class="app-confirm-halo-inner">
  <span class="material-symbols-rounded">${iconMap[normalizedType]}</span>
  </div>
+ </div>
  <h3 id="app-confirm-title">${escapeKitAttribute(title)}</h3>
- ${message ? `<p>${escapeKitAttribute(message)}</p>` : ''}
+ ${message ? `<p class="app-confirm-message">${escapeKitAttribute(message)}</p>` : ''}
  ${detailHtml}
  ${summaryHtml}
  ${promptHtml}
+ ${!hideButtons ? `
  <div class="app-confirm-actions ${isConfirm ? '' : 'app-alert-actions'}">
  ${isConfirm ? `<button type="button" class="app-confirm-btn cancel" data-action="cancel">${escapeKitAttribute(cancelText)}</button>` : ''}
- <button type="button" class="app-confirm-btn confirm ${visualType}" data-action="confirm">${escapeKitAttribute(confirmText)}</button>
- </div>
+ <button type="button" class="app-confirm-btn confirm ${visualType}" data-action="confirm">${normalizedType === 'error' && confirmText.toLowerCase().includes('tentar') ? '<span class="material-symbols-rounded">sync</span> ' : ''}${escapeKitAttribute(confirmText)}</button>
+ </div>` : ''}
  </div>
  `;
 
@@ -6474,6 +6479,12 @@ function showAppModal({
  setTimeout(() => overlay.remove(), 160);
  resolve(prompt ? (confirmed ? promptValueResult : null) : confirmed);
  };
+
+ if (autoCloseDelay > 0) {
+ setTimeout(() => {
+ if (!settled) close(true);
+ }, autoCloseDelay);
+ }
 
  overlay.addEventListener('click', event => {
  const stepButton = event.target?.closest?.('[data-quantity-step]');
@@ -20900,11 +20911,8 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
   await showAppModal({
     type: 'success',
-    title: 'Saida rapida finalizada',
-    message: finalizationResult?.queued
-      ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
-      : `Saida rapida ${sessionId} finalizada e estoque baixado.`,
-    detail: `Produtos diferentes: ${stats.total_produtos_separados} | Itens/bipes: ${stats.total_itens_separados} | Pacotes montados: ${stats.total_pacotes_montados} | Media por pacote: ${formatPickPackageAverage(stats.media_itens_por_pacote)}`,
+    title: 'Saída rápida finalizada!',
+    message: 'Estoque atualizado com sucesso.',
     confirmText: 'OK'
   });
   playBeep('success');
@@ -20929,7 +20937,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
     if (!currentPickSession?.items || currentPickSession.items.length === 0) {
       await showAppModal({
         type: 'warning',
-        title: 'Atencao',
+        title: 'Atenção',
         message: 'Adicione pelo menos um item para finalizar.',
         confirmText: 'OK'
       });
@@ -21690,18 +21698,29 @@ async function renderPackSessionDetails(sessionId) {
  ? Object.values(groupedExpected)
  : (session && Array.isArray(session.conferenceRows) ? session.conferenceRows : []);
 
+ let expectedPackages = [];
+ try {
+  if (typeof DataClient.listarPacotesSeparacaoSupabase === 'function') {
+   expectedPackages = await DataClient.listarPacotesSeparacaoSupabase(packSessionId);
+  }
+ } catch (pkgErr) {
+  console.warn('[CONFERENCIA] Falha ao listar pacotes da separacao:', pkgErr);
+ }
+
  currentPackSession = {
  ...(session || {}),
  id: packSessionId,
  separacaoRowId,
  items: expectedItems,
+ expectedPackages: expectedPackages || [],
  pickingData: {
  separacao_id: packSessionId,
  separacao_row_id: separacaoRowId,
  canal_nome: channelName || (expectedItems.length > 0 ? (expectedItems[0].canal_nome || packSessionId.split('-')[1] || '') : ''),
  total_produtos_separados: getSeparationProductTotal(separacaoSession || {}),
  total_itens_separados: getSeparationItemTotal(separacaoSession || {}),
- total_pacotes_montados: getPickPackageCountFrom(separacaoSession || {})
+ total_pacotes_montados: getPickPackageCountFrom(separacaoSession || {}),
+ pacotes: expectedPackages || []
  },
  conferenceRows
  };
@@ -21723,8 +21742,6 @@ async function renderPackSessionDetails(sessionId) {
  // Texto validado em UTF-8.
  const packList = document.getElementById('pack-items-list');
  if (packList) packList.innerHTML = renderPackItemsListHTML();
- const packPackagesEl = document.getElementById('pack-summary-packages');
- if (packPackagesEl) packPackagesEl.textContent = String(getPickPackageCountFrom(currentPackSession?.pickingData || currentPackSession || {}));
  
  } catch (err) {
  console.log('[INFO] Operacao registrada.');
@@ -21806,11 +21823,11 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  <div class="pack-blind-summary-metrics pick-summary-line">
  <div class="pick-package-count-field">
  <span class="material-symbols-rounded">inventory_2</span>
- <div class="conference-summary-copy"><span>NESTA SEPARACAO</span><strong id="conference-summary-packages">0</strong></div>
+ <div class="conference-summary-copy"><span>NESTA SEPARAÇÃO</span><strong id="conference-summary-packages">0</strong></div>
  </div>
  <div class="pick-package-count-field pick-channel-package-total">
- <span class="material-symbols-rounded">monitoring</span>
- <div class="conference-summary-copy"><span>TOTAL DO CANAL HOJE</span><strong id="conference-summary-channel-packages">0</strong></div>
+ <span class="material-symbols-rounded">add_circle</span>
+ <div class="conference-summary-copy"><span>TOTAL</span><strong id="conference-summary-channel-packages">0</strong></div>
  </div>
   <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
  <span class="material-symbols-rounded">account_tree</span><span>AGRUPAMENTOS</span>
@@ -21937,24 +21954,16 @@ function updatePackChrome() {
  alertEl.innerHTML = '';
  }
 
- const expectedItems = stats.total || stats.checkedItems || 0;
- const progress = expectedItems > 0 ? Math.min(100, Math.round((stats.checkedItems / expectedItems) * 100)) : 0;
- const itemsEl = document.getElementById('pack-summary-items');
- const unitsEl = document.getElementById('pack-summary-units');
  const packagesEl = document.getElementById('conference-summary-packages');
  const channelPackagesEl = document.getElementById('conference-summary-channel-packages');
- const progressEl = document.getElementById('pack-summary-progress');
- const ratioEl = document.getElementById('pack-summary-ratio');
  const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
  const standaloneRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits === 0);
  const groupedRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits > 0);
+ const checkedUnits = rows.reduce((sum, r) => sum + Number(r.qtd_conferida || 0), 0);
 
- if (itemsEl) itemsEl.textContent = String(stats.checkedItems);
- if (unitsEl) unitsEl.textContent = String(stats.checkedQty);
- if (packagesEl) packagesEl.textContent = String(getConferenceDisplayedPackageCount());
- if (channelPackagesEl) channelPackagesEl.textContent = String(getConferenceChannelDailyPackageTotal());
- if (progressEl) progressEl.textContent = `${progress}%`;
- if (ratioEl) ratioEl.textContent = `${stats.checkedItems} / ${expectedItems} itens`;
+ if (packagesEl) packagesEl.textContent = String(checkedUnits);
+ if (channelPackagesEl) channelPackagesEl.textContent = String(checkedUnits);
+
  const filterCounts = { all: scannedRows.length, standalone: standaloneRows.length, kits: groupedRows.length };
  Object.entries(filterCounts).forEach(([key, value]) => {
  const count = document.getElementById(`conference-filter-${key}-count`);
@@ -22599,7 +22608,7 @@ function renderConferenceCorrection() {
  </button>
  
   <button class="btn-action" id="btn-finish-atomic"
-  style="width: 100%; justify-content: center; background: #22c55e;" onclick="${hasDivergence ? 'authorizeConferenceDivergence()' : 'confirmFinishConference()'}">
+  style="width: 100%; justify-content: center; background: #22c55e;" onclick="finishConferenceSession()">
  <span class="material-symbols-rounded">check_circle</span>
  FINALIZAR E DAR BAIXA
  </button>
@@ -22714,8 +22723,370 @@ function ungroupConferencePackage(packageId) {
  if (list) list.innerHTML = renderPackItemsListHTML();
 }
 
-function openConferenceResultModal() {
+function detectConferenceGroupingDivergence(expectedPackages = [], currentConferenceRows = []) {
+ const expectedGrouped = (expectedPackages || []).filter(pkg =>
+  String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
+  || (Array.isArray(pkg.itens) && pkg.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1)
+ );
+
+ const conferencePackages = buildConferencePackagesSyncPayload(currentConferenceRows);
+ const conferenceGrouped = (conferencePackages || []).filter(pkg =>
+  String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
+  || (Array.isArray(pkg.itens) && pkg.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1)
+ );
+
+ if (expectedGrouped.length === 0 && conferenceGrouped.length === 0) {
+  return { hasDivergence: false, expectedGroupCount: 0, conferenceGroupCount: 0, details: [] };
+ }
+
+ const buildSignature = (pkg) => {
+  const items = (pkg.itens || []).map(it => `${it.id_interno}:${it.quantidade}`).sort().join('|');
+  return items;
+ };
+
+ const expectedSignatures = expectedGrouped.map(buildSignature).sort();
+ const conferenceSignatures = conferenceGrouped.map(buildSignature).sort();
+
+ const isMatch = expectedSignatures.length === conferenceSignatures.length
+  && expectedSignatures.every((sig, idx) => sig === conferenceSignatures[idx]);
+
+ const details = [];
+ if (!isMatch) {
+  expectedGrouped.forEach((pkg, idx) => {
+   const itemsDesc = (pkg.itens || []).map(it => {
+    const prod = (currentPackSession?.conferenceRows || []).find(r => String(getPickingProductId(r)) === String(it.id_interno));
+    const name = prod ? getPickItemTitle(prod) : (it.titulo || it.id_interno || 'Produto');
+    return `${it.quantidade}x ${name}`;
+   }).join(', ');
+   details.push({
+    expectedPackageNum: pkg.numero_pacote || idx + 1,
+    expectedDesc: itemsDesc,
+    tipo: 'AGRUPADO'
+   });
+  });
+ }
+
+ return {
+  hasDivergence: !isMatch,
+  expectedGroupCount: expectedGrouped.length,
+  conferenceGroupCount: conferenceGrouped.length,
+  details: details,
+  message: isMatch ? null : 'Existe produto agrupado na Separação que não corresponde ao agrupamento realizado na Conferência.'
+ };
+}
+
+function toggleConferenceDivergenceDetails() {
+ const detailsEl = document.getElementById('conference-divergence-details-box');
+ const toggleBtn = document.getElementById('conference-divergence-details-toggle');
+ if (!detailsEl || !toggleBtn) return;
+ const isHidden = detailsEl.classList.contains('hidden');
+ detailsEl.classList.toggle('hidden', !isHidden);
+ toggleBtn.innerHTML = isHidden
+  ? 'Ocultar detalhes <span class="material-symbols-rounded">expand_less</span>'
+  : 'Ver detalhes <span class="material-symbols-rounded">expand_more</span>';
+}
+
+function actionAgruparAgoraConference() {
+ closeConferenceResultModal();
  const rows = currentPackSession?.conferenceRows || [];
+ const expectedPackages = currentPackSession?.expectedPackages || currentPackSession?.pickingData?.pacotes || [];
+ const expectedGrouped = (expectedPackages || []).filter(pkg =>
+  String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
+  || (Array.isArray(pkg.itens) && pkg.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1)
+ );
+
+ let targetIndex = -1;
+ for (const pkg of expectedGrouped) {
+  for (const it of (pkg.itens || [])) {
+   const idx = rows.findIndex(r => String(getPickingProductId(r)) === String(it.id_interno) && getConferenceKitSummary(r).standaloneUnits > 0);
+   if (idx !== -1) {
+    targetIndex = idx;
+    break;
+   }
+  }
+  if (targetIndex !== -1) break;
+ }
+
+ if (targetIndex === -1) {
+  targetIndex = rows.findIndex(r => getConferenceKitSummary(r).standaloneUnits > 0);
+ }
+
+ if (targetIndex !== -1) {
+  setConferenceViewFilter('all');
+  setTimeout(() => {
+   const el = document.getElementById(`pack-row-${targetIndex}`) || document.querySelector('.pack-blind-row');
+   if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('highlight-row');
+    setTimeout(() => el.classList.remove('highlight-row'), 2000);
+   }
+   toggleConferenceItemSelection(targetIndex);
+  }, 80);
+ } else {
+  showToast('Selecione os produtos para agrupar.', 'info');
+ }
+}
+
+function actionCorrigirDivergenciaConference() {
+ closeConferenceResultModal();
+ openConferenceCorrectionModal();
+}
+
+function closeConferenceCorrectionModal() {
+ document.getElementById('conference-correction-modal')?.remove();
+ document.getElementById('conference-add-product-modal')?.remove();
+ restoreScanFieldFocus('pack', 80);
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+}
+
+function adjustConferenceCorrectionModalItem(index, delta) {
+ if (!currentPackSession || !currentPackSession.conferenceRows) return;
+ const row = currentPackSession.conferenceRows[index];
+ if (!row) return;
+
+ const newQty = Math.max(0, Number(row.qtd_conferida || 0) + delta);
+ row.qtd_conferida = newQty;
+ row.scanned_in_conference = newQty > 0;
+
+ const assignments = Array.isArray(row.conference_package_assignments) ? row.conference_package_assignments.slice(0, newQty) : [];
+ while (assignments.length < newQty) assignments.push(null);
+ row.conference_package_assignments = assignments;
+
+ updateConferenceRowDivergence(row);
+ persistPackSessionCache();
+
+ openConferenceCorrectionModal();
+
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+}
+
+function openConferenceCorrectionModal() {
+ document.getElementById('conference-correction-modal')?.remove();
+ if (!currentPackSession || !currentPackSession.conferenceRows) return;
+
+ const rows = currentPackSession.conferenceRows;
+ const divergentItems = rows.map((row, index) => {
+  const expected = Number(row.qtd_separada || 0);
+  const checked = Number(row.qtd_conferida || 0);
+  const isDivergent = expected !== checked;
+  const status = checked === expected ? 'ok' : checked < expected ? 'missing' : 'extra';
+  return { row, index, expected, checked, isDivergent, status };
+ }).filter(item => item.isDivergent);
+
+ const overlay = document.createElement('div');
+ overlay.id = 'conference-correction-modal';
+ overlay.className = 'app-confirm-overlay app-standard-modal modal-warning open';
+ 
+ const itemsHTML = divergentItems.length > 0 ? divergentItems.map(({ row, index, expected, checked, status }) => {
+  const title = escapeKitAttribute(getPickItemTitle(row) || row.descricao || 'Produto');
+  const id = escapeKitAttribute(getPickingProductId(row) || row.id_interno || '-');
+  const ean = escapeKitAttribute(getPickItemEan(row) || row.ean || '-');
+  const isMissing = status === 'missing';
+  const diffQty = isMissing ? (expected - checked) : (checked - expected);
+
+  return `
+   <div class="conference-correction-card ${isMissing ? 'is-missing' : 'is-extra'}">
+    <div class="conference-correction-card-info">
+     <div class="conference-correction-card-header">
+      <span class="material-symbols-rounded conference-correction-icon">${isMissing ? 'warning' : 'add_circle'}</span>
+      <strong class="conference-correction-title">${title}</strong>
+     </div>
+     <div class="conference-correction-meta">ID: ${id} &middot; EAN: ${ean}</div>
+     <div class="conference-correction-comparison">
+      <span>Esperado: <b>${formatStockNumber(expected)}</b></span>
+      <span>Conferido: <b>${formatStockNumber(checked)}</b></span>
+      <span class="diff-tag ${isMissing ? 'is-missing' : 'is-extra'}">
+       ${isMissing ? `Faltando: ${diffQty} un.` : `Excedente: ${diffQty} un.`}
+      </span>
+     </div>
+    </div>
+    <div class="conference-correction-stepper">
+     <button type="button" class="stepper-btn minus" onclick="adjustConferenceCorrectionModalItem(${index}, -1)" ${checked <= 0 ? 'disabled' : ''} aria-label="Diminuir">
+      <span class="material-symbols-rounded">remove</span>
+     </button>
+     <div class="stepper-value">${checked}</div>
+     <button type="button" class="stepper-btn plus" onclick="adjustConferenceCorrectionModalItem(${index}, 1)" aria-label="Aumentar">
+      <span class="material-symbols-rounded">add</span>
+     </button>
+    </div>
+   </div>
+  `;
+ }).join('') : `
+  <div class="conference-correction-empty" style="text-align: center; padding: 20px 10px;">
+   <span class="material-symbols-rounded" style="font-size: 40px; color: #16a34a; display: block; margin-bottom: 6px;">check_circle</span>
+   <strong style="color: #0f172a; font-size: 0.92rem; display: block;">Todas as divergências de produtos foram ajustadas!</strong>
+   <small style="color: #64748b; font-size: 0.78rem;">Clique em FINALIZAR para revalidar a conferência.</small>
+  </div>
+ `;
+
+ overlay.innerHTML = `
+  <div class="app-confirm-dialog conference-correction-dialog" role="dialog" aria-modal="true" aria-labelledby="conference-correction-title">
+   <button type="button" class="app-modal-x" onclick="closeConferenceCorrectionModal()" aria-label="Fechar">
+    <span class="material-symbols-rounded">close</span>
+   </button>
+
+   <div class="conference-correction-head">
+    <div class="app-confirm-icon warning">
+     <div class="app-confirm-halo-inner">
+      <span class="material-symbols-rounded">edit_note</span>
+     </div>
+    </div>
+    <h3 id="conference-correction-title">CORRIGIR DIVERGÊNCIA</h3>
+    <p>Ajuste as quantidades dos produtos divergentes antes de finalizar.</p>
+   </div>
+
+   <div class="conference-correction-body">
+    ${itemsHTML}
+   </div>
+
+   <div class="conference-correction-add-wrapper">
+    <button type="button" class="btn-incluir-produto" onclick="openConferenceAddProductModal()">
+     <span class="material-symbols-rounded">add_circle</span>
+     + INCLUIR PRODUTO
+    </button>
+   </div>
+
+   <div class="app-confirm-actions conference-correction-actions">
+    <button type="button" class="app-confirm-btn cancel btn-cancelar-correcao" onclick="closeConferenceCorrectionModal()">
+     CANCELAR
+    </button>
+    <button type="button" class="app-confirm-btn confirm btn-finalizar-correcao" onclick="submitConferenceCorrectionModalFinalize()">
+     FINALIZAR
+    </button>
+   </div>
+  </div>
+ `;
+ document.body.appendChild(overlay);
+}
+
+function submitConferenceCorrectionModalFinalize() {
+ closeConferenceCorrectionModal();
+ finishConferenceSession();
+}
+
+function openConferenceAddProductModal() {
+ document.getElementById('conference-add-product-modal')?.remove();
+ const overlay = document.createElement('div');
+ overlay.id = 'conference-add-product-modal';
+ overlay.className = 'app-confirm-overlay app-standard-modal modal-info open';
+ overlay.style.zIndex = '10001';
+
+ overlay.innerHTML = `
+  <div class="app-confirm-dialog conference-add-product-dialog" role="dialog" aria-modal="true" aria-labelledby="conference-add-product-title">
+   <button type="button" class="app-modal-x" onclick="closeConferenceAddProductModal()" aria-label="Fechar">
+    <span class="material-symbols-rounded">close</span>
+   </button>
+   <h3 id="conference-add-product-title" style="margin: 0 0 4px 0; font-size: 1.05rem; font-weight: 800; color: #0f172a;">INCLUIR PRODUTO NA CONFERÊNCIA</h3>
+   <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Busque por nome, ID interno ou código de barras (EAN):</p>
+   
+   <div class="conference-add-product-search-box">
+    <span class="material-symbols-rounded" style="color: #64748b; font-size: 20px;">search</span>
+    <input type="text" id="conference-add-product-input" placeholder="Digite para buscar..." oninput="filterConferenceAddProductList(this.value)" autocomplete="off" />
+   </div>
+
+   <div id="conference-add-product-results" class="conference-add-product-results">
+    <div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 0.8rem;">
+     Digite ao menos 2 caracteres para buscar.
+    </div>
+   </div>
+
+   <div class="app-confirm-actions" style="margin-top: 14px;">
+    <button type="button" class="app-confirm-btn cancel" style="width: 100%;" onclick="closeConferenceAddProductModal()">
+     FECHAR
+    </button>
+   </div>
+  </div>
+ `;
+ document.body.appendChild(overlay);
+ setTimeout(() => document.getElementById('conference-add-product-input')?.focus(), 100);
+}
+
+function closeConferenceAddProductModal() {
+ document.getElementById('conference-add-product-modal')?.remove();
+}
+
+function filterConferenceAddProductList(query = '') {
+ const resultsEl = document.getElementById('conference-add-product-results');
+ if (!resultsEl) return;
+ const q = String(query || '').trim().toLowerCase();
+ if (q.length < 2) {
+  resultsEl.innerHTML = `<div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 0.8rem;">Digite ao menos 2 caracteres para buscar.</div>`;
+  return;
+ }
+
+ const allProducts = appData.produtos || [];
+ const matches = allProducts.filter(p => {
+  const nome = String(p.nome || p.descricao || '').toLowerCase();
+  const id = String(p.id_interno || p.col_a || '').toLowerCase();
+  const ean = String(p.ean || p.codigo_barras || '').toLowerCase();
+  const sku = String(p.sku || '').toLowerCase();
+  return nome.includes(q) || id.includes(q) || ean.includes(q) || sku.includes(q);
+ }).slice(0, 20);
+
+ if (matches.length === 0) {
+  resultsEl.innerHTML = `<div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 0.8rem;">Nenhum produto encontrado.</div>`;
+  return;
+ }
+
+ resultsEl.innerHTML = matches.map(p => {
+  const id = escapeKitAttribute(p.id_interno || p.col_a || '');
+  const nome = escapeKitAttribute(p.nome || p.descricao || 'Produto sem nome');
+  const ean = escapeKitAttribute(p.ean || p.codigo_barras || '-');
+  return `
+   <div class="conference-add-product-item" onclick="selectConferenceAddProduct('${id}')">
+    <div style="font-weight: 750; font-size: 0.84rem; color: #0f172a;">${nome}</div>
+    <div style="font-size: 0.72rem; color: #64748b;">ID: ${id} &middot; EAN: ${ean}</div>
+   </div>
+  `;
+ }).join('');
+}
+
+function selectConferenceAddProduct(productId) {
+ if (!currentPackSession || !currentPackSession.conferenceRows) return;
+ const allProducts = appData.produtos || [];
+ const product = allProducts.find(p => String(p.id_interno || p.col_a) === String(productId));
+ if (!product) return;
+
+ const id = String(product.id_interno || product.col_a);
+ let existingRow = currentPackSession.conferenceRows.find(r => String(r.id_interno) === id);
+
+ if (existingRow) {
+  const prevQty = Number(existingRow.qtd_conferida || 0);
+  existingRow.qtd_conferida = prevQty + 1;
+  existingRow.scanned_in_conference = true;
+  const assignments = Array.isArray(existingRow.conference_package_assignments) ? existingRow.conference_package_assignments : [];
+  assignments[prevQty] = null;
+  existingRow.conference_package_assignments = assignments;
+  updateConferenceRowDivergence(existingRow);
+ } else {
+  const newRow = {
+   id_interno: id,
+   ean: product.ean || product.codigo_barras || '',
+   descricao: product.nome || product.descricao || 'Produto Extra',
+   qtd_separada: 0,
+   qtd_conferida: 1,
+   divergencia: 'SOBRA',
+   scanned_in_conference: true,
+   conference_package_assignments: [null]
+  };
+  currentPackSession.conferenceRows.push(newRow);
+ }
+
+ persistPackSessionCache();
+ closeConferenceAddProductModal();
+ openConferenceCorrectionModal();
+ const list = document.getElementById('pack-items-list');
+ if (list) list.innerHTML = renderPackItemsListHTML();
+ showToast('Produto incluído com sucesso.', 'success');
+}
+
+function openConferenceResultModal(groupingCheck = null) {
+ const rows = currentPackSession?.conferenceRows || [];
+ const expectedPackages = currentPackSession?.expectedPackages || currentPackSession?.pickingData?.pacotes || [];
+ const groupCheck = groupingCheck || detectConferenceGroupingDivergence(expectedPackages, rows);
+
  const resultRows = rows.map((row, index) => {
   const expected = Number(row.qtd_separada || 0);
   const checked = Number(row.qtd_conferida || 0);
@@ -22723,49 +23094,194 @@ function openConferenceResultModal() {
   return { row, index, expected, checked, status };
  });
  const divergentRows = resultRows.filter(item => item.status !== 'ok');
- const hasDivergence = divergentRows.length > 0;
- const packageCount = getConferencePackageCount();
+ const hasItemDivergence = divergentRows.length > 0;
+ const hasGroupingDivergence = Boolean(groupCheck?.hasDivergence);
+ const hasDivergence = hasItemDivergence || hasGroupingDivergence;
+
  document.getElementById('conference-result-modal')?.remove();
- const modal = document.createElement('div');
- modal.id = 'conference-result-modal';
- modal.className = 'conference-result-overlay';
- modal.innerHTML = `
- <section class="conference-result-dialog ${hasDivergence ? 'has-divergence' : 'is-success'}" role="dialog" aria-modal="true" aria-labelledby="conference-result-title">
-  <header>
-   <span class="material-symbols-rounded">${hasDivergence ? 'rule' : 'task_alt'}</span>
-   <div><small>RESULTADO DA CONFER\u00caNCIA</small><h2 id="conference-result-title">${hasDivergence ? 'Ajustes necess\u00e1rios' : 'Confer\u00eancia correta'}</h2><p>${escapeKitAttribute(currentPackSession?.id || '')}</p></div>
-   <button type="button" onclick="closeConferenceResultModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button>
-  </header>
-  <div class="conference-result-summary">
-   <article><small>Pacotes</small><strong>${packageCount}</strong></article>
-   <article><small>Corretos</small><strong>${resultRows.length - divergentRows.length}</strong></article>
-   <article><small>Faltando</small><strong>${resultRows.filter(item => item.status === 'missing').length}</strong></article>
-   <article><small>Excedentes</small><strong>${resultRows.filter(item => item.status === 'extra').length}</strong></article>
+ document.getElementById('app-confirm-modal')?.remove();
+
+ if (!hasDivergence) {
+  confirmFinishConference();
+  return;
+ }
+
+ const missingProductsCount = resultRows.filter(item => item.checked === 0 && item.expected > 0).length;
+ const extraProductsCount = resultRows.filter(item => item.expected === 0 && item.checked > 0).length;
+ const fewerUnitsTotal = resultRows.filter(item => item.checked < item.expected).reduce((sum, item) => sum + (item.expected - item.checked), 0);
+ const extraUnitsTotal = resultRows.filter(item => item.checked > item.expected).reduce((sum, item) => sum + (item.checked - item.expected), 0);
+
+ const motives = [];
+
+ if (hasGroupingDivergence) {
+  motives.push({
+   type: 'warning',
+   icon: 'warning',
+   text: 'Agrupamento não realizado'
+  });
+ }
+
+ if (!hasItemDivergence && hasGroupingDivergence) {
+  motives.push({
+   type: 'success',
+   icon: 'check_circle',
+   text: 'Produtos e quantidades corretos.'
+  });
+ }
+
+ if (hasItemDivergence) {
+  if (fewerUnitsTotal > 0) {
+   motives.push({
+    type: 'danger',
+    icon: 'error',
+    text: `Quantidade divergente — ${fewerUnitsTotal} unidade${fewerUnitsTotal > 1 ? 's' : ''} a menos`
+   });
+  }
+  if (extraUnitsTotal > 0) {
+   motives.push({
+    type: 'danger',
+    icon: 'error',
+    text: `Quantidade divergente — ${extraUnitsTotal} unidade${extraUnitsTotal > 1 ? 's' : ''} a mais`
+   });
+  }
+  if (missingProductsCount > 0 && fewerUnitsTotal === 0) {
+   motives.push({
+    type: 'danger',
+    icon: 'error',
+    text: `${missingProductsCount} produto${missingProductsCount > 1 ? 's' : ''} faltante${missingProductsCount > 1 ? 's' : ''}`
+   });
+  }
+  if (extraProductsCount > 0 && extraUnitsTotal === 0) {
+   motives.push({
+    type: 'danger',
+    icon: 'error',
+    text: `${extraProductsCount} produto${extraProductsCount > 1 ? 's' : ''} não esperado${extraProductsCount > 1 ? 's' : ''}`
+   });
+  }
+ }
+
+ let actionsHTML = '';
+ if (hasGroupingDivergence && !hasItemDivergence) {
+  // Scenario B: Only Grouping Divergence
+  actionsHTML = `
+   <div class="app-confirm-actions conference-divergence-actions">
+    <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
+     <span class="material-symbols-rounded">hub</span>
+     AGRUPAR AGORA
+    </button>
+    <button type="button" class="btn-finalizar-mesmo" onclick="authorizeConferenceDivergence()">
+     FINALIZAR ASSIM MESMO
+    </button>
+   </div>
+  `;
+ } else if (!hasGroupingDivergence && hasItemDivergence) {
+  // Scenario C: Only Product/Quantity Divergence
+  actionsHTML = `
+   <div class="app-confirm-actions conference-divergence-actions">
+    <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
+     <span class="material-symbols-rounded">edit</span>
+     CORRIGIR DIVERGÊNCIA
+    </button>
+    <button type="button" class="btn-finalizar-mesmo" onclick="authorizeConferenceDivergence()">
+     FINALIZAR ASSIM MESMO
+    </button>
+   </div>
+  `;
+ } else {
+  // Scenario D: Both Grouping and Product/Quantity Divergences (3 buttons)
+  actionsHTML = `
+   <div class="app-confirm-actions conference-divergence-actions has-3-buttons">
+    <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
+     <span class="material-symbols-rounded">hub</span>
+     AGRUPAR AGORA
+    </button>
+    <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
+     <span class="material-symbols-rounded">edit</span>
+     CORRIGIR DIVERGÊNCIA
+    </button>
+    <button type="button" class="btn-finalizar-mesmo" onclick="authorizeConferenceDivergence()">
+     FINALIZAR ASSIM MESMO
+    </button>
+   </div>
+  `;
+ }
+
+ const detailsHTML = `
+  <div id="conference-divergence-details-box" class="conference-divergence-details hidden">
+   ${hasItemDivergence ? `
+    <div class="conference-divergence-details-section">
+     <strong>PRODUTOS DIVERGENTES:</strong>
+     ${divergentRows.map(({ row, expected, checked, status }) => {
+      const title = escapeKitAttribute(getPickItemTitle(row));
+      const isMissing = status === 'missing';
+      const diffQty = isMissing ? (expected - checked) : (checked - expected);
+      return `
+       <div class="conference-divergence-detail-row ${isMissing ? 'is-missing' : 'is-extra'}">
+        <span>${title}</span>
+        <small>Esperado: ${expected} | Conferido: ${checked} (${isMissing ? `-${diffQty}` : `+${diffQty}`})</small>
+       </div>
+      `;
+     }).join('')}
+    </div>
+   ` : ''}
+
+   ${hasGroupingDivergence && groupCheck.details && groupCheck.details.length > 0 ? `
+    <div class="conference-divergence-details-section">
+     <strong>AGRUPAMENTOS ESPERADOS:</strong>
+     ${groupCheck.details.map(d => `
+      <div class="conference-divergence-detail-row is-missing">
+       <span>Pacote ${escapeKitAttribute(d.expectedPackageNum)}</span>
+       <small>${escapeKitAttribute(d.expectedDesc)}</small>
+      </div>
+     `).join('')}
+    </div>
+   ` : ''}
   </div>
-  <div class="conference-result-list">
-   ${divergentRows.map(({ row, index, expected, checked, status }) => `
-   <article class="is-${status}">
-    <span class="material-symbols-rounded">${status === 'ok' ? 'check_circle' : status === 'missing' ? 'add_circle' : 'remove_circle'}</span>
-    <div><strong>${escapeKitAttribute(getPickItemTitle(row))}</strong><small>ID ${escapeKitAttribute(getPickingProductId(row) || '-')} &middot; EAN ${escapeKitAttribute(getPickItemEan(row))}</small></div>
-    ${status === 'ok' ? '<em>CORRETO</em>' : conferenceCorrectionModeActive ? `<div class="conference-result-qty-actions"><button type="button" onclick="adjustConferenceFromResult(${index}, -1)" aria-label="Remover uma unidade"><span class="material-symbols-rounded">remove</span></button><button type="button" onclick="adjustConferenceFromResult(${index}, 1)" aria-label="Incluir uma unidade"><span class="material-symbols-rounded">add</span></button></div>` : `<em class="is-${status}">${status === 'missing' ? 'FALTANDO' : 'EXCEDENTE'}</em>`}
-    <p><span>Esperado <b>${formatStockNumber(expected)}</b></span><span>Bipado <b>${formatStockNumber(checked)}</b></span></p>
-   </article>`).join('')}
+ `;
+
+ const overlay = document.createElement('div');
+ overlay.id = 'conference-result-modal';
+ overlay.className = 'app-confirm-overlay app-standard-modal modal-warning open';
+ overlay.innerHTML = `
+  <div class="app-confirm-dialog conference-divergence-compact-dialog" role="dialog" aria-modal="true" aria-labelledby="conference-divergence-title">
+   <button type="button" class="app-modal-x" onclick="closeConferenceResultModal()" aria-label="Fechar">
+    <span class="material-symbols-rounded">close</span>
+   </button>
+
+   <div class="app-confirm-icon warning">
+    <div class="app-confirm-halo-inner">
+     <span class="material-symbols-rounded">warning</span>
+    </div>
+   </div>
+
+   <h3 id="conference-divergence-title">ATENÇÃO — DIVERGÊNCIA</h3>
+
+   <div class="conference-divergence-motives-list">
+    ${motives.map(m => `
+     <div class="conference-motive-item is-${m.type}">
+      <span class="material-symbols-rounded">${m.icon}</span>
+      <span>${escapeKitAttribute(m.text)}</span>
+     </div>
+    `).join('')}
+   </div>
+
+   <div class="conference-divergence-details-toggle-wrapper">
+    <button id="conference-divergence-details-toggle" type="button" class="conference-divergence-details-toggle" onclick="toggleConferenceDivergenceDetails()">
+     Ver detalhes <span class="material-symbols-rounded">expand_more</span>
+    </button>
+   </div>
+
+   ${detailsHTML}
+
+   ${actionsHTML}
+
+   <div class="app-modal-note-box">
+    <span class="material-symbols-rounded">info</span>
+    <span>Ao finalizar assim mesmo, os itens com divergência serão registrados no histórico.</span>
+   </div>
   </div>
-  <footer>
-   ${hasDivergence ? conferenceCorrectionModeActive ? `
-   <p>Use os botoes − e + ou volte para bipar um produto que nao esteja na lista.</p>
-   <button type="button" class="conference-result-review" onclick="returnToConferenceScanning()"><span class="material-symbols-rounded">barcode_scanner</span>Bipar ou incluir produto</button>
-   ` : `
-   <p>Foi encontrada divergencia entre a separacao e os produtos bipados.</p>
-   <button type="button" class="conference-result-review" onclick="enableConferenceResultCorrection()"><span class="material-symbols-rounded">edit</span>Corrigir os bipes</button>
-   <button type="button" class="conference-result-confirm" onclick="authorizeConferenceDivergence()"><span class="material-symbols-rounded">verified</span>Confirmar ajuste e enviar</button>
-   ` : `
-   <p>Todos os produtos e quantidades conferem com a separa\u00e7\u00e3o.</p>
-   <button type="button" class="conference-result-confirm" onclick="closeConferenceResultModal(); confirmFinishConference()"><span class="material-symbols-rounded">check_circle</span>Confirmar e finalizar</button>
-   `}
-  </footer>
- </section>`;
- document.body.appendChild(modal);
+ `;
+ document.body.appendChild(overlay);
 }
 
 function enableConferenceResultCorrection() {
@@ -22777,16 +23293,24 @@ async function authorizeConferenceDivergence() {
  const divergentRows = (currentPackSession?.conferenceRows || []).filter(row =>
   Number(row.qtd_conferida || 0) !== Number(row.qtd_separada || 0)
  );
- if (!divergentRows.length) return confirmFinishConference();
+ const expectedPackages = currentPackSession?.expectedPackages || currentPackSession?.pickingData?.pacotes || [];
+ const groupingCheck = detectConferenceGroupingDivergence(expectedPackages, currentPackSession?.conferenceRows || []);
+
+ if (!divergentRows.length && !groupingCheck.hasDivergence) return confirmFinishConference();
 
  const additions = divergentRows.filter(row => Number(row.qtd_conferida || 0) > Number(row.qtd_separada || 0)).length;
  const removals = divergentRows.filter(row => Number(row.qtd_conferida || 0) < Number(row.qtd_separada || 0)).length;
+ const summaryLines = [];
+ if (additions > 0) summaryLines.push(`Produtos com acréscimo: ${additions}`);
+ if (removals > 0) summaryLines.push(`Produtos com redução: ${removals}`);
+ if (groupingCheck.hasDivergence) summaryLines.push('Divergência de agrupamento de pacotes');
+
  const confirmed = await showAppConfirm({
-  title: 'Finalizar com divergencia?',
-  message: 'A quantidade conferida sera considerada a quantidade realmente enviada.',
-  summary: `Produtos com acrescimo: ${additions}\nProdutos com reducao: ${removals}`,
-  detail: 'O estoque sera movimentado pela quantidade conferida.',
-  confirmLabel: 'Finalizar com divergencia',
+  title: 'Finalizar com divergência?',
+  message: 'A quantidade conferida será considerada a quantidade realmente enviada.',
+  summary: summaryLines.join('\n') || 'Divergências encontradas serão registradas.',
+  detail: 'O estoque será movimentado pela quantidade efetivamente conferida.',
+  confirmLabel: 'Finalizar com divergência',
   cancelLabel: 'Revisar bipes'
  });
  if (!confirmed) return;
@@ -22813,19 +23337,33 @@ function adjustConferenceFromResult(index, delta) {
 }
 
 async function finishConferenceSession() {
-  const pendingPackageUnits = getPendingConferencePackageSelectionCount();
-  if (pendingPackageUnits > 0) {
-   playBeep('error');
-   await showAppModal({ type: 'warning', title: 'Pacote ainda nao criado', message: `${pendingPackageUnits} unidade(s) estao selecionada(s) para agrupamento.`, detail: 'Crie o pacote ou cancele a selecao antes de finalizar a conferencia.', confirmText: 'Voltar para criar' });
-   restoreScanFieldFocus('pack', 80);
-   return;
-  }
-  const hasDivergence = currentPackSession.conferenceRows.some(row =>
-  parseFloat(row.qtd_conferida || 0) !== parseFloat(row.qtd_separada || 0)
-  );
-  if (hasDivergence) { playBeep('error'); conferenceCorrectionModeActive = false; openConferenceResultModal(); return; }
-  playBeep('success'); conferenceCorrectionModeActive = false; await confirmFinishConference();
+ const pendingPackageUnits = getPendingConferencePackageSelectionCount();
+ if (pendingPackageUnits > 0) {
+  playBeep('error');
+  await showAppModal({ type: 'warning', title: 'Pacote ainda nao criado', message: `${pendingPackageUnits} unidade(s) estao selecionada(s) para agrupamento.`, detail: 'Crie o pacote ou cancele a selecao antes de finalizar a conferencia.', confirmText: 'Voltar para criar' });
+  restoreScanFieldFocus('pack', 80);
+  return;
  }
+
+ const rows = currentPackSession?.conferenceRows || [];
+ const hasItemDivergence = rows.some(row =>
+  Number(row.qtd_conferida || 0) !== Number(row.qtd_separada || 0)
+ );
+
+ const expectedPackages = currentPackSession?.expectedPackages || currentPackSession?.pickingData?.pacotes || [];
+ const groupingCheck = detectConferenceGroupingDivergence(expectedPackages, rows);
+
+ if (hasItemDivergence || groupingCheck.hasDivergence) {
+  playBeep('error');
+  conferenceCorrectionModeActive = false;
+  openConferenceResultModal(groupingCheck);
+  return;
+ }
+
+ playBeep('success');
+ conferenceCorrectionModeActive = false;
+ await confirmFinishConference();
+}
 
 function startFastPackSession(channelLabel, channelColor) {
  const currentUser = localStorage.getItem('currentUser');
@@ -23147,7 +23685,7 @@ async function confirmFinishConference(options = {}) {
  }
  isFinalizing = true;
 
- const btn = document.getElementById('btn-finish-atomic');
+ const btn = document.getElementById('btn-finish-pack') || document.getElementById('btn-finish-atomic');
  const originalHTML = btn ? btn.innerHTML : '';
  if (btn) {
  btn.disabled = true;
@@ -23196,52 +23734,75 @@ async function confirmFinishConference(options = {}) {
  rows: rows,
  executionId
  });
- if (!finalizationResult.queued && navigator.onLine) {
-  await DataClient.removerConferenciaAndamentoSupabase(sessionId).catch(error => console.warn('[CONFERENCIA] Finalizada; limpeza do rascunho ficou pendente.', error));
- }
+  if (!finalizationResult.queued && navigator.onLine) {
+   try {
+    if (typeof DataClient.removerConferenciaAndamentoSupabase === 'function') {
+     await DataClient.removerConferenciaAndamentoSupabase(sessionId).catch(error => console.warn('[CONFERENCIA] Finalizada; limpeza do rascunho ficou pendente.', error));
+    }
+   } catch (cleanErr) {
+    console.warn('[CONFERENCIA] Erro nao impeditivo ao limpar rascunho:', cleanErr);
+   }
+  }
 
- await showAppModal({
- type: 'success',
- title: 'Atencao',
- message: finalizationResult.queued
- ? 'CONFERENCIA salva localmente para sincronizar.'
- : (finalizationResult.negativeStockAllowed
- ? 'CONFERENCIA finalizada e estoque baixado. Um ou mais produtos ficaram com saldo negativo conforme conteudo.'
- : (allowDivergence
- ? 'CONFERENCIA finalizada com ajuste autorizado. O estoque foi movimentado pela quantidade conferida.'
- : 'CONFERENCIA finalizada e estoque baixado.')),
- confirmText: 'OK'
- });
- playBeep('success');
+  await showAppModal({
+   type: 'success',
+   title: 'Conferência finalizada!',
+   message: 'Estoque atualizado com sucesso.',
+   confirmText: 'OK'
+  });
+  playBeep('success');
 
- // Texto validado em UTF-8.
- localStorage.removeItem('draft_pack_session');
- let activeSessions = getActivePickSessions();
- activeSessions = activeSessions.filter(s => s.id !== sessionId);
- setActivePickSessions(activeSessions);
+  // Texto validado em UTF-8.
+  localStorage.removeItem('draft_pack_session');
+  let activeSessions = getActivePickSessions();
+  activeSessions = activeSessions.filter(s => s.id !== sessionId);
+  setActivePickSessions(activeSessions);
 
- // Texto validado em UTF-8.
- const sIdx = (appData.separacao || []).findIndex(s => (s.separacao_id || s.col_a) === sessionId);
- if (sIdx !== -1) {
- appData.separacao[sIdx].status = finalizationResult.queued ? 'pendente_sync' : 'finalizada';
- }
+  // Texto validado em UTF-8.
+  const sIdx = (appData.separacao || []).findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+  if (sIdx !== -1) {
+   appData.separacao[sIdx].status = finalizationResult.queued ? 'pendente_sync' : 'finalizada';
+  }
 
- renderMenu();
+  renderMenu();
  } catch (err) {
- console.error("Erro na finalizacao:", err);
- await showAppModal({
- type: 'error',
- title: 'Atencao',
- message: formatConferenceFinalizationError(err),
- confirmText: 'Entendi'
- });
+  console.error("Erro na finalizacao:", err);
+  await showAppModal({
+   type: 'error',
+   title: 'Não foi possível finalizar',
+   message: 'Ocorreu um erro no sistema.',
+   detail: 'Tente novamente em alguns instantes.',
+   confirmText: 'Tentar novamente',
+   onConfirm: async () => {
+    try {
+     const fresh = await DataClient.loadModule('conferencia', true);
+     const alreadyDone = (fresh?.conferencia || appData.conferencia || []).some(c =>
+      String(c.separacao_id || c.col_a) === String(sessionId) && isPackSessionFinished(c)
+     );
+     if (alreadyDone) {
+      localStorage.removeItem('draft_pack_session');
+      let activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+      setActivePickSessions(activeSessions);
+      await showAppModal({
+       type: 'success',
+       title: 'Conferência finalizada!',
+       message: 'Estoque atualizado com sucesso.',
+       confirmText: 'OK'
+      });
+      renderMenu();
+      return;
+     }
+    } catch (checkErr) {
+     console.warn('[CONFERENCIA] Verificacao previa de idempotencia:', checkErr);
+    }
+    await confirmFinishConference(options);
+   }
+  });
  } finally {
- isFinalizing = false;
- if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+  isFinalizing = false;
+  if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
  }
 }
-
-
 
 async function backFromConference() {
  renderPackMenu();

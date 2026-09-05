@@ -72709,15 +72709,74 @@ html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen
   line-height:1 !important;
   text-align:center !important;
 }
-html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > .material-symbols-rounded {
-  flex:0 0 44px !important;
-  width:44px !important;
-  height:44px !important;
-  margin:0 !important;
-  padding:0 !important;
-  box-sizing:border-box !important;
+/* Conferência: cards dos contadores contínuos e sem fundos internos */
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field,
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field * {
+  background: transparent !important;
+  box-shadow: none !important;
 }
-html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field { background:#ccfbf1 !important; border-color:#5eead4 !important; color:#0f766e !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  min-width: 0 !important;
+  padding: 8px 14px !important;
+  box-sizing: border-box !important;
+  background: #ccfbf1 !important;
+  border: 1px solid #5eead4 !important;
+  border-radius: 12px !important;
+  color: #0f766e !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field.pick-channel-package-total {
+  background: #f3e8ff !important;
+  border: 1px solid #d8b4fe !important;
+  border-radius: 12px !important;
+  color: #6b21a8 !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > .material-symbols-rounded {
+  flex: 0 0 auto !important;
+  font-size: 24px !important;
+  color: inherit !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field .conference-summary-copy {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  gap: 8px !important;
+  background: transparent !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field .conference-summary-copy > span {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 0.76rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.02em !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  background: transparent !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field .conference-summary-copy > strong {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  font-size: 1.55rem !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
 html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-finish-btn { background:#0d9488 !important; }
 html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-remove-btn { background:#ef4444 !important; color:#fff !important; border-color:#ef4444 !important; opacity:1 !important; }
 html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-remove-btn .material-symbols-rounded { background:rgba(255,255,255,.18) !important; color:#fff !important; }
@@ -72727,6 +72786,591 @@ html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen
 html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-state.is-standalone { display:inline-flex; align-items:center; border:1px solid #cbd5e1; border-radius:999px; padding:3px 8px; color:#64748b; background:#f8fafc; }
 @media(max-width:1100px){html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics.pick-summary-line{grid-template-columns:repeat(4,minmax(120px,1fr))!important}}
 @media(max-width:768px){html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics.pick-summary-line{grid-template-columns:repeat(2,minmax(0,1fr))!important}html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-table-head{display:none!important}html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-row.pick-product-row{grid-template-columns:minmax(0,1fr) auto auto!important}.conference-workflow-screen .pack-blind-row .pick-item-select{grid-column:2!important}.conference-workflow-screen .pack-blind-row .pick-product-delete{grid-column:3!important}.conference-workflow-screen .pack-blind-title h1 span{display:block}.conference-workflow-screen .pick-list-header{align-items:flex-start!important;gap:8px}.conference-workflow-screen .pick-list-filters{width:100%;margin-left:0;overflow-x:auto}}
+
+/* Modal Compacto de Divergência da Conferência - Alto Contraste */
+.conference-divergence-compact-dialog {
+  max-width: 440px !important;
+  width: 90% !important;
+  padding: 24px 22px 20px 22px !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.conference-divergence-compact-dialog .app-modal-x {
+  color: #64748b !important;
+}
+.conference-divergence-compact-dialog .app-modal-x:hover {
+  color: #0f172a !important;
+}
+
+.conference-divergence-compact-dialog .app-confirm-icon.warning {
+  margin: 0 auto 12px auto !important;
+  width: 52px !important;
+  height: 52px !important;
+  background: #fef3c7 !important;
+  border: 1px solid #fcd34d !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.conference-divergence-compact-dialog .app-confirm-icon.warning .material-symbols-rounded {
+  color: #d97706 !important;
+  font-size: 28px !important;
+}
+
+.conference-divergence-compact-dialog h3 {
+  font-size: 1.18rem !important;
+  font-weight: 900 !important;
+  text-align: center !important;
+  margin: 0 0 16px 0 !important;
+  letter-spacing: 0.02em !important;
+  color: #0f172a !important;
+}
+
+.conference-divergence-motives-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+  text-align: left !important;
+}
+
+.conference-motive-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 11px 14px !important;
+  border-radius: 12px !important;
+  font-size: 0.88rem !important;
+  font-weight: 750 !important;
+  line-height: 1.35 !important;
+}
+
+/* Agrupamento: Fundo âmbar suave, borda âmbar, texto âmbar escuro */
+.conference-motive-item.is-warning {
+  background: #fef3c7 !important;
+  border: 1px solid #fcd34d !important;
+  color: #92400e !important;
+}
+
+.conference-motive-item.is-warning .material-symbols-rounded {
+  color: #d97706 !important;
+  font-size: 22px !important;
+  flex: 0 0 auto !important;
+}
+
+/* Sucesso/Produtos corretos: Fundo verde suave, borda verde, texto verde escuro */
+.conference-motive-item.is-success {
+  background: #dcfce7 !important;
+  border: 1px solid #86efac !important;
+  color: #166534 !important;
+}
+
+.conference-motive-item.is-success .material-symbols-rounded {
+  color: #16a34a !important;
+  font-size: 22px !important;
+  flex: 0 0 auto !important;
+}
+
+/* Produto/Quantidade divergente: Fundo vermelho suave, borda vermelha, texto vermelho escuro */
+.conference-motive-item.is-danger {
+  background: #fee2e2 !important;
+  border: 1px solid #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+.conference-motive-item.is-danger .material-symbols-rounded {
+  color: #dc2626 !important;
+  font-size: 22px !important;
+  flex: 0 0 auto !important;
+}
+
+.conference-divergence-details-toggle-wrapper {
+  margin-bottom: 14px !important;
+  text-align: center !important;
+}
+
+.conference-divergence-details-toggle {
+  background: transparent !important;
+  border: none !important;
+  color: #475569 !important;
+  font-size: 0.8rem !important;
+  font-weight: 750 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  transition: color 0.2s ease !important;
+}
+
+.conference-divergence-details-toggle:hover {
+  color: #0f172a !important;
+}
+
+.conference-divergence-details-toggle .material-symbols-rounded {
+  font-size: 18px !important;
+}
+
+.conference-divergence-details {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  margin-bottom: 16px !important;
+  max-height: 180px !important;
+  overflow-y: auto !important;
+  text-align: left !important;
+}
+
+.conference-divergence-details-section {
+  margin-bottom: 10px !important;
+}
+
+.conference-divergence-details-section:last-child {
+  margin-bottom: 0 !important;
+}
+
+.conference-divergence-details-section > strong {
+  display: block !important;
+  font-size: 0.7rem !important;
+  color: #475569 !important;
+  margin-bottom: 6px !important;
+  letter-spacing: 0.05em !important;
+  font-weight: 900 !important;
+}
+
+.conference-divergence-detail-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  margin-bottom: 5px !important;
+  font-size: 0.8rem !important;
+}
+
+.conference-divergence-detail-row.is-missing {
+  border-left: 3px solid #d97706 !important;
+}
+
+.conference-divergence-detail-row.is-extra {
+  border-left: 3px solid #dc2626 !important;
+}
+
+.conference-divergence-detail-row span {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+.conference-divergence-detail-row small {
+  color: #64748b !important;
+  font-weight: 600 !important;
+}
+
+/* Botões do modal de divergência */
+.conference-divergence-actions {
+  display: flex !important;
+  gap: 10px !important;
+  width: 100% !important;
+  flex-wrap: wrap !important;
+  margin-top: 4px !important;
+}
+
+.conference-divergence-actions button {
+  flex: 1 1 calc(50% - 5px) !important;
+  min-width: 130px !important;
+  min-height: 44px !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.conference-divergence-actions .btn-agrupar-agora {
+  background: #d97706 !important;
+  color: #ffffff !important;
+  border: 1px solid #b45309 !important;
+}
+.conference-divergence-actions .btn-agrupar-agora:hover {
+  background: #b45309 !important;
+}
+
+.conference-divergence-actions .btn-corrigir-divergencia {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid #1d4ed8 !important;
+}
+.conference-divergence-actions .btn-corrigir-divergencia:hover {
+  background: #1d4ed8 !important;
+}
+
+.conference-divergence-actions .btn-finalizar-mesmo {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border: 1px solid #b91c1c !important;
+}
+.conference-divergence-actions .btn-finalizar-mesmo:hover {
+  background: #b91c1c !important;
+}
+
+/* Quando houver 3 botões em desktop vs mobile */
+.conference-divergence-actions.has-3-buttons {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+.conference-divergence-actions.has-3-buttons button {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+}
+
+.conference-divergence-compact-dialog .app-modal-note-box {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+  margin-top: 14px !important;
+  font-size: 0.76rem !important;
+  border-radius: 8px !important;
+  padding: 8px 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+.conference-divergence-compact-dialog .app-modal-note-box .material-symbols-rounded {
+  color: #64748b !important;
+  font-size: 18px !important;
+  flex: 0 0 auto !important;
+}
+
+.highlight-row {
+  animation: highlightPulse 2s ease forwards !important;
+}
+
+@keyframes highlightPulse {
+  0% { box-shadow: 0 0 0 4px #fbbf24; }
+  70% { box-shadow: 0 0 0 4px #fbbf24; }
+  100% { box-shadow: none; }
+}
+
+/* Modal de Correção de Divergência da Conferência */
+.conference-correction-dialog {
+  max-width: 520px !important;
+  width: 92% !important;
+  padding: 24px 22px 20px 22px !important;
+  text-align: left !important;
+  box-sizing: border-box !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.conference-correction-head {
+  text-align: center !important;
+  margin-bottom: 16px !important;
+}
+
+.conference-correction-head .app-confirm-icon {
+  margin: 0 auto 10px auto !important;
+  width: 48px !important;
+  height: 48px !important;
+  background: #fef3c7 !important;
+  border: 1px solid #fcd34d !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.conference-correction-head .app-confirm-icon .material-symbols-rounded {
+  color: #d97706 !important;
+  font-size: 26px !important;
+}
+
+.conference-correction-head h3 {
+  font-size: 1.15rem !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 0 4px 0 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.conference-correction-head p {
+  font-size: 0.8rem !important;
+  color: #64748b !important;
+  margin: 0 !important;
+}
+
+.conference-correction-body {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  max-height: 52vh !important;
+  overflow-y: auto !important;
+  padding: 2px 4px 6px 2px !important;
+  margin-bottom: 12px !important;
+}
+
+.conference-correction-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 12px 14px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+}
+
+.conference-correction-card.is-missing {
+  border-left: 4px solid #f59e0b !important;
+}
+
+.conference-correction-card.is-extra {
+  border-left: 4px solid #ef4444 !important;
+}
+
+.conference-correction-card-info {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.conference-correction-card-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  margin-bottom: 3px !important;
+}
+
+.conference-correction-icon {
+  font-size: 18px !important;
+  flex: 0 0 auto !important;
+  margin-top: 1px !important;
+}
+
+.conference-correction-card.is-missing .conference-correction-icon {
+  color: #d97706 !important;
+}
+
+.conference-correction-card.is-extra .conference-correction-icon {
+  color: #dc2626 !important;
+}
+
+.conference-correction-title {
+  font-size: 0.86rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.25 !important;
+}
+
+.conference-correction-meta {
+  font-size: 0.72rem !important;
+  color: #64748b !important;
+  margin-bottom: 6px !important;
+}
+
+.conference-correction-comparison {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 0.76rem !important;
+  font-weight: 700 !important;
+  flex-wrap: wrap !important;
+}
+
+.conference-correction-comparison span {
+  color: #475569 !important;
+}
+
+.conference-correction-comparison b {
+  color: #0f172a !important;
+}
+
+.conference-correction-stepper {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 999px !important;
+  padding: 4px 6px !important;
+  flex: 0 0 auto !important;
+}
+
+.conference-correction-stepper .stepper-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, background 0.15s ease !important;
+}
+
+.conference-correction-stepper .stepper-btn.minus {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+.conference-correction-stepper .stepper-btn.minus:hover:not(:disabled) {
+  background: #fca5a5 !important;
+}
+
+.conference-correction-stepper .stepper-btn.plus {
+  background: #dcfce7 !important;
+  color: #16a34a !important;
+}
+.conference-correction-stepper .stepper-btn.plus:hover:not(:disabled) {
+  background: #86efac !important;
+}
+
+.conference-correction-stepper .stepper-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.conference-correction-stepper .stepper-btn .material-symbols-rounded {
+  font-size: 18px !important;
+}
+
+.conference-correction-stepper .stepper-value {
+  font-size: 1rem !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  min-width: 24px !important;
+  text-align: center !important;
+}
+
+.conference-correction-add-wrapper {
+  margin-bottom: 14px !important;
+}
+
+.btn-incluir-produto {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  background: #f8fafc !important;
+  border: 1px dashed #2563eb !important;
+  color: #2563eb !important;
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease !important;
+}
+.btn-incluir-produto:hover {
+  background: #eff6ff !important;
+}
+
+.conference-correction-actions {
+  display: flex !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.conference-correction-actions .btn-cancelar-correcao {
+  flex: 1 1 40% !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+  font-weight: 800 !important;
+  min-height: 42px !important;
+  border-radius: 10px !important;
+}
+
+.conference-correction-actions .btn-finalizar-correcao {
+  flex: 1 1 60% !important;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: 1px solid #15803d !important;
+  font-weight: 900 !important;
+  min-height: 42px !important;
+  border-radius: 10px !important;
+}
+.conference-correction-actions .btn-finalizar-correcao:hover {
+  background: #15803d !important;
+}
+
+/* Modal de Busca / Inclusão de Produto */
+.conference-add-product-dialog {
+  max-width: 460px !important;
+  width: 90% !important;
+  padding: 22px 20px 18px 20px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-radius: 18px !important;
+  text-align: left !important;
+}
+
+.conference-add-product-search-box {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+.conference-add-product-search-box input {
+  flex: 1 1 auto !important;
+  border: none !important;
+  background: transparent !important;
+  font-size: 0.85rem !important;
+  color: #0f172a !important;
+  outline: none !important;
+}
+
+.conference-add-product-results {
+  max-height: 240px !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  padding: 6px !important;
+  background: #ffffff !important;
+}
+
+.conference-add-product-item {
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease, border-color 0.15s ease !important;
+}
+
+.conference-add-product-item:hover {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+}
 
 .conference-result-row-action { display:inline-flex; min-height:32px; align-items:center; justify-content:center; gap:5px; padding:5px 10px; border:0; border-radius:999px; color:#fff; font-size:.68rem; font-weight:900; cursor:pointer; white-space:nowrap; }
 .conference-result-row-action .material-symbols-rounded { font-size:17px; }

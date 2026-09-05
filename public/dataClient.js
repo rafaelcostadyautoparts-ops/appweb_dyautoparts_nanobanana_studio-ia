@@ -1650,6 +1650,65 @@ const DataClient = (function () {
         return data;
     }
 
+    async function buscarConferenciaAndamentoSupabase(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) return null;
+        const conferenciaId = `CONF-DRAFT-${sessionId}`;
+        const [header, items] = await Promise.all([
+            client.from('conferencia').select('*').eq('conferencia_id', conferenciaId).maybeSingle(),
+            client.from('conferencia_itens').select('*').eq('conferencia_id', conferenciaId)
+        ]);
+        if (header.error && header.error.code !== 'PGRST116') throw header.error;
+        if (items.error) throw items.error;
+        return header.data ? { ...header.data, itens: items.data || [] } : null;
+    }
+
+    async function salvarConferenciaAndamentoSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const { data, error } = await client.rpc('salvar_conferencia_andamento', {
+            p_separacao_id: String(payload.sessionId || '').trim(),
+            p_usuario: payload.usuario || 'N/A',
+            p_estado: payload.estado || {},
+            p_itens: payload.itens || []
+        });
+        if (error) throw error;
+        invalidateCache('conferencia');
+        return data;
+    }
+
+    async function removerConferenciaAndamentoSupabase(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) return { ok: true };
+        try {
+            const { data, error } = await client.rpc('remover_conferencia_andamento', {
+                p_separacao_id: sessionId
+            });
+            if (error) {
+                const confDraftId = `CONF-DRAFT-${sessionId}`;
+                await Promise.allSettled([
+                    client.from('conferencia_itens').delete().eq('conferencia_id', confDraftId),
+                    client.from('conferencia').delete().eq('conferencia_id', confDraftId)
+                ]);
+                console.warn('[CONFERENCIA] RPC remover_conferencia_andamento fallback executado:', error);
+            }
+            invalidateCache('conferencia');
+            return data || { ok: true };
+        } catch (err) {
+            const confDraftId = `CONF-DRAFT-${sessionId}`;
+            await Promise.allSettled([
+                client.from('conferencia_itens').delete().eq('conferencia_id', confDraftId),
+                client.from('conferencia').delete().eq('conferencia_id', confDraftId)
+            ]);
+            invalidateCache('conferencia');
+            return { ok: true, fallback: true };
+        }
+    }
+
     async function alocarNumeroSeparacaoDefinitivaSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2807,6 +2866,9 @@ const DataClient = (function () {
 
         // CONFERENCIA
         finalizarConferenciaSupabase,
+        buscarConferenciaAndamentoSupabase,
+        salvarConferenciaAndamentoSupabase,
+        removerConferenciaAndamentoSupabase,
 
         // ESTOQUE / MOVIMENTACOES
         transferirEstoqueSupabase,
