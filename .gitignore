@@ -17,3 +17,9 @@ Thumbs.db
 supabase/.branches/
 .vercel
 .env*
+test-results/
+playwright-report/
+blob-report/
+.codex/
+.codex-*/
+tmp/
