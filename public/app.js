@@ -3694,54 +3694,51 @@ function renderLogin(push = true) {
  }
 
  if (isHomologationFront) {
-  const homologFallbackUsers = [
-   { id: 'homolog_admin', nome: 'Administrador Homologação', perfil: 'Admin' },
-   { id: 'homolog_teste', nome: 'Usuário Teste', perfil: 'Operador' }
-  ];
+   const homologFallbackUsers = [
+    { id: 'homolog_admin', nome: 'Administrador Homologação', perfil: 'Admin' },
+    { id: 'homolog_teste', nome: 'Usuário Teste', perfil: 'Operador' }
+   ];
 
-  if (!Array.isArray(usersToRender) || usersToRender.length === 0 || usersToRender === fallbackUsers) {
-   usersToRender = homologFallbackUsers;
-  }
+   if (!Array.isArray(usersToRender) || usersToRender.length === 0 || usersToRender === fallbackUsers) {
+    usersToRender = homologFallbackUsers;
+   }
 
-  usersToRender = usersToRender
-  .filter(user => {
-  const normalizedId = String(user.id || '').trim().toLowerCase();
-  const normalizedProfile = String(user.perfil || '').trim().toUpperCase();
-  const normalizedName = String(user.nome || '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .trim()
-  .toUpperCase();
-  return normalizedId === 'homolog_admin'
-  || normalizedId === 'homolog_teste'
-  || normalizedProfile === 'ADMIN'
-  || normalizedName === 'ADMINISTRADOR HOMOLOGACAO'
-  || normalizedName === 'USUARIO TESTE'
-  || normalizedName === 'TESTE';
-  })
-  .map(user => {
-   const id = String(user.id || '').trim().toLowerCase();
-   const name = String(user.nome || '')
+   usersToRender = usersToRender
+   .filter(user => {
+   const normalizedId = String(user.id || '').trim().toLowerCase();
+   const normalizedProfile = String(user.perfil || '').trim().toUpperCase();
+   const normalizedName = String(user.nome || '')
    .normalize('NFD')
    .replace(/[\u0300-\u036f]/g, '')
    .trim()
    .toUpperCase();
-   let displayName = user.nome;
-   if (id === 'homolog_admin' || name === 'ADMINISTRADOR HOMOLOGACAO') displayName = 'ADM';
-   else if (id === 'homolog_teste' || name === 'USUARIO TESTE' || name === 'TESTE') displayName = 'TESTE';
-   return {
-    ...user,
-    nome: displayName
-   };
-  });
+   return normalizedId === 'homolog_admin'
+   || normalizedId === 'homolog_teste'
+   || normalizedProfile === 'ADMIN'
+   || normalizedName === 'ADMINISTRADOR HOMOLOGACAO'
+   || normalizedName === 'USUARIO TESTE'
+   || normalizedName === 'TESTE';
+   })
+   .map(user => {
+    const id = String(user.id || '').trim().toLowerCase();
+    const name = String(user.nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+    if (id === 'homolog_admin' || name === 'ADMINISTRADOR HOMOLOGACAO') {
+     return { ...user, nome: 'ADM' };
+    }
+    return user;
+   });
 
-  if (usersToRender.length === 0) {
-   usersToRender = [
-    { id: 'homolog_admin', nome: 'ADM', perfil: 'Admin' },
-    { id: 'homolog_teste', nome: 'TESTE', perfil: 'Operador' }
-   ];
+   if (usersToRender.length === 0) {
+    usersToRender = homologFallbackUsers.map(user => {
+     if (user.id === 'homolog_admin') return { ...user, nome: 'ADM' };
+     return user;
+    });
+   }
   }
- }
 
  // Texto validado em UTF-8.
  const getUserInitials = (name) => {
@@ -3766,9 +3763,7 @@ function renderLogin(push = true) {
  AK: icons.bulb,
  DY: icons.seat,
  FK: icons.car,
- RC: icons.eq,
- AD: icons.car,
- TE: icons.speed
+ RC: icons.eq
  };
  const fallbackIcons = [icons.bulb, icons.seat, icons.car, icons.eq, icons.speed];
  return iconByInitials[initials] || fallbackIcons[index % fallbackIcons.length];
@@ -4243,7 +4238,6 @@ ${finalMenuItems.map(item => {
  </div>
  </main>
  ${getQuickActionsHTML(false)}
- ${getAppVersionBadgeHTML('menu')}
  </div>
  `;
  refreshOutboxPendingCount().catch(error => console.warn('[OUTBOX] Falha ao atualizar indicador:', error));
@@ -28151,7 +28145,7 @@ function formatConfigDate(value) {
 function getAppVersionBadgeHTML(context = 'footer') {
  return `
  <div class="app-version-badge app-version-badge-${escapeKitAttribute(context)}" aria-label="Versão atual do aplicativo">
- <span class="app-version-pill">V.${escapeKitAttribute(DY_APP_VERSION)}</span>
+ <span>V.${escapeKitAttribute(DY_APP_VERSION)}</span>
  </div>
  `;
 }

@@ -28208,15 +28208,17 @@ html body:not(.login-active) #app > .dashboard-screen.pack-blind-screen :where(.
   right: 14px;
   bottom: max(10px, env(safe-area-inset-bottom));
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 4px 9px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, .28);
-  background: rgba(15, 23, 42, .42);
-  color: rgba(255, 255, 255, .72);
-  font-family: 'Roboto Mono', monospace;
-  font-size: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(15, 23, 42, 0.65);
+  color: #2dd4bf;
+  font-family: 'PT Sans Narrow', 'Arial Narrow', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1;
   pointer-events: none;
   -webkit-backdrop-filter: blur(8px);
@@ -28224,8 +28226,8 @@ html body:not(.login-active) #app > .dashboard-screen.pack-blind-screen :where(.
 }
 
 .app-version-badge small {
-  color: rgba(255, 255, 255, .52);
-  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
 }
 
 .app-version-badge-login {
@@ -28234,13 +28236,13 @@ html body:not(.login-active) #app > .dashboard-screen.pack-blind-screen :where(.
 }
 
 html[data-theme="light"] .app-version-badge {
-  background: rgba(255, 255, 255, .62);
-  border-color: rgba(15, 23, 42, .12);
-  color: rgba(15, 23, 42, .62);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(13, 148, 136, 0.28);
+  color: #0f766e;
 }
 
 html[data-theme="light"] .app-version-badge small {
-  color: rgba(15, 23, 42, .48);
+  color: rgba(15, 23, 42, 0.55);
 }
 
 .devolucoes-workspace {
@@ -74438,7 +74440,8 @@ html body:not(.login-active) #app>.dashboard-screen.menu-screen .quick-action-ca
 
 /* Homologacao: identificacao por pelicula discreta, sem consumir espaco no topo. */
 .app-version-badge-footer,html body:not(.login-active) #app>.dashboard-screen.menu-screen .app-version-badge-footer{display:none!important}
-html body.login-active #app #login-screen.login-screen .app-version-badge.app-version-badge-login{position:fixed!important;top:auto!important;right:auto!important;bottom:max(14px,env(safe-area-inset-bottom,0px))!important;left:16px!important;z-index:10040!important;display:inline-flex!important;transform:none!important;gap:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:rgba(226,232,240,.76)!important;font:800 10px/1 ui-monospace,'Cascadia Mono',Consolas,monospace!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;opacity:.8!important;text-shadow:0 1px 2px rgba(15,23,42,.5)!important}
+html body.login-active #app #login-screen.login-screen .app-version-badge.app-version-badge-login{position:fixed!important;top:auto!important;right:auto!important;bottom:max(14px,env(safe-area-inset-bottom,0px))!important;left:16px!important;z-index:10040!important;display:inline-flex!important;transform:none!important;gap:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:#2dd4bf!important;font:700 13px/1 'PT Sans Narrow','Arial Narrow',Arial,sans-serif!important;letter-spacing:.04em!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;opacity:1!important;text-shadow:0 1px 2px rgba(15,23,42,.6)!important}
+html[data-theme="light"] body.login-active #app #login-screen.login-screen .app-version-badge.app-version-badge-login{color:#0f766e!important;text-shadow:none!important}
 html.app-environment-homologation{--environment-banner-height:0px!important}
 html.app-environment-homologation #app-environment-banner{display:none!important;height:0!important;min-height:0!important;padding:0!important;border:0!important;box-shadow:none!important}
 html.app-environment-homologation body{padding-top:0!important}
@@ -75529,92 +75532,4 @@ body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-val small {
   }
 }
 
-/* ==========================================================================
-   IDENTIFICAÇÃO VISUAL DA VERSÃO V.2.2.28 (DESTAQUE ELEGANTE / TEMA CARDS)
-   ========================================================================== */
-.app-version-badge,
-html body .app-version-badge {
-  position: fixed !important;
-  z-index: 9999 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  pointer-events: none !important;
-  user-select: none !important;
-}
-
-/* Na tela de Login: fixo no canto inferior esquerdo */
-.app-version-badge-login,
-html body.login-active .app-version-badge-login {
-  left: 16px !important;
-  bottom: max(14px, env(safe-area-inset-bottom, 14px)) !important;
-  right: auto !important;
-  top: auto !important;
-  transform: none !important;
-}
-
-/* No Menu Principal: fixo no canto inferior esquerdo */
-.app-version-badge-menu,
-html body:not(.login-active) #app > .dashboard-screen.menu-screen .app-version-badge-menu {
-  left: 16px !important;
-  bottom: max(14px, env(safe-area-inset-bottom, 14px)) !important;
-  right: auto !important;
-  top: auto !important;
-  transform: none !important;
-  display: inline-flex !important;
-}
-
-/* Pílula / Badge da Versão */
-.app-version-pill {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  font-family: 'PT Sans Narrow', 'Oswald', 'Arial Narrow', sans-serif !important;
-  font-size: 0.82rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.06em !important;
-  line-height: 1 !important;
-  padding: 5px 12px !important;
-  border-radius: 999px !important;
-  background: rgba(15, 23, 42, 0.72) !important;
-  color: #2dd4bf !important; /* Tom teal / verde-azulado moderno e luminoso */
-  border: 1px solid rgba(45, 212, 191, 0.35) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), 0 0 10px rgba(45, 212, 191, 0.12) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  backdrop-filter: blur(10px) !important;
-  text-transform: uppercase !important;
-}
-
-/* Em tema claro / páginas com fundo branco */
-html[data-theme="light"] .app-version-pill,
-body:not(.login-active) .app-version-pill {
-  background: rgba(240, 253, 250, 0.92) !important;
-  color: #0f766e !important;
-  border: 1px solid rgba(13, 148, 136, 0.32) !important;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08), 0 0 8px rgba(13, 148, 136, 0.1) !important;
-}
-
-/* Na tela de login (tema escuro/automotivo) */
-body.login-active .app-version-pill {
-  background: rgba(15, 23, 42, 0.78) !important;
-  color: #2dd4bf !important;
-  border: 1px solid rgba(45, 212, 191, 0.45) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 12px rgba(45, 212, 191, 0.2) !important;
-}
-
-@media (max-width: 640px) {
-  .app-version-badge-login,
-  .app-version-badge-menu,
-  html body.login-active .app-version-badge-login,
-  html body:not(.login-active) #app > .dashboard-screen.menu-screen .app-version-badge-menu {
-    left: 12px !important;
-    bottom: max(10px, env(safe-area-inset-bottom, 10px)) !important;
-  }
-
-  .app-version-pill {
-    font-size: 0.74rem !important;
-    padding: 4px 10px !important;
-    letter-spacing: 0.05em !important;
-  }
-}
 
