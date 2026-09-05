@@ -1292,7 +1292,9 @@ const DataClient = (function () {
             total_produtos_separados: Number(session.total_produtos_separados || 0),
             total_itens_separados: Number(session.total_itens_separados || 0),
             total_pacotes_montados: Number(session.total_pacotes_montados || 0),
-            observacao: session.observacao || null
+            observacao: (session.isFastMode === true || session.modo_rapido === true || (session.observacao && String(session.observacao).toUpperCase().includes('SAIDA_RAPIDA')))
+                ? (session.observacao ? (String(session.observacao).toUpperCase().includes('SAIDA_RAPIDA') ? session.observacao : `${session.observacao} | SAIDA_RAPIDA AUTOMATICA`) : 'SAIDA_RAPIDA AUTOMATICA')
+                : (session.observacao || null)
         };
 
         console.log('[SEP] criando separacao payload', separacaoRow);
@@ -1410,7 +1412,9 @@ const DataClient = (function () {
             total_produtos_separados: Number(session.total_produtos_separados || 0),
             total_itens_separados: Number(session.total_itens_separados || 0),
             total_pacotes_montados: Number(session.total_pacotes_montados || 0),
-            observacao: session.observacao || null
+            observacao: (session.isFastMode === true || session.modo_rapido === true || (session.observacao && String(session.observacao).toUpperCase().includes('SAIDA_RAPIDA')))
+                ? (session.observacao ? (String(session.observacao).toUpperCase().includes('SAIDA_RAPIDA') ? session.observacao : `${session.observacao} | SAIDA_RAPIDA AUTOMATICA`) : 'SAIDA_RAPIDA AUTOMATICA')
+                : (session.observacao || null)
         };
 
         let { data: sepData, error: sepError } = await client
@@ -1716,13 +1720,15 @@ const DataClient = (function () {
         const canalId = String(payload.canalId || '').trim();
         const canalNome = String(payload.canalNome || payload.channelLabel || '').trim();
         const criadoPor = String(payload.criadoPor || localStorage.getItem('currentUser') || 'N/A').trim();
+        const observacaoRaw = String(payload.observacao || payload.p_observacao || '').trim();
 
         try {
             const { data, error } = await client.rpc('alocar_numero_separacao_definitiva', {
                 p_draft_id: draftId,
                 p_canal_id: canalId,
                 p_canal_nome: canalNome,
-                p_criado_por: criadoPor
+                p_criado_por: criadoPor,
+                p_observacao: observacaoRaw || null
             });
             if (error) throw error;
             invalidateCache('separacao');

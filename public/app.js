@@ -20808,7 +20808,8 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
           draftId: sessionId,
           canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
           canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
-          criadoPor: currentUser || localStorage.getItem('currentUser') || 'N/A'
+          criadoPor: currentUser || localStorage.getItem('currentUser') || 'N/A',
+          observacao: 'SAIDA_RAPIDA AUTOMATICA'
         });
         if (alloc?.separacao_id) {
           const oldDraftId = sessionId;
@@ -20987,11 +20988,13 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
     if (isDraft && typeof DataClient !== 'undefined' && typeof DataClient.alocarNumeroSeparacaoDefinitivaSupabase === 'function' && navigator.onLine) {
       try {
         await flushPickingItemsBeforeFinalization(sessionId);
+        const isFastModeActive = (typeof isPickingFastModeSource === 'function' && (isPickingFastModeSource(currentPickingContext) || isPickingFastModeSource(draft))) || modoRapidoAtivo;
         const alloc = await DataClient.alocarNumeroSeparacaoDefinitivaSupabase({
           draftId: sessionId,
           canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
           canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
-          criadoPor: localStorage.getItem('currentUser') || 'N/A'
+          criadoPor: localStorage.getItem('currentUser') || 'N/A',
+          observacao: isFastModeActive ? 'SAIDA_RAPIDA AUTOMATICA' : (draft?.observacao || null)
         });
         if (alloc?.separacao_id) {
           const oldDraftId = sessionId;
