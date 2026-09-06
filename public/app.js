@@ -614,15 +614,119 @@ window.addEventListener('DOMContentLoaded', () => {
  }
 
 
- document.addEventListener('keydown', (e) => {
- if (e.key === 'Escape') {
- if (document.body.classList.contains('fullscreen-mode')) {
- toggleFullscreen();
- }
- }
- });
-
+ initGlobalKeyboardShortcuts();
 });
+
+function isTypingInInput(el) {
+ if (!el) return false;
+ const tagName = el.tagName ? el.tagName.toUpperCase() : '';
+ if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+  return true;
+ }
+ if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') {
+  return true;
+ }
+ return false;
+}
+
+function triggerAppBackAction() {
+ const backBtn = document.querySelector('.back-button-standard, .inventory-module-back, .fab-voltar, .app-breadcrumb-parent');
+ if (backBtn) {
+  backBtn.click();
+  return true;
+ }
+ if (typeof currentScreen !== 'undefined' && currentScreen === 'internal' && typeof renderMenu === 'function') {
+  renderMenu();
+  return true;
+ }
+ return false;
+}
+
+function closeTopmostModal() {
+ const activeModalOverlay = document.querySelector('.app-modal-overlay.open, .app-modal-overlay, .modal-overlay.open, .modal-overlay, .sheet-overlay.is-open, .sheet-overlay, .product-filter-sheet.is-open, [role="dialog"].open, [role="dialog"]:not([aria-hidden="true"])');
+ if (activeModalOverlay) {
+  const cancelBtn = activeModalOverlay.querySelector('[data-action="cancel"], [data-cancel], .modal-close, .sheet-close, .btn-cancelar, .close-button, button.cancel');
+  if (cancelBtn) {
+   cancelBtn.click();
+   return true;
+  }
+  if (typeof closeProductFilterSheet === 'function' && document.body.classList.contains('product-filter-sheet-open')) {
+   closeProductFilterSheet();
+   return true;
+  }
+  activeModalOverlay.click();
+  return true;
+ }
+ return false;
+}
+
+function focusPrimaryScanInput() {
+ const primaryInput = document.querySelector('#pick-scan-input, #pack-scan-input, .pack-records-search input, #product-search-input, input[type="search"], input[name="search"], input.scan-input, input.primary-scan-field');
+ if (primaryInput) {
+  primaryInput.focus();
+  if (typeof primaryInput.select === 'function') {
+   primaryInput.select();
+  }
+  return true;
+ }
+ return false;
+}
+
+function initGlobalKeyboardShortcuts() {
+ if (window.__globalKeyboardShortcutsInitialized) return;
+ window.__globalKeyboardShortcutsInitialized = true;
+
+ document.addEventListener('keydown', (e) => {
+  // Preservar atalhos nativos do navegador (Ctrl+C, Ctrl+V, Ctrl+A, Ctrl+Z, Ctrl+F, F5, F12, etc)
+  if (e.ctrlKey || e.metaKey) return;
+
+  const isInput = isTypingInInput(e.target);
+
+  // ESC: fechar modal aberto em primeiro lugar; se não houver modal, voltar para tela anterior
+  if (e.key === 'Escape') {
+   if (document.body.classList.contains('fullscreen-mode')) {
+    toggleFullscreen();
+    return;
+   }
+   const closedModal = closeTopmostModal();
+   if (!closedModal && !isInput) {
+    triggerAppBackAction();
+   } else if (isInput) {
+    e.target.blur();
+   }
+   return;
+  }
+
+  // Se o usuário estiver digitando em input/textarea/select, não capturar outros atalhos customizados
+  if (isInput) return;
+
+  // ALT + SETA ESQUERDA: voltar para a tela anterior do app
+  if (e.altKey && e.key === 'ArrowLeft') {
+   e.preventDefault();
+   triggerAppBackAction();
+   return;
+  }
+
+  // F2: Bipar / focar campo de busca/bipagem operacional
+  if (e.key === 'F2') {
+   e.preventDefault();
+   focusPrimaryScanInput();
+   return;
+  }
+
+  // ENTER: acionar elementos com role="button", .app-breadcrumb-parent ou tabindex="0" focados
+  if (e.key === 'Enter') {
+   const activeEl = document.activeElement;
+   if (activeEl && activeEl !== document.body && !isInput) {
+    const isNativeClickable = activeEl.tagName === 'BUTTON' || activeEl.tagName === 'A' || (activeEl.tagName === 'INPUT' && (activeEl.type === 'submit' || activeEl.type === 'button'));
+    if (!isNativeClickable && (activeEl.getAttribute('role') === 'button' || activeEl.classList.contains('app-breadcrumb-parent') || activeEl.getAttribute('tabindex') === '0')) {
+     e.preventDefault();
+     activeEl.click();
+    }
+   }
+  }
+ });
+}
 
 // goBack centralizado acima
 
@@ -2915,19 +3019,19 @@ const MODULE_SIDEBAR_CONFIG = {
  anuncios: { label: 'ANÚNCIOS', icon: 'storefront', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
  pedidos: { label: 'PEDIDOS', icon: 'receipt_long', colorFrom: '#0EA5E9', colorTo: '#0284C7', shadow: '14,165,233' },
  kit_lampada: { label: 'KIT L\u00c2MPADAS', icon: 'lightbulb', colorFrom: '#CA8A04', colorTo: '#A16207', shadow: '202,138,4' },
- movimentos: { label: 'MOVIMENTACOES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
+ movimentos: { label: 'MOVIMENTA\u00c7\u00d5ES', icon: 'sync_alt', colorFrom: '#4F46E5', colorTo: '#3730A3', shadow: '79,70,229' },
  dashboard: { label: 'DASHBOARD', icon: 'dashboard', colorFrom: '#DC2626', colorTo: '#991B1B', shadow: '239,68,68' },
- sync: { label: 'SINCRONIZACAO PENDENTE', icon: 'cloud_upload', colorFrom: '#64748B', colorTo: '#475569', shadow: '71,85,105' },
+ sync: { label: 'SINCRONIZA\u00c7\u00c3O PENDENTE', icon: 'cloud_upload', colorFrom: '#64748B', colorTo: '#475569', shadow: '71,85,105' },
  inventario: { label: 'INVENT\u00c1RIO', icon: 'fact_check', colorFrom: '#F97316', colorTo: '#C2410C', shadow: '249,115,22' },
  nf: { label: 'ENTRADA NF', icon: 'receipt_long', colorFrom: '#8B5CF6', colorTo: '#7C3AED', shadow: '139,92,246' },
- pick: { label: 'SEPARA\u00c7\u00c3O (PICK)', icon: 'inventory_2', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
+ pick: { label: 'SEPARA\u00c7\u00c3O', icon: 'inventory_2', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
  romaneio_flex: { label: 'ROMANEIO FLEX', icon: 'assignment_turned_in', colorFrom: '#F59E0B', colorTo: '#D97706', shadow: '245,158,11' },
  romaneios: { label: 'ROMANEIOS', icon: 'assignment', colorFrom: '#64748B', colorTo: '#475569', shadow: '71,85,105' },
  romaneio_correios: { label: 'ROMANEIO - CORREIOS', icon: 'local_shipping', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
- pack: { label: 'CONFER\u00caNCIA (PACK)', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
+ pack: { label: 'CONFER\u00caNCIA', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
  compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#E11D48', colorTo: '#BE123C', shadow: '225,29,72' },
  financeiro: { label: 'FINANCEIRO', icon: 'payments', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
- configuracoes: { label: 'CONFIG.', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
+ configuracoes: { label: 'CONFIGURA\u00c7\u00d5ES', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
 
 function getModuleSidebarHTML(moduleKey, labelOverride = '', rightHTML = '') {
@@ -4328,25 +4432,30 @@ function renderPedidosPlaceholder(push = true) {
 
 
 function renderMovimentacoesSubMenu() {
- const currentUser = localStorage.getItem('currentUser');
- const subItems = [
- { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
- { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
- { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
- { id: 'relatorio_saida_devolucao', label: 'REL. VENDAS / DEVOLUÇÕES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar vendas, devoluções e tendências por período.' },
- { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
- { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
- { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
- { id: 'devolucoes', label: 'DEVOLUCOES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devolucoes para fornecedores.' }
- ];
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('movimentos')}
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>`;
+  const currentUser = localStorage.getItem('currentUser');
+  const subItems = [
+    { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
+    { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
+    { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
+    { id: 'relatorio_saida_devolucao', label: 'REL. VENDAS / DEVOLUÇÕES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar vendas, devoluções e tendências por período.' },
+    { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
+    { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
+    { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
+    { id: 'devolucoes', label: 'DEVOLUCOES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devolucoes para fornecedores.' }
+  ];
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('movimentos')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Movimentações</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>`;
 }
 
 function renderDevolucoesSubMenu() {
@@ -4559,81 +4668,90 @@ function getPlaceholderForm(fields) {
 }
 
 function renderComprasSubMenu() {
- const currentUser = localStorage.getItem('currentUser');
- const primaryCards = [
- {
- label: 'PEDIDO DE COMPRA',
- description: 'Crie e gerencie pedidos de compra para seus fornecedores.',
- icon: 'compras',
- onclick: 'renderPedidoCompraScreen()'
- },
- {
- label: 'COTACAO',
- description: 'Compare precos e condicoes entre fornecedores antes de comprar.',
- icon: 'pedido_compra',
- onclick: 'renderCotacaoComprasScreen()'
- },
- {
- label: 'FORNECEDORES',
- description: 'Cadastre e gerencie fornecedores e informacoes comerciais.',
- icon: 'fornecedores',
- onclick: 'renderFornecedoresScreen()'
- },
- {
- label: 'PEDIDOS EM TRANSPORTE',
- description: 'Acompanhe pedidos que ja foram despachados pelos fornecedores.',
- icon: 'transporte',
- onclick: 'renderPedidosTransporteScreen()'
- },
- {
- label: 'HISTORICO DE COMPRAS',
- description: 'Consulte historico de compras, precos e entradas de mercadorias.',
- icon: 'historico',
- onclick: 'renderHistoricoComprasScreen()'
- }
- ];
+  const currentUser = localStorage.getItem('currentUser');
+  const primaryCards = [
+    {
+      label: 'PEDIDO DE COMPRA',
+      description: 'Crie e gerencie pedidos de compra para seus fornecedores.',
+      icon: 'compras',
+      onclick: 'renderPedidoCompraScreen()'
+    },
+    {
+      label: 'COTACAO',
+      description: 'Compare precos e condicoes entre fornecedores antes de comprar.',
+      icon: 'pedido_compra',
+      onclick: 'renderCotacaoComprasScreen()'
+    },
+    {
+      label: 'FORNECEDORES',
+      description: 'Cadastre e gerencie fornecedores e informacoes comerciais.',
+      icon: 'fornecedores',
+      onclick: 'renderFornecedoresScreen()'
+    },
+    {
+      label: 'PEDIDOS EM TRANSPORTE',
+      description: 'Acompanhe pedidos que ja foram despachados pelos fornecedores.',
+      icon: 'transporte',
+      onclick: 'renderPedidosTransporteScreen()'
+    },
+    {
+      label: 'HISTORICO DE COMPRAS',
+      description: 'Consulte historico de compras, precos e entradas de mercadorias.',
+      icon: 'historico',
+      onclick: 'renderHistoricoComprasScreen()'
+    }
+  ];
 
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal compras-screen module-screen standard-card-menu-screen compras-standard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('compras')}
- <main class="container">
- <div class="standard-module-card-grid compras-standard-grid">
- ${primaryCards.map(card => `
- <button type="button" class="standard-module-card" onclick="${card.onclick}">
- <span class="standard-module-card-icon">${menu3DIcons[card.icon] || ''}</span>
- <span class="standard-module-card-copy">
- <strong>${card.label}</strong>
- <small>${card.description}</small>
- </span>
- </button>
- `).join('')}
- </div>
- </main>
- </div>
- `;
+  app.innerHTML = `
+    <div class="dashboard-screen fade-in internal compras-screen module-screen standard-card-menu-screen compras-standard-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('compras')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Compras</span>
+        </div>
+        <div class="standard-module-card-grid compras-standard-grid">
+          ${primaryCards.map(card => `
+            <button type="button" class="standard-module-card" onclick="${card.onclick}">
+              <span class="standard-module-card-icon">${menu3DIcons[card.icon] || ''}</span>
+              <span class="standard-module-card-copy">
+                <strong>${card.label}</strong>
+                <small>${card.description}</small>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+      </main>
+    </div>
+  `;
 }
 
-
 function renderComprasShell(title, subtitle, contentHTML) {
- const currentUser = localStorage.getItem('currentUser');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal compras-screen module-screen">
- ${getTopBarHTML(currentUser, 'renderComprasSubMenu()')}
- ${getModuleSidebarHTML('compras')}
- <main class="container compras-workspace compras-detail-workspace">
- <header class="compras-header compras-detail-header">
- <div class="compras-header-icon">${menu3DIcons.compras || ''}</div>
- <div>
- <p class="compras-kicker">COMPRAS</p>
- <h1>${title}</h1>
- <span>${subtitle}</span>
- </div>
- </header>
- ${contentHTML}
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  app.innerHTML = `
+    <div class="dashboard-screen fade-in internal compras-screen module-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderComprasSubMenu()')}
+      ${getModuleSidebarHTML('compras', title)}
+      <main class="container compras-workspace compras-detail-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderComprasSubMenu()">Compras</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">${title}</span>
+        </div>
+        <header class="compras-header compras-detail-header">
+          <div class="compras-header-icon">${menu3DIcons.compras || ''}</div>
+          <div>
+            <p class="compras-kicker">COMPRAS</p>
+            <h1>${title}</h1>
+            <span>${subtitle}</span>
+          </div>
+        </header>
+        ${contentHTML}
+      </main>
+    </div>
+  `;
 }
 
 async function loadFornecedoresCompras() {
@@ -15850,328 +15968,797 @@ function formatFinanceiroDate(value) {
 }
 
 async function renderFinanceiroSubMenu() {
- await ensureFinanceiroParcelasLoaded();
- const currentUser = localStorage.getItem('currentUser');
- const subItems = [
- { id: 'fin_a_vencer', label: 'A VENCER', icon: 'financeiro_avencer', onclick: "renderFinanceiroLista('a_vencer')", description: 'Consultar parcelas de notas fiscais com vencimento futuro.' },
- { id: 'fin_vencidas', label: 'VENCIDAS', icon: 'financeiro_vencidas', onclick: "renderFinanceiroLista('vencidas')", description: 'Ver parcelas vencidas e valores em atraso.' },
- { id: 'fin_pendentes', label: 'PENDENTES', icon: 'financeiro_pendentes', onclick: "renderFinanceiroLista('pendentes')", description: 'Acompanhar todas as parcelas ainda em aberto.' },
- { id: 'fin_a_combinar', label: 'A COMBINAR', icon: 'financeiro_pendentes', onclick: "renderFinanceiroACombinar()", description: 'Notas recebidas sem pagamento definido.' },
- { id: 'fin_pagas_mes', label: 'PAGAS NO MES', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Contas pagas no mes selecionado.' }
- ];
+  await ensureFinanceiroParcelasLoaded();
+  const currentUser = localStorage.getItem('currentUser');
+  const subItems = [
+    {
+      id: 'fin_contas_a_pagar',
+      label: 'CONTAS A PAGAR',
+      icon: 'financeiro',
+      onclick: "renderContasAPagar('todas')",
+      description: 'Consulte vencimentos, pendencias e programe pagamentos.'
+    },
+    {
+      id: 'fin_pagamentos',
+      label: 'PAGAMENTOS',
+      icon: 'financeiro_pagas_mes',
+      onclick: "renderPagamentos('mes')",
+      description: 'Consulte pagamentos realizados e comprovantes.'
+    }
+  ];
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('financeiro')}
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>
- `;
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('financeiro')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Financeiro</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
-async function renderFinanceiroLista(filtro = 'pendentes') {
- const parcelas = await ensureFinanceiroParcelasLoaded();
- const config = getFinanceiroFiltroConfig(filtro);
- const itens = config.calcular(parcelas);
- const currentUser = localStorage.getItem('currentUser');
- const total = itens.reduce((sum, item) => sum + roundMoney(item.valor), 0);
+async function renderContasAPagar(filtroAtivo = 'todas', buscaTexto = '') {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  let entradasACombinar = [];
+  try {
+    const entradas = await loadHistoricoEntradasNF(true);
+    entradasACombinar = (entradas || []).filter(e => {
+      const st = String(e.status_financeiro || '').toLowerCase();
+      const tp = String(e.tipo_condicao_financeira || '').toLowerCase();
+      return st === 'a_combinar' || tp === 'a_combinar';
+    });
+  } catch (err) {
+    console.warn('[FINANCEIRO] erro ao carregar entradas a combinar', err);
+  }
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
- ${getModuleSidebarHTML('financeiro')}
- <main class="container financeiro-list-workspace">
- <section class="financeiro-list-panel">
- <header class="financeiro-list-header">
- <span class="standard-module-card-icon">${menu3DIcons[config.icon] || menu3DIcons.financeiro || ''}</span>
- <span>
- <strong>${config.titulo}</strong>
- <small>${config.descricao}</small>
- </span>
- </header>
+  const hoje = getFinanceiroHoje();
+  const emSeteDias = new Date(hoje);
+  emSeteDias.setDate(emSeteDias.getDate() + 7);
 
- <div class="financeiro-list-summary">
- <div>
- <small>PARCELAS</small>
- <strong>${itens.length}</strong>
- </div>
- <div>
- <small>TOTAL</small>
- <strong>${formatFinanceiroMoney(total)}</strong>
- </div>
- </div>
+  // Parcelas em aberto
+  const parcelasAbertas = (parcelas || []).filter(item => isFinanceiroStatusAberto(item));
 
- ${itens.length ? `
- <div class="financeiro-list">
- ${itens.map(item => `
- <article class="financeiro-row">
- <div>
- <strong>${item.descricao || `NF ${item.numero_nf || '-'}`}</strong>
- <small>NF ${item.numero_nf || '-'} - Parcela ${item.parcela || '-'}</small>
- </div>
- <div>
- <strong>${formatFinanceiroMoney(item.valor)}</strong>
- <small>Venc. ${formatFinanceiroDate(getFinanceiroDataVencimento(item))}</small>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `
- <div class="financeiro-empty-state">
- <span class="material-symbols-rounded">receipt_long</span>
- <strong>${FINANCEIRO_EMPTY_MESSAGE}</strong>
- </div>
- `}
- </section>
- </main>
- </div>
- `;
+  // Indicadores
+  const listVencidas = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v < hoje;
+  });
+  const listHoje = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v.getTime() === hoje.getTime();
+  });
+  const listSeteDias = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v >= hoje && v <= emSeteDias;
+  });
+  const listAVencer = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v >= hoje;
+  });
+
+  const sumValor = arr => arr.reduce((sum, item) => sum + roundMoney(item.valor || item.valor_total || 0), 0);
+
+  const indVencidas = { count: listVencidas.length, total: sumValor(listVencidas) };
+  const indHoje = { count: listHoje.length, total: sumValor(listHoje) };
+  const indSeteDias = { count: listSeteDias.length, total: sumValor(listSeteDias) };
+  const indAVencer = { count: listAVencer.length, total: sumValor(listAVencer) };
+  const indACombinar = { count: entradasACombinar.length, total: sumValor(entradasACombinar) };
+
+  // Filtragem da lista
+  let listaExibicao = [];
+
+  if (filtroAtivo === 'vencidas') {
+    listaExibicao = listVencidas.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'hoje') {
+    listaExibicao = listHoje.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'sete_dias') {
+    listaExibicao = listSeteDias.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'a_vencer') {
+    listaExibicao = listAVencer.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'a_combinar') {
+    listaExibicao = entradasACombinar.map(e => ({ ...e, _tipoItem: 'a_combinar' }));
+  } else {
+    // todas
+    const pMapped = parcelasAbertas.map(i => ({ ...i, _tipoItem: 'parcela' }));
+    const cMapped = entradasACombinar.map(e => ({ ...e, _tipoItem: 'a_combinar' }));
+    listaExibicao = [...pMapped, ...cMapped];
+  }
+
+  // Filtro de busca texto
+  const query = String(buscaTexto || '').trim().toLowerCase();
+  if (query) {
+    listaExibicao = listaExibicao.filter(item => {
+      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || '').toLowerCase();
+      const nf = String(item.numero_nf || '').toLowerCase();
+      const desc = String(item.descricao || item.observacao_financeira || '').toLowerCase();
+      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query);
+    });
+  }
+
+  const currentUser = localStorage.getItem('currentUser');
+  const totalLista = listaExibicao.reduce((s, i) => s + roundMoney(i.valor || i.valor_total || 0), 0);
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+      ${getModuleSidebarHTML('financeiro', 'CONTAS A PAGAR')}
+      <main class="container financeiro-list-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderFinanceiroSubMenu()">Financeiro</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Contas a pagar</span>
+        </div>
+        <section class="financeiro-list-panel">
+          <header class="financeiro-panel-header">
+            <div class="financeiro-title-group">
+              <button type="button" class="btn-voltar-mod" onclick="renderFinanceiroSubMenu()" title="Voltar ao Financeiro">
+                <span class="material-symbols-rounded">arrow_back</span>
+              </button>
+              <div>
+                <h2>CONTAS A PAGAR</h2>
+                <p>Acompanhe parcelas, vencimentos e compromissos financeiros.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-nova-despesa" onclick="openModalNovaDespesaManual()">
+              <span class="material-symbols-rounded">add_circle</span>
+              Nova Despesa
+            </button>
+          </header>
+
+          <!-- INDICADORES COMPACTOS CLICÁVEIS -->
+          <div class="financeiro-indicators-grid" role="region" aria-label="Indicadores de Contas a Pagar">
+            <div class="fin-indicator-card ${filtroAtivo === 'vencidas' ? 'active' : ''} is-vencidas" onclick="renderContasAPagar('vencidas')">
+              <span class="fin-indicator-badge">VENCIDAS</span>
+              <strong class="fin-indicator-count">${indVencidas.count} ${indVencidas.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indVencidas.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'hoje' ? 'active' : ''} is-hoje" onclick="renderContasAPagar('hoje')">
+              <span class="fin-indicator-badge">VENCEM HOJE</span>
+              <strong class="fin-indicator-count">${indHoje.count} ${indHoje.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indHoje.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'sete_dias' ? 'active' : ''} is-sete-dias" onclick="renderContasAPagar('sete_dias')">
+              <span class="fin-indicator-badge">PRÓXIMOS 7 DIAS</span>
+              <strong class="fin-indicator-count">${indSeteDias.count} ${indSeteDias.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indSeteDias.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'a_vencer' ? 'active' : ''} is-a-vencer" onclick="renderContasAPagar('a_vencer')">
+              <span class="fin-indicator-badge">A VENCER</span>
+              <strong class="fin-indicator-count">${indAVencer.count} ${indAVencer.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indAVencer.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'a_combinar' ? 'active' : ''} is-a-combinar" onclick="renderContasAPagar('a_combinar')">
+              <span class="fin-indicator-badge">A COMBINAR</span>
+              <strong class="fin-indicator-count">${indACombinar.count} ${indACombinar.count === 1 ? 'nota' : 'notas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indACombinar.total)}</span>
+            </div>
+          </div>
+
+          <!-- BARRA DE FILTROS PILLS & BUSCA -->
+          <div class="financeiro-toolbar">
+            <div class="financeiro-pills">
+              <button type="button" class="fin-pill ${filtroAtivo === 'todas' ? 'active' : ''}" onclick="renderContasAPagar('todas')">Todas</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'vencidas' ? 'active' : ''}" onclick="renderContasAPagar('vencidas')">Vencidas</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'hoje' ? 'active' : ''}" onclick="renderContasAPagar('hoje')">Hoje</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'sete_dias' ? 'active' : ''}" onclick="renderContasAPagar('sete_dias')">7 dias</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'a_vencer' ? 'active' : ''}" onclick="renderContasAPagar('a_vencer')">A vencer</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'a_combinar' ? 'active' : ''}" onclick="renderContasAPagar('a_combinar')">A combinar</button>
+            </div>
+
+            <div class="financeiro-search-box">
+              <span class="material-symbols-rounded">search</span>
+              <input type="text" placeholder="Buscar fornecedor ou NF..." value="${escapeKitAttribute(query)}" oninput="renderContasAPagar('${filtroAtivo}', this.value)">
+            </div>
+          </div>
+
+          <!-- RESUMO DA LISTA -->
+          <div class="financeiro-list-summary">
+            <div><small>REGISTROS</small><strong>${listaExibicao.length}</strong></div>
+            <div><small>VALOR TOTAL</small><strong>${formatFinanceiroMoney(totalLista)}</strong></div>
+          </div>
+
+          <!-- LISTAGEM -->
+          ${listaExibicao.length ? `
+            <div class="financeiro-list">
+              ${listaExibicao.map(item => renderContasAPagarCardHTML(item, hoje)).join('')}
+            </div>
+          ` : `
+            <div class="financeiro-empty-state">
+              <span class="material-symbols-rounded">receipt_long</span>
+              <strong>Nenhum compromisso financeiro encontrado para o filtro selecionado.</strong>
+            </div>
+          `}
+        </section>
+      </main>
+    </div>
+  `;
 }
 
-async function renderFinanceiroACombinar() {
- const currentUser = localStorage.getItem('currentUser');
- let entradas = [];
- try {
- entradas = await loadHistoricoEntradasNF(true);
- } catch (error) {
- console.warn('[FINANCEIRO] erro ao carregar notas a combinar', error);
- }
- const pendentes = (entradas || []).filter(entrada => {
- const status = String(entrada.status_financeiro || '').toLowerCase();
- const tipo = String(entrada.tipo_condicao_financeira || '').toLowerCase();
- return status === 'a_combinar' || tipo === 'a_combinar';
- });
- const total = pendentes.reduce((sum, entrada) => sum + roundMoney(entrada.valor_total), 0);
+function renderContasAPagarCardHTML(item, hoje) {
+  if (item._tipoItem === 'a_combinar') {
+    return `
+      <article class="financeiro-row financeiro-row-a-combinar">
+        <div class="fin-card-info">
+          <strong>${escapeKitAttribute(item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
+          <small>NF ${escapeKitAttribute(item.numero_nf || '-')} | Recebimento ${getEntradaNFDate(item.data_recebimento || item.created_at)}</small>
+          <span class="fin-status-pill status-a-combinar">A COMBINAR</span>
+        </div>
+        <div class="fin-card-value">
+          <strong>${formatFinanceiroMoney(item.valor_total)}</strong>
+          <small>Sem parcelas definidas</small>
+        </div>
+        <div class="fin-card-action">
+          <button type="button" class="btn-action-definir" onclick="openDefinirPagamentoEntradaNF('${item.id}')">
+            <span class="material-symbols-rounded">edit_calendar</span>
+            Definir pagamento
+          </button>
+        </div>
+      </article>
+    `;
+  }
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
- ${getModuleSidebarHTML('financeiro')}
- <main class="container financeiro-list-workspace">
- <section class="financeiro-list-panel">
- <header class="financeiro-list-header">
- <span class="standard-module-card-icon">${menu3DIcons.financeiro_pendentes || menu3DIcons.financeiro || ''}</span>
- <span>
- <strong>NOTAS COM PAGAMENTO A COMBINAR</strong>
- <small>Entradas recebidas ou importadas sem contas a pagar definitivas.</small>
- </span>
- </header>
+  // item de parcela
+  const venc = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+  let statusClass = 'status-a-vencer';
+  let statusText = 'A VENCER';
+  let descVenc = venc ? `Vence ${formatFinanceiroDate(venc)}` : 'Sem vencimento';
 
- <div class="financeiro-list-summary">
- <div><small>NOTAS</small><strong>${pendentes.length}</strong></div>
- <div><small>TOTAL</small><strong>${formatFinanceiroMoney(total)}</strong></div>
- </div>
+  if (venc) {
+    if (venc < hoje) {
+      statusClass = 'status-vencida';
+      statusText = 'VENCIDA';
+      const diffDays = Math.round((hoje - venc) / (1000 * 60 * 60 * 24));
+      descVenc = `Venceu ha ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'} (${formatFinanceiroDate(venc)})`;
+    } else if (venc.getTime() === hoje.getTime()) {
+      statusClass = 'status-hoje';
+      statusText = 'VENCE HOJE';
+      descVenc = 'Vence hoje';
+    } else {
+      const diffDays = Math.round((venc - hoje) / (1000 * 60 * 60 * 24));
+      descVenc = `Vence em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'} (${formatFinanceiroDate(venc)})`;
+    }
+  }
 
- ${pendentes.length ? `
- <div class="financeiro-list">
- ${pendentes.map(entrada => `
- <article class="financeiro-row financeiro-row-a-combinar">
- <div>
- <strong>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
- <small>NF ${escapeKitAttribute(entrada.numero_nf || '-')} | Recebimento ${getEntradaNFDate(entrada.data_recebimento || entrada.created_at)}</small>
- ${entrada.observacao_financeira ? `<small>${escapeKitAttribute(entrada.observacao_financeira)}</small>` : ''}
- </div>
- <div>
- <strong>${formatFinanceiroMoney(entrada.valor_total)}</strong>
- <small>Status: A combinar</small>
- </div>
- <button type="button" class="btn-action" onclick="openDefinirPagamentoEntradaNF('${entrada.id}')">
- <span class="material-symbols-rounded">edit_calendar</span>
- Definir pagamento
- </button>
- </article>
- `).join('')}
- </div>
- ` : `
- <div class="financeiro-empty-state">
- <span class="material-symbols-rounded">task_alt</span>
- <strong>Nenhuma nota com pagamento a combinar.</strong>
- </div>
- `}
- </section>
- </main>
- </div>
- `;
+  const fornecedor = item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado';
+  const nf = item.numero_nf ? `NF ${item.numero_nf}` : (item.descricao || 'Despesa');
+  const parcelaInfo = item.parcela ? `Parcela ${item.parcela}` : '';
+  const subline = [nf, parcelaInfo].filter(Boolean).join(' • ');
+
+  return `
+    <article class="financeiro-row ${statusClass}">
+      <div class="fin-card-info">
+        <strong>${escapeKitAttribute(fornecedor)}</strong>
+        <small>${escapeKitAttribute(subline)}</small>
+        <span class="fin-status-pill ${statusClass}">${statusText}</span>
+      </div>
+      <div class="fin-card-details">
+        <small class="fin-dueDate">${descVenc}</small>
+        <small class="fin-payForm">${escapeKitAttribute((item.forma_pagamento || 'Boleto').toUpperCase())}</small>
+      </div>
+      <div class="fin-card-value">
+        <strong>${formatFinanceiroMoney(item.valor)}</strong>
+      </div>
+      <div class="fin-card-action">
+        <button type="button" class="btn-action-pagar" onclick="openModalPagarConta('${item.id}')">
+          <span class="material-symbols-rounded">payments</span>
+          PAGAR
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  const pagas = (parcelas || []).filter(item => normalizarStatusFinanceiro(item?.status) === 'pago');
+
+  const hoje = getFinanceiroHoje();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  // Filtro por período
+  let listaExibicao = pagas.filter(item => {
+    const dtPagto = parseFinanceiroDate(item.data_pagamento || item.pagamento_em || item.atualizado_em);
+    if (!dtPagto) return true;
+
+    if (filtroPeriodo === 'hoje') {
+      return dtPagto.getTime() === hoje.getTime();
+    } else if (filtroPeriodo === 'semana') {
+      const diffDays = Math.round((hoje - dtPagto) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 7;
+    } else if (filtroPeriodo === 'mes') {
+      return dtPagto.getMonth() === mesAtual && dtPagto.getFullYear() === anoAtual;
+    }
+    return true; // todos
+  });
+
+  // Filtro de busca texto
+  const query = String(buscaTexto || '').trim().toLowerCase();
+  if (query) {
+    listaExibicao = listaExibicao.filter(item => {
+      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || '').toLowerCase();
+      const nf = String(item.numero_nf || '').toLowerCase();
+      const desc = String(item.descricao || item.observacoes || '').toLowerCase();
+      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query);
+    });
+  }
+
+  const totalPago = listaExibicao.reduce((s, i) => s + roundMoney(i.valor || 0), 0);
+  const currentUser = localStorage.getItem('currentUser');
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+      ${getModuleSidebarHTML('financeiro', 'PAGAMENTOS')}
+      <main class="container financeiro-list-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderFinanceiroSubMenu()">Financeiro</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Pagamentos</span>
+        </div>
+        <section class="financeiro-list-panel">
+          <header class="financeiro-panel-header">
+            <div class="financeiro-title-group">
+              <button type="button" class="btn-voltar-mod" onclick="renderFinanceiroSubMenu()" title="Voltar ao Financeiro">
+                <span class="material-symbols-rounded">arrow_back</span>
+              </button>
+              <div>
+                <h2>PAGAMENTOS</h2>
+                <p>Consulte pagamentos realizados e comprovantes.</p>
+              </div>
+            </div>
+          </header>
+
+          <!-- BARRA DE FILTROS DE PERÍODO & BUSCA -->
+          <div class="financeiro-toolbar">
+            <div class="financeiro-pills">
+              <button type="button" class="fin-pill ${filtroPeriodo === 'hoje' ? 'active' : ''}" onclick="renderPagamentos('hoje')">Hoje</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'semana' ? 'active' : ''}" onclick="renderPagamentos('semana')">Esta semana</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'mes' ? 'active' : ''}" onclick="renderPagamentos('mes')">Este mês</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'todos' ? 'active' : ''}" onclick="renderPagamentos('todos')">Todos</button>
+            </div>
+
+            <div class="financeiro-search-box">
+              <span class="material-symbols-rounded">search</span>
+              <input type="text" placeholder="Buscar fornecedor ou NF..." value="${escapeKitAttribute(query)}" oninput="renderPagamentos('${filtroPeriodo}', this.value)">
+            </div>
+          </div>
+
+          <!-- RESUMO DE PAGAMENTOS -->
+          <div class="financeiro-list-summary">
+            <div><small>PAGAMENTOS EFETUADOS</small><strong>${listaExibicao.length}</strong></div>
+            <div><small>TOTAL PAGO</small><strong>${formatFinanceiroMoney(totalPago)}</strong></div>
+          </div>
+
+          <!-- LISTAGEM -->
+          ${listaExibicao.length ? `
+            <div class="financeiro-list">
+              ${listaExibicao.map(item => `
+                <article class="financeiro-row status-paga">
+                  <div class="fin-card-info">
+                    <strong>${escapeKitAttribute(item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
+                    <small>NF ${escapeKitAttribute(item.numero_nf || '-')} ${item.parcela ? `• Parcela ${item.parcela}` : ''}</small>
+                    <span class="fin-status-pill status-paga">PAGO</span>
+                  </div>
+                  <div class="fin-card-details">
+                    <small>Pago em ${formatFinanceiroDate(item.data_pagamento || item.pagamento_em || item.atualizado_em)}</small>
+                    <small>${escapeKitAttribute((item.forma_pagamento || 'Boleto').toUpperCase())}</small>
+                  </div>
+                  <div class="fin-card-value">
+                    <strong>${formatFinanceiroMoney(item.valor)}</strong>
+                  </div>
+                </article>
+              `).join('')}
+            </div>
+          ` : `
+            <div class="financeiro-empty-state">
+              <span class="material-symbols-rounded">task_alt</span>
+              <strong>Nenhum pagamento encontrado para o período selecionado.</strong>
+            </div>
+          `}
+        </section>
+      </main>
+    </div>
+  `;
+}
+
+async function openModalPagarConta(contaId) {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  const conta = parcelas.find(c => String(c.id) === String(contaId));
+  if (!conta) {
+    showToast('Conta a pagar nao encontrada.', 'error');
+    return;
+  }
+  closeAppCenterModal();
+
+  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const nfInfo = conta.numero_nf ? `NF ${conta.numero_nf}` : (conta.descricao || 'Sem NF');
+  const valorFormatado = formatFinanceiroMoney(conta.valor);
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+  modal.dataset.contaId = conta.id;
+  modal.innerHTML = `
+    <div class="app-center-modal-card" role="dialog" aria-modal="true" aria-label="Liquidar Conta a Pagar">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>REGISTRAR PAGAMENTO</h3>
+      <p style="margin-bottom: 16px;">${escapeKitAttribute(fornecedor)} | ${escapeKitAttribute(nfInfo)} ${conta.parcela ? `(Parc. ${conta.parcela})` : ''}</p>
+
+      <div class="modal-form-grid" style="display: flex; flex-direction: column; gap: 14px;">
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Valor Pago (R$)</span>
+          <input id="pagto-valor" class="money-input" inputmode="decimal" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${nfXmlFormatMoneyInput(conta.valor)}">
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Data do Pagamento</span>
+          <input id="pagto-data" type="date" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${getDataBrasilISO()}">
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Forma de Pagamento</span>
+          <select id="pagto-forma" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <option value="pix" ${conta.forma_pagamento === 'pix' ? 'selected' : ''}>PIX</option>
+            <option value="boleto" ${!conta.forma_pagamento || conta.forma_pagamento === 'boleto' ? 'selected' : ''}>Boleto</option>
+            <option value="transferencia" ${conta.forma_pagamento === 'transferencia' ? 'selected' : ''}>Transferencia / TED / DOC</option>
+            <option value="cartao" ${conta.forma_pagamento === 'cartao' ? 'selected' : ''}>Cartao de Credito / Debito</option>
+            <option value="dinheiro" ${conta.forma_pagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+          </select>
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Observacoes / Conta Bancaria</span>
+          <textarea id="pagto-obs" rows="2" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;">${escapeKitAttribute(conta.observacoes || conta.observacao || '')}</textarea>
+        </label>
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+        <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoConta('${conta.id}')">Confirmar Pagamento</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function salvarPagamentoConta(contaId) {
+  try {
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+    const valorVal = nfXmlMoney(document.getElementById('pagto-valor')?.value);
+    const dataVal = document.getElementById('pagto-data')?.value;
+    const formaVal = document.getElementById('pagto-forma')?.value || 'boleto';
+    const obsVal = document.getElementById('pagto-obs')?.value?.trim() || '';
+
+    if (!dataVal) throw new Error('Informe a data de pagamento.');
+    if (valorVal <= 0) throw new Error('Valor pago deve ser maior que zero.');
+
+    const now = getDataHoraBrasil();
+
+    const { error } = await client
+      .from('contas_pagar')
+      .update({
+        status: 'pago',
+        status_vencimento: 'pago',
+        data_pagamento: dataVal,
+        forma_pagamento: formaVal,
+        observacoes: obsVal,
+        observacao: obsVal,
+        atualizado_em: now
+      })
+      .eq('id', contaId);
+
+    if (error) throw error;
+
+    appData.financeiroParcelasLoaded = false;
+    closeAppCenterModal();
+    showToast('Pagamento registrado com sucesso!', 'success');
+    renderContasAPagar('todas');
+  } catch (error) {
+    console.error('[FINANCEIRO_PAGTO] erro ao liquidar conta', error);
+    showToast(error.message || 'Erro ao registrar pagamento.', 'error');
+  }
+}
+
+function openModalNovaDespesaManual() {
+  closeAppCenterModal();
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+  modal.innerHTML = `
+    <div class="app-center-modal-card" role="dialog" aria-modal="true" aria-label="Nova Despesa Manual">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>NOVA DESPESA MANUAL</h3>
+      <p style="margin-bottom: 16px;">Cadastre compromissos financeiros sem Nota Fiscal (Aluguel, Frete, Energia, etc.).</p>
+
+      <div class="modal-form-grid" style="display: flex; flex-direction: column; gap: 14px;">
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Descricao da Despesa *</span>
+          <input id="manual-descricao" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="Ex: Aluguel do Galpao, Energia, Internet...">
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Fornecedor / Beneficiario *</span>
+          <input id="manual-fornecedor" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="Ex: Imobiliaria Central, Enel, Vivo...">
+        </label>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <label>
+            <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Valor (R$) *</span>
+            <input id="manual-valor" class="money-input" inputmode="decimal" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="0,00">
+          </label>
+          <label>
+            <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Vencimento *</span>
+            <input id="manual-vencimento" type="date" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${getDataBrasilISO()}">
+          </label>
+        </div>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Forma de Pagamento</span>
+          <select id="manual-forma" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <option value="boleto">Boleto</option>
+            <option value="pix">PIX</option>
+            <option value="transferencia">Transferencia / TED / DOC</option>
+            <option value="cartao">Cartao de Credito / Debito</option>
+            <option value="dinheiro">Dinheiro</option>
+          </select>
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Observacoes</span>
+          <textarea id="manual-obs" rows="2" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="Anotacoes complementares..."></textarea>
+        </label>
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+        <button type="button" class="app-center-modal-primary" onclick="salvarDespesaManual()">Salvar Despesa</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function salvarDespesaManual() {
+  try {
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+    const desc = document.getElementById('manual-descricao')?.value?.trim();
+    const fornecedor = document.getElementById('manual-fornecedor')?.value?.trim();
+    const valor = nfXmlMoney(document.getElementById('manual-valor')?.value);
+    const vencimento = document.getElementById('manual-vencimento')?.value;
+    const forma = document.getElementById('manual-forma')?.value || 'boleto';
+    const obs = document.getElementById('manual-obs')?.value?.trim() || '';
+
+    if (!desc) throw new Error('Informe a descricao da despesa.');
+    if (!fornecedor) throw new Error('Informe o fornecedor ou beneficiario.');
+    if (valor <= 0) throw new Error('Valor deve ser maior que zero.');
+    if (!vencimento) throw new Error('Informe a data de vencimento.');
+
+    const now = getDataHoraBrasil();
+
+    const payload = {
+      descricao: desc,
+      fornecedor_nome: fornecedor,
+      valor: valor,
+      vencimento: vencimento,
+      data_vencimento: vencimento,
+      forma_pagamento: forma,
+      observacoes: obs,
+      observacao: obs,
+      status: 'pendente',
+      status_vencimento: 'em_aberto',
+      tipo_lancamento: 'manual',
+      origem: 'manual',
+      parcela: '001',
+      criado_em: now,
+      atualizado_em: now
+    };
+
+    const { error } = await client.from('contas_pagar').insert([payload]);
+    if (error) throw error;
+
+    appData.financeiroParcelasLoaded = false;
+    closeAppCenterModal();
+    showToast('Despesa manual cadastrada com sucesso!', 'success');
+    renderContasAPagar('todas');
+  } catch (error) {
+    console.error('[FINANCEIRO_MANUAL] erro ao salvar despesa manual', error);
+    showToast(error.message || 'Erro ao salvar despesa.', 'error');
+  }
 }
 
 function renderACombinarParcelRows(total, count, firstDate = getDataBrasilISO()) {
- const qty = Math.max(1, Math.min(36, parseInt(count, 10) || 1));
- const base = nfXmlRoundMoney(nfXmlMoney(total) / qty, 2);
- return Array.from({ length: qty }, (_, index) => {
- const due = new Date(firstDate || getDataBrasilISO());
- if (!Number.isNaN(due.getTime())) due.setMonth(due.getMonth() + index);
- const value = index === qty - 1 ? nfXmlRoundMoney(nfXmlMoney(total) - (base * (qty - 1)), 2) : base;
- return `
- <article class="nfxml-payment-row nfxml-a-combinar-row">
- <div class="nfxml-payment-index">${index + 1}</div>
- <label>
- <span>Parcela</span>
- <input class="a-combinar-parcela" value="${String(index + 1).padStart(3, '0')}">
- </label>
- <label>
- <span>Valor</span>
- <input class="a-combinar-valor money-input" inputmode="decimal" value="${nfXmlFormatMoneyInput(value)}">
- </label>
- <label>
- <span>Vencimento</span>
- <input class="a-combinar-vencimento" type="date" value="${getDataBrasilISO(due)}">
- </label>
- <label class="wide">
- <span>Observacao</span>
- <input class="a-combinar-obs" value="">
- </label>
- </article>
- `;
- }).join('');
+  const qty = Math.max(1, Math.min(36, parseInt(count, 10) || 1));
+  const base = nfXmlRoundMoney(nfXmlMoney(total) / qty, 2);
+  return Array.from({ length: qty }, (_, index) => {
+    const due = new Date(firstDate || getDataBrasilISO());
+    if (!Number.isNaN(due.getTime())) due.setMonth(due.getMonth() + index);
+    const value = index === qty - 1 ? nfXmlRoundMoney(nfXmlMoney(total) - (base * (qty - 1)), 2) : base;
+    return `
+      <article class="nfxml-payment-row nfxml-a-combinar-row">
+        <div class="nfxml-payment-index">${index + 1}</div>
+        <label>
+          <span>Parcela</span>
+          <input class="a-combinar-parcela" value="${String(index + 1).padStart(3, '0')}">
+        </label>
+        <label>
+          <span>Valor</span>
+          <input class="a-combinar-valor money-input" inputmode="decimal" value="${nfXmlFormatMoneyInput(value)}">
+        </label>
+        <label>
+          <span>Vencimento</span>
+          <input class="a-combinar-vencimento" type="date" value="${getDataBrasilISO(due)}">
+        </label>
+        <label class="wide">
+          <span>Observacao</span>
+          <input class="a-combinar-obs" value="">
+        </label>
+      </article>
+    `;
+  }).join('');
 }
 
 function refreshACombinarParcelRows() {
- const modal = document.getElementById('app-center-modal');
- const rows = document.getElementById('a-combinar-parcelas-list');
- if (!modal || !rows) return;
- rows.innerHTML = renderACombinarParcelRows(
- modal.dataset.total || 0,
- document.getElementById('a-combinar-qtd')?.value || 1,
- document.getElementById('a-combinar-primeiro-vencimento')?.value || getDataBrasilISO()
- );
+  const modal = document.getElementById('app-center-modal');
+  const rows = document.getElementById('a-combinar-parcelas-list');
+  if (!modal || !rows) return;
+  rows.innerHTML = renderACombinarParcelRows(
+    modal.dataset.total || 0,
+    document.getElementById('a-combinar-qtd')?.value || 1,
+    document.getElementById('a-combinar-primeiro-vencimento')?.value || getDataBrasilISO()
+  );
 }
 
 async function openDefinirPagamentoEntradaNF(entradaId) {
- const entrada = await DataClient.getEntradaNFById(entradaId);
- if (!entrada) {
- showToast('Nota nao encontrada.', 'error');
- return;
- }
- closeAppCenterModal();
- const total = nfXmlMoney(entrada.valor_total);
- const modal = document.createElement('div');
- modal.id = 'app-center-modal';
- modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
- modal.dataset.entradaId = entrada.id;
- modal.dataset.total = total;
- modal.innerHTML = `
- <div class="app-center-modal-card wide" role="dialog" aria-modal="true" aria-label="Definir pagamento">
- <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
- <span class="material-symbols-rounded">close</span>
- </button>
- <h3>DEFINIR PAGAMENTO</h3>
- <p>NF ${escapeKitAttribute(entrada.numero_nf || '-')} | ${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')} | Total ${formatFinanceiroMoney(total)}</p>
- <div class="nfxml-payment-editor-toolbar">
- <label>
- <span>Quantidade de parcelas</span>
- <input id="a-combinar-qtd" type="number" min="1" max="36" value="1" onchange="refreshACombinarParcelRows()">
- </label>
- <label>
- <span>Primeiro vencimento</span>
- <input id="a-combinar-primeiro-vencimento" type="date" value="${getDataBrasilISO()}" onchange="refreshACombinarParcelRows()">
- </label>
- </div>
- <div id="a-combinar-parcelas-list" class="nfxml-payment-list">
- ${renderACombinarParcelRows(total, 1, getDataBrasilISO())}
- </div>
- <label class="nfxml-a-combinar-note">
- <span>Observacao geral</span>
- <textarea id="a-combinar-observacao-geral" rows="2">${escapeKitAttribute(entrada.observacao_financeira || '')}</textarea>
- </label>
- <div class="app-center-modal-actions">
- <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
- <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoACombinarEntrada()">Gerar contas a pagar</button>
- </div>
- </div>
- `;
- document.body.appendChild(modal);
+  const entrada = await DataClient.getEntradaNFById(entradaId);
+  if (!entrada) {
+    showToast('Nota nao encontrada.', 'error');
+    return;
+  }
+  closeAppCenterModal();
+  const total = nfXmlMoney(entrada.valor_total);
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+  modal.dataset.entradaId = entrada.id;
+  modal.dataset.total = total;
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" aria-label="Definir pagamento">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>DEFINIR PAGAMENTO</h3>
+      <p>NF ${escapeKitAttribute(entrada.numero_nf || '-')} | ${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')} | Total ${formatFinanceiroMoney(total)}</p>
+      <div class="nfxml-payment-editor-toolbar">
+        <label>
+          <span>Quantidade de parcelas</span>
+          <input id="a-combinar-qtd" type="number" min="1" max="36" value="1" onchange="refreshACombinarParcelRows()">
+        </label>
+        <label>
+          <span>Primeiro vencimento</span>
+          <input id="a-combinar-primeiro-vencimento" type="date" value="${getDataBrasilISO()}" onchange="refreshACombinarParcelRows()">
+        </label>
+      </div>
+      <div id="a-combinar-parcelas-list" class="nfxml-payment-list">
+        ${renderACombinarParcelRows(total, 1, getDataBrasilISO())}
+      </div>
+      <label class="nfxml-a-combinar-note">
+        <span>Observacao geral</span>
+        <textarea id="a-combinar-observacao-geral" rows="2">${escapeKitAttribute(entrada.observacao_financeira || '')}</textarea>
+      </label>
+      <div class="app-center-modal-actions">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+        <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoACombinarEntrada()">Gerar contas a pagar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
 }
 
 async function salvarPagamentoACombinarEntrada() {
- try {
- const client = window.supabaseClient;
- const modal = document.getElementById('app-center-modal');
- const entradaId = modal?.dataset?.entradaId;
- if (!client || !entradaId) return;
- const entrada = await DataClient.getEntradaNFById(entradaId);
- if (!entrada) throw new Error('Nota nao encontrada.');
+  try {
+    const client = window.supabaseClient;
+    const modal = document.getElementById('app-center-modal');
+    const entradaId = modal?.dataset?.entradaId;
+    if (!client || !entradaId) return;
+    const entrada = await DataClient.getEntradaNFById(entradaId);
+    if (!entrada) throw new Error('Nota nao encontrada.');
 
- const { data: existentes, error: existingError } = await client
- .from('contas_pagar')
- .select('*')
- .eq('entrada_nf_id', entradaId);
- if (existingError) throw existingError;
- if ((existentes || []).some(item => String(item.status || '').toLowerCase() === 'pago')) {
- showToast('Ja existe conta paga para esta NF. Nao recriei o financeiro.', 'error');
- return;
- }
+    const { data: existentes, error: existingError } = await client
+      .from('contas_pagar')
+      .select('*')
+      .eq('entrada_nf_id', entradaId);
+    if (existingError) throw existingError;
+    if ((existentes || []).some(item => String(item.status || '').toLowerCase() === 'pago')) {
+      showToast('Ja existe conta paga para esta NF. Nao recriei o financeiro.', 'error');
+      return;
+    }
 
- const geralObs = document.getElementById('a-combinar-observacao-geral')?.value?.trim() || '';
- const rows = Array.from(document.querySelectorAll('#a-combinar-parcelas-list .nfxml-a-combinar-row'));
- const payload = rows.map((row, index) => {
- const parcela = row.querySelector('.a-combinar-parcela')?.value?.trim() || String(index + 1).padStart(3, '0');
- const valor = nfXmlMoney(row.querySelector('.a-combinar-valor')?.value);
- const vencimento = row.querySelector('.a-combinar-vencimento')?.value || '';
- const obs = row.querySelector('.a-combinar-obs')?.value?.trim() || geralObs;
- if (valor <= 0 || !vencimento) throw new Error('Todas as parcelas precisam de valor e vencimento.');
- return {
- entrada_nf_id: entradaId,
- nf_id: entradaId,
- fornecedor_id: entrada.fornecedor_id || null,
- fornecedor_cnpj: entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || null,
- cnpj_fornecedor: entrada.cnpj_fornecedor || entrada.fornecedor_cnpj || null,
- fornecedor_nome: entrada.fornecedor_nome || null,
- numero_nf: entrada.numero_nf || null,
- numero_parcela: index + 1,
- parcela,
- descricao: `NF ${entrada.numero_nf || '-'} - Parcela ${parcela}`,
- tipo_lancamento: 'manual',
- origem: 'manual',
- vencimento,
- data_vencimento: vencimento,
- valor,
- status: 'pendente',
- status_vencimento: 'em_aberto',
- forma_pagamento: 'boleto',
- observacoes: obs,
- observacao: obs,
- boleto_recebido: false,
- atualizado_em: getDataHoraBrasil()
- };
- });
- const totalParcelas = payload.reduce((sum, item) => sum + nfXmlMoney(item.valor), 0);
- const totalNota = nfXmlMoney(entrada.valor_total);
- if (Math.abs(totalParcelas - totalNota) > 0.01) {
- showToast('Operacao concluida.', 'info');
- return;
- }
+    const geralObs = document.getElementById('a-combinar-observacao-geral')?.value?.trim() || '';
+    const rows = Array.from(document.querySelectorAll('#a-combinar-parcelas-list .nfxml-a-combinar-row'));
+    const payload = rows.map((row, index) => {
+      const parcela = row.querySelector('.a-combinar-parcela')?.value?.trim() || String(index + 1).padStart(3, '0');
+      const valor = nfXmlMoney(row.querySelector('.a-combinar-valor')?.value);
+      const vencimento = row.querySelector('.a-combinar-vencimento')?.value || '';
+      const obs = row.querySelector('.a-combinar-obs')?.value?.trim() || geralObs;
+      if (valor <= 0 || !vencimento) throw new Error('Todas as parcelas precisam de valor e vencimento.');
+      return {
+        entrada_nf_id: entradaId,
+        nf_id: entradaId,
+        fornecedor_id: entrada.fornecedor_id || null,
+        fornecedor_cnpj: entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || null,
+        cnpj_fornecedor: entrada.cnpj_fornecedor || entrada.fornecedor_cnpj || null,
+        fornecedor_nome: entrada.fornecedor_nome || null,
+        numero_nf: entrada.numero_nf || null,
+        numero_parcela: index + 1,
+        parcela,
+        descricao: `NF ${entrada.numero_nf || '-'} - Parcela ${parcela}`,
+        tipo_lancamento: 'manual',
+        origem: 'manual',
+        vencimento,
+        data_vencimento: vencimento,
+        valor,
+        status: 'pendente',
+        status_vencimento: 'em_aberto',
+        forma_pagamento: 'boleto',
+        observacoes: obs,
+        observacao: obs,
+        boleto_recebido: false,
+        atualizado_em: getDataHoraBrasil()
+      };
+    });
+    const totalParcelas = payload.reduce((sum, item) => sum + nfXmlMoney(item.valor), 0);
+    const totalNota = nfXmlMoney(entrada.valor_total);
+    if (Math.abs(totalParcelas - totalNota) > 0.01) {
+      showToast('Operacao concluida.', 'info');
+      return;
+    }
 
- if ((existentes || []).length) {
- const ids = existentes.map(item => item.id).filter(Boolean);
- if (ids.length) await client.from('contas_pagar').delete().in('id', ids);
- }
- const { error: insertError } = await client.from('contas_pagar').insert(payload);
- if (insertError) throw insertError;
- const { error: updateError } = await client.from('entradas_nf').update({
- financeiro_lancado: true,
- status_financeiro: 'gerado',
- tipo_condicao_financeira: 'manual',
- observacao_financeira: geralObs || null,
- financeiro_configurado_em: getDataHoraBrasil(),
- financeiro_configurado_por: localStorage.getItem('currentUser'),
- atualizado_em: getDataHoraBrasil()
- }).eq('id', entradaId);
- if (updateError) throw updateError;
+    if ((existentes || []).length) {
+      const ids = existentes.map(item => item.id).filter(Boolean);
+      if (ids.length) await client.from('contas_pagar').delete().in('id', ids);
+    }
+    const { error: insertError } = await client.from('contas_pagar').insert(payload);
+    if (insertError) throw insertError;
+    const { error: updateError } = await client.from('entradas_nf').update({
+      financeiro_lancado: true,
+      status_financeiro: 'gerado',
+      tipo_condicao_financeira: 'manual',
+      observacao_financeira: geralObs || null,
+      financeiro_configurado_em: getDataHoraBrasil(),
+      financeiro_configurado_por: localStorage.getItem('currentUser'),
+      atualizado_em: getDataHoraBrasil()
+    }).eq('id', entradaId);
+    if (updateError) throw updateError;
 
- appData.financeiroParcelasLoaded = false;
- appData.historicoEntradasNFLoaded = false;
- closeAppCenterModal();
- showToast('Pagamento definido e contas a pagar geradas.', 'success');
- renderFinanceiroACombinar();
- } catch (error) {
- console.error('[FINANCEIRO_A_COMBINAR] erro ao definir pagamento', error);
- showToast(error.message || 'Erro ao definir pagamento.', 'error');
- return;
- }
+    appData.financeiroParcelasLoaded = false;
+    appData.historicoEntradasNFLoaded = false;
+    closeAppCenterModal();
+    showToast('Pagamento definido e contas a pagar geradas.', 'success');
+    renderContasAPagar('a_combinar');
+  } catch (error) {
+    console.error('[FINANCEIRO_A_COMBINAR] erro ao definir pagamento', error);
+    showToast(error.message || 'Erro ao definir pagamento.', 'error');
+  }
 }
-
 
 function getChannelConfig(label) {
  const l = String(label).toUpperCase();
@@ -21408,8 +21995,9 @@ function renderQuickDestinationLoading(title, screenClass) {
 }
 
 async function renderPackConferenceRecords(scope = 'today', query = '') {
- renderQuickDestinationLoading(scope === 'today' ? 'Conferências de hoje' : 'Histórico de conferências', 'pack-screen');
  const currentUser = localStorage.getItem('currentUser');
+ document.body.classList.remove('menu-active');
+ currentScreen = 'internal';
  await loadPackConferenceWorkspace();
  const normalizedQuery = normalizeText(query || '');
  const records = (appData.conferencia || [])
@@ -21448,10 +22036,72 @@ async function renderPackConferenceRecords(scope = 'today', query = '') {
  </div>`;
 }
 
+function getPackChannelsGridHTML(sessionsByChannel = []) {
+ if (!sessionsByChannel || sessionsByChannel.length === 0) {
+  return `
+  <div id="pack-channels-grid-container" class="operational-empty-card">
+   <span class="material-symbols-rounded">fact_check</span>
+   <strong>Nenhuma separacao pendente para conferencia.</strong>
+  </div>`;
+ }
+ return `
+ <div id="pack-channels-grid-container" class="standard-module-card-grid operational-card-grid pack-pending-channel-grid">
+  ${sessionsByChannel.map(group => {
+   const { channelName, sessions } = group;
+   const config = getChannelConfig(channelName);
+   const separationsCount = sessions.length;
+   const clickAction = `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
+   return `
+   <button type="button" class="standard-module-card operational-menu-card pick-channel-card pack-pending-channel-card channel-${escapeKitAttribute(config.color)}" onclick="${clickAction}">
+    <span class="standard-module-card-icon pack-pending-channel-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
+    <span class="standard-module-card-copy pack-pending-channel-copy"><strong>${escapeKitAttribute(channelName)}</strong></span>
+    <b class="pack-pending-channel-count">${separationsCount}</b>
+   </button>
+  `;
+  }).join('')}
+ </div>`;
+}
+
+function getPackActiveSessionsByChannel(currentUser) {
+ const activeSessions = (appData.separacao || []).filter(s =>
+  isSessionPendingConferenceForUser(s, currentUser)
+ );
+ return [...activeSessions.reduce((groups, session) => {
+  const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
+  const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
+  const current = groups.get(channelKey) || { channelName, sessions: [] };
+  current.sessions.push(session);
+  groups.set(channelKey, current);
+  return groups;
+ }, new Map()).values()].sort((a, b) => a.channelName.localeCompare(b.channelName, 'pt-BR'));
+}
+
 async function renderPackPendingChannels() {
- renderQuickDestinationLoading('Conferências em andamento', 'pack-screen');
  const currentUser = localStorage.getItem('currentUser');
- // Texto validado em UTF-8.
+ document.body.classList.remove('menu-active');
+ currentScreen = 'internal';
+
+ // Calcular sessões ativas existentes na memória antes do load assíncrono
+ const initialSessionsByChannel = getPackActiveSessionsByChannel(currentUser);
+
+ // Renderizar estrutura oficial final da página imediatamente (zero loading card, zero transição)
+ app.innerHTML = `
+ <div class="dashboard-screen internal fade-in pack-screen module-screen standard-card-menu-screen pack-channel-summary-screen app-page-shell">
+ ${getTopBarHTML(currentUser, 'renderMenu()')}
+ ${getModuleSidebarHTML('pack')}
+
+ <main class="container app-page-container">
+  <div class="app-breadcrumb">
+    <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+    <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+    <span class="app-breadcrumb-current">Conferência</span>
+  </div>
+
+  ${getPackChannelsGridHTML(initialSessionsByChannel)}
+ </main>
+ </div>
+ `;
+
  try {
  const data = await DataClient.loadModule('conferencia', true);
  if (data) {
@@ -21464,49 +22114,14 @@ async function renderPackPendingChannels() {
  console.warn('[PACK] Falha ao atualizar separacoes do Supabase:', error);
  }
 
- const activeSessions = (appData.separacao || []).filter(s =>
-  isSessionPendingConferenceForUser(s, currentUser)
- );
- const sessionsByChannel = [...activeSessions.reduce((groups, session) => {
-  const channelName = String(session.canal_nome || session.col_c || session.canal || 'Outros').trim() || 'Outros';
-  const channelKey = normalizeOperationalLabel(channelName) || 'OUTROS';
-  const current = groups.get(channelKey) || { channelName, sessions: [] };
-  current.sessions.push(session);
-  groups.set(channelKey, current);
-  return groups;
- }, new Map()).values()].sort((a, b) => a.channelName.localeCompare(b.channelName, 'pt-BR'));
-
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in pack-screen module-screen standard-card-menu-screen pack-channel-summary-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('pack')}
-
- <main class="container">
-  ${sessionsByChannel.length === 0 ? `
- <div class="operational-empty-card">
- <span class="material-symbols-rounded">fact_check</span>
- <strong>Nenhuma separacao pendente para conferencia.</strong>
- </div>
- ` : `
-  <div class="standard-module-card-grid operational-card-grid pack-pending-channel-grid">
-  ${sessionsByChannel.map(group => {
-  const { channelName, sessions } = group;
-  const config = getChannelConfig(channelName);
-  const separationsCount = sessions.length;
-  const clickAction = `renderPackSessionsList(${quotePackInlineArg(channelName)})`;
-  return `
-  <button type="button" class="standard-module-card operational-menu-card pick-channel-card pack-pending-channel-card channel-${escapeKitAttribute(config.color)}" onclick="${clickAction}">
-  <span class="standard-module-card-icon pack-pending-channel-icon">${config.svgIcon || `<span class="material-symbols-rounded">${config.icon}</span>`}</span>
-  <span class="standard-module-card-copy pack-pending-channel-copy"><strong>${escapeKitAttribute(channelName)}</strong></span>
-  <b class="pack-pending-channel-count">${separationsCount}</b>
-  </button>
- `;
- }).join('')}
- </div>
- `}
- </main>
- </div>
- `;
+ const updatedSessionsByChannel = getPackActiveSessionsByChannel(currentUser);
+ const gridContainer = document.getElementById('pack-channels-grid-container');
+ if (gridContainer) {
+  const newHTML = getPackChannelsGridHTML(updatedSessionsByChannel);
+  if (gridContainer.outerHTML !== newHTML) {
+   gridContainer.outerHTML = newHTML;
+  }
+ }
 }
 
 function renderPackHistory() {

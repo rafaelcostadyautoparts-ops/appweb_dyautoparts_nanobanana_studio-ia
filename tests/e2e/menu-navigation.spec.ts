@@ -219,15 +219,21 @@ test.describe('Navegação parametrizada dos módulos seguros da tela inicial', 
         const finSubmenuScreen = page.locator('.module-top-bar[data-ds-module="financeiro"], .financeiro-screen').first();
         const voltarButton = page.getByRole('button', { name: 'Voltar' }).or(page.locator('button.fab-voltar')).first();
 
-        // 1. Subtela: A VENCER
-        const aVencerCard = page.locator('.standard-module-card:has-text("A VENCER")').first();
-        await expect(aVencerCard).toBeVisible({ timeout: 5000 });
-        await aVencerCard.click();
+        // 1. Subtela: CONTAS A PAGAR
+        const contasAPagarCard = page.locator('.standard-module-card:has-text("CONTAS A PAGAR")').first();
+        await expect(contasAPagarCard).toBeVisible({ timeout: 5000 });
+        await contasAPagarCard.click();
 
-        const aVencerScreen = page.locator('.financeiro-list-workspace, header.financeiro-list-header strong:has-text("A VENCER")').first();
-        await expect(aVencerScreen).toBeVisible({ timeout: 15000 });
+        const contasAPagarScreen = page.locator('.financeiro-list-workspace, h2:has-text("CONTAS A PAGAR")').first();
+        await expect(contasAPagarScreen).toBeVisible({ timeout: 15000 });
 
-        await voltarButton.click();
+        const btnVoltarInterno = page.locator('.btn-voltar-mod').first();
+        if (await btnVoltarInterno.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await btnVoltarInterno.click();
+        } else {
+          await voltarButton.click();
+        }
+
         if (!(await finSubmenuScreen.isVisible({ timeout: 2000 }).catch(() => false))) {
           const mainFinCard = moduleInfo.triggerLocator(page);
           await expect(mainFinCard).toBeVisible({ timeout: 5000 });
@@ -235,63 +241,20 @@ test.describe('Navegação parametrizada dos módulos seguros da tela inicial', 
         }
         await expect(finSubmenuScreen).toBeVisible({ timeout: 10000 });
 
-        // 2. Subtela: VENCIDAS
-        const vencidasCard = page.locator('.standard-module-card:has-text("VENCIDAS")').first();
-        await expect(vencidasCard).toBeVisible({ timeout: 5000 });
-        await vencidasCard.click();
+        // 2. Subtela: PAGAMENTOS
+        const pagamentosCard = page.locator('.standard-module-card:has-text("PAGAMENTOS")').first();
+        await expect(pagamentosCard).toBeVisible({ timeout: 5000 });
+        await pagamentosCard.click();
 
-        const vencidasScreen = page.locator('.financeiro-list-workspace, header.financeiro-list-header strong:has-text("VENCIDAS")').first();
-        await expect(vencidasScreen).toBeVisible({ timeout: 15000 });
+        const pagamentosScreen = page.locator('.financeiro-list-workspace, h2:has-text("PAGAMENTOS")').first();
+        await expect(pagamentosScreen).toBeVisible({ timeout: 15000 });
 
-        await voltarButton.click();
-        if (!(await finSubmenuScreen.isVisible({ timeout: 2000 }).catch(() => false))) {
-          const mainFinCard = moduleInfo.triggerLocator(page);
-          await expect(mainFinCard).toBeVisible({ timeout: 5000 });
-          await mainFinCard.click();
+        if (await btnVoltarInterno.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await btnVoltarInterno.click();
+        } else {
+          await voltarButton.click();
         }
-        await expect(finSubmenuScreen).toBeVisible({ timeout: 10000 });
 
-        // 3. Subtela: PENDENTES
-        const pendentesCard = page.locator('.standard-module-card:has-text("PENDENTES")').first();
-        await expect(pendentesCard).toBeVisible({ timeout: 5000 });
-        await pendentesCard.click();
-
-        const pendentesScreen = page.locator('.financeiro-list-workspace, header.financeiro-list-header strong:has-text("PENDENTES")').first();
-        await expect(pendentesScreen).toBeVisible({ timeout: 15000 });
-
-        await voltarButton.click();
-        if (!(await finSubmenuScreen.isVisible({ timeout: 2000 }).catch(() => false))) {
-          const mainFinCard = moduleInfo.triggerLocator(page);
-          await expect(mainFinCard).toBeVisible({ timeout: 5000 });
-          await mainFinCard.click();
-        }
-        await expect(finSubmenuScreen).toBeVisible({ timeout: 10000 });
-
-        // 4. Subtela: A COMBINAR
-        const aCombinarCard = page.locator('.standard-module-card:has-text("A COMBINAR")').first();
-        await expect(aCombinarCard).toBeVisible({ timeout: 5000 });
-        await aCombinarCard.click();
-
-        const aCombinarScreen = page.locator('.financeiro-list-workspace, strong:has-text("NOTAS COM PAGAMENTO A COMBINAR")').first();
-        await expect(aCombinarScreen).toBeVisible({ timeout: 15000 });
-
-        await voltarButton.click();
-        if (!(await finSubmenuScreen.isVisible({ timeout: 2000 }).catch(() => false))) {
-          const mainFinCard = moduleInfo.triggerLocator(page);
-          await expect(mainFinCard).toBeVisible({ timeout: 5000 });
-          await mainFinCard.click();
-        }
-        await expect(finSubmenuScreen).toBeVisible({ timeout: 10000 });
-
-        // 5. Subtela: PAGAS NO MES
-        const pagasMesCard = page.locator('.standard-module-card:has-text("PAGAS NO MES")').first();
-        await expect(pagasMesCard).toBeVisible({ timeout: 5000 });
-        await pagasMesCard.click();
-
-        const pagasMesScreen = page.locator('.financeiro-list-workspace').first();
-        await expect(pagasMesScreen).toBeVisible({ timeout: 15000 });
-
-        await voltarButton.click();
         if (!(await finSubmenuScreen.isVisible({ timeout: 2000 }).catch(() => false))) {
           const mainFinCard = moduleInfo.triggerLocator(page);
           await expect(mainFinCard).toBeVisible({ timeout: 5000 });
@@ -312,4 +275,50 @@ test.describe('Navegação parametrizada dos módulos seguros da tela inicial', 
       expect(errors).toEqual([]);
     });
   }
+
+  test('Módulo Conferência abre diretamente sem tela intermediária e responde a atalhos de teclado', async ({ page }) => {
+    test.setTimeout(60000);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const loginOrMenu = page.locator('.user-card, .menu-screen, .menu-grid').first();
+    await loginOrMenu.waitFor({ state: 'visible', timeout: 25000 });
+
+    const usuarioTesteCard = page.locator('.user-card').filter({ hasText: 'Usuário Teste' }).first();
+    if (await usuarioTesteCard.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await usuarioTesteCard.click();
+    }
+
+    const menuElement = page.locator('.menu-screen, .menu-grid').first();
+    await expect(menuElement).toBeVisible({ timeout: 20000 });
+
+    // Clicar em CONFERÊNCIA (PACK)
+    const packBtn = page.getByRole('button', { name: 'CONFERÊNCIA (PACK)', exact: true });
+    await packBtn.click();
+
+    // Confirmar que não há tela com 'Conferências em andamento / Carregando dados...' como página inteira
+    const quickLoadingText = page.locator('div:has-text("Conferências em andamento")').filter({ hasText: 'Carregando dados...' });
+    await expect(quickLoadingText).toHaveCount(0);
+
+    // Confirmar que a tela operacional de Conferência abriu diretamente
+    const packScreen = page.locator('.pack-screen, .module-top-bar[data-ds-module="pack"]').first();
+    await expect(packScreen).toBeVisible({ timeout: 15000 });
+
+    // Testar atalho F2 (focar busca/bipagem se disponível)
+    await page.keyboard.press('F2');
+
+    // Testar atalho ESC para retornar ao menu principal
+    await page.keyboard.press('Escape');
+    await expect(menuElement).toBeVisible({ timeout: 10000 });
+
+    // Reentrar e testar Alt+ArrowLeft
+    await packBtn.click();
+    await expect(packScreen).toBeVisible({ timeout: 15000 });
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(menuElement).toBeVisible({ timeout: 10000 });
+
+    expect(errors).toEqual([]);
+  });
 });
+

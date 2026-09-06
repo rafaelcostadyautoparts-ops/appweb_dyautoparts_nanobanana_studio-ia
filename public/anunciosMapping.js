@@ -374,11 +374,16 @@
         if (!container) return;
 
         container.innerHTML = `
-            <div class="dashboard-screen fade-in internal module-screen an-screen">
+            <div class="dashboard-screen fade-in internal module-screen an-screen app-page-shell">
                 ${typeof getTopBarHTML === 'function' ? getTopBarHTML(currentUser, 'renderMenu()') : ''}
-                ${typeof getModuleSidebarHTML === 'function' ? getModuleSidebarHTML('anuncios', 'ANÚNCIOS MERCADO LIVRE') : ''}
+                ${typeof getModuleSidebarHTML === 'function' ? getModuleSidebarHTML('anuncios', 'ANÚNCIOS') : ''}
 
-                <main class="container an-shell">
+                <main class="container an-shell app-page-container">
+                    <div class="app-breadcrumb">
+                        <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+                        <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+                        <span class="app-breadcrumb-current">Anúncios</span>
+                    </div>
                     <!-- Resumo e Filtros de Topo -->
                     <section class="an-summary" aria-label="Indicadores de mapeamento">
                         <button type="button" class="tab-todos ${AnunciosState.filter === 'todos' ? 'active' : ''}" onclick="anSetFilter('todos')">
