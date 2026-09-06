@@ -3080,7 +3080,7 @@ function getStandardModuleCardsHTML(items = []) {
  return `
  <div class="standard-module-card-grid">
  ${items.map(item => `
- <button type="button" class="standard-module-card ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
+ <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)} ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
  <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
  <span class="standard-module-card-copy">
  <strong>${item.label}</strong>
@@ -4117,14 +4117,16 @@ const menu3DIcons = {
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  pedidos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0EA5E9"/><path d="M21 19h22v28H21z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 17h10v5H27z" fill="#0EA5E9" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m26 31 3 3 6-7M26 41h12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  pick: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#2563EB"/><path d="M18 23 30 17l12 6-12 6-12-6Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 23v14l12 6 7-3.5M30 29v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="43" cy="41" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><path d="m39 41 2.7 2.7 5-5.4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
- pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
- movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
+ pack: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><rect x="18" y="22" width="28" height="24" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><path d="M26 36 L31 42 L40 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+ movimentacoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#7C3AED"/><path d="M20 32 H44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M36 24 L44 32 L36 40" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M28 40 L20 32 L28 24" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/></svg>',
  inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F97316"/><path d="M16 22h32M16 41h32M20 22v24M44 22v24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><rect x="22" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><rect x="33" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M25 30h3M36 30h3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
- dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
+ dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
  configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
  nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 15h17l7 7v27H20V15Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M37 15v8h7M25 29h14M25 35h8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M36 38v8m0 0-4-4m4 4 4-4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
- compras: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M20 22 L22 18 H42 L44 22 V40 H20 Z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/><path d="M26 22 V18 M38 22 V18" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M26 31 L31 36 L38 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
- financeiro: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><circle cx="32" cy="32" r="14" stroke="#fff" stroke-width="2.5" fill="none"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">$</text></svg>',
+ compras: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EA580C"/><path d="M20 22 L22 18 H42 L44 22 V40 H20 Z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/><path d="M26 22 V18 M38 22 V18" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M26 31 L31 36 L38 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+ financeiro: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M18 19 h28 v26 H18 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 29 C27 25 37 25 37 31 C37 37 27 37 27 41 C27 45 37 45 37 41" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/><line x1="32" y1="22" x2="32" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
+ contas_a_pagar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 18 H38 L44 24 V44 H20 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M38 18 V24 H44" stroke="#fff" stroke-width="2.5" stroke-linejoin="round" fill="none"/><path d="M26 30 H36 M26 36 H32" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="38" cy="38" r="6" fill="#8B5CF6" stroke="#fff" stroke-width="2"/><path d="M38 35 V38 L40 40" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+ pagamentos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><path d="M18 24 C18 21.8 19.8 20 22 20 H42 C44.2 20 46 21.8 46 24 V40 C46 42.2 44.2 44 42 44 H22 C19.8 44 18 42.2 18 40 Z" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M18 28 H46" stroke="#fff" stroke-width="2.5"/><circle cx="38" cy="36" r="3.5" fill="#fff"/><path d="M24 35 L27 38 L32 32" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  financeiro_avencer: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 18 H42 C44 18 46 20 46 22 V46 H18 V22 C18 20 20 18 22 18 Z" fill="#fff" opacity="0.95"/><path d="M24 28 H40 M24 34 H36" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/><path d="M34 40 L38 44 L46 36" stroke="#F59E0B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  financeiro_vencidas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 16 L50 48 H14 Z" fill="#fff" opacity="0.95"/><path d="M32 27 V36" stroke="#EF4444" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="42" r="2.6" fill="#EF4444"/></svg>',
  financeiro_pendentes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M20 20 H44 V46 H20 Z" fill="#fff" opacity="0.95"/><path d="M26 28 H38 M26 34 H38 M26 40 H34" stroke="#3B82F6" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -10295,13 +10297,18 @@ function renderInventarioSubMenu() {
  ];
 
  app.innerHTML = `
- <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('inventario')}
+ <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen app-page-shell">
+  ${getTopBarHTML(currentUser, 'renderMenu()')}
+  ${getModuleSidebarHTML('inventario')}
 
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
+  <main class="container app-page-container">
+   <div class="app-breadcrumb">
+    <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+    <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+    <span class="app-breadcrumb-current">Inventário</span>
+   </div>
+   ${getStandardModuleCardsHTML(subItems)}
+  </main>
  </div>
  `;
 }
@@ -15974,14 +15981,14 @@ async function renderFinanceiroSubMenu() {
     {
       id: 'fin_contas_a_pagar',
       label: 'CONTAS A PAGAR',
-      icon: 'financeiro',
+      icon: 'contas_a_pagar',
       onclick: "renderContasAPagar('todas')",
       description: 'Consulte vencimentos, pendencias e programe pagamentos.'
     },
     {
       id: 'fin_pagamentos',
       label: 'PAGAMENTOS',
-      icon: 'financeiro_pagas_mes',
+      icon: 'pagamentos',
       onclick: "renderPagamentos('mes')",
       description: 'Consulte pagamentos realizados e comprovantes.'
     }
@@ -17413,19 +17420,24 @@ async function renderPickMenu(selectedMode = null) {
 
  document.body.classList.remove('menu-active');
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen pick-channel-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('pick')}
- <main class="container">
- <div class="standard-module-card-grid operational-card-grid">
- ${channelCards.map(item => `
- <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(item.color)}" ${item.key === 'ml_coleta' ? 'aria-haspopup="dialog"' : ''} onclick="${item.key === 'ml_coleta' ? `openMercadoLivrePickModal(${quotePackInlineArg(effectiveMode)})` : `startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})`}">
- <span class="standard-module-card-icon">${item.svgIcon}</span>
- <span class="standard-module-card-copy"><strong>${escapeKitAttribute(item.key === 'ml_coleta' ? 'Mercado Livre' : item.label)}</strong></span>
- </button>
- `).join('')}
- </div>
- </main>
+ <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen pick-channel-menu-screen app-page-shell">
+  ${getTopBarHTML(currentUser, 'renderMenu()')}
+  ${getModuleSidebarHTML('pick')}
+  <main class="container app-page-container">
+   <div class="app-breadcrumb">
+    <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+    <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+    <span class="app-breadcrumb-current">Separação</span>
+   </div>
+   <div class="standard-module-card-grid operational-card-grid">
+    ${channelCards.map(item => `
+    <button type="button" class="standard-module-card operational-menu-card pick-channel-card channel-${escapeKitAttribute(item.color)}" ${item.key === 'ml_coleta' ? 'aria-haspopup="dialog"' : ''} onclick="${item.key === 'ml_coleta' ? `openMercadoLivrePickModal(${quotePackInlineArg(effectiveMode)})` : `startPickingSession(${quotePackInlineArg(item.id)}, ${quotePackInlineArg(item.actualLabel)}, ${quotePackInlineArg(item.color)}, ${quotePackInlineArg(effectiveMode)})`}">
+     <span class="standard-module-card-icon">${item.svgIcon}</span>
+     <span class="standard-module-card-copy"><strong>${escapeKitAttribute(item.key === 'ml_coleta' ? 'Mercado Livre' : item.label)}</strong></span>
+    </button>
+    `).join('')}
+   </div>
+  </main>
  </div>`;
 }
 
@@ -29450,10 +29462,15 @@ function renderConfigSubMenu() {
  const localPinEnabled = config.local_pin_enabled === true && !!localStorage.getItem(DY_LOCAL_PIN_HASH_KEY);
 
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in config-screen module-screen">
+ <div class="dashboard-screen internal fade-in config-screen module-screen app-page-shell">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('configuracoes')}
- <main class="container config-settings-shell">
+ <main class="container config-settings-shell app-page-container">
+ <div class="app-breadcrumb">
+  <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+  <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+  <span class="app-breadcrumb-current">Configurações</span>
+ </div>
  <header class="config-settings-header">
  <span class="material-symbols-rounded">settings</span>
  <div>
@@ -35920,7 +35937,8 @@ renderRomaneioScreen = async function(selectedType='', selectedId='') {
 /* Fluxo final de Romaneios: escolha exclusiva entre Flex e Correios. */
 renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  const currentUser = localStorage.getItem('currentUser');
- renderQuickDestinationLoading(selectedId === '__realizados__' ? 'Histórico de romaneios' : 'Romaneios', 'romaneio-screen');
+ currentScreen = 'internal';
+ document.body.classList.remove('menu-active');
  const requestedChannel = parseRomaneioSelectedChannels(selectedType)
  .find(channel => ['FLEX', 'CORREIOS'].includes(normalizeOperationalLabel(channel))) || '';
  const selectedChannels = requestedChannel ? [requestedChannel] : [];
