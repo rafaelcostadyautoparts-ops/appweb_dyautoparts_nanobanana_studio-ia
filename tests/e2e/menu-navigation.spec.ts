@@ -81,12 +81,12 @@ test.describe('Navegação parametrizada dos módulos seguros da tela inicial', 
       await page.goto('/', { waitUntil: 'domcontentloaded' });
 
       // Aguardar o carregamento inicial da aplicação sair do splash screen
-      const loginOrMenu = page.locator('.user-card, .menu-screen, .menu-grid').first();
+      const loginOrMenu = page.locator('.user-card, .login-user-card, .menu-screen, .menu-grid').first();
       await loginOrMenu.waitFor({ state: 'visible', timeout: 25000 });
 
       // Se a tela de login for exibida, realiza o clique no usuário nativo da UI
-      const usuarioTesteCard = page.locator('.user-card').filter({ hasText: 'Usuário Teste' }).first();
-      const admCard = page.locator('.user-card').filter({ hasText: 'ADM' }).first();
+      const usuarioTesteCard = page.locator('.user-card, .login-user-card').filter({ hasText: 'Usuário Teste' }).first();
+      const admCard = page.locator('.user-card, .login-user-card').filter({ hasText: 'ADM' }).first();
 
       if (await usuarioTesteCard.isVisible({ timeout: 3000 }).catch(() => false)) {
         await usuarioTesteCard.click();
@@ -282,10 +282,10 @@ test.describe('Navegação parametrizada dos módulos seguros da tela inicial', 
     page.on('pageerror', error => errors.push(error.message));
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    const loginOrMenu = page.locator('.user-card, .menu-screen, .menu-grid').first();
+    const loginOrMenu = page.locator('.user-card, .login-user-card, .menu-screen, .menu-grid').first();
     await loginOrMenu.waitFor({ state: 'visible', timeout: 25000 });
 
-    const usuarioTesteCard = page.locator('.user-card').filter({ hasText: 'Usuário Teste' }).first();
+    const usuarioTesteCard = page.locator('.user-card, .login-user-card').filter({ hasText: 'Usuário Teste' }).first();
     if (await usuarioTesteCard.isVisible({ timeout: 3000 }).catch(() => false)) {
       await usuarioTesteCard.click();
     }
