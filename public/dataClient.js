@@ -12,6 +12,7 @@ const DataClient = (function () {
     // Cache por mdulo
     const cache = {};
     const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+    const produtoMestreCache = new Map();
 
     // Mapeamento de mdulos para abas do Google Sheets
     const MODULE_TABLES = {
@@ -4007,6 +4008,10 @@ const DataClient = (function () {
             return null;
         }
 
+        if (produtoMestreCache.has(cleanId)) {
+            return produtoMestreCache.get(cleanId);
+        }
+
         let client = window.supabaseMestreClient;
         if (!client && window.supabaseMestreClientReady) {
             try {
@@ -4033,7 +4038,11 @@ const DataClient = (function () {
                 throw new Error('Erro ao consultar Produto Mestre: ' + error.message);
             }
 
-            return data || null;
+            const result = data || null;
+            if (result) {
+                produtoMestreCache.set(cleanId, result);
+            }
+            return result;
         } catch (err) {
             console.error('[Produto Mestre] Falha na consulta do produto mestre:', err?.message || err);
             throw err;

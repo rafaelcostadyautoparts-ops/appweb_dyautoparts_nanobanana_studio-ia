@@ -15217,9 +15217,9 @@ async function renderProductDetails(p) {
  <span>Voltar</span>
  </button>
 
- <div style="display: flex; align-items: center; gap: 8px;">
+ <div style="display: flex; align-items: center; gap: 8px;" id="crm-hero-top-actions-left">
  ${pdfUrl ? `
- <a href="${pdfUrl}" target="_blank" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700;" title="Abrir manual PDF">
+ <a href="${pdfUrl}" target="_blank" id="crm-hero-pdf-link" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700;" title="Abrir manual PDF">
  <span class="material-symbols-rounded" style="font-size: 18px;">picture_as_pdf</span>
  <span>MANUAL</span>
  </a>
@@ -15238,7 +15238,7 @@ async function renderProductDetails(p) {
  </div>
 
  <div class="product-hero-body" style="display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 20px; align-items: center;">
- <div class="product-detail-img" style="width: 110px; height: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+ <div class="product-detail-img" id="crm-hero-image-container" style="width: 110px; height: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
  ${(p.url_imagem || p.image_path) ? `
  <img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="width: 100%; height: 100%; object-fit: contain; cursor: zoom-in;">
  ` : `
@@ -15250,26 +15250,22 @@ async function renderProductDetails(p) {
  </div>
 
  <div class="product-hero-info" style="min-width: 0;">
- <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+ <div id="crm-hero-badges" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
  <span class="product-id-badge" style="display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; padding: 4px 12px; border-radius: 8px; font-weight: 900; font-size: 0.85rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(37,99,235,0.3);">
  <small style="font-size: 0.65rem; opacity: 0.85; font-weight: 700;">ID</small>
  <strong>${idInterno}</strong>
  </span>
 
- ${isFilledValue(p.marca) ? `
- <span style="display: inline-flex; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;">
- ${p.marca}
+ <span id="crm-hero-brand" style="display: ${isFilledValue(p.marca) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;">
+ ${p.marca || ''}
  </span>
- ` : ''}
 
- ${isFilledValue(p.categoria) ? `
- <span style="display: inline-flex; background: rgba(255,255,255,0.04); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">
- ${p.categoria}
+ <span id="crm-hero-category" style="display: ${isFilledValue(p.categoria) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.04); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">
+ ${p.categoria || ''}
  </span>
- ` : ''}
  </div>
 
- <h1 style="font-size: 1.2rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin: 0 0 12px 0;">${p.descricao_completa || p.descricao_base || 'Produto sem descrição'}</h1>
+ <h1 id="crm-hero-title" style="font-size: 1.2rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin: 0 0 12px 0;">${p.descricao_completa || p.descricao_base || 'Produto sem descrição'}</h1>
 
  <div class="product-hero-highlights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
  <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
@@ -15336,7 +15332,7 @@ async function renderProductDetails(p) {
  <span class="material-symbols-rounded" style="color: #2563eb; font-size: 20px;">qr_code_2</span>
  Identificação & Código
  </div>
- <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+ <div id="crm-identificacao-items" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
  <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
  <span style="color: var(--muted);">ID Interno:</span>
  <strong style="color: #60a5fa; font-weight: 800;">${idInterno}</strong>
@@ -15359,24 +15355,21 @@ async function renderProductDetails(p) {
  <strong style="color: #ffffff;">${p.sku_fornecedor}</strong>
  </div>
  ` : ''}
- ${isFilledValue(p.marca) ? `
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <div id="crm-ident-row-marca" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.marca) ? '' : 'display: none;'}">
  <span style="color: var(--muted);">Marca:</span>
- <strong style="color: #ffffff;">${p.marca}</strong>
+ <strong id="crm-ident-row-marca-val" style="color: #ffffff;">${p.marca || ''}</strong>
  </div>
- ` : ''}
- ${isFilledValue(p.categoria) ? `
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <div id="crm-ident-row-cat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.categoria) ? '' : 'display: none;'}">
  <span style="color: var(--muted);">Categoria:</span>
- <strong style="color: #ffffff;">${p.categoria}</strong>
+ <strong id="crm-ident-row-cat-val" style="color: #ffffff;">${p.categoria || ''}</strong>
  </div>
- ` : ''}
  ${isFilledValue(p.subcategoria) ? `
- <div style="display: flex; justify-content: space-between;">
+ <div id="crm-ident-row-subcat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
  <span style="color: var(--muted);">Subcategoria:</span>
- <strong style="color: #ffffff;">${p.subcategoria}</strong>
+ <strong id="crm-ident-row-subcat-val" style="color: #ffffff;">${p.subcategoria}</strong>
  </div>
  ` : ''}
+ <div id="crm-ident-mestre-extras"></div>
  </div>
  </div>
 
@@ -15462,11 +15455,10 @@ async function renderProductDetails(p) {
 
  ${packagingHTML}
 
- ${attrs.length > 0 ? `
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
+ <div id="crm-attrs-section" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px; ${attrs.length > 0 ? '' : 'display: none;'}">
  <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
  <span class="material-symbols-rounded" style="color: #60a5fa; font-size: 20px;">description</span>
- Ficha Técnica de Atributos
+ Ficha Técnica & Especificações
  </div>
  <div class="product-attrs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
  ${attrs.map(attr => `
@@ -15477,7 +15469,8 @@ async function renderProductDetails(p) {
  `).join('')}
  </div>
  </div>
- ` : ''}
+
+ <div id="crm-keywords-section" style="display: none;"></div>
 
  ${p.observacoes ? `
  <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
@@ -15557,7 +15550,200 @@ async function renderProductDetails(p) {
  </main>
  </div>
  `;
+ const renderSeq = ++currentProductDetailRenderSequence;
  window.scrollTo(0, 0);
+ enrichProductDetailsWithMestre(p, renderSeq);
+}
+
+let currentProductDetailRenderSequence = 0;
+
+async function enrichProductDetailsWithMestre(p, renderSeq) {
+    const idInterno = (p.id_interno || p.col_A || '').toString().trim();
+    if (!idInterno) return;
+
+    try {
+        const mestre = await DataClient.fetchProdutoMestreByIdInterno(idInterno);
+
+        // Protecao contra race condition
+        if (currentProductDetailRenderSequence !== renderSeq) {
+            return;
+        }
+        if (window.currentCRMProductIdInterno !== idInterno) {
+            return;
+        }
+        if (!mestre) {
+            return;
+        }
+
+        // 1. TITULO DO PRODUTO NO HERO
+        const heroTitleEl = document.getElementById('crm-hero-title');
+        const nomeMestre = mestre.nome_completo || mestre.nome_produto;
+        if (heroTitleEl && isFilledValue(nomeMestre)) {
+            heroTitleEl.textContent = nomeMestre;
+        }
+
+        // 2. BADGE DISCRETO CADASTRO MESTRE NO HERO
+        const badgesContainer = document.getElementById('crm-hero-badges');
+        if (badgesContainer && !document.getElementById('crm-hero-mestre-badge')) {
+            const mestreBadge = document.createElement('span');
+            mestreBadge.id = 'crm-hero-mestre-badge';
+            mestreBadge.className = 'product-mestre-badge';
+            mestreBadge.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;';
+            mestreBadge.innerHTML = '<span class="material-symbols-rounded" style="font-size: 14px;">verified</span> MESTRE';
+            badgesContainer.appendChild(mestreBadge);
+        }
+
+        // 3. MARCA E CATEGORIA NO HERO
+        const heroBrandEl = document.getElementById('crm-hero-brand');
+        if (heroBrandEl && isFilledValue(mestre.marca)) {
+            heroBrandEl.textContent = mestre.marca;
+            heroBrandEl.style.display = 'inline-flex';
+        }
+        const heroCatEl = document.getElementById('crm-hero-category');
+        if (heroCatEl && isFilledValue(mestre.categoria)) {
+            heroCatEl.textContent = mestre.categoria;
+            heroCatEl.style.display = 'inline-flex';
+        }
+
+        // 4. IMAGEM DO HERO (FALLBACK SE OPERACIONAL NAO TIVER)
+        const heroImgContainer = document.getElementById('crm-hero-image-container');
+        const hasOpImage = isFilledValue(p.url_imagem) || isFilledValue(p.image_path);
+        if (heroImgContainer && !hasOpImage && isFilledValue(mestre.url_imagem)) {
+            const formattedMestreImg = formatImageUrl(mestre.url_imagem);
+            heroImgContainer.innerHTML = `<img src="${formattedMestreImg}" onclick="openImageModal('${formattedMestreImg}')" style="width: 100%; height: 100%; object-fit: contain; cursor: zoom-in;">`;
+        }
+
+        // 5. MANUAL PDF NO HERO (FALLBACK SE OPERACIONAL NAO TIVER)
+        const heroTopActions = document.getElementById('crm-hero-top-actions-left');
+        const hasOpPdf = isValidUrl(p.url_pdf_manual || p.url_pdf);
+        if (heroTopActions && !hasOpPdf && isValidUrl(mestre.url_pdf_manual) && !document.getElementById('crm-hero-pdf-link')) {
+            const pdfBtn = document.createElement('a');
+            pdfBtn.id = 'crm-hero-pdf-link';
+            pdfBtn.href = mestre.url_pdf_manual;
+            pdfBtn.target = '_blank';
+            pdfBtn.className = 'btn-action';
+            pdfBtn.style.cssText = 'padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700;';
+            pdfBtn.title = 'Abrir manual PDF do Produto Mestre';
+            pdfBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 18px;">picture_as_pdf</span><span>MANUAL</span>';
+            heroTopActions.insertBefore(pdfBtn, heroTopActions.firstChild);
+        }
+
+        // 6. VISAO GERAL - IDENTIFICACAO E CADASTRO
+        const identContainer = document.getElementById('crm-identificacao-items');
+        if (identContainer) {
+            const rowMarca = document.getElementById('crm-ident-row-marca-val');
+            if (rowMarca && isFilledValue(mestre.marca)) {
+                rowMarca.textContent = mestre.marca;
+                const rowMarcaWrap = document.getElementById('crm-ident-row-marca');
+                if (rowMarcaWrap) rowMarcaWrap.style.display = 'flex';
+            }
+            const rowCat = document.getElementById('crm-ident-row-cat-val');
+            if (rowCat && isFilledValue(mestre.categoria)) {
+                rowCat.textContent = mestre.categoria;
+                const rowCatWrap = document.getElementById('crm-ident-row-cat');
+                if (rowCatWrap) rowCatWrap.style.display = 'flex';
+            }
+            const rowSubcat = document.getElementById('crm-ident-row-subcat-val');
+            if (rowSubcat && isFilledValue(mestre.subcategoria)) {
+                rowSubcat.textContent = mestre.subcategoria;
+            } else if (!rowSubcat && isFilledValue(mestre.subcategoria)) {
+                const subcatDiv = document.createElement('div');
+                subcatDiv.id = 'crm-ident-row-subcat';
+                subcatDiv.style.cssText = 'display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;';
+                subcatDiv.innerHTML = `<span style="color: var(--muted);">Subcategoria:</span><strong id="crm-ident-row-subcat-val" style="color: #ffffff;">${mestre.subcategoria}</strong>`;
+                identContainer.appendChild(subcatDiv);
+            }
+
+            const extraContainer = document.getElementById('crm-ident-mestre-extras');
+            if (extraContainer) {
+                let extraHtml = '';
+                if (isFilledValue(mestre.tipo_item)) {
+                    extraHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;"><span style="color: var(--muted);">Tipo do Item:</span><strong style="color: #60a5fa;">${mestre.tipo_item}</strong></div>`;
+                }
+                if (isFilledValue(mestre.cor)) {
+                    extraHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;"><span style="color: var(--muted);">Cor / Variação:</span><strong style="color: #ffffff;">${mestre.cor}</strong></div>`;
+                }
+                if (isFilledValue(mestre.unidade_estoque) && mestre.unidade_estoque !== 'UN') {
+                    extraHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;"><span style="color: var(--muted);">Unidade Estoque:</span><strong style="color: #ffffff;">${mestre.unidade_estoque}</strong></div>`;
+                }
+                if (isFilledValue(mestre.unidade_venda) && mestre.unidade_venda !== 'UN') {
+                    extraHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;"><span style="color: var(--muted);">Unidade Venda:</span><strong style="color: #ffffff;">${mestre.unidade_venda}</strong></div>`;
+                }
+                if (mestre.quantidade_conteudo && Number(mestre.quantidade_conteudo) > 1) {
+                    extraHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;"><span style="color: var(--muted);">Quantidade Conteúdo:</span><strong style="color: #34d399;">${mestre.quantidade_conteudo} ${mestre.unidade_estoque || 'UN'}</strong></div>`;
+                }
+                extraContainer.innerHTML = extraHtml;
+            }
+        }
+
+        // 7. ESPECIFICACOES / ATRIBUTOS UNIFICADOS
+        const attrsSection = document.getElementById('crm-attrs-section');
+        const mestreAttrsRaw = safeParseAtributos(mestre.atributos);
+        if (attrsSection && Array.isArray(mestreAttrsRaw) && mestreAttrsRaw.length > 0) {
+            const opAttrs = safeParseAtributos(p.atributos);
+            const attrMap = new Map();
+
+            opAttrs.forEach(a => {
+                const key = String(a.nome || '').toLowerCase().trim();
+                if (key && isFilledValue(a.valor)) {
+                    attrMap.set(key, { nome: a.nome, valor: a.valor, ordem: a.ordem || 99 });
+                }
+            });
+
+            mestreAttrsRaw.forEach(a => {
+                const key = String(a.nome || '').toLowerCase().trim();
+                if (key && isFilledValue(a.valor)) {
+                    attrMap.set(key, { nome: a.nome, valor: a.valor, ordem: a.ordem ?? 50, mestre: true });
+                }
+            });
+
+            const mergedAttrs = Array.from(attrMap.values()).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+            if (mergedAttrs.length > 0) {
+                attrsSection.style.display = 'block';
+                const grid = attrsSection.querySelector('.product-attrs-grid');
+                if (grid) {
+                    grid.innerHTML = mergedAttrs.map(attr => `
+                        <div class="product-attr-chip" style="background: rgba(0,0,0,0.2); border: 1px solid ${attr.mestre ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)'}; padding: 8px 12px; border-radius: 10px;">
+                            <span class="product-attr-name" style="font-size: 0.72rem; color: ${attr.mestre ? '#34d399' : 'var(--muted)'}; display: block; text-transform: uppercase;">${formatAttributeName(attr.nome)}</span>
+                            <span class="product-attr-value" style="font-size: 0.85rem; color: #ffffff; font-weight: 700;">${formatAttributeValue(attr.valor)}</span>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+
+        // 8. PALAVRAS-CHAVE DO PRODUTO MESTRE
+        const keywordsSection = document.getElementById('crm-keywords-section');
+        if (keywordsSection && isFilledValue(mestre.palavras_chave)) {
+            const rawKw = String(mestre.palavras_chave || '');
+            const kwList = rawKw.split(';').map(k => k.trim()).filter(Boolean);
+            if (kwList.length > 0) {
+                keywordsSection.style.display = 'block';
+                keywordsSection.innerHTML = `
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
+                        <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                            <span class="material-symbols-rounded" style="color: #a78bfa; font-size: 20px;">label</span>
+                            Palavras-chave de Catálogo
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            ${kwList.map(kw => `<span style="background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.25); color: #c4b5fd; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">${kw}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 9. AUDITORIA ESTOQUE MINIMO / IDEAL
+        if (mestre.estoque_minimo != null && Number(mestre.estoque_minimo) !== Number(p.estoque_minimo)) {
+            console.log(`[AUDITORIA D2] Divergencia estoque_minimo no SKU ${idInterno}: Operacional=${p.estoque_minimo}, Mestre=${mestre.estoque_minimo}`);
+        }
+        if (mestre.estoque_ideal != null && Number(mestre.estoque_ideal) !== Number(p.estoque_ideal)) {
+            console.log(`[AUDITORIA D2] Divergencia estoque_ideal no SKU ${idInterno}: Operacional=${p.estoque_ideal}, Mestre=${mestre.estoque_ideal}`);
+        }
+
+    } catch (err) {
+        console.warn('[Produto Mestre] Falha silenciosa ao enriquecer CRM:', err?.message || err);
+    }
 }
 
 window.toggleCusto = function() {
