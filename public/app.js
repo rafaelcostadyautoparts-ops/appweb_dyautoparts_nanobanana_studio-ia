@@ -33377,6 +33377,20 @@ function renderNFXmlPreview() {
 
  </div>
 
+  <section class="nfxml-light-card" style="margin-top:14px; margin-bottom:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:14px;">
+    <div class="nfxml-kicker" style="color:#60a5fa; font-size:0.72rem; font-weight:900; letter-spacing:0.05em; margin-bottom:6px;">MODO DA ENTRADA - PEDIDO DE COMPRA</div>
+    <div style="display:flex; gap:24px; margin-top:8px; align-items:center; flex-wrap:wrap;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:800; color:#fff; font-size:0.85rem;">
+        <input type="radio" name="tipo_vinculo_pedido" value="SEM_PEDIDO" ${state.tipo_vinculo_pedido !== 'COM_PEDIDO' ? 'checked' : ''} onchange="setNFXmlTipoVinculoPedido(this.value)">
+        <span>SEM PEDIDO DE COMPRA</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:800; color:#fff; font-size:0.85rem;">
+        <input type="radio" name="tipo_vinculo_pedido" value="COM_PEDIDO" ${state.tipo_vinculo_pedido === 'COM_PEDIDO' ? 'checked' : ''} onchange="setNFXmlTipoVinculoPedido(this.value)">
+        <span>COM PEDIDO DE COMPRA</span>
+      </label>
+    </div>
+  </section>
+
  ${renderNFXmlFinanceBlock()}
 
  <section class="nfxml-card nfxml-products-card">
@@ -33461,6 +33475,7 @@ function renderNFXmlItemCard(item, allowLink = true) {
  <span class="nf-cost-real">Custo real unao: <strong>${custo.custoRealUnitario}</strong></span>
  </div>
  ${conversionHtml}
+ ${renderNFXmlPedidoVinculoBlock(item)}
  </div>
  ${allowLink ? `
  <div class="nfxml-item-link-panel">
@@ -33642,6 +33657,39 @@ async function salvarEntradaNFXml() {
  itensError = retry.error;
  }
  if (itensError) throw itensError;
+
+ // Salvar alocações de pedidos de compra (Bloco 3)
+ try {
+ const { data: dbItens } = await client
+ .from('entradas_nf_itens')
+ .select('id, numero_item')
+ .eq('entrada_nf_id', entrada.id);
+
+ const itemMap = new Map((dbItens || []).map(i => [i.numero_item, i.id]));
+ const alocacoesPayload = [];
+ (state.itens || []).forEach(item => {
+ if (Array.isArray(item.alocacoes)) {
+ item.alocacoes.forEach(aloc => {
+ const dbItemId = itemMap.get(item.numero_item) || item.id || null;
+ alocacoesPayload.push({
+ entrada_nf_item_id: dbItemId,
+ numero_item: item.numero_item,
+ pedido_compra_id: aloc.pedido_compra_id,
+ pedido_compra_item_id: aloc.pedido_compra_item_id,
+ quantidade_alocada: aloc.quantidade_alocada
+ });
+ });
+ }
+ });
+
+ await DataClient.salvarAlocacoesPedidoEntradaNF(
+ entrada.id,
+ state.tipo_vinculo_pedido || 'SEM_PEDIDO',
+ alocacoesPayload
+ );
+ } catch (alocErr) {
+ console.error('[ENTRADA_NF_PEDIDO_ALOCACOES] Erro ao salvar alocacoes de pedidos:', alocErr);
+ }
 
  if (tipoConfig.afetaFinanceiro && state.financeiro?.modoPagamento !== 'a_combinar') {
  const contasPayload = buildNFXmlFinancePayload(entrada.id);

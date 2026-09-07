@@ -2357,6 +2357,93 @@ const DataClient = (function () {
     }
 
     /**
+     * ENTRADA NF - Buscar pedidos de compra candidatos para vinculo de item fiscal
+     */
+    async function fetchPedidosCompraCandidatos(fornecedorId, idInterno) {
+        const client = window.supabaseClient;
+        if (!client || !idInterno) return [];
+
+        try {
+            let query = client
+                .from('pedidos_compra_itens')
+                .select('*')
+                .eq('id_interno', String(idInterno).trim())
+                .neq('status', 'CANCELADO')
+                .order('data_pedido', { ascending: true });
+
+            if (fornecedorId) {
+                query = query.eq('fornecedor_id', fornecedorId);
+            }
+
+            const { data, error } = await query;
+            if (error) {
+                console.warn('[DATA_CLIENT] Erro ao buscar pedidos candidatos:', error);
+                return [];
+            }
+            return (data || []).map(p => ({
+                ...p,
+                saldo_pendente: Math.max(parseDecimal(p.quantidade_pedida) - parseDecimal(p.quantidade_recebida), 0)
+            })).filter(p => p.saldo_pendente > 0);
+        } catch (e) {
+            console.error('[DATA_CLIENT] Erro ao buscar pedidos de compra candidatos:', e);
+            return [];
+        }
+    }
+
+    /**
+     * ENTRADA NF - Salvar alocacoes de Pedidos de Compra para uma Entrada NF (Transacional via RPC)
+     */
+    async function salvarAlocacoesPedidoEntradaNF(entradaId, tipoVinculo = 'SEM_PEDIDO', alocacoes = []) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return { ok: false, error: 'ID da Entrada NF nao informado.' };
+
+        try {
+            const payload = (alocacoes || []).map(a => ({
+                entrada_nf_item_id: a.entrada_nf_item_id,
+                pedido_compra_item_id: a.pedido_compra_item_id,
+                quantidade_alocada_xml: parseDecimal(a.quantidade_alocada_xml)
+            }));
+
+            const { data, error } = await client.rpc('salvar_entrada_nf_pedido_alocacoes', {
+                p_entrada_nf_id: entradaId,
+                p_tipo_vinculo: tipoVinculo,
+                p_alocacoes: payload
+            });
+
+            if (error) throw error;
+            return { ok: true, count: data?.alocacoes_salvas || 0, data };
+        } catch (error) {
+            console.error('[DATA_CLIENT] Erro ao salvar alocacoes de pedidos da Entrada NF via RPC:', error);
+            return { ok: false, error };
+        }
+    }
+
+    /**
+     * ENTRADA NF - Buscar alocacoes de Pedidos de Compra existentes para uma Entrada NF
+     */
+    async function fetchAlocacoesPedidoEntradaNF(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        try {
+            const { data, error } = await client
+                .from('entrada_nf_item_pedido_alocacoes')
+                .select('*, pedidos_compra_itens(*)')
+                .eq('entrada_nf_id', entradaId);
+
+            if (error) {
+                console.warn('[DATA_CLIENT] Erro ao buscar alocacoes da Entrada NF:', error);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            console.error('[DATA_CLIENT] Erro ao buscar alocacoes da Entrada NF:', e);
+            return [];
+        }
+    }
+
+
+    /**
      * GARANTIA - Salvar envio
      */
     async function saveGarantiaSupabase(garantiaData) {
@@ -2967,6 +3054,9 @@ const DataClient = (function () {
         listEntradaNFRecebimentos,
         saveEntradaNFRecebimentos,
         finalizarRecebimentoEntradaNF,
+        fetchPedidosCompraCandidatos,
+        salvarAlocacoesPedidoEntradaNF,
+        fetchAlocacoesPedidoEntradaNF,
 
         // GARANTIA
         saveGarantiaSupabase,

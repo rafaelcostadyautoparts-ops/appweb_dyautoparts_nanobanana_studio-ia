@@ -745,6 +745,21 @@
                 const values = Object.fromEntries(new FormData(form).entries());
                 const order = this.orders.find(candidate => String(candidate.id) === String(values.order_id));
                 if (!order) throw new Error('Pedido nao encontrado.');
+
+                // Verifica se este pedido possui alocacoes ativas em Entrada NF
+                const client = window.supabaseClient;
+                if (client) {
+                    const { data: alocs } = await client
+                        .from('entrada_nf_item_pedido_alocacoes')
+                        .select('id')
+                        .eq('pedido_compra_item_id', order.id)
+                        .limit(1);
+
+                    if (alocs && alocs.length > 0) {
+                        global.showToast?.('Este pedido está alocado a uma Entrada NF. O recebimento é gerenciado transacionalmente na finalização da NF.', 'warning');
+                    }
+                }
+
                 await this.repository.receiveOrder(order, {
                     date: values.data_recebimento,
                     quantity: asNumber(values.quantidade_recebida)
