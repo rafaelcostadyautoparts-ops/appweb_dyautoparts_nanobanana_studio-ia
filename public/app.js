@@ -33804,66 +33804,6 @@ async function finalizarEntradaNFXml() {
 }
 
 async function finalizarEntradaNFXmlConfirmado() {
- const client = window.supabaseClient;
- const state = entradaNfXmlState;
- if (!client || !state?.savedEntradaId) return;
-
- try {
- console.log('[ENTRADA_NF_XML] finalizando entrada', state.savedEntradaId);
- recalcularCustosReaisEntradaNFXML({ log: true });
- for (const item of state.itens) {
- const quantidadeEntrada = getEntradaNFStockQuantity(item);
- await applyStockChangeWithRequiredMovement({
- idInterno: item.id_interno,
- local: 'TERREO',
- operacao: 'soma',
- quantidade: quantidadeEntrada,
- contextLabel: `movimento da NF ${state.numero_nf}`,
- movPayload: {
- tipo: 'ENTRADA',
- id_interno: item.id_interno,
- local_origem: null,
- local_destino: 'TERREO',
- quantidade: quantidadeEntrada,
- usuario: localStorage.getItem('currentUser'),
- origem: 'APP_COMPRAS',
- observacao: `NF ${state.numero_nf} - ${state.chave_acesso} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
- }
- });
- }
-
- const lotesResult = await criarLotesEntradaNF({
- id: state.savedEntradaId,
- numero_nf: state.numero_nf,
- data_emissao: state.data_emissao,
- local_estoque: 'terreo'
- }, state.itens.map(item => ({ ...item, local_entrada: 'terreo' })));
- if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
- console.warn('[ESTOQUE_LOTES] lotes da Entrada NF nao foram criados integralmente', lotesResult);
- }
-
- const { error } = await client
- .from('entradas_nf')
- .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
- .eq('id', state.savedEntradaId);
- if (error) throw error;
-
- await atualizarCustoProdutosEntradaNF(state.itens);
-
- state.status = 'finalizada';
- state.estoque_finalizado = true;
- appData.historicoEntradasNFLoaded = false;
- DataClient.invalidateCache?.('nf');
- showToast('Entrada finalizada e estoque atualizado.', 'success');
- await showAppAlert({
- title: 'Recebimento finalizado',
- message: 'Revise os dados e tente novamente.',
- buttonLabel: 'OK',
- icon: 'check_circle'
- });
- renderNFXmlUploadScreen();
- } catch (error) {
- console.error('[ENTRADA_NF_XML] erro ao finalizar entrada', error);
  await showAppAlert({
  title: 'Erro ao finalizar entrada',
  message: error.message || String(error),
@@ -33959,65 +33899,44 @@ async function finalizarEntradaNFAberta(entradaId) {
  if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
  const pendentes = itens.filter(item => !item.id_interno || getEntradaNFStockQuantity(item) <= 0);
  if (pendentes.length) throw new Error('Existem itens sem vAnculo interno ou quantidade valida.');
- console.log('[ENTRADA_NF_CUSTO_REAL]', {
- numero_nf: entrada.numero_nf,
- valor_oficial_nf: entrada.valor_total,
- origem: 'nf_aberta',
- itens: itens.map(item => ({
- numero_item: item.numero_item,
- id_interno: item.id_interno,
- quantidade: item.quantidade,
- custo_unitario_nf: item.custo_nota_unitario ?? item.valor_unitario,
- custo_real_unitario: item.custo_real_unitario,
- custo_real_total: item.custo_real_total
- }))
- });
 
+ const recebimentosPayload = [];
  for (const item of itens) {
- const quantidadeEntrada = getEntradaNFStockQuantity(item);
- await applyStockChangeWithRequiredMovement({
- idInterno: item.id_interno,
- local: 'TERREO',
- operacao: 'soma',
- quantidade: quantidadeEntrada,
- contextLabel: `movimento da NF ${entrada.numero_nf || entrada.id}`,
- movPayload: {
- tipo: 'ENTRADA',
- id_interno: item.id_interno,
- local_origem: null,
- local_destino: 'TERREO',
- quantidade: quantidadeEntrada,
- usuario: localStorage.getItem('currentUser'),
- origem: 'APP_COMPRAS',
- observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
- }
+ const itemRecs = item.recebimentos && item.recebimentos.length > 0
+ ? item.recebimentos
+ : getNFXmlItemRecebimentos(item);
+
+ for (const r of itemRecs) {
+ recebimentosPayload.push({
+ entrada_nf_item_id: item.id || r.entrada_nf_item_id,
+ produto_id: r.produto_id || item.produto_id || null,
+ id_interno: r.id_interno || item.id_interno || '',
+ quantidade_fisica: parseDecimal(r.quantidade_fisica),
+ quantidade_aceita: parseDecimal(r.quantidade_aceita),
+ quantidade_recusada: parseDecimal(r.quantidade_recusada),
+ local_destino: r.local_destino || 'TERREO',
+ situacao: r.situacao || 'CONFERE',
+ motivo_divergencia: r.motivo_divergencia || null,
+ observacoes: r.observacoes || null
  });
  }
-
- const lotesResult = await criarLotesEntradaNF({
- id: entrada.id,
- numero_nf: entrada.numero_nf,
- data_emissao: entrada.data_emissao,
- data_recebimento: entrada.data_recebimento,
- local_estoque: 'terreo'
- }, itens.map(item => ({ ...item, local_entrada: 'terreo' })));
- if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
- console.warn('[ESTOQUE_LOTES] lotes da Entrada NF aberta nao foram criados integralmente', lotesResult);
  }
 
- const { error } = await client
- .from('entradas_nf')
- .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
- .eq('id', entrada.id);
- if (error) throw error;
+ const saveRecRes = await DataClient.saveEntradaNFRecebimentos(entrada.id, recebimentosPayload);
+ if (!saveRecRes.ok) {
+ throw new Error('Falha ao salvar a conferencia fisica antes da finalizacao: ' + (saveRecRes.error?.message || saveRecRes.error || 'Erro desconhecido.'));
+ }
 
- await atualizarCustoProdutosEntradaNF(itens);
+ const currentUser = localStorage.getItem('currentUser') || 'N/A';
+ const finResult = await DataClient.finalizarRecebimentoEntradaNF(entrada.id, currentUser);
+ console.log('[ENTRADA_NF_XML] resultado finalizacao NF aberta via RPC:', finResult);
 
  appData.historicoEntradasNFLoaded = false;
  DataClient.invalidateCache?.('nf');
  DataClient.invalidateCache?.('produtos');
  DataClient.invalidateCache?.('movimentos');
- showToast('Entrada finalizada e estoque atualizado.', 'success');
+ DataClient.invalidateCache?.('estoque_lotes');
+ showToast('Entrada finalizada com sucesso! Estoque, movimentos e lotes atualizados.', 'success');
  await showAppAlert({
  title: 'Recebimento finalizado',
  message: 'Revise os dados e tente novamente.',

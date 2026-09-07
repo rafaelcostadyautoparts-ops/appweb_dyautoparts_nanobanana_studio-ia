@@ -2332,6 +2332,31 @@ const DataClient = (function () {
     }
 
     /**
+     * ENTRADA NF - Finalização Transacional do Recebimento (RPC)
+     */
+    async function finalizarRecebimentoEntradaNF(entradaId, usuario = '') {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) throw new Error('ID da Entrada NF não informado.');
+
+        const user = usuario || localStorage.getItem('currentUser') || 'SISTEMA';
+        const { data, error } = await client.rpc('finalizar_recebimento_entrada_nf', {
+            p_entrada_nf_id: entradaId,
+            p_usuario: user
+        });
+
+        if (error) {
+            console.error('[ENTRADA_NF] Erro na RPC finalizar_recebimento_entrada_nf:', error);
+            throw new Error(error.message || 'Erro ao finalizar recebimento da entrada no banco de dados.');
+        }
+
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        invalidateCache('estoque_lotes');
+        invalidateCache('nf');
+        return data;
+    }
+
+    /**
      * GARANTIA - Salvar envio
      */
     async function saveGarantiaSupabase(garantiaData) {
@@ -2941,6 +2966,7 @@ const DataClient = (function () {
         getEntradaNFById,
         listEntradaNFRecebimentos,
         saveEntradaNFRecebimentos,
+        finalizarRecebimentoEntradaNF,
 
         // GARANTIA
         saveGarantiaSupabase,
