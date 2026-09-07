@@ -15083,473 +15083,475 @@ async function renderProductDetails(p) {
   window.currentCRMProductIdInterno = idInterno;
   window.currentCRMProductObj = p;
 
- let productStockEntries = [];
- try {
- productStockEntries = await DataClient.fetchEstoqueProdutoSupabase(idInterno);
- } catch (e) {
- console.log('[DETALHE] Estoque via cache local');
- }
+  let productStockEntries = [];
+  try {
+    productStockEntries = await DataClient.fetchEstoqueProdutoSupabase(idInterno);
+  } catch (e) {
+    console.log('[DETALHE] Estoque via cache local');
+  }
 
- if (productStockEntries.length === 0) {
- productStockEntries = (appData.estoque || []).filter(s => {
- const hasId = s.id_interno && s.id_interno.toString() === idInterno;
- if (!hasId) return false;
- const total = parseFloat((s.saldo_total || s.saldo || '0').toString().replace(',', '.'));
- return total > 0;
- });
- }
+  if (productStockEntries.length === 0) {
+    productStockEntries = (appData.estoque || []).filter(s => {
+      const hasId = s.id_interno && s.id_interno.toString() === idInterno;
+      if (!hasId) return false;
+      const total = parseFloat((s.saldo_total || s.saldo || '0').toString().replace(',', '.'));
+      return total > 0;
+    });
+  }
 
- const terreoQty = getStockQtyByLocal(productStockEntries, 'TERREO');
- const primeiroAndarQty = getStockQtyByLocal(productStockEntries, 'PRIMEIRO_ANDAR');
- const mostruarioQty = getStockQtyByLocal(productStockEntries, 'MOSTRUARIO');
- const defeitoQty = getStockQtyByLocal(productStockEntries, 'DEFEITO');
- const garantiaQty = getStockQtyByLocal(productStockEntries, 'EM_GARANTIA');
- const transporteQty = getStockQtyByLocal(productStockEntries, 'EM_TRANSPORTE');
- const fullMlQty = getStockQtyByLocal(productStockEntries, 'FULL_ML');
- const disponivel = calcularEstoqueOperacional(productStockEntries);
- const naoVendavel = calcularEstoqueNaoVendavel(productStockEntries);
- const totalStock = disponivel + naoVendavel;
- const resumoLotesProduto = await calcularResumoLotesProduto(idInterno);
- const camadasEstoqueHTML = renderCamadasEstoqueHTML(resumoLotesProduto.lotes, resumoLotesProduto);
+  const terreoQty = getStockQtyByLocal(productStockEntries, 'TERREO');
+  const primeiroAndarQty = getStockQtyByLocal(productStockEntries, 'PRIMEIRO_ANDAR');
+  const mostruarioQty = getStockQtyByLocal(productStockEntries, 'MOSTRUARIO');
+  const defeitoQty = getStockQtyByLocal(productStockEntries, 'DEFEITO');
+  const garantiaQty = getStockQtyByLocal(productStockEntries, 'EM_GARANTIA');
+  const transporteQty = getStockQtyByLocal(productStockEntries, 'EM_TRANSPORTE');
+  const fullMlQty = getStockQtyByLocal(productStockEntries, 'FULL_ML');
+  const disponivel = calcularEstoqueOperacional(productStockEntries);
+  const naoVendavel = calcularEstoqueNaoVendavel(productStockEntries);
+  const totalStock = disponivel + naoVendavel;
+  const resumoLotesProduto = await calcularResumoLotesProduto(idInterno);
+  const camadasEstoqueHTML = renderCamadasEstoqueHTML(resumoLotesProduto.lotes, resumoLotesProduto);
 
- const equivalentes = getEquivalentProductsForDetail(p);
+  const equivalentes = getEquivalentProductsForDetail(p);
 
- const attrs = safeParseAtributos(p.atributos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
- const rawPdf = p.url_pdf_manual || p.url_pdf;
- const pdfUrl = isValidUrl(rawPdf) ? rawPdf : null;
+  const attrs = safeParseAtributos(p.atributos).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const rawPdf = p.url_pdf_manual || p.url_pdf;
+  const pdfUrl = isValidUrl(rawPdf) ? rawPdf : null;
 
- const isInactiveProduct = (p.status === 'inativo' || p.status === 'nao' || p.status === '0');
- const statusColor = isInactiveProduct ? '#ef4444' : '#22c55e';
- const statusText = isInactiveProduct ? 'Inativo' : 'Ativo';
- const estoqueMinimo = parseStockQty(p.estoque_minimo);
- const stockStatusClass = getStockStatusClass(disponivel, estoqueMinimo);
- const unitLabel = p.unidade || 'UN';
- const packaging = getPackagingBreakdown(p, disponivel);
+  const isInactiveProduct = (p.status === 'inativo' || p.status === 'nao' || p.status === '0');
+  const statusColor = isInactiveProduct ? '#ef4444' : '#22c55e';
+  const statusText = isInactiveProduct ? 'Inativo' : 'Ativo';
+  const estoqueMinimo = parseStockQty(p.estoque_minimo);
+  const stockStatusClass = getStockStatusClass(disponivel, estoqueMinimo);
+  const unitLabel = p.unidade || 'UN';
+  const packaging = getPackagingBreakdown(p, disponivel);
 
- const packagingHTML = `
- <div class="product-packaging-card" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-bottom: 20px;">
- <div class="product-packaging-header" style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.88rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase;">
- <span class="material-symbols-rounded" style="color: #3b82f6;">inventory</span>
- <span>Embalagem / Volume</span>
- </div>
- <div class="product-packaging-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
- <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
- <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Tipo de Embalagem</span>
- <strong style="font-size: 0.95rem; color: #ffffff;">${packaging.qtdPorCaixa > 1 ? `Caixa com ${formatStockNumber(packaging.qtdPorCaixa)} UN` : 'Venda avulsa / 1 UN'}</strong>
- </div>
- ${packaging.qtdPorCaixa > 1 ? `
- <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
- <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Composição do Volume</span>
- <strong style="font-size: 0.95rem; color: #3b82f6;">${formatStockNumber(packaging.caixasFechadas)} CX fechadas + ${formatStockNumber(packaging.unidadesAvulsas)} UN avulsas</strong>
- </div>
- ` : ''}
- </div>
- </div>
- `;
+  const packagingHTML = `
+  <div class="product-packaging-card" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-bottom: 20px;">
+    <div class="product-packaging-header" style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.88rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase;">
+      <span class="material-symbols-rounded" style="color: #3b82f6;">inventory</span>
+      <span>Embalagem / Volume</span>
+    </div>
+    <div class="product-packaging-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+      <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
+        <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Tipo de Embalagem</span>
+        <strong style="font-size: 0.95rem; color: #ffffff;">${packaging.qtdPorCaixa > 1 ? `Caixa com ${formatStockNumber(packaging.qtdPorCaixa)} UN` : 'Venda avulsa / 1 UN'}</strong>
+      </div>
+      ${packaging.qtdPorCaixa > 1 ? `
+      <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
+        <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Composição do Volume</span>
+        <strong style="font-size: 0.95rem; color: #3b82f6;">${formatStockNumber(packaging.caixasFechadas)} CX fechadas + ${formatStockNumber(packaging.unidadesAvulsas)} UN avulsas</strong>
+      </div>
+      ` : ''}
+    </div>
+  </div>
+  `;
 
- const stockIconByGroup = {
- operational: 'inventory_2',
- secondary: 'storefront',
- blocked: 'error',
- warranty: 'shield',
- transit: 'local_shipping',
- external: 'warehouse'
- };
+  const stockIconByGroup = {
+    operational: 'inventory_2',
+    secondary: 'storefront',
+    blocked: 'error',
+    warranty: 'shield',
+    transit: 'local_shipping',
+    external: 'warehouse'
+  };
 
- const renderStockLocationCard = (key, label, qty, group) => `
- <div class="product-stock-location ${qty === 0 ? 'is-empty' : ''}" data-stock-group="${group}" data-stock-key="${key}" style="${qty === 0 ? 'opacity: 0.4;' : ''} background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 14px; border-radius: 14px; display: flex; align-items: center; justify-content: space-between;">
- <div style="display: flex; align-items: center; gap: 10px;">
- <span class="material-symbols-rounded" style="color: ${group === 'operational' ? '#22c55e' : group === 'external' ? '#f59e0b' : '#94a3b8'}; font-size: 22px;">${stockIconByGroup[group] || 'inventory_2'}</span>
- <span style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">${label}</span>
- </div>
- <div style="text-align: right;">
- <span style="font-size: 1.15rem; font-weight: 900; color: ${qty > 0 ? '#ffffff' : '#94a3b8'};">${qty}</span>
- <span style="font-size: 0.72rem; color: var(--muted); font-weight: 700; margin-left: 2px;">${unitLabel}</span>
- </div>
- </div>
- `;
+  const renderStockLocationCard = (key, label, qty, group) => `
+  <div class="product-stock-location ${qty === 0 ? 'is-empty' : ''}" data-stock-group="${group}" data-stock-key="${key}" style="${qty === 0 ? 'opacity: 0.4;' : ''} background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 14px; border-radius: 14px; display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="material-symbols-rounded" style="color: ${group === 'operational' ? '#22c55e' : group === 'external' ? '#f59e0b' : '#94a3b8'}; font-size: 22px;">${stockIconByGroup[group] || 'inventory_2'}</span>
+      <span style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">${label}</span>
+    </div>
+    <div style="text-align: right;">
+      <span style="font-size: 1.15rem; font-weight: 900; color: ${qty > 0 ? '#ffffff' : '#94a3b8'};">${qty}</span>
+      <span style="font-size: 0.72rem; color: var(--muted); font-weight: 700; margin-left: 2px;">${unitLabel}</span>
+    </div>
+  </div>
+  `;
 
- const stockLocationsHTML = `
- <div class="product-stock-locations" style="margin-bottom: 24px;">
- <div class="product-stock-title" style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase;">Estoque por Localização</div>
- 
- <div class="product-stock-group" style="margin-bottom: 16px;">
- <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #22c55e; text-transform: uppercase; margin-bottom: 8px;">Locais Vendáveis</div>
- <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
- ${renderStockLocationCard('TERREO', 'TÉRREO', terreoQty, 'operational')}
- ${renderStockLocationCard('PRIMEIRO_ANDAR', '1º ANDAR', primeiroAndarQty, 'operational')}
- </div>
- </div>
+  const stockLocationsHTML = `
+  <div class="product-stock-locations" style="margin-bottom: 24px;">
+    <div class="product-stock-title" style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase;">Estoque por Localização</div>
+    
+    <div class="product-stock-group" style="margin-bottom: 16px;">
+      <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #22c55e; text-transform: uppercase; margin-bottom: 8px;">Locais Vendáveis</div>
+      <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+        ${renderStockLocationCard('TERREO', 'TÉRREO', terreoQty, 'operational')}
+        ${renderStockLocationCard('PRIMEIRO_ANDAR', '1º ANDAR', primeiroAndarQty, 'operational')}
+      </div>
+    </div>
 
- <div class="product-stock-group" style="margin-bottom: 16px;">
- <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Locais Secundários / Restritos</div>
- <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mostruário: venda opcional. Defeito/Garantia: bloqueado.</p>
- <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
- ${renderStockLocationCard('MOSTRUARIO', 'MOSTRUÁRIO', mostruarioQty, 'secondary')}
- ${renderStockLocationCard('DEFEITO', 'Defeito', defeitoQty, 'blocked')}
- ${renderStockLocationCard('EM_GARANTIA', 'Em Garantia', garantiaQty, 'warranty')}
- ${renderStockLocationCard('EM_TRANSPORTE', 'Em Transporte', transporteQty, 'transit')}
- </div>
- </div>
+    <div class="product-stock-group" style="margin-bottom: 16px;">
+      <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Locais Secundários / Restritos</div>
+      <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mostruário: venda opcional. Defeito/Garantia: bloqueado.</p>
+      <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+        ${renderStockLocationCard('MOSTRUARIO', 'MOSTRUÁRIO', mostruarioQty, 'secondary')}
+        ${renderStockLocationCard('DEFEITO', 'Defeito', defeitoQty, 'blocked')}
+        ${renderStockLocationCard('EM_GARANTIA', 'Em Garantia', garantiaQty, 'warranty')}
+        ${renderStockLocationCard('EM_TRANSPORTE', 'Em Transporte', transporteQty, 'transit')}
+      </div>
+    </div>
 
- <div class="product-stock-group">
- <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #f59e0b; text-transform: uppercase; margin-bottom: 4px;">Estoque Depósito Externo</div>
- <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mercado Livre Fulfillment (Sem venda direta local).</p>
- <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
- ${renderStockLocationCard('FULL_ML', 'FULL ML', fullMlQty, 'external')}
- </div>
- </div>
- </div>
- `;
+    <div class="product-stock-group">
+      <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #f59e0b; text-transform: uppercase; margin-bottom: 4px;">Estoque Depósito Externo</div>
+      <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mercado Livre Fulfillment (Sem venda direta local).</p>
+      <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+        ${renderStockLocationCard('FULL_ML', 'FULL ML', fullMlQty, 'external')}
+      </div>
+    </div>
+  </div>
+  `;
 
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal no-top-bar product-detail">
- ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderSearchScreen()')}
- 
- <main class="container product-detail-screen" style="max-width: 1100px; margin: 0 auto; padding: 16px;">
- 
- <!-- HERO HEADER CRM -->
- <div class="product-crm-hero-card" style="background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(12px);">
- 
- <div class="product-detail-top-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
- <button type="button" onclick="renderSearchScreen()" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #ffffff; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span>
- <span>Voltar</span>
- </button>
+  const imgUrl = formatImageUrl(p.image_path || p.url_imagem);
+  const titleText = p.descricao_completa || p.descricao_base || 'PRODUTO SEM NOME';
 
- <div style="display: flex; align-items: center; gap: 8px;" id="crm-hero-top-actions-left">
- ${pdfUrl ? `
- <a href="${pdfUrl}" target="_blank" id="crm-hero-pdf-link" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700;" title="Abrir manual PDF">
- <span class="material-symbols-rounded" style="font-size: 18px;">picture_as_pdf</span>
- <span>MANUAL</span>
- </a>
- ` : ''}
+  app.innerHTML = `
+  <div class="dashboard-screen fade-in internal">
+  ${getTopBarHTML(currentUser, 'renderProductsScreen()')}
 
- <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(37,99,235,0.2); border: 1px solid rgba(37,99,235,0.4); border-radius: 10px; color: #60a5fa; display: flex; align-items: center; gap: 6px; font-weight: 700;" title="Editar produto">
- <span class="material-symbols-rounded" style="font-size: 18px;">edit</span>
- <span>EDITAR</span>
- </button>
+  <main class="container product-detail-screen" style="max-width: 1280px; margin: 0 auto; padding: 16px 20px;">
+    
+    <!-- BOTÃO VOLTAR -->
+    <div style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+      <button type="button" onclick="renderProductsScreen()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #ffffff; padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span>
+        <span>Voltar à Busca</span>
+      </button>
+      <div style="font-size: 0.75rem; color: var(--muted); font-weight: 600;">
+        CRM de Produtos
+      </div>
+    </div>
 
- <div class="product-status-chip" style="padding: 6px 12px; border-radius: 10px; background: ${isInactiveProduct ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; border: 1px solid ${isInactiveProduct ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}; display: flex; align-items: center; gap: 6px;">
- <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
- <span style="font-size: 0.75rem; font-weight: 800; color: ${statusColor}; text-transform: uppercase;">${statusText}</span>
- </div>
- </div>
- </div>
+    <!-- HERO CARD REDESENHADO (FASE D3) -->
+    <div class="product-detail-hero" style="background: linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.85) 100%); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 24px; margin-bottom: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);">
+      
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+        
+        <!-- FOTO PRINCIPAL COM DISPLAY MAIOR -->
+        <div id="crm-hero-image-container" style="width: 130px; height: 130px; background: rgba(0,0,0,0.3); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;">
+          ${imgUrl ? `<img src="${imgUrl}" onclick="openImageModal('${imgUrl}')" style="width: 100%; height: 100%; object-fit: contain; cursor: zoom-in;" alt="Foto do Produto">` : `<span class="material-symbols-rounded" style="font-size: 54px; color: var(--muted);">inventory_2</span>`}
+        </div>
 
- <div class="product-hero-body" style="display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 20px; align-items: center;">
- <div class="product-detail-img" id="crm-hero-image-container" style="width: 110px; height: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
- ${(p.url_imagem || p.image_path) ? `
- <img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="width: 100%; height: 100%; object-fit: contain; cursor: zoom-in;">
- ` : `
- <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8;">
- <span class="material-symbols-rounded" style="font-size: 36px; color: #cbd5e1;">inventory_2</span>
- <span style="font-size: 0.65rem; font-weight: 700; margin-top: 4px; color: #94a3b8;">Sem foto</span>
- </div>
- `}
- </div>
+        <!-- INFO PRINCIPAL -->
+        <div style="flex: 1; min-width: 280px;">
+          
+          <!-- ID INTERNO, STATUS E BADGES -->
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px;" id="crm-hero-badges">
+            <span class="product-id-badge" style="font-size: 0.85rem; padding: 4px 10px; border-radius: 8px; background: rgba(37,99,235,0.25); color: #60a5fa; border: 1px solid rgba(37,99,235,0.4); font-weight: 900; letter-spacing: 0.5px;">
+              ID: <strong style="color: #ffffff;">${idInterno}</strong>
+            </span>
+            
+            <span id="crm-hero-status-badge" style="display: inline-flex; align-items: center; gap: 4px; background: ${isInactiveProduct ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; color: ${statusColor}; border: 1px solid ${isInactiveProduct ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: ${statusColor}; display: inline-block;"></span>
+              ${statusText}
+            </span>
 
- <div class="product-hero-info" style="min-width: 0;">
- <div id="crm-hero-badges" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
- <span class="product-id-badge" style="display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; padding: 4px 12px; border-radius: 8px; font-weight: 900; font-size: 0.85rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(37,99,235,0.3);">
- <small style="font-size: 0.65rem; opacity: 0.85; font-weight: 700;">ID</small>
- <strong>${idInterno}</strong>
- </span>
+            <span id="crm-hero-brand" style="display: ${isFilledValue(p.marca) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">
+              ${p.marca || ''}
+            </span>
 
- <span id="crm-hero-brand" style="display: ${isFilledValue(p.marca) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;">
- ${p.marca || ''}
- </span>
+            <span id="crm-hero-category" style="display: ${isFilledValue(p.categoria) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--muted); padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">
+              ${p.categoria || ''}
+            </span>
+          </div>
 
- <span id="crm-hero-category" style="display: ${isFilledValue(p.categoria) ? 'inline-flex' : 'none'}; background: rgba(255,255,255,0.04); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">
- ${p.categoria || ''}
- </span>
- </div>
+          <!-- NOME COMPLETO DO PRODUTO -->
+          <h1 id="crm-hero-title" style="font-size: 1.35rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin: 0 0 14px 0; word-break: break-word;">
+            ${titleText}
+          </h1>
 
- <h1 id="crm-hero-title" style="font-size: 1.2rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin: 0 0 12px 0;">${p.descricao_completa || p.descricao_base || 'Produto sem descrição'}</h1>
+          <!-- INDICADORES RESUMIDOS DE PREÇO E ESTOQUE -->
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+            <div style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); border-radius: 12px; padding: 8px 14px;">
+              <span style="font-size: 0.7rem; color: rgba(255,255,255,0.7); display: block; font-weight: 700; text-transform: uppercase;">Estoque Disponível</span>
+              <span style="font-size: 1.15rem; font-weight: 900; color: #22c55e;">${disponivel} <small style="font-size: 0.75rem; color: rgba(255,255,255,0.7);">${unitLabel}</small></span>
+            </div>
 
- <div class="product-hero-highlights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
- <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
- <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">PREÇO VAREJO</span>
- <strong style="font-size: 1.1rem; color: #22c55e; font-weight: 900;">${formatPrice(p.preco_varejo)}</strong>
- </div>
+            <div style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25); border-radius: 12px; padding: 8px 14px;">
+              <span style="font-size: 0.7rem; color: rgba(255,255,255,0.7); display: block; font-weight: 700; text-transform: uppercase;">Preço Varejo</span>
+              <span style="font-size: 1.15rem; font-weight: 900; color: #60a5fa;">${formatPrice(p.preco_varejo)}</span>
+            </div>
 
- <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
- <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">DISPONÍVEL</span>
- <strong style="font-size: 1.1rem; color: ${disponivel > 0 ? '#22c55e' : '#ef4444'}; font-weight: 900;">${disponivel} <small style="font-size: 0.75rem; font-weight: 700; color: var(--muted);">${unitLabel}</small></strong>
- </div>
+            <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 8px 14px;">
+              <span style="font-size: 0.7rem; color: var(--muted); display: block; font-weight: 700; text-transform: uppercase;">Preço Atacado</span>
+              <span style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${formatPrice(p.preco_atacado)}</span>
+            </div>
+          </div>
 
- ${p.preco_atacado ? `
- <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
- <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">PREÇO ATACADO</span>
- <strong style="font-size: 1.05rem; color: #3b82f6; font-weight: 800;">${formatPrice(p.preco_atacado)}</strong>
- </div>
- ` : ''}
- </div>
- </div>
- </div>
- </div>
+        </div>
 
- <!-- BARRA DE NAVEGAÇÃO DE ABAS (TOUCH-FIRST HORIZONTAL) -->
- <div class="product-detail-tabs-bar" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 20px; scrollbar-width: none;">
- <button type="button" id="tab-btn-visao-geral" class="product-detail-tab-btn active" onclick="switchProductDetailTab('visao-geral')" role="tab" aria-selected="true" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: 1px solid #2563eb; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">
- <span class="material-symbols-rounded" style="font-size: 18px;">visibility</span>
- <span>Visão Geral</span>
- </button>
+        <!-- AÇÕES DO HERO (EDITAR E MANUAL) -->
+        <div id="crm-hero-top-actions-left" style="display: flex; flex-direction: column; gap: 8px; align-self: flex-start;">
+          ${pdfUrl ? `
+            <a id="crm-hero-pdf-link" href="${pdfUrl}" target="_blank" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; font-weight: 700;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">picture_as_pdf</span>
+              <span>MANUAL</span>
+            </a>
+          ` : ''}
+          <button type="button" class="btn-action" onclick="openEditProductModal(window.currentProductDetailForEdit)" style="padding: 8px 16px; font-size: 0.82rem; background: rgba(37,99,235,0.2); border: 1px solid rgba(37,99,235,0.4); border-radius: 10px; color: #60a5fa; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+            <span class="material-symbols-rounded" style="font-size: 18px;">edit</span>
+            <span>EDITAR</span>
+          </button>
+        </div>
 
- <button type="button" id="tab-btn-estoque-fifo" class="product-detail-tab-btn" onclick="switchProductDetailTab('estoque-fifo')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">inventory</span>
- <span>Estoque & FIFO</span>
- </button>
+      </div>
+    </div>
 
- <button type="button" id="tab-btn-movimentacoes" class="product-detail-tab-btn" onclick="switchProductDetailTab('movimentacoes')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">history</span>
- <span>Movimentações</span>
- </button>
+    <!-- ABAS NAVEGAÇÃO REFINADAS -->
+    <div class="product-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 24px; padding-bottom: 2px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;">
+      <button type="button" class="tab-btn active" onclick="switchProductTab('visao-geral', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">grid_view</span>
+        <span>VISÃO GERAL</span>
+      </button>
+      <button type="button" class="tab-btn" onclick="switchProductTab('estoque-fifo', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">inventory_2</span>
+        <span>ESTOQUE & FIFO</span>
+      </button>
+      <button type="button" class="tab-btn" onclick="switchProductTab('movimentacoes', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">history</span>
+        <span>MOVIMENTAÇÕES</span>
+      </button>
+      <button type="button" class="tab-btn" onclick="switchProductTab('entradas-nf', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">receipt_long</span>
+        <span>ENTRADAS NF</span>
+      </button>
+      <button type="button" class="tab-btn" onclick="switchProductTab('fornecedores', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">local_shipping</span>
+        <span>FORNECEDORES</span>
+      </button>
+      <button type="button" class="tab-btn" onclick="switchProductTab('equivalentes', this)" style="padding: 10px 18px; border-radius: 10px 10px 0 0; font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;">
+        <span class="material-symbols-rounded" style="font-size: 18px;">compare_arrows</span>
+        <span>EQUIVALENTES (${equivalentes.length})</span>
+      </button>
+    </div>
 
- <button type="button" id="tab-btn-entradas-nf" class="product-detail-tab-btn" onclick="switchProductDetailTab('entradas-nf')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">receipt_long</span>
- <span>Entradas NF</span>
- </button>
+    <!-- CONTEÚDO DAS ABAS -->
 
- <button type="button" id="tab-btn-fornecedores" class="product-detail-tab-btn" onclick="switchProductDetailTab('fornecedores')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">domain</span>
- <span>Fornecedores</span>
- </button>
+    <!-- ABA 1: VISÃO GERAL (GRID RESPONSIVO DE 2 COLUNAS NO DESKTOP) -->
+    <div id="tab-content-visao-geral" class="product-tab-page active">
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px;">
+        
+        <!-- BLOCO 1: IDENTIFICAÇÃO -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+          <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span class="material-symbols-rounded" style="color: #60a5fa; font-size: 20px;">fingerprint</span>
+            Identificação Cadastral
+          </div>
+          <div id="crm-identificacao-items" style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">ID Interno:</span>
+              <strong style="color: #60a5fa; font-weight: 800;">${idInterno}</strong>
+            </div>
+            ${isFilledValue(p.ean) ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">EAN:</span>
+              <strong style="color: #ffffff;">${p.ean}</strong>
+            </div>
+            ` : ''}
+            ${isFilledValue(p.sku) ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">SKU Interno:</span>
+              <strong style="color: #ffffff;">${p.sku}</strong>
+            </div>
+            ` : ''}
+            ${isFilledValue(p.sku_fornecedor) ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">SKU Fornecedor:</span>
+              <strong style="color: #ffffff;">${p.sku_fornecedor}</strong>
+            </div>
+            ` : ''}
+            <div id="crm-ident-row-marca" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.marca) ? '' : 'display: none;'}">
+              <span style="color: var(--muted);">Marca:</span>
+              <strong id="crm-ident-row-marca-val" style="color: #ffffff;">${p.marca || ''}</strong>
+            </div>
+            <div id="crm-ident-row-cat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.categoria) ? '' : 'display: none;'}">
+              <span style="color: var(--muted);">Categoria:</span>
+              <strong id="crm-ident-row-cat-val" style="color: #ffffff;">${p.categoria || ''}</strong>
+            </div>
+            ${isFilledValue(p.subcategoria) ? `
+            <div id="crm-ident-row-subcat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Subcategoria:</span>
+              <strong id="crm-ident-row-subcat-val" style="color: #ffffff;">${p.subcategoria}</strong>
+            </div>
+            ` : ''}
+            <div id="crm-ident-mestre-extras"></div>
+          </div>
+        </div>
 
- <button type="button" id="tab-btn-equivalentes" class="product-detail-tab-btn" onclick="switchProductDetailTab('equivalentes')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
- <span class="material-symbols-rounded" style="font-size: 18px;">sync_alt</span>
- <span>Equivalentes ${equivalentes.length > 0 ? `(${equivalentes.length})` : ''}</span>
- </button>
- </div>
+        <!-- BLOCO 2: COMERCIAL & PREÇOS -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+          <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span class="material-symbols-rounded" style="color: #22c55e; font-size: 20px;">payments</span>
+            Comercial & Preços
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Preço de Varejo:</span>
+              <strong style="color: #22c55e; font-weight: 800; font-size: 1rem;">${formatPrice(p.preco_varejo)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Preço de Atacado:</span>
+              <strong style="color: #3b82f6; font-weight: 800;">${formatPrice(p.preco_atacado)}</strong>
+            </div>
+            ${p.quantidade_minima_atacado ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Mínimo Atacado:</span>
+              <strong style="color: #ffffff;">${p.quantidade_minima_atacado} ${unitLabel}</strong>
+            </div>
+            ` : ''}
+            
+            <!-- PREÇO DE CUSTO PROTEGIDO -->
+            <div style="margin-top: 6px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 12px;">
+              <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--muted); display: block; font-weight: 700;">PREÇO DE CUSTO</span>
+                  <span style="font-size: 1.1rem; color: #ffffff; font-weight: 700; letter-spacing: 2px;">------</span>
+                </div>
+                <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700; cursor: pointer;">
+                  MOSTRAR
+                </button>
+              </div>
 
- <!-- ABA 1: VISÃO GERAL -->
- <div id="tab-content-visao-geral" class="product-tab-page">
- <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
- 
- <!-- IDENTIFICAÇÃO -->
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="color: #2563eb; font-size: 20px;">qr_code_2</span>
- Identificação & Código
- </div>
- <div id="crm-identificacao-items" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">ID Interno:</span>
- <strong style="color: #60a5fa; font-weight: 800;">${idInterno}</strong>
- </div>
- ${isFilledValue(p.ean) ? `
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">EAN:</span>
- <strong style="color: #ffffff;">${p.ean}</strong>
- </div>
- ` : ''}
- ${isFilledValue(p.sku) ? `
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">SKU Interno:</span>
- <strong style="color: #ffffff;">${p.sku}</strong>
- </div>
- ` : ''}
- ${isFilledValue(p.sku_fornecedor) ? `
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">SKU Fornecedor:</span>
- <strong style="color: #ffffff;">${p.sku_fornecedor}</strong>
- </div>
- ` : ''}
- <div id="crm-ident-row-marca" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.marca) ? '' : 'display: none;'}">
- <span style="color: var(--muted);">Marca:</span>
- <strong id="crm-ident-row-marca-val" style="color: #ffffff;">${p.marca || ''}</strong>
- </div>
- <div id="crm-ident-row-cat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; ${isFilledValue(p.categoria) ? '' : 'display: none;'}">
- <span style="color: var(--muted);">Categoria:</span>
- <strong id="crm-ident-row-cat-val" style="color: #ffffff;">${p.categoria || ''}</strong>
- </div>
- ${isFilledValue(p.subcategoria) ? `
- <div id="crm-ident-row-subcat" style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Subcategoria:</span>
- <strong id="crm-ident-row-subcat-val" style="color: #ffffff;">${p.subcategoria}</strong>
- </div>
- ` : ''}
- <div id="crm-ident-mestre-extras"></div>
- </div>
- </div>
+              <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--muted); display: block; font-weight: 700;">PREÇO DE CUSTO</span>
+                  <span class="product-custo-amount" style="font-size: 1.15rem; color: #fbbf24; font-weight: 900;">${formatPrice(p.preco_custo)}</span>
+                </div>
+                <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700; cursor: pointer;">
+                  OCULTAR
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
- <!-- COMERCIAL & PREÇOS -->
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="color: #22c55e; font-size: 20px;">payments</span>
- Comercial & Preços
- </div>
- <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Preço de Varejo:</span>
- <strong style="color: #22c55e; font-weight: 800; font-size: 0.95rem;">${formatPrice(p.preco_varejo)}</strong>
- </div>
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Preço de Atacado:</span>
- <strong style="color: #3b82f6; font-weight: 800;">${formatPrice(p.preco_atacado)}</strong>
- </div>
- ${p.quantidade_minima_atacado ? `
- <div style="display: flex; justify-content: space-between;">
- <span style="color: var(--muted);">Mínimo Atacado:</span>
- <strong style="color: #ffffff;">${p.quantidade_minima_atacado} ${unitLabel}</strong>
- </div>
- ` : ''}
- </div>
- </div>
+        <!-- BLOCO 3: OPERAÇÃO & REPOSIÇÃO -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+          <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span class="material-symbols-rounded" style="color: #f59e0b; font-size: 20px;">settings_suggest</span>
+            Operação & Reposição
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Estoque Mínimo:</span>
+              <strong style="color: #ffffff;">${p.estoque_minimo || 0} ${unitLabel}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Estoque Ideal:</span>
+              <strong style="color: #ffffff;">${p.estoque_ideal || 0} ${unitLabel}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+              <span style="color: var(--muted);">Modo de Reposição:</span>
+              <strong style="color: #ffffff;">${p.modo_reposicao || 'MANUAL'}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--muted);">Unidade Operacional:</span>
+              <strong style="color: #ffffff;">${unitLabel}</strong>
+            </div>
+          </div>
+        </div>
 
- <!-- OPERACIONAL & REPOSIÇÃO -->
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="color: #f59e0b; font-size: 20px;">settings_suggest</span>
- Operacional & Reposição
- </div>
- <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Estoque Mínimo:</span>
- <strong style="color: #ffffff;">${p.estoque_minimo || 0} ${unitLabel}</strong>
- </div>
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Estoque Ideal:</span>
- <strong style="color: #ffffff;">${p.estoque_ideal || 0} ${unitLabel}</strong>
- </div>
- <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
- <span style="color: var(--muted);">Modo de Reposição:</span>
- <strong style="color: #ffffff;">${p.modo_reposicao || 'MANUAL'}</strong>
- </div>
- <div style="display: flex; justify-content: space-between;">
- <span style="color: var(--muted);">Unidade de Medida:</span>
- <strong style="color: #ffffff;">${unitLabel}</strong>
- </div>
- </div>
- </div>
+        <!-- BLOCO 4: FICHA TÉCNICA / ATRIBUTOS -->
+        <div id="crm-attrs-section" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; ${attrs.length > 0 ? '' : 'display: none;'}">
+          <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span class="material-symbols-rounded" style="color: #60a5fa; font-size: 20px;">description</span>
+            Especificações & Ficha Técnica
+          </div>
+          <div class="product-attrs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+            ${attrs.map(attr => `
+              <div class="product-attr-chip" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 10px;">
+                <span class="product-attr-name" style="font-size: 0.72rem; color: var(--muted); display: block; text-transform: uppercase;">${formatAttributeName(attr.nome)}</span>
+                <span class="product-attr-value" style="font-size: 0.85rem; color: #ffffff; font-weight: 700;">${formatAttributeValue(attr.valor)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
 
- <!-- PREÇO DE CUSTO PROTEGIDO -->
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="color: #ef4444; font-size: 20px;">lock</span>
- Custo Financeiro Cadastral
- </div>
- 
- <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
- <div>
- <span style="font-size: 0.72rem; color: var(--muted); display: block;">PREÇO DE CUSTO</span>
- <span style="font-size: 1.1rem; color: #ffffff; font-weight: 700; letter-spacing: 2px;">------</span>
- </div>
- <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700;">
- MOSTRAR
- </button>
- </div>
+      </div>
 
- <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
- <div>
- <span style="font-size: 0.72rem; color: var(--muted); display: block;">PREÇO DE CUSTO</span>
- <span class="product-custo-amount" style="font-size: 1.15rem; color: #fbbf24; font-weight: 900;">${formatPrice(p.preco_custo)}</span>
- </div>
- <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700;">
- OCULTAR
- </button>
- </div>
- </div>
+      ${packagingHTML}
 
- </div>
+      <div id="crm-keywords-section" style="display: none;"></div>
 
- ${packagingHTML}
+      ${p.observacoes ? `
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
+        <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 8px; text-transform: uppercase;">Observações Internas</div>
+        <div style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.8);">${p.observacoes}</div>
+      </div>
+      ` : ''}
+    </div>
 
- <div id="crm-attrs-section" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px; ${attrs.length > 0 ? '' : 'display: none;'}">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="color: #60a5fa; font-size: 20px;">description</span>
- Ficha Técnica & Especificações
- </div>
- <div class="product-attrs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
- ${attrs.map(attr => `
- <div class="product-attr-chip" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 10px;">
- <span class="product-attr-name" style="font-size: 0.72rem; color: var(--muted); display: block; text-transform: uppercase;">${formatAttributeName(attr.nome)}</span>
- <span class="product-attr-value" style="font-size: 0.85rem; color: #ffffff; font-weight: 700;">${formatAttributeValue(attr.valor)}</span>
- </div>
- `).join('')}
- </div>
- </div>
+    <!-- ABA 2: ESTOQUE & FIFO -->
+    <div id="tab-content-estoque-fifo" class="product-tab-page hidden">
+      ${stockLocationsHTML}
+      ${camadasEstoqueHTML}
+    </div>
 
- <div id="crm-keywords-section" style="display: none;"></div>
+    <!-- ABA 3: MOVIMENTAÇÕES -->
+    <div id="tab-content-movimentacoes" class="product-tab-page hidden">
+      <div id="crm-tab-movimentacoes-container"></div>
+    </div>
 
- ${p.observacoes ? `
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
- <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 8px; text-transform: uppercase;">Observações Internas</div>
- <div style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.8);">${p.observacoes}</div>
- </div>
- ` : ''}
- </div>
+    <!-- ABA 4: ENTRADAS NF -->
+    <div id="tab-content-entradas-nf" class="product-tab-page hidden">
+      <div id="crm-tab-entradas-nf-container"></div>
+    </div>
 
- <!-- ABA 2: ESTOQUE & FIFO -->
- <div id="tab-content-estoque-fifo" class="product-tab-page hidden">
- ${stockLocationsHTML}
- ${camadasEstoqueHTML}
- </div>
+    <!-- ABA 5: FORNECEDORES -->
+    <div id="tab-content-fornecedores" class="product-tab-page hidden">
+      <div id="crm-tab-fornecedores-container"></div>
+    </div>
 
- <!-- ABA 3: MOVIMENTAÇÕES -->
- <div id="tab-content-movimentacoes" class="product-tab-page hidden">
- <div id="crm-tab-movimentacoes-container"></div>
- </div>
+    <!-- ABA 6: EQUIVALENTES -->
+    <div id="tab-content-equivalentes" class="product-tab-page hidden">
+      ${equivalentes.length > 0 ? `
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+        <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
+          <span class="material-symbols-rounded" style="color: #2563eb; font-size: 22px;">compare_arrows</span>
+          SKUs Substitutos do Grupo (${equivalentes.length})
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+        ${equivalentes.map(eq => {
+          const eqStock = getAvailableStockCache(eq.id_interno);
+          const eqMostruario = getProductShowroomStockCache(eq.id_interno);
+          return `
+          <div class="related-product-card" onclick="renderProductDetails(${JSON.stringify(eq).replace(/"/g, '&quot;')})" style="background: rgba(0,0,0,0.25); padding: 14px 16px; border-radius: 14px; display: flex; align-items: center; gap: 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); transition: transform 0.15s ease;">
+            <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.04); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.08);">
+              ${(eq.image_path || eq.url_imagem) ? `<img src="${formatImageUrl(eq.image_path || eq.url_imagem)}" style="width: 100%; height: 100%; object-fit: contain;">` : '<span class="material-symbols-rounded" style="font-size: 24px; color: var(--muted);">inventory_2</span>'}
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px;">
+                <span style="font-size: 0.7rem; color: #3b82f6; font-weight: 800; text-transform: uppercase;">${eq.marca || 'SEM MARCA'}</span>
+                <span class="product-id-badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: rgba(37,99,235,0.2); color: #60a5fa; border: 1px solid rgba(37,99,235,0.4);">
+                  <strong>${eq.id_interno}</strong>
+                </span>
+              </div>
+              <div style="font-size: 0.88rem; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${eq.descricao_completa || eq.descricao_base}</div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.8rem; color: #22c55e; font-weight: 800;">${formatPrice(eq.preco_varejo)} | ${eqStock} UN disp.${eqMostruario > 0 ? ` (${eqMostruario} most.)` : ''}</span>
+                <span style="font-size: 0.72rem; font-weight: 800; color: #60a5fa; display: flex; align-items: center; gap: 2px;">
+                  VER DETALHES <span class="material-symbols-rounded" style="font-size: 16px;">chevron_right</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          `;
+        }).join('')}
+        </div>
+      </div>
+      ` : `
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+        <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">sync_alt</span>
+        <div style="font-weight: 700; font-size: 0.9rem;">Nenhum produto equivalente cadastrado para este SKU</div>
+        <p style="font-size: 0.75rem; margin-top: 4px; color: #64748b;">Produtos equivalentes compartilham o mesmo grupo técnico ou código de equivalência.</p>
+      </div>
+      `}
+    </div>
 
- <!-- ABA 4: ENTRADAS NF -->
- <div id="tab-content-entradas-nf" class="product-tab-page hidden">
- <div id="crm-tab-entradas-nf-container"></div>
- </div>
-
- <!-- ABA 5: FORNECEDORES -->
- <div id="tab-content-fornecedores" class="product-tab-page hidden">
- <div id="crm-tab-fornecedores-container"></div>
- </div>
-
- <!-- ABA 3: EQUIVALENTES -->
- <div id="tab-content-equivalentes" class="product-tab-page hidden">
- ${equivalentes.length > 0 ? `
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
- <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
- <span class="material-symbols-rounded" style="color: #2563eb; font-size: 22px;">compare_arrows</span>
- SKUs Substitutos do Grupo (${equivalentes.length})
- </div>
- <div style="display: flex; flex-direction: column; gap: 12px;">
- ${equivalentes.map(eq => {
- const eqStock = getAvailableStockCache(eq.id_interno);
- const eqMostruario = getProductShowroomStockCache(eq.id_interno);
- return `
- <div class="related-product-card" onclick="renderProductDetails(${JSON.stringify(eq).replace(/"/g, '&quot;')})" style="background: rgba(0,0,0,0.25); padding: 14px 16px; border-radius: 14px; display: flex; align-items: center; gap: 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); transition: transform 0.15s ease;">
- <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.04); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.08);">
- ${(eq.image_path || eq.url_imagem) ? `<img src="${formatImageUrl(eq.image_path || eq.url_imagem)}" style="width: 100%; height: 100%; object-fit: contain;">` : '<span class="material-symbols-rounded" style="font-size: 24px; color: var(--muted);">inventory_2</span>'}
- </div>
- <div style="flex: 1; min-width: 0;">
- <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px;">
- <span style="font-size: 0.7rem; color: #3b82f6; font-weight: 800; text-transform: uppercase;">${eq.marca || 'SEM MARCA'}</span>
- <span class="product-id-badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: rgba(37,99,235,0.2); color: #60a5fa; border: 1px solid rgba(37,99,235,0.4);">
- <strong>${eq.id_interno}</strong>
- </span>
- </div>
- <div style="font-size: 0.88rem; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${eq.descricao_completa || eq.descricao_base}</div>
- <div style="display: flex; justify-content: space-between; align-items: center;">
- <span style="font-size: 0.8rem; color: #22c55e; font-weight: 800;">${formatPrice(eq.preco_varejo)} | ${eqStock} UN disp.${eqMostruario > 0 ? ` (${eqMostruario} most.)` : ''}</span>
- <span style="font-size: 0.72rem; font-weight: 800; color: #60a5fa; display: flex; align-items: center; gap: 2px;">
- VER DETALHES <span class="material-symbols-rounded" style="font-size: 16px;">chevron_right</span>
- </span>
- </div>
- </div>
- </div>
- `;
- }).join('')}
- </div>
- </div>
- ` : `
- <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
- <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">sync_alt</span>
- <div style="font-weight: 700; font-size: 0.9rem;">Nenhum produto equivalente cadastrado para este SKU</div>
- <p style="font-size: 0.75rem; margin-top: 4px; color: #64748b;">Produtos equivalentes compartilham o mesmo grupo técnico ou código de equivalência.</p>
- </div>
- `}
- </div>
-
- </main>
- </div>
- `;
+  </main>
+  </div>
+  `;
  const renderSeq = ++currentProductDetailRenderSequence;
  window.scrollTo(0, 0);
  enrichProductDetailsWithMestre(p, renderSeq);
