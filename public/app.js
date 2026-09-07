@@ -2313,6 +2313,7 @@ async function loadOperationalCatalog() {
  appData.separacao_itens = Array.isArray(snapshot.separacao_itens) ? snapshot.separacao_itens : appData.separacao_itens;
  appData.conferencia = Array.isArray(snapshot.conferencia) ? snapshot.conferencia : appData.conferencia;
  rebuildProductCodeIndex(appData.products);
+ loadSupplierProductCodesIndex().catch(e => console.warn('[PRODUTOS] Erro index fornecedor:', e));
  return true;
  } catch (error) {
  console.warn('[OFFLINE] Falha ao restaurar catalogo operacional:', error);
@@ -13410,6 +13411,39 @@ function productSearchStartsWithTerm(product, query) {
  });
 }
 
+function normalizeProductCode(val) {
+ if (val === null || val === undefined) return '';
+ return String(val)
+ .toLowerCase()
+ .trim()
+ .normalize('NFD')
+ .replace(/[\u0300-\u036f]/g, '')
+ .replace(/[^a-z0-9]+/g, '');
+}
+
+let supplierProductCodesMap = new Map();
+
+async function loadSupplierProductCodesIndex() {
+ try {
+ if (typeof window.DataClient?.fetchFornecedorProdutosSupabase === 'function') {
+ const list = await window.DataClient.fetchFornecedorProdutosSupabase();
+ supplierProductCodesMap.clear();
+ (list || []).forEach(row => {
+ const idInt = String(row.id_interno || '').trim();
+ const codForn = normalizeProductCode(row.codigo_produto_fornecedor);
+ if (idInt && codForn) {
+ if (!supplierProductCodesMap.has(codForn)) {
+ supplierProductCodesMap.set(codForn, new Set());
+ }
+ supplierProductCodesMap.get(codForn).add(idInt);
+ }
+ });
+ }
+ } catch (e) {
+ console.warn('[PRODUTOS] Erro ao indexar fornecedor_produtos:', e);
+ }
+}
+
 function getProductSearchTokens(query) {
  return normalizeProductSearchTerm(query)
  .split(/\s+/)
@@ -13434,32 +13468,63 @@ function getProductSearchPrimaryText(product) {
  ].filter(Boolean).join(' '));
 }
 
-function productMatchesSmartSearch(product, query) {
- const tokens = getProductSearchTokens(query);
+function getProductSearchScore(product, queryRaw) {
+ if (!queryRaw || !queryRaw.trim()) return 10;
+ const normQueryCode = normalizeProductCode(queryRaw);
+ const normQueryText = normalizeProductSearchTerm(queryRaw);
+ const normId = normalizeProductCode(product.id_interno || product.col_A);
+ const normEan = normalizeProductCode(product.ean || product.col_B);
+ const normSkuFornecedor = normalizeProductCode(product.sku_fornecedor);
+ const normSku = normalizeProductCode(product.sku);
+
+ // PRIORIDADE 0: ID_INTERNO EXATO
+ if (normQueryCode && normId === normQueryCode) return 0;
+
+ // PRIORIDADE 1: ID_INTERNO PREFIXO
+ if (normQueryCode.length >= 2 && normId.startsWith(normQueryCode)) return 1;
+
+ // PRIORIDADE 2: ID_INTERNO PARCIAL (SUBSTRING)
+ if (normQueryCode.length >= 2 && normId.includes(normQueryCode)) return 2;
+
+ // PRIORIDADE 3: EAN EXATO
+ if (normQueryCode.length >= 6 && normEan === normQueryCode) return 3;
+
+ // PRIORIDADE 4: SKU / SKU_FORNECEDOR / CÓDIGO DO FORNECEDOR EXATO
+ const isSupplierMatch = normQueryCode.length >= 2 && (supplierProductCodesMap.get(normQueryCode)?.has(String(product.id_interno || product.col_A).trim()) === true);
+ if (normQueryCode.length >= 2 && (normSku === normQueryCode || normSkuFornecedor === normQueryCode || isSupplierMatch)) return 4;
+
+ // PRIORIDADE 5: NOME / DESCRIÇÃO PREFIXO
+ if (normQueryText.length >= 2 && (product._dBaseNorm?.startsWith(normQueryText) || product._dFullNorm?.startsWith(normQueryText))) return 5;
+
+ // PRIORIDADE 6: PALAVRA DO NOME PREFIXO
+ if (normQueryText.length >= 2 && (
+ product._dBaseNorm?.split(/\s+/).some(w => w.startsWith(normQueryText)) ||
+ product._dFullNorm?.split(/\s+/).some(w => w.startsWith(normQueryText))
+ )) return 6;
+
+ // PRIORIDADE 7: NOME CONTENDO TODOS OS TERMOS
+ const tokens = getProductSearchTokens(queryRaw);
+ if (tokens.length > 0 && tokens.every(t => (product._searchIndex || '').includes(t))) return 7;
+
+ // PRIORIDADE 8: MARCA / CATEGORIA / SUBCATEGORIA
+ if (normQueryText.length >= 2 && product._brandCatSubNorm?.includes(normQueryText)) return 8;
+
+ // PRIORIDADE 9: EQUIVALENTE DE UM PRODUTO BUSCADO
+ if (product._isEquivOfSearch) return 9;
+
+ return 10;
+}
+
+function productMatchesSmartSearch(product, queryRaw) {
+ if (!queryRaw || !queryRaw.trim()) return true;
+ const score = getProductSearchScore(product, queryRaw);
+ if (score <= 9) return true;
+
+ const tokens = getProductSearchTokens(queryRaw);
  if (!tokens.length) return true;
  const primaryText = getProductSearchPrimaryText(product);
  const fullIndex = product._searchIndex || primaryText;
- const matchedPrimary = tokens.filter(token => primaryText.includes(token)).length;
- if (matchedPrimary === tokens.length) return true;
- if (tokens.length > 1) return false;
- const token = tokens[0];
- const strongAttributeMatch = (product._brandCatSubNorm || '').includes(token)
- || String(product.ean || '').includes(token)
- || normalizeProductSearchTerm(product.sku_fornecedor || product.sku || '').includes(token)
- || normalizeProductSearchTerm(product.id_interno || product.id || '').includes(token);
- return strongAttributeMatch && fullIndex.includes(token);
-}
-
-function getProductSearchScore(product, query) {
- if (!query || query.length < 2) return 0;
- if (product._dBaseNorm?.startsWith(query)) return 0;
- if (product._dBaseNorm?.split(/\s+/).some(word => word.startsWith(query))) return 1;
- if (product._dFullNorm?.startsWith(query)) return 2;
- if (product._dFullNorm?.split(/\s+/).some(word => word.startsWith(query))) return 3;
- if (product._dBaseNorm?.includes(query)) return 4;
- if (product._dFullNorm?.includes(query)) return 5;
- if (product._brandCatSubNorm?.includes(query)) return 6;
- return 7;
+ return tokens.every(token => fullIndex.includes(token));
 }
 
 function isProductSearchMobileExperience() {
@@ -13487,25 +13552,40 @@ const doPerformSearch = async () => {
  }
 
  const query = normalizeProductSearchTerm(queryRaw);
- const isMobileSearchExperience = isProductSearchMobileExperience();
  console.log('[BUSCA DEBUG] termo original:', queryRaw);
- console.log('[BUSCA DEBUG] termo normalizado:', query);
 
- // Texto validado em UTF-8.
  const productsSource = Array.isArray(appData.products) ? appData.products : [];
- let textResults = query.length >= 2
- ? productsSource.filter(p => productMatchesSmartSearch(p, query))
+ 
+ // Reset _isEquivOfSearch flag before evaluation
+ productsSource.forEach(p => { delete p._isEquivOfSearch; });
+
+ let textResults = queryRaw.length >= 1
+ ? productsSource.filter(p => productMatchesSmartSearch(p, queryRaw))
  : productsSource.slice();
- if (isMobileSearchExperience && query.length >= 2) {
- const prefixResults = productsSource.filter(p => productSearchStartsWithTerm(p, query));
- if (prefixResults.length) textResults = prefixResults;
+
+ // Se a busca encontrou produtos por codigo de alta prioridade (score <= 4), adicionar os equivalentes deles como prioridade 9
+ if (queryRaw.length >= 2) {
+ const codeMatches = textResults.filter(p => getProductSearchScore(p, queryRaw) <= 4);
+ codeMatches.forEach(matchedProd => {
+ const equivs = (typeof getEquivalentProductsForDetail === 'function') ? getEquivalentProductsForDetail(matchedProd) : [];
+ (equivs || []).forEach(eq => {
+ if (!textResults.some(r => String(r.id_interno) === String(eq.id_interno))) {
+ eq._isEquivOfSearch = true;
+ textResults.push(eq);
  }
+ });
+ });
+ }
+
  const results = applyProductStockLocationFilter(textResults);
 
- // Texto validado em UTF-8.
  const finalResults = results
  .sort((a, b) => {
- // Prioridade 1: Ativos primeiro (opcional, mas recomendado para ERP)
+ const scoreA = getProductSearchScore(a, queryRaw);
+ const scoreB = getProductSearchScore(b, queryRaw);
+
+ if (scoreA !== scoreB) return scoreA - scoreB;
+
  const statusA = String(a.status || "ativo").toLowerCase();
  const statusB = String(b.status || "ativo").toLowerCase();
  const isAtivoA = statusA === 'ativo' || statusA === 'sim' || statusA === '1';
@@ -13514,30 +13594,13 @@ const doPerformSearch = async () => {
  if (isAtivoA && !isAtivoB) return -1;
  if (!isAtivoA && isAtivoB) return 1;
 
- if (query.length >= 2) {
- const getDesktopScore = (p) => {
- if (p._dBaseNorm.startsWith(query)) return 0;
- if (p._dFullNorm.startsWith(query)) return 1;
- if (p._dBaseNorm.includes(query)) return 2;
- if (p._dFullNorm.includes(query)) return 3;
- if (p._brandCatSubNorm.includes(query)) return 4;
- return 5;
- };
-
- const scoreA = isMobileSearchExperience ? getProductSearchScore(a, query) : getDesktopScore(a);
- const scoreB = isMobileSearchExperience ? getProductSearchScore(b, query) : getDesktopScore(b);
-
- if (scoreA !== scoreB) return scoreA - scoreB;
- }
-
  if (hasLocationFilter) {
  const qtyA = getStockLocationQty(a.id_interno || a.col_A, activeStockFilter.key);
  const qtyB = getStockLocationQty(b.id_interno || b.col_A, activeStockFilter.key);
  if (qtyA !== qtyB) return qtyB - qtyA;
  }
 
- // Texto validado em UTF-8.
- return a._dBaseNorm.localeCompare(b._dBaseNorm);
+ return (a._dBaseNorm || '').localeCompare(b._dBaseNorm || '');
  });
 
  productSearchAllResults = finalResults;

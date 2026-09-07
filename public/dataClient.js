@@ -2925,6 +2925,24 @@ const DataClient = (function () {
         return fornecedor?.nome_fantasia || fornecedor?.razao_social || fornecedor?.cnpj || vinculo.fornecedor_cnpj;
     }
 
+    async function fetchFornecedorProdutosSupabase() {
+        const client = window.supabaseClient;
+        if (!client) return [];
+        try {
+            const { data, error } = await client
+                .from('fornecedor_produtos')
+                .select('id_interno, codigo_produto_fornecedor, ean_fornecedor, fornecedor_cnpj');
+            if (error) {
+                console.warn('[Supabase] Erro ao carregar fornecedor_produtos:', error.message);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            console.warn('[Supabase] Excecao ao carregar fornecedor_produtos:', e?.message || String(e));
+            return [];
+        }
+    }
+
 
     async function finalizarConferenciaSupabase(payload) {
         const client = window.supabaseClient;
@@ -3039,6 +3057,7 @@ const DataClient = (function () {
         fetchCanaisEnvioSupabase,
         fetchSeparacoesAbertasPorCanalSupabase,
         findProdutoByCodeSupabase,
+        fetchFornecedorProdutosSupabase,
 
         // ETIQUETAS
         salvarEtiquetaLote,
