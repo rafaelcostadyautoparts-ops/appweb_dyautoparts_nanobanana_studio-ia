@@ -2276,6 +2276,62 @@ const DataClient = (function () {
     }
 
     /**
+     * ENTRADA NF - Listar recebimentos físicos por entrada
+     */
+    async function listEntradaNFRecebimentos(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        const { data, error } = await client
+            .from('entrada_nf_item_recebimentos')
+            .select('*')
+            .eq('entrada_nf_id', entradaId)
+            .order('criado_em', { ascending: true });
+
+        if (error) {
+            console.error('[ENTRADA NF DEBUG] erro ao carregar recebimentos físicos:', error);
+            return [];
+        }
+
+        return data || [];
+    }
+
+    /**
+     * ENTRADA NF - Salvar recebimentos físicos (Transacional via RPC)
+     */
+    async function saveEntradaNFRecebimentos(entradaId, recebimentos = []) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return { ok: false, reason: 'missing_client_or_id' };
+
+        try {
+            const payload = (recebimentos || []).map(row => ({
+                entrada_nf_item_id: row.entrada_nf_item_id,
+                produto_id: row.produto_id || null,
+                id_interno: String(row.id_interno || ''),
+                quantidade_fisica: parseDecimal(row.quantidade_fisica) || 0,
+                quantidade_aceita: parseDecimal(row.quantidade_aceita) || 0,
+                quantidade_recusada: parseDecimal(row.quantidade_recusada) || 0,
+                local_destino: String(row.local_destino || 'TERREO').toUpperCase(),
+                situacao: String(row.situacao || 'CONFERE'),
+                motivo_divergencia: row.motivo_divergencia || null,
+                observacoes: row.observacoes || null,
+                criado_por: localStorage.getItem('currentUser') || null
+            }));
+
+            const { data, error } = await client.rpc('salvar_entrada_nf_recebimentos', {
+                p_entrada_nf_id: entradaId,
+                p_recebimentos: payload
+            });
+
+            if (error) throw error;
+            return { ok: true, count: data?.count || payload.length, data };
+        } catch (error) {
+            console.error('[ENTRADA NF DEBUG] erro ao salvar recebimentos físicos via RPC:', error);
+            return { ok: false, error };
+        }
+    }
+
+    /**
      * GARANTIA - Salvar envio
      */
     async function saveGarantiaSupabase(garantiaData) {
@@ -2883,6 +2939,8 @@ const DataClient = (function () {
         // ENTRADA NF
         listEntradasNFAbertas,
         getEntradaNFById,
+        listEntradaNFRecebimentos,
+        saveEntradaNFRecebimentos,
 
         // GARANTIA
         saveGarantiaSupabase,

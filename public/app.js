@@ -31563,6 +31563,199 @@ function getEntradaNFStockTotalCost(item = {}) {
  return parseDecimal(item.custo_total_real_item ?? item.custo_real_total ?? item.valor_total);
 }
 
+function getNFXmlItemRecebimentos(item) {
+ if (Array.isArray(item?.recebimentos) && item.recebimentos.length > 0) {
+ return item.recebimentos;
+ }
+ const idInterno = item.id_interno || '';
+ const qtd = parseDecimal(item.quantidade_estoque_calculada ?? item.quantidade) || 0;
+ return [{
+ id: `rec-${item.numero_item || 1}-1`,
+ entrada_nf_item_id: item.id || null,
+ produto_id: item.produto_id || null,
+ id_interno: idInterno,
+ quantidade_fisica: qtd,
+ quantidade_aceita: qtd,
+ quantidade_recusada: 0,
+ local_destino: 'TERREO',
+ situacao: idInterno ? 'CONFERE' : 'NAO_IDENTIFICADO',
+ motivo_divergencia: null,
+ observacoes: ''
+ }];
+}
+
+function calcularSituacaoRecebimentoItem(item, recebimentos = null) {
+ const qtdXml = parseDecimal(item.quantidade_estoque_calculada ?? item.quantidade) || 0;
+ const idInternoFiscal = String(item.id_interno || '').trim();
+ const recs = (recebimentos && recebimentos.length) ? recebimentos : getNFXmlItemRecebimentos(item);
+
+ const totalFisico = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_fisica) || 0), 0);
+ const totalAceito = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_aceita) || 0), 0);
+ const totalRecusado = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_recusada) || 0), 0);
+
+ const temRecusa = totalRecusado > 0;
+ const temDivergenciaQtd = Math.abs(totalFisico - qtdXml) > 0.0001;
+ const temDivergenciaSku = recs.some(r => String(r.id_interno || '').trim() !== idInternoFiscal);
+ const temMultiSku = recs.length > 1;
+ const temSemIdentificacao = !idInternoFiscal || recs.some(r => !String(r.id_interno || '').trim());
+
+ if (temSemIdentificacao) return 'NAO_IDENTIFICADO';
+ if (totalAceito === 0 && temRecusa) return 'RECUSADO';
+ if (temDivergenciaQtd || temDivergenciaSku || temMultiSku || temRecusa) return 'DIVERGENCIA_XML_FISICO';
+ return 'CONFERE';
+}
+
+function getSituacaoLabel(situacao) {
+ const map = {
+ 'CONFERE': { label: 'Confere', tone: '#22c55e', badgeClass: 'positive' },
+ 'NAO_IDENTIFICADO': { label: 'SKU N&atilde;o Identificado', tone: '#eab308', badgeClass: 'warning' },
+ 'DIVERGENCIA_XML_FISICO': { label: 'Diverg&ecirc;ncia XML &times; F&iacute;sico', tone: '#f97316', badgeClass: 'warning' },
+ 'ITEM_NAO_PEDIDO': { label: 'Item N&atilde;o Pedido', tone: '#a855f7', badgeClass: 'warning' },
+ 'RECEBIMENTO_PARCIAL': { label: 'Recebimento Parcial', tone: '#3b82f6', badgeClass: 'info' },
+ 'RECUSADO': { label: 'Recusado', tone: '#ef4444', badgeClass: 'danger' }
+ };
+ return map[situacao] || { label: situacao || 'Pendente', tone: '#64748b', badgeClass: 'neutral' };
+}
+
+function addNFXmlItemRecebimento(numeroItem) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item) return;
+ if (!item.recebimentos) item.recebimentos = getNFXmlItemRecebimentos(item);
+ const nextIdx = item.recebimentos.length + 1;
+ item.recebimentos.push({
+ id: `rec-${numeroItem}-${nextIdx}-${Date.now()}`,
+ entrada_nf_item_id: item.id || null,
+ produto_id: null,
+ id_interno: '',
+ quantidade_fisica: 0,
+ quantidade_aceita: 0,
+ quantidade_recusada: 0,
+ local_destino: 'TERREO',
+ situacao: 'DIVERGENCIA_XML_FISICO',
+ motivo_divergencia: null,
+ observacoes: ''
+ });
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function removeNFXmlItemRecebimento(numeroItem, index) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item || !item.recebimentos) return;
+ if (item.recebimentos.length <= 1) return;
+ item.recebimentos.splice(index, 1);
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function updateNFXmlItemRecebimentoField(numeroItem, index, field, value) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item) return;
+ if (!item.recebimentos) item.recebimentos = getNFXmlItemRecebimentos(item);
+ const rec = item.recebimentos[index];
+ if (!rec) return;
+
+ if (field === 'quantidade_fisica') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_fisica = val;
+ rec.quantidade_aceita = Math.min(rec.quantidade_aceita, val);
+ rec.quantidade_recusada = Math.max(0, val - rec.quantidade_aceita);
+ } else if (field === 'quantidade_aceita') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_aceita = Math.min(val, rec.quantidade_fisica);
+ rec.quantidade_recusada = Math.max(0, rec.quantidade_fisica - rec.quantidade_aceita);
+ } else if (field === 'quantidade_recusada') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_recusada = Math.min(val, rec.quantidade_fisica);
+ rec.quantidade_aceita = Math.max(0, rec.quantidade_fisica - rec.quantidade_recusada);
+ } else if (field === 'id_interno') {
+ rec.id_interno = String(value || '').trim();
+ const prod = (appData.products || []).find(p => String(p.id_interno) === rec.id_interno);
+ rec.produto_id = prod?.id || null;
+ } else {
+ rec[field] = value;
+ }
+
+ rec.situacao = calcularSituacaoRecebimentoItem(item, item.recebimentos);
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function renderNFXmlRecebimentoFisicoBlock(item, allowLink = true) {
+ const recebimentos = getNFXmlItemRecebimentos(item);
+ const situacao = calcularSituacaoRecebimentoItem(item, recebimentos);
+ const sitInfo = getSituacaoLabel(situacao);
+ const locs = ['TERREO', '1ANDAR', 'MOSTRUARIO'];
+
+ return `
+ <div class="nfxml-recebimento-block" style="margin-top:14px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.12);">
+ <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+ <div style="display:flex; align-items:center; gap:8px;">
+ <span class="material-symbols-rounded" style="color:var(--primary); font-size:20px;">inventory</span>
+ <strong style="font-size:0.85rem; letter-spacing:0.5px;">RECEBIMENTO F&Iacute;SICO (ALOCA&Ccedil;&Atilde;O &amp; DIVERG&Ecirc;NCIAS)</strong>
+ </div>
+ <span class="nfxml-status-pill ${sitInfo.badgeClass}" style="font-weight:800; font-size:0.75rem;">${escapeKitAttribute(sitInfo.label)}</span>
+ </div>
+
+ <div style="display:flex; flex-direction:column; gap:10px;">
+ ${recebimentos.map((rec, idx) => {
+ const prod = (appData.products || []).find(p => String(p.id_interno) === String(rec.id_interno));
+ const prodDesc = prod ? (prod.descricao_completa || prod.descricao_base || prod.nome) : '';
+ return `
+ <div class="nfxml-rec-row" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px;">
+ <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; align-items:end;">
+ <label style="display:flex; flex-direction:column; gap:4px; flex:2;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">PRODUTO F&Iacute;SICO</span>
+ <input class="input-field" value="${escapeKitAttribute(rec.id_interno || '')}" placeholder="id_interno" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'id_interno', this.value)">
+ ${prodDesc ? `<small style="font-size:0.72rem; color:#94a3b8; margin-top:2px;">${escapeKitAttribute(prodDesc)}</small>` : ''}
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">F&Iacute;SICO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_fisica}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_fisica', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:#4ade80; font-weight:700;">ACEITO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_aceita}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_aceita', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:#f87171; font-weight:700;">RECUSADO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_recusada}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_recusada', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">DESTINO</span>
+ <select class="input-field" ${allowLink ? '' : 'disabled'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'local_destino', this.value)">
+ ${locs.map(l => `<option value="${l}" ${String(rec.local_destino).toUpperCase() === l ? 'selected' : ''}>${l}</option>`).join('')}
+ </select>
+ </label>
+ ${recebimentos.length > 1 && allowLink ? `
+ <button type="button" class="btn-action danger" onclick="removeNFXmlItemRecebimento(${item.numero_item}, ${idx})" style="height:38px; padding:0 10px; background:#ef4444 !important;" title="Remover aloca&ccedil;&atilde;o">
+ <span class="material-symbols-rounded">delete</span>
+ </button>
+ ` : ''}
+ </div>
+ ${situacao !== 'CONFERE' ? `
+ <div style="margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+ <input class="input-field" placeholder="Motivo da diverg&ecirc;ncia" value="${escapeKitAttribute(rec.motivo_divergencia || '')}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'motivo_divergencia', this.value)">
+ <input class="input-field" placeholder="Observa&ccedil;&otilde;es" value="${escapeKitAttribute(rec.observacoes || '')}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'observacoes', this.value)">
+ </div>
+ ` : ''}
+ </div>
+ `;
+ }).join('')}
+ </div>
+
+ ${allowLink ? `
+ <div style="margin-top:10px; display:flex; justify-content:flex-start;">
+ <button type="button" class="btn-action" onclick="addNFXmlItemRecebimento(${item.numero_item})" style="font-size:0.78rem; background:rgba(59,130,246,0.2) !important; color:#60a5fa !important; border:1px dashed #3b82f6 !important;">
+ <span class="material-symbols-rounded">add_circle</span>
+ + ADICIONAR OUTRO PRODUTO RECEBIDO (MULTI-SKU)
+ </button>
+ </div>
+ ` : ''}
+ </div>
+ `;
+}
+
 function aplicarCustosReaisNF(nota, options = {}) {
  const rateios = calcularRateioCustosNF(nota, nota.itens);
  const totalProdutosNF = nfXmlMoney(nota?.totais?.valor_produtos) ||
@@ -33716,7 +33909,30 @@ async function fetchEntradaNFItens(entradaId) {
  return [];
  }
 
- return (data || []).map(normalizeEntradaNFItemForStock);
+ const recs = await DataClient.listEntradaNFRecebimentos(entradaId);
+
+ return (data || []).map(raw => {
+   const normalized = normalizeEntradaNFItemForStock(raw);
+   const itemRecs = (recs || []).filter(r => r.entrada_nf_item_id === raw.id);
+   if (itemRecs.length > 0) {
+     normalized.recebimentos = itemRecs.map(r => ({
+       id: r.id,
+       entrada_nf_item_id: r.entrada_nf_item_id,
+       produto_id: r.produto_id,
+       id_interno: r.id_interno,
+       quantidade_fisica: parseDecimal(r.quantidade_fisica),
+       quantidade_aceita: parseDecimal(r.quantidade_aceita),
+       quantidade_recusada: parseDecimal(r.quantidade_recusada),
+       local_destino: r.local_destino || 'TERREO',
+       situacao: r.situacao || 'CONFERE',
+       motivo_divergencia: r.motivo_divergencia,
+       observacoes: r.observacoes
+     }));
+   } else {
+     normalized.recebimentos = getNFXmlItemRecebimentos(normalized);
+   }
+   return normalized;
+ });
 }
 
 async function finalizarEntradaNFAberta(entradaId) {
