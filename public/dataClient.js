@@ -1114,6 +1114,249 @@ const DataClient = (function () {
         return data || [];
     }
 
+    async function fetchEntradasNfProdutoSupabase(id_interno) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const cleanId = String(id_interno || '').trim();
+        if (!cleanId) return [];
+
+        let results = [];
+        const seenNfItemKeys = new Set();
+
+        // 1. PRIMÁRIO: Buscar recebimentos físicos exatos (entrada_nf_item_recebimentos)
+        const { data: recs, error: recsError } = await client
+            .from('entrada_nf_item_recebimentos')
+            .select('*')
+            .eq('id_interno', cleanId)
+            .order('criado_em', { ascending: false })
+            .limit(100);
+
+        if (recsError) {
+            console.error('[ENTRADAS NF PRODUTO] erro ao listar recebimentos fisicos:', recsError);
+            throw recsError;
+        }
+
+        if (recs && recs.length > 0) {
+            const nfIds = [...new Set(recs.map(r => r.entrada_nf_id).filter(Boolean))];
+            const itemIds = [...new Set(recs.map(r => r.entrada_nf_item_id).filter(Boolean))];
+
+            let nfsMap = {};
+            if (nfIds.length > 0) {
+                const { data: nfs, error: nfsError } = await client
+                    .from('entradas_nf')
+                    .select('*')
+                    .in('id', nfIds);
+                if (!nfsError && nfs) {
+                    nfs.forEach(nf => { nfsMap[nf.id] = nf; });
+                }
+            }
+
+            let itensMap = {};
+            if (itemIds.length > 0) {
+                const { data: itens, error: itensError } = await client
+                    .from('entradas_nf_itens')
+                    .select('*')
+                    .in('id', itemIds);
+                if (!itensError && itens) {
+                    itens.forEach(i => { itensMap[i.id] = i; });
+                }
+            }
+
+            recs.forEach(r => {
+                const itemParent = itensMap[r.entrada_nf_item_id] || {};
+                const nfParent = nfsMap[r.entrada_nf_id] || {};
+                const key = `${r.entrada_nf_id}_${r.entrada_nf_item_id}`;
+                seenNfItemKeys.add(key);
+
+                results.push({
+                    id: r.id,
+                    origem_dados: 'RECEBIMENTO_FISICO',
+                    entrada_nf_id: r.entrada_nf_id,
+                    entrada_nf_item_id: r.entrada_nf_item_id,
+                    id_interno: cleanId,
+                    quantidade_fisica: parseFloat(r.quantidade_fisica ?? 0),
+                    quantidade_aceita: parseFloat(r.quantidade_aceita ?? 0),
+                    quantidade_recusada: parseFloat(r.quantidade_recusada ?? 0),
+                    local_destino: r.local_destino || 'TÉRREO',
+                    situacao: r.situacao || 'CONFERE',
+                    criado_em: r.criado_em,
+                    codigo_produto_fornecedor: itemParent.codigo_produto_fornecedor || null,
+                    descricao_produto_fornecedor: itemParent.descricao_produto_fornecedor || null,
+                    custo_real_unitario: itemParent.custo_real_unitario ?? itemParent.custo_nota_unitario ?? itemParent.custo_unitario_nf ?? null,
+                    custo_nota_unitario: itemParent.custo_nota_unitario ?? itemParent.custo_unitario_nf ?? null,
+                    nf: nfParent
+                });
+            });
+        }
+
+        // 2. FALLBACK LEGADO: Buscar itens fiscais antigos em entradas_nf_itens sem recebimento físico registrado
+        const { data: itensLegados, error: legadosError } = await client
+            .from('entradas_nf_itens')
+            .select('*')
+            .eq('id_interno', cleanId)
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (!legadosError && itensLegados && itensLegados.length > 0) {
+            const nfIdsLegados = [];
+            const itensFiltrados = [];
+
+            itensLegados.forEach(item => {
+                const key = `${item.entrada_nf_id}_${item.id}`;
+                if (!seenNfItemKeys.has(key)) {
+                    itensFiltrados.push(item);
+                    if (item.entrada_nf_id) nfIdsLegados.push(item.entrada_nf_id);
+                }
+            });
+
+            if (itensFiltrados.length > 0) {
+                const uniqueNfIds = [...new Set(nfIdsLegados)];
+                let nfsLegadasMap = {};
+                if (uniqueNfIds.length > 0) {
+                    const { data: nfsL, error: nfsLError } = await client
+                        .from('entradas_nf')
+                        .select('*')
+                        .in('id', uniqueNfIds);
+                    if (!nfsLError && nfsL) {
+                        nfsL.forEach(nf => { nfsLegadasMap[nf.id] = nf; });
+                    }
+                }
+
+                itensFiltrados.forEach(item => {
+                    const nfParent = nfsLegadasMap[item.entrada_nf_id] || {};
+                    results.push({
+                        id: item.id,
+                        origem_dados: 'LEGADO_FISCAL',
+                        entrada_nf_id: item.entrada_nf_id,
+                        entrada_nf_item_id: item.id,
+                        id_interno: cleanId,
+                        quantidade_fisica: parseFloat(item.quantidade_estoque_calculada ?? item.quantidade_nf_original ?? 0),
+                        quantidade_aceita: parseFloat(item.quantidade_estoque_calculada ?? item.quantidade_nf_original ?? 0),
+                        quantidade_recusada: 0,
+                        local_destino: 'TÉRREO',
+                        situacao: 'LEGADO',
+                        criado_em: item.created_at,
+                        codigo_produto_fornecedor: item.codigo_produto_fornecedor || null,
+                        descricao_produto_fornecedor: item.descricao_produto_fornecedor || null,
+                        custo_real_unitario: item.custo_real_unitario ?? item.custo_nota_unitario ?? item.custo_unitario_nf ?? null,
+                        custo_nota_unitario: item.custo_nota_unitario ?? item.custo_unitario_nf ?? null,
+                        nf: nfParent
+                    });
+                });
+            }
+        }
+
+        // Ordenar por data de recebimento/emissão/criado_em decrescente
+        results.sort((a, b) => {
+            const dateA = new Date(a.nf?.data_recebimento || a.nf?.data_emissao || a.criado_em || 0).getTime();
+            const dateB = new Date(b.nf?.data_recebimento || b.nf?.data_emissao || b.criado_em || 0).getTime();
+            return dateB - dateA;
+        });
+
+        return results;
+    }
+
+    async function fetchFornecedoresProdutoSupabase(id_interno, productObj = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const cleanId = String(id_interno || '').trim();
+        if (!cleanId) return [];
+
+        const resultsMap = new Map();
+
+        // 1. CADASTRADOS: Buscar vinculos oficiais em fornecedor_produtos
+        const { data: fpData, error: fpError } = await client
+            .from('fornecedor_produtos')
+            .select('*')
+            .eq('id_interno', cleanId);
+
+        if (fpError) {
+            console.warn('[FORNECEDORES PRODUTO] aviso ao buscar fornecedor_produtos:', fpError.message);
+        } else if (fpData && fpData.length > 0) {
+            const cnpjs = [...new Set(fpData.map(f => f.fornecedor_cnpj).filter(Boolean))];
+            let fornMap = {};
+            if (cnpjs.length > 0) {
+                const { data: fornData, error: fornError } = await client
+                    .from('fornecedores')
+                    .select('*')
+                    .in('cnpj', cnpjs);
+
+                if (!fornError && fornData) {
+                    fornData.forEach(f => { fornMap[f.cnpj] = f; });
+                }
+            }
+
+            fpData.forEach(fp => {
+                const cnpjNorm = String(fp.fornecedor_cnpj || '').replace(/\D/g, '') || fp.fornecedor_cnpj || 'SEM_CNPJ';
+                const det = fornMap[fp.fornecedor_cnpj] || {};
+
+                resultsMap.set(cnpjNorm, {
+                    id_interno: cleanId,
+                    tipo_vinculo: 'CADASTRADO',
+                    label_vinculo: 'CADASTRADO',
+                    fornecedor_cnpj: fp.fornecedor_cnpj,
+                    codigo_produto_fornecedor: fp.codigo_produto_fornecedor || null,
+                    ean_fornecedor: fp.ean_fornecedor || null,
+                    ultimo_custo: fp.ultimo_custo || null,
+                    ultima_compra_em: fp.ultima_compra_em || null,
+                    fornecedor_detalhe: det
+                });
+            });
+        }
+
+        // 2. HISTÓRICO DE COMPRAS: Complementar ou adicionar fornecedores via NFs do produto
+        try {
+            const nfItems = await fetchEntradasNfProdutoSupabase(cleanId);
+            nfItems.forEach(item => {
+                const nf = item.nf || {};
+                const cnpjNf = nf.cnpj_fornecedor || null;
+                const nomeNf = nf.fornecedor_nome || null;
+                if (!cnpjNf && !nomeNf) return;
+
+                const cnpjNorm = String(cnpjNf || '').replace(/\D/g, '') || cnpjNf || nomeNf;
+
+                if (resultsMap.has(cnpjNorm)) {
+                    const existing = resultsMap.get(cnpjNorm);
+                    const dataNf = nf.data_recebimento || nf.data_emissao || item.criado_em;
+                    if (dataNf && (!existing.ultima_compra_em || new Date(dataNf) > new Date(existing.ultima_compra_em))) {
+                        existing.ultima_compra_em = dataNf;
+                    }
+                    if (item.custo_real_unitario && !existing.ultimo_custo) {
+                        existing.ultimo_custo = item.custo_real_unitario;
+                    }
+                    if (!existing.codigo_produto_fornecedor && item.codigo_produto_fornecedor) {
+                        existing.codigo_produto_fornecedor = item.codigo_produto_fornecedor;
+                    }
+                } else {
+                    const dataNf = nf.data_recebimento || nf.data_emissao || item.criado_em;
+                    resultsMap.set(cnpjNorm, {
+                        id_interno: cleanId,
+                        tipo_vinculo: 'HISTORICO',
+                        label_vinculo: 'HISTÓRICO',
+                        fornecedor_cnpj: cnpjNf,
+                        codigo_produto_fornecedor: item.codigo_produto_fornecedor || null,
+                        ean_fornecedor: item.ean_fornecedor || null,
+                        ultimo_custo: item.custo_real_unitario || item.custo_nota_unitario || null,
+                        ultima_compra_em: dataNf || null,
+                        fornecedor_detalhe: {
+                            nome_fantasia: nomeNf,
+                            razao_social: nomeNf,
+                            cnpj: cnpjNf
+                        }
+                    });
+                }
+            });
+        } catch (err) {
+            console.warn('[FORNECEDORES PRODUTO] aviso ao buscar fornecedores no historico de NFs:', err?.message || String(err));
+        }
+
+        return Array.from(resultsMap.values());
+    }
+
+
+
     async function fetchSeparacoesAbertasPorCanalSupabase(channelName) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -3053,6 +3296,8 @@ const DataClient = (function () {
         fetchEstoqueItemLocalSupabase,
         fetchMovimentosSupabase,
         fetchMovimentosProdutoSupabase,
+        fetchEntradasNfProdutoSupabase,
+        fetchFornecedoresProdutoSupabase,
         fetchUsuariosSupabase,
         fetchCanaisEnvioSupabase,
         fetchSeparacoesAbertasPorCanalSupabase,

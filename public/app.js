@@ -14686,28 +14686,402 @@ window.toggleMoreInfo = function() {
 };
 
 window.switchProductDetailTab = function(tabName) {
- const tabs = ['visao-geral', 'estoque-fifo', 'equivalentes'];
- tabs.forEach(t => {
- const btn = document.getElementById(`tab-btn-${t}`);
- const content = document.getElementById(`tab-content-${t}`);
- if (btn && content) {
- if (t === tabName) {
- btn.classList.add('active');
- btn.setAttribute('aria-selected', 'true');
- content.classList.remove('hidden');
- } else {
- btn.classList.remove('active');
- btn.setAttribute('aria-selected', 'false');
- content.classList.add('hidden');
- }
- }
- });
+    const tabs = ['visao-geral', 'estoque-fifo', 'movimentacoes', 'entradas-nf', 'fornecedores', 'equivalentes'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const content = document.getElementById(`tab-content-${t}`);
+        if (btn && content) {
+            if (t === tabName) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+                btn.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+                btn.style.color = '#ffffff';
+                btn.style.borderColor = '#2563eb';
+                btn.style.boxShadow = '0 4px 12px rgba(37,99,235,0.3)';
+                content.classList.remove('hidden');
+            } else {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+                btn.style.background = 'rgba(255,255,255,0.05)';
+                btn.style.color = 'var(--muted)';
+                btn.style.borderColor = 'rgba(255,255,255,0.1)';
+                btn.style.boxShadow = 'none';
+                content.classList.add('hidden');
+            }
+        }
+    });
+
+    const currentId = window.currentCRMProductIdInterno;
+    const currentProd = window.currentCRMProductObj;
+    if (!currentId) return;
+
+    if (!window.crmTabLoadedState) window.crmTabLoadedState = {};
+    if (!window.crmTabLoadedState[currentId]) {
+        window.crmTabLoadedState[currentId] = { movimentacoes: false, entradasNf: false, fornecedores: false };
+    }
+
+    const state = window.crmTabLoadedState[currentId];
+
+    if (tabName === 'movimentacoes' && !state.movimentacoes) {
+        loadCRMMovimentacoesTab(currentId);
+    } else if (tabName === 'entradas-nf' && !state.entradasNf) {
+        loadCRMEntradasNfTab(currentId);
+    } else if (tabName === 'fornecedores' && !state.fornecedores) {
+        loadCRMFornecedoresTab(currentId, currentProd);
+    }
 };
 
+window.loadCRMMovimentacoesTab = async function(idInterno, force = false) {
+    const container = document.getElementById('crm-tab-movimentacoes-container');
+    if (!container) return;
+
+    if (!window.crmTabLoadedState) window.crmTabLoadedState = {};
+    if (!window.crmTabLoadedState[idInterno]) {
+        window.crmTabLoadedState[idInterno] = { movimentacoes: false, entradasNf: false, fornecedores: false };
+    }
+
+    if (force) {
+        window.crmTabLoadedState[idInterno].movimentacoes = false;
+    } else if (window.crmTabLoadedState[idInterno].movimentacoes) {
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+            <span class="material-symbols-rounded spin" style="font-size: 32px; color: #3b82f6; margin-bottom: 8px;">sync</span>
+            <div style="font-weight: 700; font-size: 0.9rem;">CARREGANDO...</div>
+        </div>
+    `;
+
+    try {
+        const movimentos = await DataClient.fetchMovimentosProdutoSupabase(idInterno, 120);
+        window.crmTabLoadedState[idInterno].movimentacoes = true;
+
+        if (!movimentos || movimentos.length === 0) {
+            container.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+                    <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">history</span>
+                    <div style="font-weight: 700; font-size: 0.9rem;">Nenhuma movimentação encontrada para este produto.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const getTipoColor = (tipo) => {
+            const t = (tipo || '').toUpperCase();
+            if (t.includes('ENTRADA') || t.includes('RECEB')) return { bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)', color: '#22c55e' };
+            if (t.includes('SAIDA') || t.includes('SAÍDA') || t.includes('VENDA')) return { bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)', color: '#ef4444' };
+            if (t.includes('SEPARA')) return { bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)', color: '#f59e0b' };
+            if (t.includes('TRANSFER')) return { bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6' };
+            return { bg: 'rgba(148,163,184,0.15)', border: 'rgba(148,163,184,0.3)', color: '#94a3b8' };
+        };
+
+        const html = `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+                <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; text-transform: uppercase;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-rounded" style="color: #3b82f6; font-size: 22px;">history</span>
+                        <span>Histórico de Movimentações Operacionais (${movimentos.length})</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${movimentos.map(m => {
+                        const style = getTipoColor(m.tipo);
+                        const dateStr = m.data_hora ? (typeof formatDateTimeBR === 'function' ? formatDateTimeBR(m.data_hora) : new Date(m.data_hora).toLocaleString('pt-BR')) : '—';
+                        const orig = m.local_origem || m.origem || '—';
+                        const dest = m.local_destino || '—';
+                        const doc = m.movimento_id || m.execution_id || m.observacao || '—';
+                        const user = m.usuario || 'Sistema';
+
+                        return `
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 12px; min-width: 200px; flex: 1;">
+                                    <span style="padding: 4px 10px; border-radius: 8px; background: ${style.bg}; border: 1px solid ${style.border}; color: ${style.color}; font-weight: 800; font-size: 0.75rem; text-transform: uppercase;">
+                                        ${m.tipo || 'MOVIMENTO'}
+                                    </span>
+                                    <div style="min-width: 0;">
+                                        <div style="font-size: 0.85rem; font-weight: 700; color: #ffffff;">${orig} &rarr; ${dest}</div>
+                                        <div style="font-size: 0.72rem; color: var(--muted);">${dateStr} · Por: <strong style="color: #cbd5e1;">${user}</strong></div>
+                                    </div>
+                                </div>
+
+                                <div style="text-align: right; min-width: 120px;">
+                                    <span style="font-size: 1.05rem; font-weight: 900; color: ${style.color};">
+                                        ${m.quantidade > 0 ? `+${m.quantidade}` : m.quantidade} UN
+                                    </span>
+                                    ${doc !== '—' ? `<div style="font-size: 0.7rem; color: #94a3b8; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${doc}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    } catch (err) {
+        console.error('[CRM MOVIMENTACOES] Erro:', err);
+        container.innerHTML = `
+            <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 16px; padding: 24px; text-align: center; color: #fca5a5;">
+                <span class="material-symbols-rounded" style="font-size: 36px; margin-bottom: 8px;">error_outline</span>
+                <div style="font-weight: 700; font-size: 0.9rem;">Não foi possível carregar as movimentações agora.</div>
+                <button type="button" onclick="loadCRMMovimentacoesTab('${idInterno}', true)" style="margin-top: 12px; padding: 6px 14px; border-radius: 8px; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: #ffffff; font-size: 0.8rem; font-weight: 700; cursor: pointer;">Tentar novamente</button>
+            </div>
+        `;
+    }
+};
+
+window.loadCRMEntradasNfTab = async function(idInterno, force = false) {
+    const container = document.getElementById('crm-tab-entradas-nf-container');
+    if (!container) return;
+
+    if (!window.crmTabLoadedState) window.crmTabLoadedState = {};
+    if (!window.crmTabLoadedState[idInterno]) {
+        window.crmTabLoadedState[idInterno] = { movimentacoes: false, entradasNf: false, fornecedores: false };
+    }
+
+    if (force) {
+        window.crmTabLoadedState[idInterno].entradasNf = false;
+    } else if (window.crmTabLoadedState[idInterno].entradasNf) {
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+            <span class="material-symbols-rounded spin" style="font-size: 32px; color: #3b82f6; margin-bottom: 8px;">sync</span>
+            <div style="font-weight: 700; font-size: 0.9rem;">CARREGANDO...</div>
+        </div>
+    `;
+
+    try {
+        const nfItems = await DataClient.fetchEntradasNfProdutoSupabase(idInterno);
+        window.crmTabLoadedState[idInterno].entradasNf = true;
+
+        if (!nfItems || nfItems.length === 0) {
+            container.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+                    <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">receipt_long</span>
+                    <div style="font-weight: 700; font-size: 0.9rem;">Nenhuma entrada de nota encontrada para este produto.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const html = `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+                <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
+                    <span class="material-symbols-rounded" style="color: #3b82f6; font-size: 22px;">receipt_long</span>
+                    <span>Histórico de Entradas Fiscais / NF (${nfItems.length})</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${nfItems.map(item => {
+                        const nf = item.nf || {};
+                        const numNf = nf.numero_nf ? `NF ${nf.numero_nf}` : 'NF sem número';
+                        const fornecedor = nf.fornecedor_nome || nf.cnpj_fornecedor || 'Fornecedor não informado';
+                        const dataEntrada = nf.data_recebimento || nf.data_emissao || item.criado_em;
+                        const dateStr = dataEntrada ? (typeof formatDateBR === 'function' ? formatDateBR(dataEntrada) : new Date(dataEntrada).toLocaleDateString('pt-BR')) : '—';
+                        const statusNf = nf.status || item.situacao || 'IMPORTADA';
+
+                        const isFisico = (item.origem_dados === 'RECEBIMENTO_FISICO');
+                        const origemBadge = isFisico
+                            ? { bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)', color: '#22c55e', text: 'RECEBIMENTO FÍSICO' }
+                            : { bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)', color: '#60a5fa', text: 'NF FISCAL (LEGADO)' };
+
+                        const qtyAceita = parseFloat(item.quantidade_aceita ?? 0);
+                        const qtyRecusada = parseFloat(item.quantidade_recusada ?? 0);
+                        const qtyFisica = parseFloat(item.quantidade_fisica ?? qtyAceita);
+                        const custoUnit = item.custo_real_unitario ?? item.custo_nota_unitario ?? 0;
+                        const localDestino = item.local_destino || 'TÉRREO';
+
+                        return `
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                        <span style="font-size: 0.95rem; font-weight: 800; color: #ffffff;">${numNf}</span>
+                                        <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 6px; background: ${origemBadge.bg}; border: 1px solid ${origemBadge.border}; color: ${origemBadge.color}; font-weight: 800; text-transform: uppercase;">
+                                            ${origemBadge.text}
+                                        </span>
+                                        <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); font-weight: 700; text-transform: uppercase;">
+                                            ${statusNf}
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 0.78rem; color: var(--muted); font-weight: 700;">
+                                        Data: <strong style="color: #ffffff;">${dateStr}</strong>
+                                    </div>
+                                </div>
+
+                                <div style="font-size: 0.82rem; color: #cbd5e1; margin-bottom: 10px;">
+                                    Fornecedor: <strong style="color: #ffffff;">${fornecedor}</strong>
+                                    ${item.codigo_produto_fornecedor ? ` · Cód. Forn: <strong style="color: #60a5fa;">${item.codigo_produto_fornecedor}</strong>` : ''}
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Qtd Aceita</span>
+                                        <strong style="font-size: 0.9rem; color: #22c55e;">${qtyAceita} UN</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Qtd Recusada</span>
+                                        <strong style="font-size: 0.9rem; color: ${qtyRecusada > 0 ? '#ef4444' : '#94a3b8'};">${qtyRecusada} UN</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Qtd Física</span>
+                                        <strong style="font-size: 0.9rem; color: #ffffff;">${qtyFisica} UN</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Custo Unitário</span>
+                                        <strong style="font-size: 0.9rem; color: #fbbf24;">${custoUnit > 0 ? (typeof formatPrice === 'function' ? formatPrice(custoUnit) : `R$ ${custoUnit}`) : '—'}</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Destino</span>
+                                        <strong style="font-size: 0.85rem; color: #ffffff;">${localDestino}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    } catch (err) {
+        console.error('[CRM ENTRADAS NF] Erro:', err);
+        container.innerHTML = `
+            <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 16px; padding: 24px; text-align: center; color: #fca5a5;">
+                <span class="material-symbols-rounded" style="font-size: 36px; margin-bottom: 8px;">error_outline</span>
+                <div style="font-weight: 700; font-size: 0.9rem;">Não foi possível carregar as entradas de nota agora.</div>
+                <button type="button" onclick="loadCRMEntradasNfTab('${idInterno}', true)" style="margin-top: 12px; padding: 6px 14px; border-radius: 8px; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: #ffffff; font-size: 0.8rem; font-weight: 700; cursor: pointer;">Tentar novamente</button>
+            </div>
+        `;
+    }
+};
+
+window.loadCRMFornecedoresTab = async function(idInterno, productObj = {}, force = false) {
+    const container = document.getElementById('crm-tab-fornecedores-container');
+    if (!container) return;
+
+    if (!window.crmTabLoadedState) window.crmTabLoadedState = {};
+    if (!window.crmTabLoadedState[idInterno]) {
+        window.crmTabLoadedState[idInterno] = { movimentacoes: false, entradasNf: false, fornecedores: false };
+    }
+
+    if (force) {
+        window.crmTabLoadedState[idInterno].fornecedores = false;
+    } else if (window.crmTabLoadedState[idInterno].fornecedores) {
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+            <span class="material-symbols-rounded spin" style="font-size: 32px; color: #3b82f6; margin-bottom: 8px;">sync</span>
+            <div style="font-weight: 700; font-size: 0.9rem;">CARREGANDO...</div>
+        </div>
+    `;
+
+    try {
+        const fornecedores = await DataClient.fetchFornecedoresProdutoSupabase(idInterno, productObj);
+        window.crmTabLoadedState[idInterno].fornecedores = true;
+
+        if (!fornecedores || fornecedores.length === 0) {
+            container.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+                    <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">domain</span>
+                    <div style="font-weight: 700; font-size: 0.9rem;">Nenhum fornecedor vinculado a este produto.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const html = `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+                <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
+                    <span class="material-symbols-rounded" style="color: #3b82f6; font-size: 22px;">domain</span>
+                    <span>Fornecedores Vinculados (${fornecedores.length})</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${fornecedores.map(f => {
+                        const det = f.fornecedor_detalhe || {};
+                        const nome = det.nome_fantasia || det.razao_social || f.fornecedor_cnpj || 'Fornecedor Vinculado';
+                        const cnpj = f.fornecedor_cnpj || det.cnpj || '—';
+                        const codForn = f.codigo_produto_fornecedor || '—';
+                        const eanForn = f.ean_fornecedor || '—';
+                        const dateStr = f.ultima_compra_em ? (typeof formatDateBR === 'function' ? formatDateBR(f.ultima_compra_em) : new Date(f.ultima_compra_em).toLocaleDateString('pt-BR')) : '—';
+                        const custoStr = f.ultimo_custo ? (typeof formatPrice === 'function' ? formatPrice(f.ultimo_custo) : `R$ ${f.ultimo_custo}`) : null;
+
+                        const isCadastrado = (f.tipo_vinculo === 'CADASTRADO');
+                        const vinculoBadge = isCadastrado
+                            ? { bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)', color: '#22c55e', text: 'CADASTRADO' }
+                            : { bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)', color: '#f59e0b', text: 'HISTÓRICO (NF)' };
+
+                        return `
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                            <span style="font-size: 1rem; font-weight: 800; color: #ffffff;">${nome}</span>
+                                            <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 6px; background: ${vinculoBadge.bg}; border: 1px solid ${vinculoBadge.border}; color: ${vinculoBadge.color}; font-weight: 800; text-transform: uppercase;">
+                                                ${vinculoBadge.text}
+                                            </span>
+                                        </div>
+                                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 2px;">CNPJ: <strong style="color: #cbd5e1;">${cnpj}</strong></div>
+                                    </div>
+                                    ${custoStr ? `
+                                        <div style="text-align: right;">
+                                            <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Último Custo</span>
+                                            <strong style="font-size: 0.95rem; color: #fbbf24;">${custoStr}</strong>
+                                        </div>
+                                    ` : ''}
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; background: rgba(255,255,255,0.03); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem;">
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Cód. no Fornecedor</span>
+                                        <strong style="color: #60a5fa;">${codForn}</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">EAN Fornecedor</span>
+                                        <strong style="color: #ffffff;">${eanForn}</strong>
+                                    </div>
+                                    <div>
+                                        <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Última Compra</span>
+                                        <strong style="color: #ffffff;">${dateStr}</strong>
+                                    </div>
+                                    ${det.telefone || det.whatsapp ? `
+                                        <div>
+                                            <span style="font-size: 0.65rem; color: var(--muted); display: block; text-transform: uppercase;">Contato</span>
+                                            <strong style="color: #22c55e;">${det.telefone || det.whatsapp}</strong>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    } catch (err) {
+        console.error('[CRM FORNECEDORES] Erro:', err);
+        container.innerHTML = `
+            <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 16px; padding: 24px; text-align: center; color: #fca5a5;">
+                <span class="material-symbols-rounded" style="font-size: 36px; margin-bottom: 8px;">error_outline</span>
+                <div style="font-weight: 700; font-size: 0.9rem;">Não foi possível carregar os fornecedores agora.</div>
+                <button type="button" onclick="loadCRMFornecedoresTab('${idInterno}', window.currentCRMProductObj, true)" style="margin-top: 12px; padding: 6px 14px; border-radius: 8px; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: #ffffff; font-size: 0.8rem; font-weight: 700; cursor: pointer;">Tentar novamente</button>
+            </div>
+        `;
+    }
+};
+
+
 async function renderProductDetails(p) {
- const currentUser = localStorage.getItem('currentUser');
- const idInterno = (p.id_interno || p.col_A || '').toString();
- window.currentProductDetailForEdit = p;
+
+  const currentUser = localStorage.getItem('currentUser');
+  const idInterno = (p.id_interno || p.col_A || '').toString();
+  window.currentProductDetailForEdit = p;
+  window.currentCRMProductIdInterno = idInterno;
+  window.currentCRMProductObj = p;
 
  let productStockEntries = [];
  try {
@@ -14931,6 +15305,21 @@ async function renderProductDetails(p) {
  <span>Estoque & FIFO</span>
  </button>
 
+ <button type="button" id="tab-btn-movimentacoes" class="product-detail-tab-btn" onclick="switchProductDetailTab('movimentacoes')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">history</span>
+ <span>Movimentações</span>
+ </button>
+
+ <button type="button" id="tab-btn-entradas-nf" class="product-detail-tab-btn" onclick="switchProductDetailTab('entradas-nf')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">receipt_long</span>
+ <span>Entradas NF</span>
+ </button>
+
+ <button type="button" id="tab-btn-fornecedores" class="product-detail-tab-btn" onclick="switchProductDetailTab('fornecedores')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">domain</span>
+ <span>Fornecedores</span>
+ </button>
+
  <button type="button" id="tab-btn-equivalentes" class="product-detail-tab-btn" onclick="switchProductDetailTab('equivalentes')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
  <span class="material-symbols-rounded" style="font-size: 18px;">sync_alt</span>
  <span>Equivalentes ${equivalentes.length > 0 ? `(${equivalentes.length})` : ''}</span>
@@ -15102,6 +15491,21 @@ async function renderProductDetails(p) {
  <div id="tab-content-estoque-fifo" class="product-tab-page hidden">
  ${stockLocationsHTML}
  ${camadasEstoqueHTML}
+ </div>
+
+ <!-- ABA 3: MOVIMENTAÇÕES -->
+ <div id="tab-content-movimentacoes" class="product-tab-page hidden">
+ <div id="crm-tab-movimentacoes-container"></div>
+ </div>
+
+ <!-- ABA 4: ENTRADAS NF -->
+ <div id="tab-content-entradas-nf" class="product-tab-page hidden">
+ <div id="crm-tab-entradas-nf-container"></div>
+ </div>
+
+ <!-- ABA 5: FORNECEDORES -->
+ <div id="tab-content-fornecedores" class="product-tab-page hidden">
+ <div id="crm-tab-fornecedores-container"></div>
  </div>
 
  <!-- ABA 3: EQUIVALENTES -->
