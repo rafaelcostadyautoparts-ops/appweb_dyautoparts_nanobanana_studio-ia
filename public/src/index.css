@@ -65,6 +65,34 @@ body:not(.login-active) #app > .dashboard-screen.internal:not(.menu-screen) > ma
   }
 }
 
+.fin-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-action-editar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-action-editar:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
 .app-breadcrumb {
   display: flex;
   align-items: center;
@@ -30565,7 +30593,7 @@ body:not(.login-active) #app > .product-submenu-screen > main.container {
 }
 
 .financeiro-list-panel {
-  width: min(100%, 1120px);
+  width: min(100%, 1440px);
   margin: 0 auto;
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.08);

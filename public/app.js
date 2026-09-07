@@ -15870,11 +15870,24 @@ function getFinanceiroHoje() {
 }
 
 function parseFinanceiroDate(value) {
- if (!value) return null;
- const date = new Date(value);
- if (Number.isNaN(date.getTime())) return null;
- date.setHours(0, 0, 0, 0);
- return date;
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const copy = new Date(value.getTime());
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [year, month, day] = trimmed.split('-').map(Number);
+      return new Date(year, month - 1, day, 0, 0, 0, 0);
+    }
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 function isFinanceiroStatusAberto(item) {
@@ -16081,10 +16094,11 @@ async function renderContasAPagar(filtroAtivo = 'todas', buscaTexto = '') {
   const query = String(buscaTexto || '').trim().toLowerCase();
   if (query) {
     listaExibicao = listaExibicao.filter(item => {
-      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || '').toLowerCase();
+      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || item.beneficiario || item.fornecedor || '').toLowerCase();
       const nf = String(item.numero_nf || '').toLowerCase();
-      const desc = String(item.descricao || item.observacao_financeira || '').toLowerCase();
-      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query);
+      const desc = String(item.descricao || '').toLowerCase();
+      const obs = String(item.observacoes || item.observacao || item.observacao_financeira || '').toLowerCase();
+      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query) || obs.includes(query);
     });
   }
 
@@ -16104,9 +16118,6 @@ async function renderContasAPagar(filtroAtivo = 'todas', buscaTexto = '') {
         <section class="financeiro-list-panel">
           <header class="financeiro-panel-header">
             <div class="financeiro-title-group">
-              <button type="button" class="btn-voltar-mod" onclick="renderFinanceiroSubMenu()" title="Voltar ao Financeiro">
-                <span class="material-symbols-rounded">arrow_back</span>
-              </button>
               <div>
                 <h2>CONTAS A PAGAR</h2>
                 <p>Acompanhe parcelas, vencimentos e compromissos financeiros.</p>
@@ -16241,6 +16252,9 @@ function renderContasAPagarCardHTML(item, hoje) {
   const parcelaInfo = item.parcela ? `Parcela ${item.parcela}` : '';
   const subline = [nf, parcelaInfo].filter(Boolean).join(' • ');
 
+  const isPago = normalizarStatusFinanceiro(item?.status) === 'pago';
+  const showEdit = !isPago && item._tipoItem !== 'a_combinar';
+
   return `
     <article class="financeiro-row ${statusClass}">
       <div class="fin-card-info">
@@ -16256,6 +16270,12 @@ function renderContasAPagarCardHTML(item, hoje) {
         <strong>${formatFinanceiroMoney(item.valor)}</strong>
       </div>
       <div class="fin-card-action">
+        ${showEdit ? `
+          <button type="button" class="btn-action-editar" onclick="openModalEditarParcelaConta('${item.id}')" title="Editar parcela">
+            <span class="material-symbols-rounded">edit</span>
+            EDITAR
+          </button>
+        ` : ''}
         <button type="button" class="btn-action-pagar" onclick="openModalPagarConta('${item.id}')">
           <span class="material-symbols-rounded">payments</span>
           PAGAR
@@ -16316,9 +16336,6 @@ async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
         <section class="financeiro-list-panel">
           <header class="financeiro-panel-header">
             <div class="financeiro-title-group">
-              <button type="button" class="btn-voltar-mod" onclick="renderFinanceiroSubMenu()" title="Voltar ao Financeiro">
-                <span class="material-symbols-rounded">arrow_back</span>
-              </button>
               <div>
                 <h2>PAGAMENTOS</h2>
                 <p>Consulte pagamentos realizados e comprovantes.</p>
@@ -16364,6 +16381,12 @@ async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
                   <div class="fin-card-value">
                     <strong>${formatFinanceiroMoney(item.valor)}</strong>
                   </div>
+                  <div class="fin-card-action">
+                    <button type="button" class="btn-action-editar" onclick="openModalDetalhesPagamento('${item.id}')" title="Ver detalhes do pagamento">
+                      <span class="material-symbols-rounded">visibility</span>
+                      VER DETALHES
+                    </button>
+                  </div>
                 </article>
               `).join('')}
             </div>
@@ -16405,9 +16428,14 @@ async function openModalPagarConta(contaId) {
       <p style="margin-bottom: 16px;">${escapeKitAttribute(fornecedor)} | ${escapeKitAttribute(nfInfo)} ${conta.parcela ? `(Parc. ${conta.parcela})` : ''}</p>
 
       <div class="modal-form-grid" style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 10px 12px; border-radius: 6px; font-size: 0.82rem; color: #475569; margin-bottom: 4px;">
+          <strong style="display: block; color: #1e40af; margin-bottom: 2px;">Quitação Integral</strong>
+          O pagamento atual quita integralmente esta parcela. Pagamentos parciais ainda não são suportados neste módulo.
+        </div>
+
         <label>
-          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Valor Pago (R$)</span>
-          <input id="pagto-valor" class="money-input" inputmode="decimal" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${nfXmlFormatMoneyInput(conta.valor)}">
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Valor da Parcela (Quitação Integral)</span>
+          <input id="pagto-valor" class="money-input" readonly style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background-color: #f1f5f9; color: #334155; cursor: not-allowed;" value="${nfXmlFormatMoneyInput(conta.valor)}">
         </label>
 
         <label>
@@ -16434,7 +16462,7 @@ async function openModalPagarConta(contaId) {
 
       <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
-        <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoConta('${conta.id}')">Confirmar Pagamento</button>
+        <button id="btn-confirmar-pagamento-conta" type="button" class="app-center-modal-primary" onclick="salvarPagamentoConta('${conta.id}')">Confirmar Pagamento</button>
       </div>
     </div>
   `;
@@ -16442,6 +16470,9 @@ async function openModalPagarConta(contaId) {
 }
 
 async function salvarPagamentoConta(contaId) {
+  const btnSalvar = document.getElementById('btn-confirmar-pagamento-conta');
+  if (btnSalvar && btnSalvar.disabled) return;
+
   try {
     const client = window.supabaseClient;
     if (!client) throw new Error('Cliente Supabase nao inicializado.');
@@ -16453,6 +16484,11 @@ async function salvarPagamentoConta(contaId) {
 
     if (!dataVal) throw new Error('Informe a data de pagamento.');
     if (valorVal <= 0) throw new Error('Valor pago deve ser maior que zero.');
+
+    if (btnSalvar) {
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Confirmando...';
+    }
 
     const now = getDataHoraBrasil();
 
@@ -16478,6 +16514,263 @@ async function salvarPagamentoConta(contaId) {
   } catch (error) {
     console.error('[FINANCEIRO_PAGTO] erro ao liquidar conta', error);
     showToast(error.message || 'Erro ao registrar pagamento.', 'error');
+    if (btnSalvar) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Confirmar Pagamento';
+    }
+  }
+}
+
+async function openModalDetalhesPagamento(contaId) {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  const conta = parcelas.find(c => String(c.id) === String(contaId));
+  if (!conta) {
+    showToast('Pagamento nao encontrado.', 'error');
+    return;
+  }
+  closeAppCenterModal();
+
+  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const cnpj = conta.fornecedor_cnpj || conta.cnpj_fornecedor || '-';
+  const nfNum = conta.numero_nf ? `NF ${conta.numero_nf}` : '-';
+  const parcelaNum = conta.parcela ? `Parcela ${conta.parcela}` : (conta.numero_parcela ? `Parcela ${conta.numero_parcela}` : '-');
+  const tipoLancamentoRaw = String(conta.tipo_lancamento || '').toLowerCase();
+  let tipoLancamentoStr = 'Parcela Normal (NF)';
+  if (tipoLancamentoRaw === 'manual') {
+    tipoLancamentoStr = 'Despesa Manual';
+  } else if (tipoLancamentoRaw === 'complementar') {
+    tipoLancamentoStr = 'Adicional / Complementar';
+  }
+  const valorStr = formatFinanceiroMoney(conta.valor);
+  const dataPagtoStr = formatFinanceiroDate(conta.data_pagamento || conta.pagamento_em);
+  const formaPagtoStr = (conta.forma_pagamento || 'Boleto').toUpperCase();
+  const vencimentoStr = formatFinanceiroDate(conta.vencimento || conta.data_vencimento);
+  const obsStr = conta.observacoes || conta.observacao || '-';
+  const statusStr = (conta.status || 'pago').toUpperCase();
+  const atualizadoEmStr = conta.atualizado_em ? formatDateTimeBR(conta.atualizado_em) : '-';
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+  modal.dataset.contaId = conta.id;
+  modal.innerHTML = `
+    <div class="app-center-modal-card" role="dialog" aria-modal="true" aria-label="Detalhes do Pagamento">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>DETALHES DO PAGAMENTO</h3>
+      <p style="margin-bottom: 16px;">${escapeKitAttribute(fornecedor)} | ${escapeKitAttribute(nfNum)} ${conta.parcela ? `(${escapeKitAttribute(parcelaNum)})` : ''}</p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+        <div><span style="color: #64748b; font-weight: 500;">Fornecedor:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(fornecedor)}</strong></div>
+        <div><span style="color: #64748b; font-weight: 500;">CNPJ:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(cnpj)}</strong></div>
+        <div><span style="color: #64748b; font-weight: 500;">Número da NF:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(nfNum)}</strong></div>
+        <div><span style="color: #64748b; font-weight: 500;">Parcela:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(parcelaNum)}</strong></div>
+        <div><span style="color: #64748b; font-weight: 500;">Tipo de Lançamento:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(tipoLancamentoStr)}</strong></div>
+        <div><span style="color: #64748b; font-weight: 500;">Status:</span> <span class="fin-status-pill status-paga" style="display: inline-block; margin-top: 2px;">${escapeKitAttribute(statusStr)}</span></div>
+      </div>
+
+      <div style="background: #f1f5f9; border-left: 4px solid #059669; border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+        <div><span style="color: #475569; font-weight: 600; font-size: 0.78rem; text-transform: uppercase;">Valor Pago</span><strong style="color: #047857; font-size: 1.1rem; display: block;">${valorStr}</strong></div>
+        <div><span style="color: #475569; font-weight: 600; font-size: 0.78rem; text-transform: uppercase;">Data do Pagamento</span><strong style="color: #1e293b; font-size: 0.95rem; display: block; margin-top: 2px;">${dataPagtoStr}</strong></div>
+        <div><span style="color: #475569; font-weight: 600; font-size: 0.78rem; text-transform: uppercase;">Forma de Pagamento</span><strong style="color: #1e293b; font-size: 0.95rem; display: block; margin-top: 2px;">${escapeKitAttribute(formaPagtoStr)}</strong></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem; color: #475569; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+        <div><strong>Vencimento Original:</strong> ${vencimentoStr}</div>
+        <div><strong>Observações / Conta Bancária:</strong> ${escapeKitAttribute(obsStr)}</div>
+        <div><strong style="color: #64748b;">Última atualização:</strong> ${atualizadoEmStr}</div>
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; justify-content: flex-end;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function openModalEditarParcelaConta(contaId) {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  const conta = parcelas.find(c => String(c.id) === String(contaId));
+  if (!conta) {
+    showToast('Conta a pagar nao encontrada.', 'error');
+    return;
+  }
+  if (normalizarStatusFinanceiro(conta.status) === 'pago') {
+    showToast('Parcelas ja pagas nao podem ser editadas.', 'warning');
+    return;
+  }
+  closeAppCenterModal();
+
+  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const nfInfo = conta.numero_nf ? `NF ${conta.numero_nf}` : (conta.descricao || 'Despesa');
+  const parcelaInfo = conta.parcela ? `Parc. ${conta.parcela}` : (conta.tipo_lancamento || 'Lancamento');
+  const valorAtualStr = formatFinanceiroMoney(conta.valor);
+  const dtVenc = getFinanceiroDataVencimento(conta);
+  const vencISO = dtVenc ? getDataBrasilISO(parseFinanceiroDate(dtVenc)) : getDataBrasilISO();
+  const isComplementar = String(conta.tipo_lancamento || '').toLowerCase() === 'complementar';
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop nfxml-finance-modal';
+  modal.dataset.contaId = conta.id;
+  modal.innerHTML = `
+    <div class="app-center-modal-card" role="dialog" aria-modal="true" aria-label="Editar Parcela a Pagar">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>EDITAR PARCELA</h3>
+      <p style="margin-bottom: 12px;">${escapeKitAttribute(fornecedor)} | ${escapeKitAttribute(nfInfo)} (${escapeKitAttribute(parcelaInfo)})</p>
+
+      <div class="fin-edit-readonly-banner" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 0.82rem; color: #475569; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div><span>Valor Atual:</span> <strong style="color:#0f172a;">${valorAtualStr}</strong></div>
+        <div><span>Tipo:</span> <strong style="color:#0f172a;">${isComplementar ? 'Adicional / Complementar' : 'Parcela Normal'}</strong></div>
+      </div>
+
+      <div class="modal-form-grid" style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <label>
+            <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Vencimento *</span>
+            <input id="edit-vencimento" type="date" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${vencISO}">
+          </label>
+          <label>
+            <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Novo Valor (R$) *</span>
+            <input id="edit-valor" class="money-input" inputmode="decimal" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" value="${nfXmlFormatMoneyInput(conta.valor)}">
+          </label>
+        </div>
+
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; padding: 4px 0;">
+          <input id="edit-boleto-recebido" type="checkbox" style="width: 18px; height: 18px; accent-color: #059669;" ${conta.boleto_recebido ? 'checked' : ''}>
+          <span style="font-weight: 600; font-size: 0.88rem; color: #334155;">Boleto Fisico / PDF Recebido</span>
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Codigo de Barras / Linha Digitavel</span>
+          <input id="edit-codigo-barras" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="Digite ou cole a linha digitavel do boleto..." value="${escapeKitAttribute(conta.codigo_barras || '')}">
+        </label>
+
+        <label>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Observacoes da Parcela</span>
+          <textarea id="edit-obs" rows="2" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;" placeholder="Anotacoes complementares...">${escapeKitAttribute(conta.observacoes || conta.observacao || '')}</textarea>
+        </label>
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
+        <button id="btn-salvar-edicao-parcela" type="button" class="app-center-modal-primary" onclick="salvarEdicaoParcelaConta('${conta.id}')">Salvar Alteracoes</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function salvarEdicaoParcelaConta(contaId) {
+  const btnSalvar = document.getElementById('btn-salvar-edicao-parcela');
+  if (btnSalvar && btnSalvar.disabled) return;
+
+  try {
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+    const parcelas = await ensureFinanceiroParcelasLoaded();
+    const conta = parcelas.find(c => String(c.id) === String(contaId));
+    if (!conta) throw new Error('Parcela nao encontrada.');
+
+    if (normalizarStatusFinanceiro(conta.status) === 'pago') {
+      throw new Error('Parcelas ja pagas nao podem ser editadas.');
+    }
+
+    const vencimentoVal = document.getElementById('edit-vencimento')?.value;
+    const valorVal = nfXmlMoney(document.getElementById('edit-valor')?.value);
+    const boletoRecebidoVal = !!document.getElementById('edit-boleto-recebido')?.checked;
+    const codigoBarrasVal = document.getElementById('edit-codigo-barras')?.value?.trim() || null;
+    const obsVal = document.getElementById('edit-obs')?.value?.trim() || '';
+
+    if (!vencimentoVal) throw new Error('Informe a data de vencimento.');
+    if (valorVal <= 0) throw new Error('O valor da parcela deve ser maior que zero.');
+
+    const valorOriginal = roundMoney(conta.valor || 0);
+    const valorMudou = Math.abs(valorVal - valorOriginal) > 0.001;
+    const isComplementar = String(conta.tipo_lancamento || '').toLowerCase() === 'complementar';
+
+    if (valorMudou) {
+      if (isComplementar) {
+        const diffComp = roundMoney(valorVal - valorOriginal);
+        const diffSign = diffComp > 0 ? '+' : '';
+        const descComplementar = conta.descricao || 'Lancamento complementar';
+        const msgComp = `ATENCAO\n\nVoce esta alterando o valor do Lancamento Complementar:\n"${descComplementar}"\n\nde ${formatFinanceiroMoney(valorOriginal)} para ${formatFinanceiroMoney(valorVal)}.\n\nDiferenca: ${diffSign}${formatFinanceiroMoney(diffComp)}.\n\nEsta parcela e um custo complementar vinculado a NF e nao altera o valor fiscal da Nota.\nNenhuma outra parcela sera alterada automaticamente.\n\nDeseja continuar?`;
+
+        const confirmed = await showAppConfirm({
+          title: 'Confirmar alteracao de valor complementar',
+          message: msgComp,
+          confirmLabel: 'Confirmar e Salvar',
+          cancelLabel: 'Cancelar'
+        });
+        if (!confirmed) return;
+      } else if (conta.entrada_nf_id) {
+        const entrada = await DataClient.getEntradaNFById(conta.entrada_nf_id);
+        const valorFiscalNF = roundMoney(entrada?.valor_total || 0);
+
+        const parcelasNormais = (parcelas || []).filter(item =>
+          String(item.entrada_nf_id || item.nf_id || '') === String(conta.entrada_nf_id) &&
+          String(item.tipo_lancamento || '').toLowerCase() !== 'complementar'
+        );
+
+        const totalNormalAtual = parcelasNormais.reduce((sum, item) => sum + roundMoney(item.valor || 0), 0);
+        const totalNormalNovo = roundMoney(totalNormalAtual - valorOriginal + valorVal);
+        const diffNF = roundMoney(totalNormalNovo - valorFiscalNF);
+
+        if (Math.abs(totalNormalNovo - valorFiscalNF) > 0.01) {
+          const diffSign = diffNF > 0 ? '+' : '';
+          const msgNF = `ATENCAO\n\nCom esta alteracao, o total das parcelas da NOTA passara de ${formatFinanceiroMoney(totalNormalAtual)} para ${formatFinanceiroMoney(totalNormalNovo)}.\n\nValor fiscal da NF: ${formatFinanceiroMoney(valorFiscalNF)}.\nDiferenca: ${diffSign}${formatFinanceiroMoney(diffNF)}.\n\nNenhuma outra parcela sera alterada automaticamente.\n\nDeseja continuar?`;
+
+          const confirmed = await showAppConfirm({
+            title: 'Divergencia com o Valor Fiscal da NF',
+            message: msgNF,
+            confirmLabel: 'Confirmar e Salvar',
+            cancelLabel: 'Cancelar'
+          });
+          if (!confirmed) return;
+        }
+      }
+    }
+
+    if (btnSalvar) {
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Salvando...';
+    }
+
+    const now = getDataHoraBrasil();
+    const payload = {
+      vencimento: vencimentoVal,
+      data_vencimento: vencimentoVal,
+      valor: valorVal,
+      observacoes: obsVal,
+      observacao: obsVal,
+      boleto_recebido: boletoRecebidoVal,
+      codigo_barras: codigoBarrasVal,
+      atualizado_em: now
+    };
+
+    const { error } = await client
+      .from('contas_pagar')
+      .update(payload)
+      .eq('id', contaId);
+
+    if (error) throw error;
+
+    appData.financeiroParcelasLoaded = false;
+    closeAppCenterModal();
+    showToast('Parcela alterada com sucesso!', 'success');
+    renderContasAPagar('todas');
+  } catch (error) {
+    console.error('[FINANCEIRO_EDITAR] Erro ao editar parcela', error);
+    showToast(error.message || 'Erro ao salvar alteracoes da parcela.', 'error');
+    if (btnSalvar) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Salvar Alteracoes';
+    }
   }
 }
 
@@ -16535,7 +16828,7 @@ function openModalNovaDespesaManual() {
 
       <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
-        <button type="button" class="app-center-modal-primary" onclick="salvarDespesaManual()">Salvar Despesa</button>
+        <button id="btn-salvar-despesa-manual" type="button" class="app-center-modal-primary" onclick="salvarDespesaManual()">Salvar Despesa</button>
       </div>
     </div>
   `;
@@ -16543,6 +16836,9 @@ function openModalNovaDespesaManual() {
 }
 
 async function salvarDespesaManual() {
+  const btnSalvar = document.getElementById('btn-salvar-despesa-manual');
+  if (btnSalvar && btnSalvar.disabled) return;
+
   try {
     const client = window.supabaseClient;
     if (!client) throw new Error('Cliente Supabase nao inicializado.');
@@ -16558,6 +16854,11 @@ async function salvarDespesaManual() {
     if (!fornecedor) throw new Error('Informe o fornecedor ou beneficiario.');
     if (valor <= 0) throw new Error('Valor deve ser maior que zero.');
     if (!vencimento) throw new Error('Informe a data de vencimento.');
+
+    if (btnSalvar) {
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Salvando...';
+    }
 
     const now = getDataHoraBrasil();
 
@@ -16589,6 +16890,10 @@ async function salvarDespesaManual() {
   } catch (error) {
     console.error('[FINANCEIRO_MANUAL] erro ao salvar despesa manual', error);
     showToast(error.message || 'Erro ao salvar despesa.', 'error');
+    if (btnSalvar) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Salvar Despesa';
+    }
   }
 }
 
@@ -16673,7 +16978,7 @@ async function openDefinirPagamentoEntradaNF(entradaId) {
       </label>
       <div class="app-center-modal-actions">
         <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Cancelar</button>
-        <button type="button" class="app-center-modal-primary" onclick="salvarPagamentoACombinarEntrada()">Gerar contas a pagar</button>
+        <button id="btn-gerar-contas-a-combinar" type="button" class="app-center-modal-primary" onclick="salvarPagamentoACombinarEntrada()">Gerar contas a pagar</button>
       </div>
     </div>
   `;
@@ -16681,6 +16986,10 @@ async function openDefinirPagamentoEntradaNF(entradaId) {
 }
 
 async function salvarPagamentoACombinarEntrada() {
+  const btnSubmit = document.getElementById('btn-gerar-contas-a-combinar');
+  if (btnSubmit && btnSubmit.disabled) return;
+  let originalText = btnSubmit ? btnSubmit.textContent : 'Gerar contas a pagar';
+
   try {
     const client = window.supabaseClient;
     const modal = document.getElementById('app-center-modal');
@@ -16739,6 +17048,11 @@ async function salvarPagamentoACombinarEntrada() {
       return;
     }
 
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Gerando parcelas...';
+    }
+
     if ((existentes || []).length) {
       const ids = existentes.map(item => item.id).filter(Boolean);
       if (ids.length) await client.from('contas_pagar').delete().in('id', ids);
@@ -16764,6 +17078,10 @@ async function salvarPagamentoACombinarEntrada() {
   } catch (error) {
     console.error('[FINANCEIRO_A_COMBINAR] erro ao definir pagamento', error);
     showToast(error.message || 'Erro ao definir pagamento.', 'error');
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = originalText;
+    }
   }
 }
 
