@@ -13842,71 +13842,88 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
 
  const cardsHtml = results.map((p, index) => {
  const idInterno = p.id_interno || p.col_A || '-';
- const desc = cleanProductSearchText(p.descricao_completa || p.col_C || 'Produto sem desao');
- const marca = cleanProductSearchText(p.marca || p.col_E || '-');
+ const desc = cleanProductSearchText(p.descricao_completa || p.descricao_base || p.descricao || p.nome || p.col_C || 'Produto sem descrição');
+ const marca = cleanProductSearchText(p.marca || p.col_E || '');
  const imgUrl = getProductImageUrl(p);
  const precoVarejo = p.preco_varejo || p.col_G || 0;
  const precoAtacado = p.preco_atacado ?? p.col_I ?? p.preco_revenda ?? precoVarejo;
  const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
- const isAtivo = status === 'SIM' || status === 'TRUE';
+ const isAtivo = status === 'SIM' || status === 'TRUE' || status === '1';
 
- // Texto validado em UTF-8.
  const estoque = getSearchCardStockQty(p);
  const pack = getSearchProductPackInfo(p, estoque);
  const showCx = pack && pack.caixas > 0;
+ const equivs = (typeof getEquivalentProductsForDetail === 'function') ? getEquivalentProductsForDetail(p) : [];
+
  return `
  <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
  onclick="showProductDetails('${idInterno}')" 
  role="option" 
  data-index="${index}"
  tabindex="0"
- onkeydown="handleSearchKeyDown(event)">
- <div class="card-image-wrapper">
- ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<span class=\\'material-symbols-rounded\\'>image</span>';">` : `<span class="material-symbols-rounded">image</span>`}
- </div>
+ onkeydown="handleSearchKeyDown(event)"
+ style="position:relative; background:#ffffff; border:1px solid rgba(15,23,42,0.08); border-radius:16px; padding:14px 16px; display:grid; grid-template-columns:84px minmax(0,1fr) auto auto; gap:16px; align-items:center; box-shadow:0 4px 14px rgba(15,23,42,0.03); cursor:pointer; transition:transform 0.15s ease, box-shadow 0.15s ease; ${!isAtivo ? 'opacity:0.65;' : ''}">
  
- <div class="card-main-info">
- <div class="card-header-row">
- <span class="card-id">
- <small>ID INTERNO</small>
- <span class="product-id-row">
+ <div class="card-image-wrapper" style="width:84px; height:84px; background:#f8fafc; border:1px solid rgba(148,163,184,0.18); border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+ ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" style="width:100%; height:100%; object-fit:contain;" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<div style=\\'display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;\\'><span class=\\'material-symbols-rounded\\' style=\\'font-size:28px;color:#cbd5e1;\\'>inventory_2</span><span style=\\'font-size:0.6rem;font-weight:700;margin-top:2px;color:#94a3b8;\\'>Sem foto</span></div>';">` : `
+ <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;">
+ <span class="material-symbols-rounded" style="font-size:28px;color:#cbd5e1;">inventory_2</span>
+ <span style="font-size:0.6rem;font-weight:700;margin-top:2px;color:#94a3b8;">Sem foto</span>
+ </div>
+ `}
+ </div>
+
+ <div class="card-main-info" style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+ <div class="card-header-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+ <span class="product-id-badge" style="display:inline-flex; align-items:center; gap:4px; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#ffffff; padding:3px 10px; border-radius:8px; font-weight:800; font-size:0.78rem; letter-spacing:0.4px; box-shadow:0 2px 6px rgba(37,99,235,0.22);">
+ <small style="font-size:0.62rem; opacity:0.85; font-weight:700; text-transform:uppercase;">ID</small>
  <strong>${idInterno}</strong>
+ </span>
+ ${!isAtivo ? `<span style="display:inline-flex; background:#ef444415; color:#ef4444; border:1px solid #ef444440; padding:2px 8px; border-radius:6px; font-size:0.68rem; font-weight:800; text-transform:uppercase;">INATIVO</span>` : ''}
  ${renderSearchProductLocationBadge(p)}
- </span>
- </span>
  </div>
- <h3 class="card-title">${desc}</h3>
- <span class="card-brand">${isFilledValue(marca) ? marca : 'SEM MARCA'}</span>
- <div class="card-mobile-quick-info">
- ${isFilledValue(marca) ? `<span>${marca}</span>` : '<span>Marca nao informada</span>'}
- <span>Estoque: ${formatStockNumber(estoque)}</span>
- <span>${getSearchCardPrimaryLocation(p)}</span>
- </div>
+
+ <h3 class="card-title" style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-weight:800; color:#0f172a; font-size:0.95rem; line-height:1.3; margin:2px 0 2px 0;" title="${desc}">${desc}</h3>
+
+ <div class="card-meta-line" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:0.75rem;">
+ ${isFilledValue(marca) ? `<span style="font-weight:800; color:#475569; text-transform:uppercase;">${marca}</span>` : ''}
  ${renderSearchProductMeta(p)}
  </div>
 
- <div class="card-stock-block">
- <span class="stock-label">ESTOQUE TOTAL</span>
- <div class="stock-quantity-row">
- <span class="stock-value ${estoque <= 0 ? 'out' : ''}">${formatStockNumber(estoque)} <small>UN</small></span>
+ ${equivs.length > 0 ? `
+ <div style="margin-top:2px;">
+ <span class="product-card-equivalents-badge" style="display:inline-flex; align-items:center; gap:4px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:800; cursor:pointer;" onclick="event.stopPropagation(); showProductDetails('${idInterno}')" title="Ver produtos equivalentes">
+ <span class="material-symbols-rounded" style="font-size:13px;">sync_alt</span>
+ + ${equivs.length} ${equivs.length === 1 ? 'EQUIVALENTE' : 'EQUIVALENTES'}
+ </span>
+ </div>
+ ` : ''}
+ </div>
+
+ <div class="card-stock-block" style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:4px; min-width:130px;">
+ <span class="stock-label" style="font-size:0.65rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">ESTOQUE TOTAL</span>
+ <div class="stock-quantity-row" style="display:flex; align-items:baseline; gap:4px;">
+ <span class="stock-value ${estoque <= 0 ? 'out' : ''}" style="font-size:1.15rem; font-weight:900; color:${estoque > 0 ? '#16a34a' : '#dc2626'};">
+ ${formatStockNumber(estoque)} <small style="font-size:0.75rem; font-weight:700; color:#64748b;">UN</small>
+ </span>
  ${showCx ? `
- <span class="stock-divider">|</span>
- <span class="stock-cx-value">${formatStockNumber(pack.caixas)} <small>CX</small></span>
+ <span style="font-size:0.78rem; font-weight:700; color:#475569;">(${formatStockNumber(pack.caixas)} CX)</span>
  ` : ''}
  </div>
  ${renderSearchProductSellableLocations(p)}
  </div>
 
- <div class="card-price-block">
- <div class="card-price-tier card-price-tier-retail">
- <span class="price-label">PRECO VAREJO</span>
- <span class="price-value">${formatPrice(precoVarejo)}</span>
+ <div class="card-price-block" style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:2px; min-width:110px; opacity:0.85; border-left:1px solid rgba(15,23,42,0.06); padding-left:12px;">
+ <div style="font-size:0.7rem; color:#64748b; font-weight:600;">
+ Varejo: <strong style="color:#0f172a; font-size:0.82rem;">${formatPrice(precoVarejo)}</strong>
  </div>
- <div class="card-price-tier card-price-tier-wholesale">
- <span class="price-label">PRECO ATACADO</span>
- <span class="price-value">${formatPrice(precoAtacado)}</span>
+ ${precoAtacado && precoAtacado !== precoVarejo ? `
+ <div style="font-size:0.68rem; color:#94a3b8; font-weight:500;">
+ Atacado: <strong style="color:#475569;">${formatPrice(precoAtacado)}</strong>
  </div>
+ ` : ''}
  </div>
+
  </div>
  `;
  }).join('');
@@ -14621,7 +14638,7 @@ function getEquivalentProductsForDetail(p) {
  if (!appData.products || !p) return [];
 
  const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
- const isSameProduct = (other) => String(other.id_interno || '') === String(p.id_interno || '') || String(other.ean || '') === String(p.ean || '');
+ const isSameProduct = (other) => (p.id_interno && String(other.id_interno) === String(p.id_interno)) || (p.ean && other.ean && String(other.ean) === String(p.ean));
  const attrs = safeParseAtributos(p.atributos);
  const codEquivalenteAttr = attrs.find(a => {
  const nome = norm(a.nome).replace(/\s+/g, '_');
