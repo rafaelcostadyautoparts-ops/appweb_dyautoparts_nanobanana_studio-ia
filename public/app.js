@@ -4413,24 +4413,279 @@ async function renderDashboard() {
 }
 
 function renderPedidosPlaceholder(push = true) {
- const currentUser = localStorage.getItem('currentUser');
- if (!currentUser) return renderLogin();
-
- currentScreen = 'pedidos';
- if (push) pushNav('pedidos');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- <main class="container">
- <div class="kit-premium-state">
- <span class="material-symbols-rounded">receipt_long</span>
- <h2>Pedidos</h2>
- <p>M&oacute;dulo em prepara&ccedil;&atilde;o.</p>
- </div>
- </main>
- </div>
- `;
+  renderPedidosScreen('todos');
 }
+
+async function renderPedidosScreen(filtroAba = 'todos') {
+  const currentUser = localStorage.getItem('currentUser');
+  if (!currentUser) return renderLogin();
+
+  currentScreen = 'pedidos';
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+      <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:20px;">
+        <div class="pedidos-loading" style="text-align:center;padding:40px;color:#64748b;">
+          <span class="material-symbols-rounded" style="font-size:36px;animation:spin 1s linear infinite;">sync</span>
+          <p>Carregando pedidos do marketplace...</p>
+        </div>
+      </main>
+    </div>
+  `;
+
+  try {
+    let pedidos = [];
+    if (window.DataClient?.listMercadoLivrePedidos) {
+      pedidos = await window.DataClient.listMercadoLivrePedidos();
+    }
+
+    const totalTodos = pedidos.length;
+    const listPendentes = pedidos.filter(p => p.status_identificacao === 'pendente_identificacao' || p.status_identificacao === 'novo');
+    const listProntos = pedidos.filter(p => p.status_identificacao === 'pronto_separacao' && p.status_mercadolivre !== 'cancelled');
+
+    let listaExibicao = pedidos;
+    if (filtroAba === 'pendentes') listaExibicao = listPendentes;
+    if (filtroAba === 'prontos') listaExibicao = listProntos;
+
+    app.innerHTML = `
+      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()')}
+        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+        <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:24px 20px;">
+          <div class="app-breadcrumb" style="margin-bottom:16px;">
+            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+            <span class="material-symbols-rounded">chevron_right</span>
+            <span class="app-breadcrumb-current">Pedidos & Identificação</span>
+          </div>
+
+          <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+            <div>
+              <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
+              <p style="color:#64748b;font-size:0.9rem;margin:4px 0 0;">Acompanhe a identificação dos anúncios e o snapshot congelado de equivalentes.</p>
+            </div>
+          </header>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
+            <div onclick="renderPedidosScreen('todos')" style="background:#fff;border:2px solid ${filtroAba === 'todos' ? '#4f46e5' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#64748b;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Todos os Pedidos</small>
+              <h2 style="font-size:1.8rem;color:#0f172a;margin:6px 0 0;">${totalTodos}</h2>
+            </div>
+            <div onclick="renderPedidosScreen('pendentes')" style="background:#fff;border:2px solid ${filtroAba === 'pendentes' ? '#ea580c' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#c2410c;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Pendentes de Identificação</small>
+              <h2 style="font-size:1.8rem;color:#c2410c;margin:6px 0 0;">${listPendentes.length}</h2>
+            </div>
+            <div onclick="renderPedidosScreen('prontos')" style="background:#fff;border:2px solid ${filtroAba === 'prontos' ? '#16a34a' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#15803d;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Prontos para Separação</small>
+              <h2 style="font-size:1.8rem;color:#15803d;margin:6px 0 0;">${listProntos.length}</h2>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:16px;">
+            ${listaExibicao.length ? listaExibicao.map(ped => renderPedidoCardHTML(ped)).join('') : `
+              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:40px;text-align:center;color:#64748b;">
+                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;">inbox</span>
+                <p style="margin-top:12px;font-weight:600;">Nenhum pedido encontrado nesta categoria.</p>
+              </div>
+            `}
+          </div>
+        </main>
+      </div>
+    `;
+  } catch (err) {
+    console.error('[PEDIDOS] Erro ao renderizar tela:', err);
+  }
+}
+
+function renderPedidoCardHTML(ped) {
+  const itens = ped.mercadolivre_pedido_itens || [];
+  const isCancelled = String(ped.status_mercadolivre || '').toLowerCase() === 'cancelled';
+  const isPronto = ped.status_identificacao === 'pronto_separacao' && !isCancelled;
+  const isPendente = ped.status_identificacao === 'pendente_identificacao' || ped.status_identificacao === 'novo';
+  const hasSeparacao = Boolean(ped.separacao_id);
+
+  const totalQtd = itens.reduce((s, i) => s + (i.quantidade_comprada || 1), 0);
+  const dataFmt = ped.date_created ? new Date(ped.date_created).toLocaleString() : '-';
+
+  return `
+    <article style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:800;color:#4f46e5;font-size:0.85rem;background:#e0e7ff;padding:4px 8px;border-radius:6px;">Mercado Livre</span>
+            <h3 style="font-size:1.1rem;font-weight:700;color:#0f172a;margin:0;">Pedido #${escapeKitAttribute(ped.external_order_id)}</h3>
+          </div>
+          <small style="color:#64748b;display:block;margin-top:4px;">${dataFmt} • ${itens.length} anúncio(s) • ${totalQtd} unidade(s)</small>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${hasSeparacao ? `
+            <span style="background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">local_shipping</span> ENVIADO PARA SEPARAÇÃO
+            </span>
+          ` : isCancelled ? `
+            <span style="background:#fef2f2;color:#991b1b;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">cancel</span> CANCELADO NO MARKETPLACE
+            </span>
+          ` : isPronto ? `
+            <span style="background:#f0fdf4;color:#166534;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span> PRONTO PARA SEPARAÇÃO
+            </span>
+          ` : `
+            <span style="background:#fff7ed;color:#9a3412;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">pending</span> IDENTIFICAÇÃO PENDENTE
+            </span>
+          `}
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f1f5f9;padding-top:12px;flex-wrap:wrap;gap:10px;">
+        <span style="font-weight:700;color:#0f172a;">Total: ${formatFinanceiroMoney(ped.total_amount || 0)}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;">
+            Ver detalhes
+          </button>
+
+          ${hasSeparacao ? `
+            <button type="button" class="app-center-modal-primary" onclick="showToast('Separação ${escapeKitAttribute(ped.separacao_id)} já vinculada ao pedido.', 'info')" style="padding:6px 14px;font-size:0.85rem;background:#2563eb;">
+              Ver separação (${escapeKitAttribute(ped.separacao_id)})
+            </button>
+          ` : isPronto ? `
+            <button type="button" id="btn-enviar-sep-${ped.id}" class="app-center-modal-primary" onclick="enviarPedidoParaSeparacaoUI('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;background:#16a34a;">
+              <span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+async function enviarPedidoParaSeparacaoUI(pedidoId) {
+  const btn = document.getElementById(`btn-enviar-sep-${pedidoId}`);
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px;animation:spin 1s linear infinite;vertical-align:middle;">sync</span> Enviando...';
+  }
+
+  try {
+    const usuario = localStorage.getItem('currentUser') || 'Sistema';
+    if (!window.DataClient?.enviarPedidoParaSeparacaoTransacional) {
+      throw new Error('Função DataClient.enviarPedidoParaSeparacaoTransacional não está disponível.');
+    }
+
+    const res = await window.DataClient.enviarPedidoParaSeparacaoTransacional(pedidoId, usuario);
+    if (res && res.separacao_id) {
+      showToast(`Pedido enviado para Separação (${res.separacao_id}) com sucesso!`, 'success');
+    }
+    renderPedidosScreen();
+  } catch (err) {
+    console.error('[PEDIDOS] Erro ao enviar para separacao:', err);
+    showToast(err.message || 'Erro ao enviar pedido para separação', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação';
+    }
+  }
+}
+
+async function openModalDetalhesPedido(pedidoId) {
+  closeAppCenterModal();
+  if (!window.DataClient?.getMercadoLivrePedidoById) return;
+
+  const ped = await window.DataClient.getMercadoLivrePedidoById(pedidoId);
+  if (!ped) {
+    showToast('Pedido não encontrado.', 'error');
+    return;
+  }
+
+  const itens = ped.mercadolivre_pedido_itens || [];
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop';
+
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:850px;">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>DETALHES DO PEDIDO #${escapeKitAttribute(ped.external_order_id)}</h3>
+      <p style="color:#64748b;font-size:0.85rem;margin-bottom:16px;">Importado em ${new Date(ped.importado_em).toLocaleString()} | Status: ${escapeKitAttribute(ped.status_identificacao)}</p>
+
+      <div style="display:grid;gap:16px;max-height:60vh;overflow-y:auto;padding-right:8px;">
+        ${itens.map(item => {
+          const hasMapping = Boolean(item.mapping_version_id);
+          const snapshot = item.snapshot_componentes || [];
+          return `
+            <div style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                <div>
+                  <strong style="color:#0f172a;display:block;">${escapeKitAttribute(item.titulo)}</strong>
+                  <small style="color:#64748b;">item_id: ${escapeKitAttribute(item.item_id)} ${item.variation_id ? `| var_id: ${escapeKitAttribute(item.variation_id)}` : ''} | Qtd comprada: <b>${item.quantidade_comprada}</b></small>
+                </div>
+                ${hasMapping ? `
+                  <span style="background:#f0fdf4;color:#166534;font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:4px;">MAPEADO (V${item.mapping_version_id})</span>
+                ` : `
+                  <button type="button" class="app-center-modal-primary" onclick="closeAppCenterModal(); openAnuncioMappingModalParaItem('${escapeKitAttribute(item.item_id)}', '${escapeKitAttribute(item.variation_id || '')}', '${ped.id}')" style="padding:4px 10px;font-size:0.75rem;background:#ea580c;">
+                    Mapar Anúncio Pendente
+                  </button>
+                `}
+              </div>
+
+              ${hasMapping && snapshot.length ? `
+                <div style="margin-top:12px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px;">
+                  <small style="font-weight:800;color:#475569;text-transform:uppercase;display:block;margin-bottom:8px;">Snapshot Congelado de Componentes & Equivalentes Aceitos:</small>
+                  <div style="display:grid;gap:8px;">
+                    ${snapshot.map(comp => `
+                      <div style="font-size:0.85rem;color:#1e293b;border-bottom:1px dashed #e2e8f0;padding-bottom:6px;">
+                        <div>
+                          <strong>${comp.tipo_componente === 'grupo' ? `Grupo: ${comp.grupo_nome}` : 'Produto Isolado'}</strong>
+                          <span style="color:#4f46e5;font-weight:700;"> — ${comp.quantidade_total_calculada} un. total (${comp.quantidade_por_unidade} un/kit × ${item.quantidade_comprada} kits)</span>
+                        </div>
+                        <small style="color:#64748b;display:block;margin-top:2px;">
+                          SKUs válidos no momento do pedido (${(comp.skus_validos_snapshot || []).length}): 
+                          <b>${(comp.skus_validos_snapshot || []).map(s => `${s.id_interno} (${s.marca || '-'})`).join(', ')}</b>
+                        </small>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top:20px;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Fechar</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function openAnuncioMappingModalParaItem(itemId, variationId, pedidoId) {
+  if (typeof anOpenMappingModal === 'function') {
+    // Abre o modal de mapeamento do anuncio
+    anOpenMappingModal(itemId, variationId);
+    // Ao fechar ou atualizar o mapeamento do anuncio, reprocessa o pedido
+    const originalSave = window.anConfirmModalMapping;
+    window.anConfirmModalMapping = async function() {
+      await originalSave();
+      if (window.DataClient?.reprocessarIdentificacaoPedidoTransacional) {
+        await window.DataClient.reprocessarIdentificacaoPedidoTransacional(pedidoId);
+        showToast('Pedido reprocessado com sucesso!', 'success');
+        renderPedidosScreen('todos');
+      }
+      window.anConfirmModalMapping = originalSave;
+    };
+  } else {
+    showToast('Módulo de Mapeamento de Anúncios não está carregado.', 'warning');
+  }
+}
+
 
 
 function renderMovimentacoesSubMenu() {

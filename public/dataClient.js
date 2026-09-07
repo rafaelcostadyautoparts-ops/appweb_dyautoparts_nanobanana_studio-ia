@@ -1683,6 +1683,34 @@ const DataClient = (function () {
         return data;
     }
 
+    async function analisarConsistenciaPedidoSeparacaoConferencia(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) throw new Error('separacaoId e obrigatorio');
+
+        const { data, error } = await client.rpc('analisar_consistencia_pedido_separacao_conferencia', {
+            p_separacao_id: sessionId
+        });
+
+        if (error) throw new Error(error.message || 'Erro ao analisar consistencia da conferencia.');
+        return data;
+    }
+
+    async function obterItensEsperadosConferencia(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) throw new Error('separacaoId e obrigatorio');
+
+        const { data, error } = await client.rpc('obter_itens_esperados_conferencia', {
+            p_separacao_id: sessionId
+        });
+
+        if (error) throw new Error(error.message || 'Erro ao obter itens esperados da conferencia.');
+        return data || [];
+    }
+
     async function removerConferenciaAndamentoSupabase(separacaoId) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2875,13 +2903,657 @@ const DataClient = (function () {
         buscarConferenciaAndamentoSupabase,
         salvarConferenciaAndamentoSupabase,
         removerConferenciaAndamentoSupabase,
+        analisarConsistenciaPedidoSeparacaoConferencia,
+        obterItensEsperadosConferencia,
 
         // ESTOQUE / MOVIMENTACOES
         transferirEstoqueSupabase,
 
+        // GRUPOS DE EQUIVALENCIA
+        listGruposEquivalencia,
+        getGrupoEquivalenciaById,
+        getGrupoEquivalenciaByProdutoId,
+        getSkusGrupoEquivalencia,
+        createGrupoEquivalencia,
+        updateGrupoEquivalencia,
+        addSkuAoGrupoEquivalencia,
+        removeSkuDoGrupoEquivalencia,
+        getEquivalenciaResolvidaByProdutoId,
+
+        // MAPEAMENTO DE ANUNCIOS ML / MARKETPLACE
+        listMercadoLivreItemMappings,
+        getMercadoLivreItemMapping,
+        saveMercadoLivreItemMappingTransacional,
+
+        // PEDIDOS ML / MARKETPLACE & SEPARACAO
+        listMercadoLivrePedidos,
+        getMercadoLivrePedidoById,
+        saveMercadoLivrePedidoTransacional,
+        reprocessarIdentificacaoPedidoTransacional,
+        enviarPedidoParaSeparacaoTransacional,
+        biparItemSeparacaoEquivalente,
+
         // Constantes para uso interno
         MODULES: Object.keys(MODULE_TABLES)
     };
+
+    // IMPLEMENTACAO GRUPOS DE EQUIVALENCIA
+    async function listGruposEquivalencia(apenasAtivos = true) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        let query = client.from('grupos_equivalencia').select('*, grupo_equivalencia_skus(*, produtos(*))');
+        if (apenasAtivos) {
+            query = query.eq('ativo', true);
+        }
+        const { data, error } = await query.order('nome', { ascending: true });
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function getGrupoEquivalenciaById(grupoId) {
+        if (!grupoId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .select('*, grupo_equivalencia_skus(*, produtos(*))')
+            .eq('id', grupoId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async function getGrupoEquivalenciaByProdutoId(produtoId) {
+        if (!produtoId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .select('*, grupos_equivalencia(*)')
+            .eq('produto_id', produtoId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async function getSkusGrupoEquivalencia(grupoId) {
+        if (!grupoId) return [];
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .select('*, produtos(*)')
+            .eq('grupo_id', grupoId);
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function createGrupoEquivalencia(payload) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .insert([{
+                codigo_grupo: payload.codigo_grupo,
+                nome: payload.nome,
+                descricao: payload.descricao || null,
+                ativo: payload.ativo !== undefined ? payload.ativo : true,
+                criado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function updateGrupoEquivalencia(grupoId, payload) {
+        if (!grupoId) throw new Error('ID do grupo e obrigatorio.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const updateData = { ...payload, atualizado_em: new Date().toISOString() };
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .update(updateData)
+            .eq('id', grupoId)
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function addSkuAoGrupoEquivalencia(grupoId, produtoId) {
+        if (!grupoId || !produtoId) throw new Error('grupoId e produtoId sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const { data: existente, error: errExist } = await client
+            .from('grupo_equivalencia_skus')
+            .select('grupo_id')
+            .eq('produto_id', produtoId)
+            .maybeSingle();
+        if (errExist) throw errExist;
+
+        if (existente) {
+            if (String(existente.grupo_id) === String(grupoId)) {
+                throw new Error('Produto ja pertence a este grupo de equivalencia.');
+            } else {
+                throw new Error('Produto ja pertence a outro grupo de equivalencia ativo. Cada SKU pode pertencer a no maximo um grupo.');
+            }
+        }
+
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .insert([{
+                grupo_id: grupoId,
+                produto_id: produtoId,
+                criado_em: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function removeSkuDoGrupoEquivalencia(grupoId, produtoId) {
+        if (!grupoId || !produtoId) throw new Error('grupoId e produtoId sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { error } = await client
+            .from('grupo_equivalencia_skus')
+            .delete()
+            .eq('grupo_id', grupoId)
+            .eq('produto_id', produtoId);
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return true;
+    }
+
+    async function getEquivalenciaResolvidaByProdutoId(produtoId) {
+        if (!produtoId) return { possui_grupo: false, grupo: null, skus: [] };
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const assoc = await getGrupoEquivalenciaByProdutoId(produtoId);
+        if (assoc && assoc.grupos_equivalencia && assoc.grupos_equivalencia.ativo) {
+            const grupo = assoc.grupos_equivalencia;
+            const skusAssoc = await getSkusGrupoEquivalencia(grupo.id);
+            const skus = skusAssoc.map(item => item.produtos).filter(Boolean);
+            return {
+                possui_grupo: true,
+                grupo: grupo,
+                skus: skus
+            };
+        }
+
+        const { data: prod, error } = await client
+            .from('produtos')
+            .select('*')
+            .eq('id', produtoId)
+            .maybeSingle();
+        if (error) throw error;
+
+        return {
+            possui_grupo: false,
+            grupo: null,
+            skus: prod ? [prod] : []
+        };
+    }
+
+    // IMPLEMENTACAO MAPEAMENTO DE ANUNCIOS ML / MARKETPLACE
+    async function listMercadoLivreItemMappings(accountId = 1) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('mercadolivre_item_mappings')
+            .select(`
+                *,
+                mercadolivre_item_mapping_versions!mercadolivre_item_mappings_current_version_fkey(
+                    *,
+                    mercadolivre_item_mapping_componentes(
+                        *,
+                        produtos:produto_id(*),
+                        grupos_equivalencia:grupo_equivalencia_id(*, grupo_equivalencia_skus(*, produtos(*))),
+                        produto_referencia:produto_referencia_id(*)
+                    )
+                )
+            `)
+            .eq('mercadolivre_account_id', accountId)
+            .eq('ativo', true);
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function getMercadoLivreItemMapping(itemId, variationId = null, accountId = 1) {
+        if (!itemId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+
+        const { data, error } = await client
+            .from('mercadolivre_item_mappings')
+            .select(`
+                *,
+                mercadolivre_item_mapping_versions!mercadolivre_item_mappings_current_version_fkey(
+                    *,
+                    mercadolivre_item_mapping_componentes(
+                        *,
+                        produtos:produto_id(*),
+                        grupos_equivalencia:grupo_equivalencia_id(*, grupo_equivalencia_skus(*, produtos(*))),
+                        produto_referencia:produto_referencia_id(*)
+                    )
+                )
+            `)
+            .eq('mercadolivre_account_id', accountId)
+            .eq('item_id', itemId)
+            .eq('variation_key', varKey)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    }
+
+    async function saveMercadoLivreItemMappingTransacional({ itemId, variationId = null, tipoIdentificacao = 'produto', observacao = '', componentes = [], criadoPor = 'usuario', accountId = 1 }) {
+        if (!itemId) throw new Error('item_id e obrigatorio.');
+        if (!componentes || !componentes.length) throw new Error('Pelo menos um componente deve ser informado.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+
+        const { data: mappingExistente, error: errMap } = await client
+            .from('mercadolivre_item_mappings')
+            .select('id, current_version_id')
+            .eq('mercadolivre_account_id', accountId)
+            .eq('item_id', itemId)
+            .eq('variation_key', varKey)
+            .maybeSingle();
+        if (errMap) throw errMap;
+
+        let mappingId = mappingExistente?.id;
+        let proximaVersao = 1;
+
+        if (mappingId) {
+            const { data: ultVersao, error: errVers } = await client
+                .from('mercadolivre_item_mapping_versions')
+                .select('versao')
+                .eq('mapping_id', mappingId)
+                .order('versao', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            if (errVers) throw errVers;
+            if (ultVersao) proximaVersao = ultVersao.versao + 1;
+        } else {
+            const { data: novoMap, error: errNovoMap } = await client
+                .from('mercadolivre_item_mappings')
+                .insert([{
+                    mercadolivre_account_id: accountId,
+                    item_id: itemId,
+                    variation_id: variationId || null,
+                    ativo: true,
+                    criado_por: criadoPor,
+                    criado_em: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                }])
+                .select('id')
+                .single();
+            if (errNovoMap) throw errNovoMap;
+            mappingId = novoMap.id;
+        }
+
+        const { data: novaVersao, error: errNovaVersao } = await client
+            .from('mercadolivre_item_mapping_versions')
+            .insert([{
+                mapping_id: mappingId,
+                versao: proximaVersao,
+                tipo_identificacao: tipoIdentificacao,
+                observacao: observacao || null,
+                criado_por: criadoPor,
+                criado_em: new Date().toISOString()
+            }])
+            .select('id')
+            .single();
+        if (errNovaVersao) throw errNovaVersao;
+        const versionId = novaVersao.id;
+
+        const componentesPayload = componentes.map((comp, idx) => {
+            const isGrupo = Boolean(comp.grupo_equivalencia_id);
+            return {
+                mapping_version_id: versionId,
+                produto_id: isGrupo ? null : comp.produto_id,
+                grupo_equivalencia_id: isGrupo ? comp.grupo_equivalencia_id : null,
+                produto_referencia_id: comp.produto_referencia_id || comp.produto_id || null,
+                quantidade_por_unidade: Number(comp.quantidade_por_unidade || comp.quantidade || 1),
+                ordem: idx + 1,
+                criado_em: new Date().toISOString()
+            };
+        });
+
+        const { error: errComp } = await client
+            .from('mercadolivre_item_mapping_componentes')
+            .insert(componentesPayload);
+        if (errComp) throw errComp;
+
+        const { error: errUpdMap } = await client
+            .from('mercadolivre_item_mappings')
+            .update({
+                current_version_id: versionId,
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', mappingId);
+        if (errUpdMap) throw errUpdMap;
+
+        invalidateCache('produtos');
+        return await getMercadoLivreItemMapping(itemId, variationId, accountId);
+    }
+
+    // IMPLEMENTACAO PEDIDOS ML / MARKETPLACE
+    async function listMercadoLivrePedidos(filtro = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        let query = client
+            .from('mercadolivre_pedidos')
+            .select('*, mercadolivre_pedido_itens(*)');
+
+        if (filtro.statusIdentificacao) {
+            query = query.eq('status_identificacao', filtro.statusIdentificacao);
+        }
+        if (filtro.accountId) {
+            query = query.eq('mercadolivre_account_id', filtro.accountId);
+        }
+
+        const { data, error } = await query.order('date_created', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function getMercadoLivrePedidoById(pedidoId) {
+        if (!pedidoId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('mercadolivre_pedidos')
+            .select('*, mercadolivre_pedido_itens(*)')
+            .eq('id', pedidoId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async function resolverSnapshotItemPedido(item, accountId = 1) {
+        const mapping = await getMercadoLivreItemMapping(item.item_id, item.variation_id, accountId);
+        if (!mapping || !mapping.current_version_id || !mapping.mercadolivre_item_mapping_versions) {
+            return {
+                identificado: false,
+                mapping_id: null,
+                mapping_version_id: null,
+                snapshot_componentes: []
+            };
+        }
+
+        const version = mapping.mercadolivre_item_mapping_versions;
+        const componentes = version.mercadolivre_item_mapping_componentes || [];
+        const qtdComprada = Number(item.quantidade_comprada || 1);
+
+        const snapshotComponentes = await Promise.all(componentes.map(async (comp) => {
+            const isGrupo = Boolean(comp.grupo_equivalencia_id);
+            const qtdUnit = Number(comp.quantidade_por_unidade || 1);
+            const qtdTotal = qtdUnit * qtdComprada;
+
+            let skusValidosSnapshot = [];
+            if (isGrupo && comp.grupos_equivalencia) {
+                const eqSkus = comp.grupos_equivalencia.grupo_equivalencia_skus || [];
+                skusValidosSnapshot = eqSkus.map(s => s.produtos).filter(Boolean);
+            } else if (comp.produtos) {
+                skusValidosSnapshot = [comp.produtos];
+            }
+
+            return {
+                ordem: comp.ordem,
+                tipo_componente: isGrupo ? 'grupo' : 'produto',
+                produto_id: comp.produto_id || null,
+                grupo_equivalencia_id: comp.grupo_equivalencia_id || null,
+                produto_referencia_id: comp.produto_referencia_id || comp.produto_id || null,
+                grupo_nome: comp.grupos_equivalencia?.nome || null,
+                quantidade_por_unidade: qtdUnit,
+                quantidade_total_calculada: qtdTotal,
+                skus_validos_snapshot: skusValidosSnapshot
+            };
+        }));
+
+        return {
+            identificado: true,
+            mapping_id: mapping.id,
+            mapping_version_id: version.id,
+            snapshot_componentes: snapshotComponentes
+        };
+    }
+
+    async function saveMercadoLivrePedidoTransacional({ accountId = 1, externalOrderId, statusMercadolivre = 'paid', dateCreated = new Date().toISOString(), totalAmount = 0, currencyId = 'BRL', itens = [] }) {
+        if (!externalOrderId) throw new Error('external_order_id e obrigatorio.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        let todosIdentificados = true;
+        const itensProcessados = await Promise.all(itens.map(async (item, idx) => {
+            const res = await resolverSnapshotItemPedido(item, accountId);
+            if (!res.identificado) todosIdentificados = false;
+            return {
+                source_line_number: idx + 1,
+                item_id: item.item_id,
+                variation_id: item.variation_id || null,
+                titulo: item.titulo || 'Item de pedido',
+                seller_sku: item.seller_sku || null,
+                ean: item.ean || null,
+                quantidade_comprada: Number(item.quantidade_comprada || 1),
+                unit_price: Number(item.unit_price || 0),
+                full_unit_price: Number(item.full_unit_price || item.unit_price || 0),
+                gross_price: Number(item.gross_price || 0),
+                currency_id: currencyId,
+                atributos: item.atributos || {},
+                payload_original: item.payload_original || {},
+                mapping_id: res.mapping_id,
+                mapping_version_id: res.mapping_version_id,
+                snapshot_componentes: res.snapshot_componentes,
+                importado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+            };
+        }));
+
+        const statusIdentificacao = todosIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+
+        const { data: pedExistente, error: errPedExist } = await client
+            .from('mercadolivre_pedidos')
+            .select('id')
+            .eq('mercadolivre_account_id', accountId)
+            .eq('external_order_id', externalOrderId)
+            .maybeSingle();
+        if (errPedExist) throw errPedExist;
+
+        let pedidoId = pedExistente?.id;
+        if (pedidoId) {
+            const { error: errUpdPed } = await client
+                .from('mercadolivre_pedidos')
+                .update({
+                    status_mercadolivre: statusMercadolivre,
+                    status_identificacao: statusIdentificacao,
+                    total_amount: totalAmount,
+                    atualizado_em: new Date().toISOString()
+                })
+                .eq('id', pedidoId);
+            if (errUpdPed) throw errUpdPed;
+
+            await client.from('mercadolivre_pedido_itens').delete().eq('pedido_id', pedidoId);
+        } else {
+            const { data: novoPed, error: errNovoPed } = await client
+                .from('mercadolivre_pedidos')
+                .insert([{
+                    mercadolivre_account_id: accountId,
+                    external_order_id: externalOrderId,
+                    status_mercadolivre: statusMercadolivre,
+                    status_identificacao: statusIdentificacao,
+                    date_created: dateCreated,
+                    total_amount: totalAmount,
+                    currency_id: currencyId,
+                    importado_em: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                }])
+                .select('id')
+                .single();
+            if (errNovoPed) throw errNovoPed;
+            pedidoId = novoPed.id;
+        }
+
+        const itensPayload = itensProcessados.map(item => ({ ...item, pedido_id: pedidoId }));
+        const { error: errItens } = await client
+            .from('mercadolivre_pedido_itens')
+            .insert(itensPayload);
+        if (errItens) throw errItens;
+
+        return await getMercadoLivrePedidoById(pedidoId);
+    }
+
+    async function reprocessarIdentificacaoPedidoTransacional(pedidoId) {
+        if (!pedidoId) throw new Error('pedidoId e obrigatorio.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const pedido = await getMercadoLivrePedidoById(pedidoId);
+        if (!pedido) throw new Error('Pedido nao encontrado.');
+
+        const itens = pedido.mercadolivre_pedido_itens || [];
+        let todosIdentificados = true;
+
+        for (const item of itens) {
+            const res = await resolverSnapshotItemPedido(item, pedido.mercadolivre_account_id);
+            if (!res.identificado) {
+                todosIdentificados = false;
+            } else {
+                await client
+                    .from('mercadolivre_pedido_itens')
+                    .update({
+                        mapping_id: res.mapping_id,
+                        mapping_version_id: res.mapping_version_id,
+                        snapshot_componentes: res.snapshot_componentes,
+                        atualizado_em: new Date().toISOString()
+                    })
+                    .eq('id', item.id);
+            }
+        }
+
+        const novoStatus = todosIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+        await client
+            .from('mercadolivre_pedidos')
+            .update({
+                status_identificacao: novoStatus,
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', pedidoId);
+
+        return await getMercadoLivrePedidoById(pedidoId);
+    }
+
+    async function enviarPedidoParaSeparacaoTransacional(pedidoId, usuario = 'Sistema') {
+        if (!pedidoId) throw new Error('pedidoId e obrigatorio.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const { data, error } = await client.rpc('enviar_pedido_para_separacao', {
+            p_pedido_id: Number(pedidoId),
+            p_usuario: usuario
+        });
+
+        if (error) throw new Error(error.message || 'Erro ao enviar pedido para separacao.');
+        if (!data || !data.ok) throw new Error(data?.message || 'Falha na operacao de envio.');
+
+        invalidateCache('separacao');
+        return data;
+    }
+
+    async function biparItemSeparacaoEquivalente(separacaoItemId, codigoOuEan, usuario = 'Sistema') {
+        if (!separacaoItemId || !codigoOuEan) throw new Error('Item de separacao e codigo sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const cleanCode = String(codigoOuEan).trim().toUpperCase();
+
+        const { data: prodData, error: errProd } = await client
+            .from('produtos')
+            .select('id, id_interno, ean, descricao_base, marca')
+            .or(`id_interno.ilike.${cleanCode},ean.eq.${cleanCode}`)
+            .limit(1);
+
+        if (errProd || !prodData || !prodData.length) {
+            throw new Error(`Produto com código/EAN "${cleanCode}" não foi encontrado no cadastro.`);
+        }
+        const prodFisico = prodData[0];
+
+        const { data: itemData, error: errItem } = await client
+            .from('separacao_itens')
+            .select('*')
+            .eq('id', separacaoItemId)
+            .single();
+
+        if (errItem || !itemData) throw new Error('Item de separacao nao encontrado.');
+
+        const rawDet = itemData.detalhes_operacionais;
+        const detalhesObj = Array.isArray(rawDet) ? (rawDet[0] || {}) : (rawDet || {});
+        const skusAceitos = detalhesObj.skus_aceitos || [];
+
+        const isPermitido = skusAceitos.some(s =>
+            String(s.produto_id || s.id || '') === String(prodFisico.id) ||
+            String(s.id_interno || s.sku || '').toUpperCase() === prodFisico.id_interno.toUpperCase()
+        );
+
+        if (!isPermitido) {
+            throw new Error(`REJEITADO: O produto "${prodFisico.id_interno}" (${prodFisico.marca || 'Sem Marca'}) não pertence aos SKUs equivalentes autorizados no snapshot deste pedido!`);
+        }
+
+        const novaQtd = (Number(itemData.qtd_separada) || 0) + 1;
+        const bipagensFisicas = Array.isArray(detalhesObj.bipagens_fisicas) ? detalhesObj.bipagens_fisicas : [];
+        bipagensFisicas.push({
+            produto_id: prodFisico.id,
+            id_interno: prodFisico.id_interno,
+            ean: prodFisico.ean,
+            bipado_em: new Date().toISOString()
+        });
+
+        detalhesObj.bipagens_fisicas = bipagensFisicas;
+
+        const { error: errUpdate } = await client
+            .from('separacao_itens')
+            .update({
+                qtd_separada: novaQtd,
+                detalhes_operacionais: [detalhesObj],
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', separacaoItemId);
+
+        if (errUpdate) throw errUpdate;
+
+        const { error: errBipagemRel } = await client.from('separacao_item_bipagens').insert([{
+            separacao_id: itemData.separacao_id,
+            separacao_item_id: separacaoItemId,
+            produto_id: prodFisico.id,
+            id_interno: prodFisico.id_interno,
+            ean: prodFisico.ean,
+            quantidade: 1,
+            bipado_por: usuario,
+            bipado_em: new Date().toISOString()
+        }]);
+
+        if (errBipagemRel) console.warn('[SEPARACAO] Erro ao gravar separacao_item_bipagens relacional:', errBipagemRel);
+
+        invalidateCache('separacao');
+        return {
+            success: true,
+            nova_qtd_separada: novaQtd,
+            produto_fisico: prodFisico
+        };
+    }
 
 })();
 

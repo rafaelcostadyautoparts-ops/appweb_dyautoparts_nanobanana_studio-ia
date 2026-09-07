@@ -809,20 +809,33 @@
         }
     };
 
-    window.anSelectCatalogProduct = function (idInterno) {
+    window.anSelectCatalogProduct = async function (idInterno) {
         const prod = findProduto(idInterno);
         if (!prod) return;
 
-        if (AnunciosState.modalMode === 'equivalents') {
-            if (!AnunciosState.modalAcceptedProducts.some(p => p.id_interno === idInterno)) {
-                AnunciosState.modalAcceptedProducts.push({ ...prod });
+        // Resolve se o produto pertence a algum grupo de equivalencia ativo
+        let infoEquivalencia = { possui_grupo: false, grupo: null, skus: [prod] };
+        try {
+            if (window.DataClient?.getEquivalenciaResolvidaByProdutoId && prod.id) {
+                infoEquivalencia = await window.DataClient.getEquivalenciaResolvidaByProdutoId(prod.id);
             }
+        } catch (err) {
+            console.warn('[ANUNCIOS_MAPPING] Erro ao resolver equivalencia do produto:', err);
+        }
+
+        const prodComGrupo = {
+            ...prod,
+            _infoEquivalencia: infoEquivalencia
+        };
+
+        if (AnunciosState.modalMode === 'equivalents') {
+            AnunciosState.modalAcceptedProducts = [prodComGrupo];
         } else {
-            const existing = AnunciosState.modalKitComponents.find(c => c.product.id_interno === idInterno);
+            const existing = AnunciosState.modalKitComponents.find(c => c.product.id_interno === idInterno || c.product.id === prod.id);
             if (existing) {
                 existing.qty++;
             } else {
-                AnunciosState.modalKitComponents.push({ product: { ...prod }, qty: 1 });
+                AnunciosState.modalKitComponents.push({ product: prodComGrupo, qty: 1 });
             }
         }
 
@@ -858,41 +871,91 @@
         }
     };
 
-    window.anConfirmModalMapping = function () {
+    // Ações do Modal
+    window.anConfirmModalMapping = async function () {
         const anuncio = AnunciosState.anuncios.find(a => a.id === AnunciosState.activeAnuncioId);
         if (!anuncio) return;
 
-        if (AnunciosState.modalMode === 'equivalents') {
-            if (!AnunciosState.modalAcceptedProducts.length) {
-                if (typeof showToast === 'function') showToast('Adicione pelo menos um produto ao mapeamento.', 'warning');
-                return;
+        const btnSave = document.querySelector('.an-modal-footer .an-btn-primary');
+        if (btnSave && btnSave.disabled) return;
+
+        try {
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.textContent = 'Salvando...';
             }
 
-            const newMapping = {
-                type: AnunciosState.modalAcceptedProducts.length > 1 ? 'equivalents' : 'single',
-                products: AnunciosState.modalAcceptedProducts.map(p => ({ ...p }))
-            };
+            let tipoIdentificacao = 'produto';
+            let componentesPayload = [];
 
-            if (AnunciosState.activeVariationId && anuncio.has_variations) {
-                const v = anuncio.variations.find(x => x.variation_id === AnunciosState.activeVariationId);
-                if (v) {
-                    v.mapping = newMapping;
-                    v.mapping_status = 'mapped';
+            if (AnunciosState.modalMode === 'equivalents') {
+                if (!AnunciosState.modalAcceptedProducts.length) {
+                    if (typeof showToast === 'function') showToast('Adicione pelo menos um produto ao mapeamento.', 'warning');
+                    return;
                 }
-                const allMapped = anuncio.variations.every(x => x.mapping_status === 'mapped');
-                anuncio.mapping_status = allMapped ? 'mapped' : 'partial';
+                tipoIdentificacao = 'produto';
+                const p = AnunciosState.modalAcceptedProducts[0];
+                const infoEq = p._infoEquivalencia;
+
+                if (infoEq && infoEq.possui_grupo && infoEq.grupo) {
+                    componentesPayload.push({
+                        grupo_equivalencia_id: infoEq.grupo.id,
+                        produto_id: null,
+                        produto_referencia_id: p.id,
+                        quantidade_por_unidade: 1
+                    });
+                } else {
+                    componentesPayload.push({
+                        produto_id: p.id,
+                        grupo_equivalencia_id: null,
+                        produto_referencia_id: p.id,
+                        quantidade_por_unidade: 1
+                    });
+                }
             } else {
-                anuncio.mapping = newMapping;
-                anuncio.mapping_status = 'mapped';
-            }
-        } else {
-            if (!AnunciosState.modalKitComponents.length) {
-                if (typeof showToast === 'function') showToast('Adicione pelo menos um componente ao kit.', 'warning');
-                return;
+                if (!AnunciosState.modalKitComponents.length) {
+                    if (typeof showToast === 'function') showToast('Adicione pelo menos um componente ao kit.', 'warning');
+                    return;
+                }
+                tipoIdentificacao = 'kit';
+                componentesPayload = AnunciosState.modalKitComponents.map(c => {
+                    const infoEq = c.product._infoEquivalencia;
+                    if (infoEq && infoEq.possui_grupo && infoEq.grupo) {
+                        return {
+                            grupo_equivalencia_id: infoEq.grupo.id,
+                            produto_id: null,
+                            produto_referencia_id: c.product.id,
+                            quantidade_por_unidade: c.qty
+                        };
+                    } else {
+                        return {
+                            produto_id: c.product.id,
+                            grupo_equivalencia_id: null,
+                            produto_referencia_id: c.product.id,
+                            quantidade_por_unidade: c.qty
+                        };
+                    }
+                });
             }
 
+            // Salva transacionalmente no Supabase se DataClient estiver disponivel
+            if (window.DataClient?.saveMercadoLivreItemMappingTransacional && anuncio.item_id) {
+                const currentUser = localStorage.getItem('currentUser') || 'usuario';
+                const savedMapping = await window.DataClient.saveMercadoLivreItemMappingTransacional({
+                    itemId: anuncio.item_id,
+                    variationId: AnunciosState.activeVariationId || null,
+                    tipoIdentificacao: tipoIdentificacao,
+                    observacao: `Mapeado via painel em ${new Date().toLocaleString()}`,
+                    componentes: componentesPayload,
+                    criadoPor: currentUser
+                });
+                console.log('[ANUNCIOS_MAPPING] Mapeamento salvo no Supabase:', savedMapping);
+            }
+
+            // Atualiza estado local na UI
             const newMapping = {
-                type: 'kit',
+                type: tipoIdentificacao === 'kit' ? 'kit' : (AnunciosState.modalAcceptedProducts.length > 1 ? 'equivalents' : 'single'),
+                products: AnunciosState.modalAcceptedProducts.map(p => ({ ...p })),
                 components: AnunciosState.modalKitComponents.map(c => ({ product: { ...c.product }, qty: c.qty }))
             };
 
@@ -908,12 +971,22 @@
                 anuncio.mapping = newMapping;
                 anuncio.mapping_status = 'mapped';
             }
-        }
 
-        document.getElementById('an-mapping-modal-overlay')?.remove();
-        renderAnunciosScreen(false);
-        if (typeof showToast === 'function') {
-            showToast('Mapeamento de anúncio atualizado com sucesso!', 'success');
+            document.getElementById('an-mapping-modal-overlay')?.remove();
+            renderAnunciosScreen(false);
+            if (typeof showToast === 'function') {
+                showToast('Mapeamento de anúncio atualizado e salvo no banco com sucesso!', 'success');
+            }
+        } catch (error) {
+            console.error('[ANUNCIOS_MAPPING] Erro ao salvar mapeamento:', error);
+            if (typeof showToast === 'function') {
+                showToast(error.message || 'Erro ao salvar mapeamento do anúncio.', 'error');
+            }
+        } finally {
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.textContent = 'Salvar Mapeamento';
+            }
         }
     };
 
