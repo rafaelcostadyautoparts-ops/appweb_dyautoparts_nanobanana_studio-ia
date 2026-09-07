@@ -50,6 +50,12 @@ function showUnsafeEnvironmentBlock() {
     }
 }
 
+const configuredSupabaseMestreUrl = getConfiguredValue(runtimeConfig.supabaseMestreUrl).replace(/\/rest\/v1\/?$/, '');
+const configuredSupabaseMestreAnonKey = getConfiguredValue(runtimeConfig.supabaseMestreAnonKey);
+const SUPABASE_MESTRE_URL = configuredSupabaseMestreUrl || '';
+const SUPABASE_MESTRE_ANON_KEY = configuredSupabaseMestreAnonKey || '';
+const hasMestreConfig = Boolean(SUPABASE_MESTRE_URL && SUPABASE_MESTRE_ANON_KEY);
+
 showEnvironmentIdentity();
 window.supabaseClientReady = new Promise((resolve, reject) => {
     if (!localConfigurationIsSafe) {
@@ -85,6 +91,55 @@ window.supabaseClientReady = new Promise((resolve, reject) => {
     }
 
     tryCreateClient();
+});
+
+window.supabaseMestreClientReady = new Promise((resolve) => {
+    if (!hasMestreConfig) {
+        window.supabaseMestreClient = null;
+        resolve(null);
+        return;
+    }
+
+    const startedAt = Date.now();
+    const timeoutMs = 6000;
+
+    function tryCreateMestreClient() {
+        if (window.supabaseMestreClient) {
+            resolve(window.supabaseMestreClient);
+            return;
+        }
+
+        if (window.supabase?.createClient) {
+            try {
+                window.supabaseMestreClient = window.supabase.createClient(SUPABASE_MESTRE_URL, SUPABASE_MESTRE_ANON_KEY, {
+                    auth: {
+                        persistSession: false,
+                        autoRefreshToken: false,
+                        detectSessionInUrl: false
+                    }
+                });
+                console.log('[Supabase Mestre] Client inicializado com URL:', SUPABASE_MESTRE_URL);
+                resolve(window.supabaseMestreClient);
+                return;
+            } catch (err) {
+                console.warn('[Supabase Mestre] Falha ao criar client secundario:', err?.message || err);
+                window.supabaseMestreClient = null;
+                resolve(null);
+                return;
+            }
+        }
+
+        if (Date.now() - startedAt >= timeoutMs) {
+            console.warn('[Supabase Mestre] Biblioteca Supabase nao carregou a tempo');
+            window.supabaseMestreClient = null;
+            resolve(null);
+            return;
+        }
+
+        setTimeout(tryCreateMestreClient, 100);
+    }
+
+    tryCreateMestreClient();
 });
 
 function getStoragePath(file, tipo = 'imagem') {

@@ -3371,6 +3371,9 @@ const DataClient = (function () {
         enviarPedidoParaSeparacaoTransacional,
         biparItemSeparacaoEquivalente,
 
+        // PRODUTO MESTRE (BASE SECUNDARIA - SOMENTE LEITURA)
+        fetchProdutoMestreByIdInterno,
+
         // Constantes para uso interno
         MODULES: Object.keys(MODULE_TABLES)
     };
@@ -3991,6 +3994,50 @@ const DataClient = (function () {
             nova_qtd_separada: novaQtd,
             produto_fisico: prodFisico
         };
+    }
+
+    /**
+     * Consulta produto na base do Produto Mestre por id_interno exato (somente leitura)
+     * @param {string} idInterno - Identificador exato do produto (ex: 'DY-000.001')
+     * @returns {Promise<Object|null>} - Objeto do Produto Mestre ou null
+     */
+    async function fetchProdutoMestreByIdInterno(idInterno) {
+        const cleanId = String(idInterno || '').trim();
+        if (!cleanId) {
+            return null;
+        }
+
+        let client = window.supabaseMestreClient;
+        if (!client && window.supabaseMestreClientReady) {
+            try {
+                client = await window.supabaseMestreClientReady;
+            } catch (err) {
+                console.warn('[Produto Mestre] Client secundario indisponivel:', err?.message || err);
+                return null;
+            }
+        }
+
+        if (!client) {
+            return null;
+        }
+
+        try {
+            const { data, error } = await client
+                .from('produto_mestre')
+                .select('id, id_interno, nome_produto, nome_completo, marca, categoria, subcategoria, tipo_item, cor, atributos, unidade_estoque, unidade_venda, quantidade_conteudo, etiqueta_nome, palavras_chave, url_imagem, url_pdf_manual, status, observacoes, criado_em, atualizado_em, estoque_minimo, estoque_ideal')
+                .eq('id_interno', cleanId)
+                .maybeSingle();
+
+            if (error) {
+                console.error('[Produto Mestre] Erro ao consultar produto_mestre por id_interno:', error.message);
+                throw new Error('Erro ao consultar Produto Mestre: ' + error.message);
+            }
+
+            return data || null;
+        } catch (err) {
+            console.error('[Produto Mestre] Falha na consulta do produto mestre:', err?.message || err);
+            throw err;
+        }
     }
 
 })();
