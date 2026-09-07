@@ -14600,81 +14600,7 @@ function getComparableAttr(attrMap, names) {
 }
 
 function getEquivalentProducts(p) {
- if (!appData.products || !p) return [];
- 
- const attrs = safeParseAtributos(p.atributos);
- const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
- // Texto validado em UTF-8.
- const codEquivalenteAttr = attrs.find(a => norm(a.nome).includes('equivalente'));
- const codEquivalente = (codEquivalenteAttr && norm(codEquivalenteAttr.valor)) ? norm(codEquivalenteAttr.valor) : null;
- 
- if (codEquivalente && codEquivalente !== 'null' && codEquivalente !== 'undefined') {
- return appData.products.filter(other => {
- if (other.id_interno === p.id_interno) return false;
- const otherAttrs = safeParseAtributos(other.atributos);
- const otherCod = otherAttrs.find(a => norm(a.nome).includes('equivalente'));
- return otherCod && norm(otherCod.valor) === codEquivalente;
- }).slice(0, 5);
- }
- 
- // Texto validado em UTF-8.
- const ATRIBUTOS_OBRIGATORIOS = ['tipo', 'modelo', 'encaixe', 'tensao', 'potencia', 'polos', 'pinos', 'aplicacao'];
- const ATRIBUTOS_CONDICIONAIS = ['cor', 'lado', 'acabamento'];
- const ATRIBUTOS_CHAVE = [...ATRIBUTOS_OBRIGATORIOS, ...ATRIBUTOS_CONDICIONAIS];
- 
- const pTechAttrs = {};
- attrs.forEach(a => {
- const nome = norm(a.nome);
- if (ATRIBUTOS_CHAVE.includes(nome)) {
- pTechAttrs[nome] = norm(a.valor);
- }
- });
-
- // Texto validado em UTF-8.
- // Texto validado em UTF-8.
- if (Object.keys(pTechAttrs).length === 0) return [];
-
- const pDesc = norm(p.descricao_base);
- const pCat = norm(p.categoria);
- const pSub = norm(p.subcategoria);
- 
- // Texto validado em UTF-8.
- if (!pDesc || !pCat) return [];
-
- return appData.products.filter(other => {
- if (other.id_interno === p.id_interno) return false;
- 
- // Texto validado em UTF-8.
- if (norm(other.marca) === norm(p.marca)) return false;
-
- // Texto validado em UTF-8.
- if (norm(other.descricao_base) !== pDesc) return false;
- if (norm(other.categoria) !== pCat) return false;
- if (norm(other.subcategoria) !== pSub) return false;
- 
- // Texto validado em UTF-8.
- const otherAttrs = safeParseAtributos(other.atributos);
- const otherTechAttrs = {};
- otherAttrs.forEach(a => {
- const nome = norm(a.nome);
- if (ATRIBUTOS_CHAVE.includes(nome)) {
- otherTechAttrs[nome] = norm(a.valor);
- }
- });
- 
- // Texto validado em UTF-8.
- for (const key of ATRIBUTOS_OBRIGATORIOS) {
- if (pTechAttrs[key] !== otherTechAttrs[key]) return false;
- }
- 
- // Texto validado em UTF-8.
- for (const key of ATRIBUTOS_CONDICIONAIS) {
- if (pTechAttrs[key] && pTechAttrs[key] !== otherTechAttrs[key]) return false;
- }
-
- return true;
- }).slice(0, 5);
+ return getEquivalentProductsForDetail(p);
 }
 
 function getAvailableStockCache(idInterno) {
@@ -14702,13 +14628,27 @@ function getEquivalentProductsForDetail(p) {
 
  const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
  const isSameProduct = (other) => (p.id_interno && String(other.id_interno) === String(p.id_interno)) || (p.ean && other.ean && String(other.ean) === String(p.ean));
+ 
+ const grupoId = p.grupo_equivalencia_id || p.grupo_id || (p.grupo_equivalencia && p.grupo_equivalencia.id);
+
  const attrs = safeParseAtributos(p.atributos);
  const codEquivalenteAttr = attrs.find(a => {
  const nome = norm(a.nome).replace(/\s+/g, '_');
  return nome === 'codigo_equivalente' || nome.includes('codigo_equivalente');
  });
- const codEquivalente = codEquivalenteAttr && isFilledValue(codEquivalenteAttr.valor) ? norm(codEquivalenteAttr.valor) : null;
+ const codEquivalente = (codEquivalenteAttr && isFilledValue(codEquivalenteAttr.valor)) ? norm(codEquivalenteAttr.valor) : null;
 
+ // REGRA CANÔNICA DE EQUIVALÊNCIA OFICIAL (C1.1):
+ // A. Se o produto pertence a um grupo_id oficial
+ if (grupoId) {
+ return appData.products.filter(other => {
+ if (isSameProduct(other)) return false;
+ const otherGrupoId = other.grupo_equivalencia_id || other.grupo_id || (other.grupo_equivalencia && other.grupo_equivalencia.id);
+ return otherGrupoId && String(otherGrupoId) === String(grupoId);
+ }).sort(sortEquivalentProductsForDetail).slice(0, 8);
+ }
+
+ // B. Se o produto possui código_equivalente explícito
  if (codEquivalente) {
  return appData.products.filter(other => {
  if (isSameProduct(other)) return false;
@@ -14721,44 +14661,8 @@ function getEquivalentProductsForDetail(p) {
  }).sort(sortEquivalentProductsForDetail).slice(0, 8);
  }
 
- const pDesc = norm(p.descricao_base);
- const pCat = norm(p.categoria);
- const pSub = norm(p.subcategoria);
- if (!pDesc || !pCat || !pSub) return [];
-
- const pMap = getProductAttrMap(p);
- const requiredGroups = [
- ['modelo'],
- ['tipo_lampada', 'tipo'],
- ['voltagem', 'tensao'],
- ['potencia']
- ];
- const optionalGroups = [['encaixe']];
- const conditionalGroups = [['cor'], ['acabamento'], ['lado'], ['linha'], ['aplicacao']];
- const pRequired = requiredGroups.map(group => getComparableAttr(pMap, group));
- if (pRequired.some(value => !isFilledValue(value))) return [];
- const pOptional = optionalGroups.map(group => getComparableAttr(pMap, group));
- const pConditional = conditionalGroups.map(group => getComparableAttr(pMap, group));
-
- return appData.products.filter(other => {
- if (isSameProduct(other)) return false;
- if (norm(other.descricao_base) !== pDesc) return false;
- if (norm(other.categoria) !== pCat) return false;
- if (norm(other.subcategoria) !== pSub) return false;
-
- const otherMap = getProductAttrMap(other);
- for (let i = 0; i < requiredGroups.length; i++) {
- if (pRequired[i] !== getComparableAttr(otherMap, requiredGroups[i])) return false;
- }
- for (let i = 0; i < optionalGroups.length; i++) {
- if (isFilledValue(pOptional[i]) && pOptional[i] !== getComparableAttr(otherMap, optionalGroups[i])) return false;
- }
- for (let i = 0; i < conditionalGroups.length; i++) {
- if (isFilledValue(pConditional[i]) && pConditional[i] !== getComparableAttr(otherMap, conditionalGroups[i])) return false;
- }
-
- return true;
- }).sort(sortEquivalentProductsForDetail).slice(0, 8);
+ // C. Se não possui grupo oficial nem código explícito: 0 equivalentes operacionais.
+ return [];
 }
 
 window.toggleMoreInfo = function() {
@@ -14781,6 +14685,24 @@ window.toggleMoreInfo = function() {
  }
 };
 
+window.switchProductDetailTab = function(tabName) {
+ const tabs = ['visao-geral', 'estoque-fifo', 'equivalentes'];
+ tabs.forEach(t => {
+ const btn = document.getElementById(`tab-btn-${t}`);
+ const content = document.getElementById(`tab-content-${t}`);
+ if (btn && content) {
+ if (t === tabName) {
+ btn.classList.add('active');
+ btn.setAttribute('aria-selected', 'true');
+ content.classList.remove('hidden');
+ } else {
+ btn.classList.remove('active');
+ btn.setAttribute('aria-selected', 'false');
+ content.classList.add('hidden');
+ }
+ }
+ });
+};
 
 async function renderProductDetails(p) {
  const currentUser = localStorage.getItem('currentUser');
@@ -14829,33 +14751,25 @@ async function renderProductDetails(p) {
  const stockStatusClass = getStockStatusClass(disponivel, estoqueMinimo);
  const unitLabel = p.unidade || 'UN';
  const packaging = getPackagingBreakdown(p, disponivel);
+
  const packagingHTML = `
- <div class="product-packaging-card">
- <div class="product-packaging-header">
- <span class="material-symbols-rounded">inventory</span>
+ <div class="product-packaging-card" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-bottom: 20px;">
+ <div class="product-packaging-header" style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.88rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase;">
+ <span class="material-symbols-rounded" style="color: #3b82f6;">inventory</span>
  <span>Embalagem / Volume</span>
  </div>
- <div class="product-packaging-grid">
- <div class="product-packaging-item">
- <span class="product-packaging-label">Embalagem</span>
- <strong>${packaging.qtdPorCaixa > 1 ? `Caixa com ${formatStockNumber(packaging.qtdPorCaixa)} UN` : 'Venda avulsa / 1 UN'}</strong>
+ <div class="product-packaging-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+ <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
+ <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Tipo de Embalagem</span>
+ <strong style="font-size: 0.95rem; color: #ffffff;">${packaging.qtdPorCaixa > 1 ? `Caixa com ${formatStockNumber(packaging.qtdPorCaixa)} UN` : 'Venda avulsa / 1 UN'}</strong>
  </div>
  ${packaging.qtdPorCaixa > 1 ? `
- <div class="product-packaging-item">
- <span class="product-packaging-label">Volume</span>
- <strong>${formatStockNumber(packaging.caixasFechadas)} caixas fechadas + ${formatStockNumber(packaging.unidadesAvulsas)} unidades avulsas</strong>
+ <div class="product-packaging-item" style="background: rgba(0,0,0,0.15); padding: 12px; border-radius: 12px;">
+ <span class="product-packaging-label" style="font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px;">Composição do Volume</span>
+ <strong style="font-size: 0.95rem; color: #3b82f6;">${formatStockNumber(packaging.caixasFechadas)} CX fechadas + ${formatStockNumber(packaging.unidadesAvulsas)} UN avulsas</strong>
  </div>
  ` : ''}
  </div>
- </div>
- `;
- const stockAlertsHTML = '';
-
- const renderProductMetaItem = (icon, label, value) => `
- <div class="product-detail-meta-item">
- <span class="material-symbols-rounded">${icon}</span>
- <strong>${label}:</strong>
- <span>${value || '-'}</span>
  </div>
  `;
 
@@ -14867,218 +14781,359 @@ async function renderProductDetails(p) {
  transit: 'local_shipping',
  external: 'warehouse'
  };
+
  const renderStockLocationCard = (key, label, qty, group) => `
- <div class="product-stock-location ${qty === 0 ? 'is-empty' : ''}" data-stock-group="${group}" data-stock-key="${key}">
- <span class="product-stock-location-icon material-symbols-rounded">${stockIconByGroup[group] || 'inventory_2'}</span>
- <span class="product-stock-location-name">${label}</span>
- <span class="product-stock-location-value">
- <span class="product-stock-location-qty">${qty}</span>
- <span class="product-stock-location-unit">${unitLabel}</span>
- </span>
+ <div class="product-stock-location ${qty === 0 ? 'is-empty' : ''}" data-stock-group="${group}" data-stock-key="${key}" style="${qty === 0 ? 'opacity: 0.4;' : ''} background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 14px; border-radius: 14px; display: flex; align-items: center; justify-content: space-between;">
+ <div style="display: flex; align-items: center; gap: 10px;">
+ <span class="material-symbols-rounded" style="color: ${group === 'operational' ? '#22c55e' : group === 'external' ? '#f59e0b' : '#94a3b8'}; font-size: 22px;">${stockIconByGroup[group] || 'inventory_2'}</span>
+ <span style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">${label}</span>
+ </div>
+ <div style="text-align: right;">
+ <span style="font-size: 1.15rem; font-weight: 900; color: ${qty > 0 ? '#ffffff' : '#94a3b8'};">${qty}</span>
+ <span style="font-size: 0.72rem; color: var(--muted); font-weight: 700; margin-left: 2px;">${unitLabel}</span>
+ </div>
  </div>
  `;
 
  const stockLocationsHTML = `
- <div class="product-stock-locations">
- <div class="product-stock-title">ESTOQUE POR LOCAL</div>
- <div class="product-stock-group">
- <div class="product-stock-group-title">DISPON\u00cdVEL PARA VENDA</div>
- <div class="product-stock-grid">
- ${renderStockLocationCard('TERREO', 'T\u00c9RREO', terreoQty, 'operational')}
- ${renderStockLocationCard('PRIMEIRO_ANDAR', '1\u00ba ANDAR', primeiroAndarQty, 'operational')}
+ <div class="product-stock-locations" style="margin-bottom: 24px;">
+ <div class="product-stock-title" style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 14px; text-transform: uppercase;">Estoque por Localização</div>
+ 
+ <div class="product-stock-group" style="margin-bottom: 16px;">
+ <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #22c55e; text-transform: uppercase; margin-bottom: 8px;">Locais Vendáveis</div>
+ <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+ ${renderStockLocationCard('TERREO', 'TÉRREO', terreoQty, 'operational')}
+ ${renderStockLocationCard('PRIMEIRO_ANDAR', '1º ANDAR', primeiroAndarQty, 'operational')}
  </div>
  </div>
- <div class="product-stock-group">
- <div class="product-stock-group-title">ESTOQUE SECUND\u00c1RIO / N\u00c3O DISPON\u00cdVEL</div>
- <p class="product-stock-group-note">Mostru\u00e1rio: venda opcional, conforme o estado do produto.</p>
- <div class="product-stock-grid product-stock-grid-secondary">
- ${renderStockLocationCard('MOSTRUARIO', 'MOSTRU\u00c1RIO', mostruarioQty, 'secondary')}
+
+ <div class="product-stock-group" style="margin-bottom: 16px;">
+ <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Locais Secundários / Restritos</div>
+ <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mostruário: venda opcional. Defeito/Garantia: bloqueado.</p>
+ <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+ ${renderStockLocationCard('MOSTRUARIO', 'MOSTRUÁRIO', mostruarioQty, 'secondary')}
  ${renderStockLocationCard('DEFEITO', 'Defeito', defeitoQty, 'blocked')}
  ${renderStockLocationCard('EM_GARANTIA', 'Em Garantia', garantiaQty, 'warranty')}
  ${renderStockLocationCard('EM_TRANSPORTE', 'Em Transporte', transporteQty, 'transit')}
  </div>
  </div>
- <div class="product-stock-group product-stock-group-external">
- <div class="product-stock-group-title" style="display: flex; align-items: center; gap: 6px;">
- <span class="material-symbols-rounded" style="font-size: 16px; color: #f59e0b;">warehouse</span>
- Estoque externo
- </div>
- <p class="product-stock-group-note">Dep\u00f3sito Mercado Livre: n\u00e3o dispon\u00edvel para venda direta.</p>
- <div class="product-stock-grid">
+
+ <div class="product-stock-group">
+ <div class="product-stock-group-title" style="font-size: 0.75rem; font-weight: 800; color: #f59e0b; text-transform: uppercase; margin-bottom: 4px;">Estoque Depósito Externo</div>
+ <p style="font-size: 0.7rem; color: var(--muted); margin-bottom: 8px;">Mercado Livre Fulfillment (Sem venda direta local).</p>
+ <div class="product-stock-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
  ${renderStockLocationCard('FULL_ML', 'FULL ML', fullMlQty, 'external')}
  </div>
  </div>
  </div>
  `;
 
- const commercialInfoHTML = renderInfoBlock('Comercial', [
- { label: 'Marca', value: p.marca },
- { label: 'EAN', value: p.ean },
- { label: 'SKU', value: p.sku_fornecedor || p.sku },
- { label: 'Categoria', value: p.categoria },
- { label: 'Subcategoria', value: p.subcategoria }
- ]);
- const technicalInfoHTML = attrs.length ? renderInfoBlock('Ficha t\u00e9cnica', attrs.map(attr => ({
- label: formatAttributeName(attr.nome),
- value: formatAttributeValue(attr.valor)
- }))) : '';
- const operationalInfoHTML = renderInfoBlock('Operacional', [
- { label: 'Estoque m\u00ednimo', value: p.estoque_minimo },
- { label: 'Estoque ideal', value: p.estoque_ideal },
- { label: 'Reposi\u00e7\u00e3o', value: p.modo_reposicao || 'MANUAL' },
- { label: 'Unidade', value: p.unidade },
- { label: 'Qtd. embalagem', value: p.quantidade_embalagem },
- { label: 'M\u00ednimo atacado', value: p.quantidade_minima_atacado },
- { label: 'Status', value: p.status }
- ]); const adminInfoHTML = renderInfoBlock('Administrativo', [
- { label: 'ID interno', value: idInterno },
- { label: 'Descri\u00e7\u00e3o completa', value: p.descricao_completa },
- { label: 'Manual PDF', value: pdfUrl },
- { label: 'Observa\u00e7\u00f5es', value: p.observacoes }
- ]);
-
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal no-top-bar product-detail">
  ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderSearchScreen()')}
  
- <main class="container product-detail-screen">
- <div class="product-detail-card">
- <div class="product-detail-top-actions">
- ${pdfUrl ? `
- <a href="${pdfUrl}" target="_blank" class="product-manual-icon-btn" title="Abrir manual do produto">
- <span class="material-symbols-rounded">picture_as_pdf</span>
- </a>
- ` : ''}
+ <main class="container product-detail-screen" style="max-width: 1100px; margin: 0 auto; padding: 16px;">
  
- <!-- BotAo Editar Produto -->
- <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="product-edit-btn" title="Editar Produto">
- <span class="material-symbols-rounded">edit</span>
- <span>Editar</span>
+ <!-- HERO HEADER CRM -->
+ <div class="product-crm-hero-card" style="background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(12px);">
+ 
+ <div class="product-detail-top-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+ <button type="button" onclick="renderSearchScreen()" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #ffffff; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">arrow_back</span>
+ <span>Voltar</span>
  </button>
 
- <div class="product-status-chip" title="Status: ${statusText}">
- <span class="status-indicator-dot" style="background-color: ${statusColor};"></span><span class="product-status-text">${statusText}</span>
- </div>
- </div>
- <!-- CABEAiALHO PRINCIPAL -->
- <div class="product-detail-header">
- <div class="product-detail-img">
- ${(p.url_imagem || p.image_path) ? `<img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="cursor:zoom-in">` : `<span class="material-symbols-rounded" style="font-size: 48px; color: #d1d5db;">inventory_2</span>`}
- </div>
- <div class="product-detail-title-block">
- <h1 class="product-detail-title">${p.descricao_completa || p.descricao_base || 'Produto sem descri\u00e7\u00e3o'}</h1>
- <div class="product-detail-meta-row">
- ${renderProductMetaItem('barcode', 'SKU', p.sku_fornecedor || p.sku || idInterno)}
- ${renderProductMetaItem('sell', 'Marca', p.marca)}
- ${renderProductMetaItem('qr_code_2', 'EAN', p.ean)}
+ <div style="display: flex; align-items: center; gap: 8px;">
+ ${pdfUrl ? `
+ <a href="${pdfUrl}" target="_blank" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; display: flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700;" title="Abrir manual PDF">
+ <span class="material-symbols-rounded" style="font-size: 18px;">picture_as_pdf</span>
+ <span>MANUAL</span>
+ </a>
+ ` : ''}
+
+ <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="btn-action" style="padding: 8px 14px; font-size: 0.8rem; background: rgba(37,99,235,0.2); border: 1px solid rgba(37,99,235,0.4); border-radius: 10px; color: #60a5fa; display: flex; align-items: center; gap: 6px; font-weight: 700;" title="Editar produto">
+ <span class="material-symbols-rounded" style="font-size: 18px;">edit</span>
+ <span>EDITAR</span>
+ </button>
+
+ <div class="product-status-chip" style="padding: 6px 12px; border-radius: 10px; background: ${isInactiveProduct ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; border: 1px solid ${isInactiveProduct ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}; display: flex; align-items: center; gap: 6px;">
+ <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
+ <span style="font-size: 0.75rem; font-weight: 800; color: ${statusColor}; text-transform: uppercase;">${statusText}</span>
  </div>
  </div>
  </div>
 
- <!-- CARDS DE PRECO E ESTOQUE TOTAL -->
- <div class="product-detail-prices">
- <div class="product-price-card product-price-card-varejo">
- <span class="product-price-icon material-symbols-rounded">sell</span>
- <span class="product-price-ghost material-symbols-rounded">sell</span>
- <div class="product-price-label">PRE\u00c7O DE VENDA</div>
- <div class="product-price-value product-price-main">${formatPrice(p.preco_varejo)}</div>
- <div class="product-price-hint">VALOR UNIT\u00c1RIO NO VAREJO</div></div>
- <div class="product-price-card product-stock-main-card ${stockStatusClass}" title="T\u00e9rreo + 1\u00ba andar">
- <span class="product-price-icon material-symbols-rounded">inventory_2</span>
- <span class="product-price-ghost material-symbols-rounded">inventory_2</span>
- <div class="product-price-label">QUANTIDADE DISPON\u00cdVEL</div>
- <div class="product-price-value product-stock-value ${stockStatusClass}">${disponivel} <span class="product-stock-unit">${unitLabel}</span></div>
- <div class="product-price-hint">T\u00c9RREO + 1\u00ba ANDAR</div></div>
- <div class="product-price-card product-price-card-atacado collapsible-mobile">
- <span class="product-price-icon material-symbols-rounded">shopping_cart</span>
- <span class="product-price-ghost material-symbols-rounded">shopping_cart</span>
- <div class="product-price-label">PRE\u00c7O DE ATACADO</div>
- <div class="product-price-value product-price-atacado">${formatPrice(p.preco_atacado)}</div>
- <div class="product-price-hint">${p.quantidade_minima_atacado ? `A PARTIR DE ${p.quantidade_minima_atacado} ${unitLabel}` : 'CONSULTE A QUANTIDADE M\u00cdNIMA'}</div></div>
+ <div class="product-hero-body" style="display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 20px; align-items: center;">
+ <div class="product-detail-img" style="width: 110px; height: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+ ${(p.url_imagem || p.image_path) ? `
+ <img src="${formatImageUrl(p.image_path || p.url_imagem)}" onclick="openImageModal('${formatImageUrl(p.image_path || p.url_imagem)}')" style="width: 100%; height: 100%; object-fit: contain; cursor: zoom-in;">
+ ` : `
+ <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8;">
+ <span class="material-symbols-rounded" style="font-size: 36px; color: #cbd5e1;">inventory_2</span>
+ <span style="font-size: 0.65rem; font-weight: 700; margin-top: 4px; color: #94a3b8;">Sem foto</span>
+ </div>
+ `}
  </div>
 
- ${stockAlertsHTML}
+ <div class="product-hero-info" style="min-width: 0;">
+ <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+ <span class="product-id-badge" style="display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; padding: 4px 12px; border-radius: 8px; font-weight: 900; font-size: 0.85rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(37,99,235,0.3);">
+ <small style="font-size: 0.65rem; opacity: 0.85; font-weight: 700;">ID</small>
+ <strong>${idInterno}</strong>
+ </span>
+
+ ${isFilledValue(p.marca) ? `
+ <span style="display: inline-flex; background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase;">
+ ${p.marca}
+ </span>
+ ` : ''}
+
+ ${isFilledValue(p.categoria) ? `
+ <span style="display: inline-flex; background: rgba(255,255,255,0.04); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">
+ ${p.categoria}
+ </span>
+ ` : ''}
+ </div>
+
+ <h1 style="font-size: 1.2rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin: 0 0 12px 0;">${p.descricao_completa || p.descricao_base || 'Produto sem descrição'}</h1>
+
+ <div class="product-hero-highlights" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+ <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
+ <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">PREÇO VAREJO</span>
+ <strong style="font-size: 1.1rem; color: #22c55e; font-weight: 900;">${formatPrice(p.preco_varejo)}</strong>
+ </div>
+
+ <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
+ <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">DISPONÍVEL</span>
+ <strong style="font-size: 1.1rem; color: ${disponivel > 0 ? '#22c55e' : '#ef4444'}; font-weight: 900;">${disponivel} <small style="font-size: 0.75rem; font-weight: 700; color: var(--muted);">${unitLabel}</small></strong>
+ </div>
+
+ ${p.preco_atacado ? `
+ <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 10px 14px; border-radius: 12px;">
+ <span style="font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; display: block;">PREÇO ATACADO</span>
+ <strong style="font-size: 1.05rem; color: #3b82f6; font-weight: 800;">${formatPrice(p.preco_atacado)}</strong>
+ </div>
+ ` : ''}
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- BARRA DE NAVEGAÇÃO DE ABAS (TOUCH-FIRST HORIZONTAL) -->
+ <div class="product-detail-tabs-bar" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 20px; scrollbar-width: none;">
+ <button type="button" id="tab-btn-visao-geral" class="product-detail-tab-btn active" onclick="switchProductDetailTab('visao-geral')" role="tab" aria-selected="true" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: 1px solid #2563eb; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">
+ <span class="material-symbols-rounded" style="font-size: 18px;">visibility</span>
+ <span>Visão Geral</span>
+ </button>
+
+ <button type="button" id="tab-btn-estoque-fifo" class="product-detail-tab-btn" onclick="switchProductDetailTab('estoque-fifo')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">inventory</span>
+ <span>Estoque & FIFO</span>
+ </button>
+
+ <button type="button" id="tab-btn-equivalentes" class="product-detail-tab-btn" onclick="switchProductDetailTab('equivalentes')" role="tab" aria-selected="false" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 0.84rem; cursor: pointer; background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+ <span class="material-symbols-rounded" style="font-size: 18px;">sync_alt</span>
+ <span>Equivalentes ${equivalentes.length > 0 ? `(${equivalentes.length})` : ''}</span>
+ </button>
+ </div>
+
+ <!-- ABA 1: VISÃO GERAL -->
+ <div id="tab-content-visao-geral" class="product-tab-page">
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+ 
+ <!-- IDENTIFICAÇÃO -->
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="color: #2563eb; font-size: 20px;">qr_code_2</span>
+ Identificação & Código
+ </div>
+ <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">ID Interno:</span>
+ <strong style="color: #60a5fa; font-weight: 800;">${idInterno}</strong>
+ </div>
+ ${isFilledValue(p.ean) ? `
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">EAN:</span>
+ <strong style="color: #ffffff;">${p.ean}</strong>
+ </div>
+ ` : ''}
+ ${isFilledValue(p.sku) ? `
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">SKU Interno:</span>
+ <strong style="color: #ffffff;">${p.sku}</strong>
+ </div>
+ ` : ''}
+ ${isFilledValue(p.sku_fornecedor) ? `
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">SKU Fornecedor:</span>
+ <strong style="color: #ffffff;">${p.sku_fornecedor}</strong>
+ </div>
+ ` : ''}
+ ${isFilledValue(p.marca) ? `
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Marca:</span>
+ <strong style="color: #ffffff;">${p.marca}</strong>
+ </div>
+ ` : ''}
+ ${isFilledValue(p.categoria) ? `
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Categoria:</span>
+ <strong style="color: #ffffff;">${p.categoria}</strong>
+ </div>
+ ` : ''}
+ ${isFilledValue(p.subcategoria) ? `
+ <div style="display: flex; justify-content: space-between;">
+ <span style="color: var(--muted);">Subcategoria:</span>
+ <strong style="color: #ffffff;">${p.subcategoria}</strong>
+ </div>
+ ` : ''}
+ </div>
+ </div>
+
+ <!-- COMERCIAL & PREÇOS -->
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="color: #22c55e; font-size: 20px;">payments</span>
+ Comercial & Preços
+ </div>
+ <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Preço de Varejo:</span>
+ <strong style="color: #22c55e; font-weight: 800; font-size: 0.95rem;">${formatPrice(p.preco_varejo)}</strong>
+ </div>
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Preço de Atacado:</span>
+ <strong style="color: #3b82f6; font-weight: 800;">${formatPrice(p.preco_atacado)}</strong>
+ </div>
+ ${p.quantidade_minima_atacado ? `
+ <div style="display: flex; justify-content: space-between;">
+ <span style="color: var(--muted);">Mínimo Atacado:</span>
+ <strong style="color: #ffffff;">${p.quantidade_minima_atacado} ${unitLabel}</strong>
+ </div>
+ ` : ''}
+ </div>
+ </div>
+
+ <!-- OPERACIONAL & REPOSIÇÃO -->
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="color: #f59e0b; font-size: 20px;">settings_suggest</span>
+ Operacional & Reposição
+ </div>
+ <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Estoque Mínimo:</span>
+ <strong style="color: #ffffff;">${p.estoque_minimo || 0} ${unitLabel}</strong>
+ </div>
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Estoque Ideal:</span>
+ <strong style="color: #ffffff;">${p.estoque_ideal || 0} ${unitLabel}</strong>
+ </div>
+ <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px;">
+ <span style="color: var(--muted);">Modo de Reposição:</span>
+ <strong style="color: #ffffff;">${p.modo_reposicao || 'MANUAL'}</strong>
+ </div>
+ <div style="display: flex; justify-content: space-between;">
+ <span style="color: var(--muted);">Unidade de Medida:</span>
+ <strong style="color: #ffffff;">${unitLabel}</strong>
+ </div>
+ </div>
+ </div>
+
+ <!-- PREÇO DE CUSTO PROTEGIDO -->
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="color: #ef4444; font-size: 20px;">lock</span>
+ Custo Financeiro Cadastral
+ </div>
+ 
+ <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
+ <div>
+ <span style="font-size: 0.72rem; color: var(--muted); display: block;">PREÇO DE CUSTO</span>
+ <span style="font-size: 1.1rem; color: #ffffff; font-weight: 700; letter-spacing: 2px;">------</span>
+ </div>
+ <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700;">
+ MOSTRAR
+ </button>
+ </div>
+
+ <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
+ <div>
+ <span style="font-size: 0.72rem; color: var(--muted); display: block;">PREÇO DE CUSTO</span>
+ <span class="product-custo-amount" style="font-size: 1.15rem; color: #fbbf24; font-weight: 900;">${formatPrice(p.preco_custo)}</span>
+ </div>
+ <button type="button" onclick="toggleCusto()" class="btn-action" style="padding: 6px 14px; font-size: 0.75rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #ffffff; font-weight: 700;">
+ OCULTAR
+ </button>
+ </div>
+ </div>
+
+ </div>
+
+ ${packagingHTML}
+
+ ${attrs.length > 0 ? `
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+ <span class="material-symbols-rounded" style="color: #60a5fa; font-size: 20px;">description</span>
+ Ficha Técnica de Atributos
+ </div>
+ <div class="product-attrs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+ ${attrs.map(attr => `
+ <div class="product-attr-chip" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 10px;">
+ <span class="product-attr-name" style="font-size: 0.72rem; color: var(--muted); display: block; text-transform: uppercase;">${formatAttributeName(attr.nome)}</span>
+ <span class="product-attr-value" style="font-size: 0.85rem; color: #ffffff; font-weight: 700;">${formatAttributeValue(attr.valor)}</span>
+ </div>
+ `).join('')}
+ </div>
+ </div>
+ ` : ''}
+
+ ${p.observacoes ? `
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; margin-top: 16px;">
+ <div style="font-size: 0.85rem; font-weight: 800; color: var(--muted); margin-bottom: 8px; text-transform: uppercase;">Observações Internas</div>
+ <div style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.8);">${p.observacoes}</div>
+ </div>
+ ` : ''}
+ </div>
+
+ <!-- ABA 2: ESTOQUE & FIFO -->
+ <div id="tab-content-estoque-fifo" class="product-tab-page hidden">
  ${stockLocationsHTML}
  ${camadasEstoqueHTML}
- ${packagingHTML}
- ${false ? (() => {
- const t = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'TERREO')?.saldo_total || 0);
- const m = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'MOSTRUARIO')?.saldo_total || 0);
- const p1 = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'PRIMEIRO_ANDAR')?.saldo_total || 0);
- 
- if (false && t === 0 && m === 0 && p1 > 0) {
- return `
- <div style="margin-top: 20px; padding: 14px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 14px; display: flex; align-items: center; gap: 12px;">
- <div style="width: 40px; height: 40px; background: rgba(251, 191, 36, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
- <span class="material-symbols-rounded" style="color: #fbbf24; font-size: 24px;">local_shipping</span>
- </div>
- <div>
- <div style="color: #fbbf24; font-weight: 800; font-size: 0.85rem;">SEM ESTOQUE NO TERREO/MOSTRUARIO</div>
- <div style="color: rgba(255,255,255,0.7); font-size: 0.75rem;">DisionAivel no 1<b>${p1}</b></div>
- <div style="color: #fbbf24; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin-top: 2px;">Transferir para venda</div>
- </div>
- </div>
- `;
- }
- return '';
- })() : ''}
-
- <!-- ESTOQUE POR LOCAL (DETALHADO) -->
- <div class="product-stock-locations legacy-product-stock-locations" style="margin-top: 24px;">
- <div class="product-stock-title" style="font-size: 0.9rem; margin-bottom: 12px; color: var(--muted); font-weight: 700;">ESTOQUE POR LOCAL</div>
- <div class="product-stock-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
- ${(() => {
- const localMap = {
- TERREO: 'Terreo',
- MOSTRUARIO: 'Mostruario',
- PRIMEIRO_ANDAR: '1 Andar',
- DEFEITO: 'Defeito',
- EM_GARANTIA: 'Em Garantia',
- EM_TRANSPORTE: 'Em Transporte',
- FULL_ML: 'FULL ML'
- };
- return Object.keys(localMap).map(key => {
- const entry = productStockEntries.find(e => normalizeLocal(e.local) === key);
- const saldo = entry ? parseFloat(entry.saldo_total || entry.saldo || 0) : 0;
- const label = localMap[key];
- return `
- <div class="product-stock-location" style="${saldo === 0 ? 'opacity: 0.4;' : ''} background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 12px; border-radius: 12px;">
- <span class="product-stock-location-name" style="font-size: 0.75rem; color: var(--muted);">${label}</span>
- <span class="product-stock-location-qty" style="font-size: 1.1rem; font-weight: 800; display: block; margin-top: 4px;">${saldo}</span>
- </div>
- `;
- }).join('');
- })()}
- </div>
  </div>
 
- <!-- PRODUTOS EQUIVALENTES (Collapsible on mobile) -->
- <div class="collapsible-mobile">
+ <!-- ABA 3: EQUIVALENTES -->
+ <div id="tab-content-equivalentes" class="product-tab-page hidden">
  ${equivalentes.length > 0 ? `
- <div class="product-related-section" style="margin-top: 32px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 24px;">
- <div class="product-related-title" style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
- <span class="material-symbols-rounded" style="color: var(--primary); font-size: 20px;">compare_arrows</span>
- Produtos Equivalentes / Por Marca
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px;">
+ <div style="font-size: 0.9rem; font-weight: 800; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;">
+ <span class="material-symbols-rounded" style="color: #2563eb; font-size: 22px;">compare_arrows</span>
+ SKUs Substitutos do Grupo (${equivalentes.length})
  </div>
- <div style="display: flex; flex-direction: column; gap: 10px;">
+ <div style="display: flex; flex-direction: column; gap: 12px;">
  ${equivalentes.map(eq => {
  const eqStock = getAvailableStockCache(eq.id_interno);
  const eqMostruario = getProductShowroomStockCache(eq.id_interno);
  return `
- <div class="related-product-card" onclick="renderProductDetails(${JSON.stringify(eq).replace(/"/g, '&quot;')})" style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s ease;">
- <div style="width: 44px; height: 44px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);">
- ${(eq.image_path || eq.url_imagem) ? `<img src="${formatImageUrl(eq.image_path || eq.url_imagem)}" style="width: 100%; height: 100%; object-fit: contain;">` : '<span class="material-symbols-rounded" style="font-size: 20px; color: var(--muted);">inventory_2</span>'}
+ <div class="related-product-card" onclick="renderProductDetails(${JSON.stringify(eq).replace(/"/g, '&quot;')})" style="background: rgba(0,0,0,0.25); padding: 14px 16px; border-radius: 14px; display: flex; align-items: center; gap: 14px; cursor: pointer; border: 1px solid rgba(255,255,255,0.08); transition: transform 0.15s ease;">
+ <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.04); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.08);">
+ ${(eq.image_path || eq.url_imagem) ? `<img src="${formatImageUrl(eq.image_path || eq.url_imagem)}" style="width: 100%; height: 100%; object-fit: contain;">` : '<span class="material-symbols-rounded" style="font-size: 24px; color: var(--muted);">inventory_2</span>'}
  </div>
  <div style="flex: 1; min-width: 0;">
- <div style="display: flex; justify-content: space-between; align-items: flex-start;">
- <span style="font-size: 0.7rem; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">${eq.marca || 'S/M'}</span>
- <span style="font-size: 0.65rem; color: var(--muted);">ID: ${eq.id_interno}</span>
+ <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px;">
+ <span style="font-size: 0.7rem; color: #3b82f6; font-weight: 800; text-transform: uppercase;">${eq.marca || 'SEM MARCA'}</span>
+ <span class="product-id-badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: rgba(37,99,235,0.2); color: #60a5fa; border: 1px solid rgba(37,99,235,0.4);">
+ <strong>${eq.id_interno}</strong>
+ </span>
  </div>
- <div style="font-size: 0.85rem; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0;">${eq.descricao_completa || eq.descricao_base}</div>
+ <div style="font-size: 0.88rem; font-weight: 700; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${eq.descricao_completa || eq.descricao_base}</div>
  <div style="display: flex; justify-content: space-between; align-items: center;">
- <span style="font-size: 0.8rem; color: #4ade80; font-weight: 700;">${formatPrice(eq.preco_varejo)} A ${eqStock} disp.${eqMostruario > 0 ? ` A ${eqMostruario} most.` : ''}</span>
- <span class="related-product-action">VER PRODUTO</span>
- <span class="material-symbols-rounded" style="font-size: 18px; color: var(--muted);">chevron_right</span>
+ <span style="font-size: 0.8rem; color: #22c55e; font-weight: 800;">${formatPrice(eq.preco_varejo)} | ${eqStock} UN disp.${eqMostruario > 0 ? ` (${eqMostruario} most.)` : ''}</span>
+ <span style="font-size: 0.72rem; font-weight: 800; color: #60a5fa; display: flex; align-items: center; gap: 2px;">
+ VER DETALHES <span class="material-symbols-rounded" style="font-size: 16px;">chevron_right</span>
+ </span>
  </div>
  </div>
  </div>
@@ -15086,99 +15141,15 @@ async function renderProductDetails(p) {
  }).join('')}
  </div>
  </div>
- ` : ''}
+ ` : `
+ <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; text-align: center; color: var(--muted);">
+ <span class="material-symbols-rounded" style="font-size: 40px; color: #64748b; margin-bottom: 8px; display: block;">sync_alt</span>
+ <div style="font-weight: 700; font-size: 0.9rem;">Nenhum produto equivalente cadastrado para este SKU</div>
+ <p style="font-size: 0.75rem; margin-top: 4px; color: #64748b;">Produtos equivalentes compartilham o mesmo grupo técnico ou código de equivalência.</p>
+ </div>
+ `}
  </div>
 
- <!-- BLOCO + INFORMACOES (RECOLH) -->
- <div class="product-more-info-section">
- <button type="button" onclick="toggleMoreInfo()" class="product-more-info-btn" aria-expanded="false" aria-controls="more-info-content">
- <span class="material-symbols-rounded">info</span>
- <span id="more-info-label">Info</span>
- </button>
- 
- <div id="more-info-content" class="hidden" style="padding: 20px 10px 0;">
- <div class="product-info-blocks">
- ${commercialInfoHTML}
- ${technicalInfoHTML}
- ${operationalInfoHTML}
- ${adminInfoHTML}
- </div>
- <!-- CUSTO -->
- <div style="margin-bottom: 24px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 14px; border: 1px dashed rgba(255,255,255,0.1);">
- <div id="custo-locked" style="display: flex; align-items: center; justify-content: space-between;">
- <div>
- <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PRE\u00c7O DE CUSTO</span>
- <span style="font-size: 1.1rem; color: white; font-weight: 700; letter-spacing: 2px;">------</span>
- </div>
- <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
- MOSTRAR
- </button>
- </div>
- <div id="custo-display" class="hidden" style="display: flex; align-items: center; justify-content: space-between;">
- <div>
- <span style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">PRE\u00c7O DE CUSTO</span>
- <span class="product-custo-amount" style="font-size: 1.2rem; color: #fbbf24; font-weight: 800;">${formatPrice(p.preco_custo)}</span>
- </div>
- <button onclick="toggleCusto()" class="btn-action" style="padding: 8px 16px; font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
- OCULTAR
- </button>
- </div>
- </div>
-
- <!-- DADOS ADICIONAIS -->
- <div class="product-detail-id-section" style="background: transparent; padding: 0; border: none; margin-bottom: 24px;">
- ${p.sku_fornecedor ? `
- <div class="product-id-item">
- <span class="product-id-label">SKU Fornecedor</span>
- <span class="product-id-value">${p.sku_fornecedor}</span>
- </div>
- ` : ''}
- ${p.quantidade_minima_atacado ? `
- <div class="product-id-item">
- <span class="product-id-label">MAnimo Atacado</span>
- <span class="product-id-value">${p.quantidade_minima_atacado} ${p.unidade || 'UN'}</span>
- </div>
- ` : ''}
- ${p.estoque_minimo ? `
- <div class="product-id-item">
- <span class="product-id-label">Estoque MAnimo</span>
- <span class="product-id-value">${p.estoque_minimo}</span>
- </div>
- ` : ''}
- </div>
-
- <!-- ATRIBUTOS TAiCNICOS -->
- ${attrs.length > 0 ? `
- <div class="product-attrs-section" style="margin-bottom: 24px;">
- <div class="product-attrs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; font-weight: 800;">Atributos TAcnicos</div>
- <div class="product-attrs-grid">
- ${attrs.map(attr => `
- <div class="product-attr-chip">
- <span class="product-attr-name">${formatAttributeName(attr.nome)}:</span>
- <span class="product-attr-value">${formatAttributeValue(attr.valor)}</span>
- </div>
- `).join('')}
- </div>
- </div>
- ` : ''}
-
- <!-- OBSERVACOES -->
- ${p.observacoes ? `
- <div class="product-obs-section" style="margin-bottom: 24px;">
- <div class="product-obs-title" style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; font-weight: 800;">Observacoes Internas</div>
- <div class="product-obs-text" style="font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.7);">${p.observacoes}</div>
- </div>
- ` : ''}
- </div>
- </div>
-
- <div class="product-movement-entry">
- <button type="button" class="product-movement-entry-btn" onclick="openProductMovementsFromDetail()">
- <span class="material-symbols-rounded">history</span>
- <span>Ver movimentacoes</span>
- </button>
- </div>
- </div>
  </main>
  </div>
  `;
