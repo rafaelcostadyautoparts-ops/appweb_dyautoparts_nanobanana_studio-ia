@@ -31073,26 +31073,29 @@ async function renderGarantiaEnvioForm() {
 
 
 function renderNFSubMenu() {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
- const subItems = [
- { id: 'nf_xml', label: 'RECEBER POR XML', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML da NF-e, validar fornecedor e preparar os itens da entrada.' },
- { id: 'nf_rascunhos', label: 'RASCUNHOS DE NF', icon: 'abertas', onclick: 'renderEntradaNFRascunhosList()', description: 'Continuar XMLs iniciados antes de importar a entrada.' },
- { id: 'nf_abertas', label: 'NFs ABERTAS', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Acompanhar notas fiscais recebidas e ainda nao finalizadas.' },
- { id: 'nf_historico', label: 'HISTORICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas e movimentacoes geradas.' }
- ];
- 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('nf')}
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
 
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>
- `;
+  const draftCount = (typeof getEntradaNFXMLDrafts === 'function' ? getEntradaNFXMLDrafts().length : 0);
+
+  const subItems = [
+    { id: 'nf_nova', label: 'NOVA ENTRADA', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML e iniciar um novo recebimento.' },
+    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'abertas', onclick: 'renderEntradaNFEmRecebimento()', description: draftCount ? `Continuar entradas iniciadas (${draftCount} rascunho local).` : 'Continuar entradas iniciadas e acompanhar recebimentos em andamento.' },
+    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'prioridade', onclick: 'renderEntradaNFPendencias()', description: 'Entradas que precisam de atenção ou correção antes da conclusão.' },
+    { id: 'nf_historico', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas e movimentações geradas.' }
+  ];
+  
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('nf')}
+
+      <main class="container">
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
 let entradaNfXmlState = null;
@@ -34173,80 +34176,238 @@ function applyEntradaNFDraftFilters() {
  document.querySelector('.entrada-nf-drafts-empty-filter')?.classList.toggle('hidden', visibleCount > 0);
 }
 
+function getEntradaNFFriendlyStatusText(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'pendente_vinculo') return 'Produto pendente';
+  if (s === 'pronta_para_finalizar') return 'Pronta para finalizar';
+  if (s === 'pendente_fornecedor') return 'Fornecedor pendente';
+  if (s === 'importada') return 'Importada';
+  if (s === 'rascunho') return 'Rascunho';
+  if (s === 'finalizada') return 'Finalizada';
+  if (s === 'cancelada') return 'Cancelada';
+  if (s === 'financeiro_lancado') return 'Financeiro lançado';
+  return s ? s.replace(/_/g, ' ') : 'Pendente';
+}
+
 async function renderNFAbertasList(backAction = 'renderNFSubMenu()') {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
- const hasLocalDraft = hasEntradaNFXMLDraft();
- 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, backAction)}
- 
- <main class="container">
- ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
- <div id="nf-list-container" style="padding: 12px 20px 40px 20px;">
- <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.05);">
- <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">PendAAncias operacionais</strong>
- <span style="font-size:0.78rem;">Aqui aparecem somente notas que ainda precisam de fornecedor, vAnculo de produtos ou finao de estoque. Notas somente financeiro ficam no Hisao de entradas.</span>
- </div>
- <div class="entrada-nf-quick-actions" style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
- ${hasLocalDraft ? `
- <button type="button" class="btn-action" onclick="resumeEntradaNFXMLDraft()" style="background:#f59e0b !important; color:#111827 !important;">
- <span class="material-symbols-rounded">restore</span>
- Continuar XML local
- </button>
- ` : ''}
- <button type="button" class="btn-action" onclick="renderNFXmlUploadScreen()" style="background:#2563eb !important;">
- <span class="material-symbols-rounded">upload_file</span>
- Importar nova NF
- </button>
- </div>
- <div id="nf-list-items">
- <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas...</div>
- </div>
- </div>
- </main>
- </div>
- `;
+  return renderEntradaNFEmRecebimento(backAction);
+}
 
- const notas = await DataClient.listEntradasNFAbertas();
- const container = document.getElementById('nf-list-items');
+async function renderEntradaNFEmRecebimento(backAction = 'renderNFSubMenu()') {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+  
+  const drafts = getEntradaNFXMLDrafts();
 
- if (notas.length === 0) {
- container.innerHTML = `
- <div style="text-align: center; padding: 60px 20px; background: #fff; border-radius: 24px; border: 1px dashed rgba(15,23,42,0.16); box-shadow:0 10px 24px rgba(15,23,42,0.04);">
- <span class="material-symbols-rounded" style="font-size: 48px; color: #94a3b8; margin-bottom: 16px;">task_alt</span>
- <p style="color: #0f172a; font-weight:800; margin:0 0 6px 0;">Nenhuma nota operacional em aberto.</p>
- <p style="color: #64748b; margin:0;">Notas jA lanAadas somente no financeiro aparecem no Hisao de entradas.</p>
- </div>
- `;
- return;
- }
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
+      ${getTopBarHTML(currentUser, backAction)}
+      
+      <main class="container" style="max-width: 960px; margin: 0 auto; padding-bottom: 40px;">
+        ${getStandardScreenTitleHTML('ENTRADAS EM RECEBIMENTO', menu3DIcons.abertas)}
 
- container.innerHTML = `
- <div style="display: flex; flex-direction: column; gap: 12px;">
- ${notas.map(nf => {
- const statusInfo = getEntradaNFOpenStatusInfo(nf);
- return `
- <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.2s; gap:16px;">
- <div style="flex: 1; min-width:0;">
- <div style="font-weight: 800; color: #101018; font-size: 1rem;">NF ${nf.numero_nf}</div>
- <div style="font-size: 0.75rem; color: #666; text-transform: uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nf.fornecedor_nome}</div>
- </div>
- <div style="text-align: right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
- <div style="font-weight: 700; color: var(--primary); font-size: 0.9rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
- <div style="display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 4px;">
- <span class="status-dot" style="width: 6px; height: 6px; background: ${statusInfo.tone}; border-radius: 50%;"></span>
- <span style="font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase;">${statusInfo.label}</span>
- </div>
- <span style="font-size:0.68rem; font-weight:800; color:${statusInfo.tone}; text-transform:uppercase;">${statusInfo.action}</span>
- </div>
- </div>
- `;
- }).join('')}
- </div>
- `;
+        <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:20px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.04);">
+          <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">Acompanhamento Operacional</strong>
+          <span style="font-size:0.8rem; color:#64748b;">Reúne os rascunhos de XML salvos neste dispositivo e as Notas Fiscais em andamento gravadas no sistema.</span>
+        </div>
+
+        ${drafts.length ? `
+          <div style="margin-bottom: 24px;">
+            <h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="color:#f59e0b;">draft</span>
+              RASCUNHOS DE XML NESTE DISPOSITIVO (${drafts.length})
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              ${drafts.map(d => {
+                const supplierName = d.fornecedor?.razao_social || d.fornecedor?.nome_fantasia || d.fornecedor?.cnpj || 'Fornecedor não identificado';
+                const totalItems = d.itens?.length || 0;
+                return `
+                  <div style="background: #fff; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">NF ${d.numero_nf || 'XML Sem Número'}</div>
+                      <div style="font-size: 0.78rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${supplierName}</div>
+                      <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">${totalItems} itens · Salvo localmente</div>
+                    </div>
+                    <button type="button" onclick="resumeEntradaNFXMLDraft('${d.chave_acesso}')" class="btn-action" style="background:#f59e0b !important; color:#111827 !important; font-weight:700; padding:8px 14px; border-radius:10px;">
+                      <span class="material-symbols-rounded">restore</span> Continuar
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <div>
+          <h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-rounded" style="color:#2563eb;">inventory_2</span>
+            NOTAS FISCAIS EM ANDAMENTO NO BANCO
+          </h3>
+          <div id="em-recebimento-banco-list">
+            <div style="text-align: center; padding: 30px; color: var(--muted);">Carregando notas em andamento...</div>
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
+
+  const notas = await DataClient.listEntradasNFAbertas();
+  const container = document.getElementById('em-recebimento-banco-list');
+  if (!container) return;
+
+  if (notas.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px 20px; background: #fff; border-radius: 18px; border: 1px dashed rgba(15,23,42,0.16);">
+        <span class="material-symbols-rounded" style="font-size: 40px; color: #94a3b8; margin-bottom: 10px;">task_alt</span>
+        <p style="color: #0f172a; font-weight:800; margin:0 0 4px 0;">Nenhuma nota fiscal em andamento no banco.</p>
+        <p style="color: #64748b; font-size:0.8rem; margin:0;">Inicie uma nova entrada importando um arquivo XML.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      ${notas.map(nf => {
+        const statusInfo = getEntradaNFOpenStatusInfo(nf);
+        const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+        return `
+          <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.2s; gap:16px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
+            <div style="flex: 1; min-width:0;">
+              <div style="font-weight: 800; color: #101018; font-size: 1rem;">NF ${nf.numero_nf}</div>
+              <div style="font-size: 0.78rem; color: #64748b; text-transform: uppercase; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nf.fornecedor_nome || 'Fornecedor não cadastrado'}</div>
+              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px;">Emissão: ${dateStr}</div>
+            </div>
+            <div style="text-align: right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+              <div style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
+              <div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;">
+                <span style="width: 8px; height: 8px; background: ${statusInfo.tone}; border-radius: 50%;"></span>
+                <span style="font-size: 0.7rem; font-weight: 800; color: ${statusInfo.tone}; text-transform: uppercase;">${getEntradaNFFriendlyStatusText(nf.status)}</span>
+              </div>
+              <span style="font-size:0.7rem; font-weight:800; color:#2563eb; text-transform:uppercase;">CONTINUAR</span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function renderEntradaNFPendencias(backAction = 'renderNFSubMenu()', filterCategory = 'TODOS') {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
+      ${getTopBarHTML(currentUser, backAction)}
+      
+      <main class="container" style="max-width: 960px; margin: 0 auto; padding-bottom: 40px;">
+        ${getStandardScreenTitleHTML('PENDÊNCIAS OPERACIONAIS', menu3DIcons.abertas)}
+
+        <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.04);">
+          <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">Visão Agrupada por Nota Fiscal</strong>
+          <span style="font-size:0.8rem; color:#64748b;">Notas fiscais em andamento que possuem inconsistências ou etapas pendentes de decisão (vínculos de produtos, divergências físicas ou financeiro a combinar).</span>
+        </div>
+
+        <div class="entrada-nf-pendencias-filters" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:16px;">
+          ${['TODOS', 'PRODUTO', 'FÍSICO', 'PEDIDO', 'FINANCEIRO'].map(cat => `
+            <button type="button" onclick="renderEntradaNFPendencias('${backAction}', '${cat}')" 
+              style="padding:6px 14px; border-radius:20px; border:1px solid ${filterCategory === cat ? '#2563eb' : 'rgba(15,23,42,0.12)'}; background:${filterCategory === cat ? '#2563eb' : '#fff'}; color:${filterCategory === cat ? '#fff' : '#475569'}; font-weight:700; font-size:0.75rem; cursor:pointer;">
+              ${cat}
+            </button>
+          `).join('')}
+        </div>
+
+        <div id="pendencias-nf-list">
+          <div style="text-align: center; padding: 40px; color: var(--muted);">Analisando pendências operacionais...</div>
+        </div>
+      </main>
+    </div>
+  `;
+
+  const notas = await DataClient.listEntradasNFAbertas();
+  const container = document.getElementById('pendencias-nf-list');
+  if (!container) return;
+
+  const listWithBadges = await Promise.all(notas.map(async nf => {
+    const badges = [];
+    const status = String(nf.status || '').toLowerCase();
+
+    if (status === 'pendente_vinculo' || status === 'pendente_fornecedor') {
+      badges.push({ cat: 'PRODUTO', label: 'Produto Não Identificado', tone: '#f59e0b', icon: 'help_outline' });
+    }
+    if (nf.status_financeiro === 'a_combinar') {
+      badges.push({ cat: 'FINANCEIRO', label: 'Financeiro A Combinar', tone: '#3b82f6', icon: 'payments' });
+    }
+    if (nf.tipo_vinculo_pedido === 'COM_PEDIDO') {
+      const alocs = await DataClient.fetchAlocacoesPedidoEntradaNF(nf.id);
+      if (!alocs || !alocs.length) {
+        badges.push({ cat: 'PEDIDO', label: 'Item Não Pedido', tone: '#f59e0b', icon: 'assignment_late' });
+      }
+    }
+    const itens = await fetchEntradaNFItens(nf.id);
+    if (Array.isArray(itens) && itens.some(i => i.id_interno === null)) {
+      if (!badges.some(b => b.label === 'Produto Não Identificado')) {
+        badges.push({ cat: 'PRODUTO', label: 'Produto Pendente de Vínculo', tone: '#f59e0b', icon: 'help_outline' });
+      }
+    }
+
+    if (!badges.length) {
+      badges.push({ cat: 'PRODUTO', label: 'Aguardando Conferência/Finalização', tone: '#3b82f6', icon: 'hourglass_empty' });
+    }
+
+    return { nf, badges };
+  }));
+
+  const filtered = listWithBadges.filter(item => {
+    if (filterCategory === 'TODOS') return true;
+    return item.badges.some(b => b.cat === filterCategory);
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 50px 20px; background: #fff; border-radius: 20px; border: 1px dashed rgba(15,23,42,0.16);">
+        <span class="material-symbols-rounded" style="font-size: 44px; color: #22c55e; margin-bottom: 12px;">verified</span>
+        <p style="color: #0f172a; font-weight:800; margin:0 0 4px 0;">Nenhuma pendência na categoria '${filterCategory}'.</p>
+        <p style="color: #64748b; font-size:0.8rem; margin:0;">Todas as notas operacionais estão regulares para processamento.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      ${filtered.map(({ nf, badges }) => `
+        <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 18px; border-radius: 16px; cursor: pointer; transition: transform 0.2s; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:12px;">
+            <div>
+              <div style="font-weight: 800; color: #0f172a; font-size: 1.05rem;">NF ${nf.numero_nf}</div>
+              <div style="font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight:600;">${nf.fornecedor_nome || 'Fornecedor não cadastrado'}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight: 800; color: #0f172a; font-size: 1rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
+              <div style="font-size: 0.72rem; color: #94a3b8;">${formatDateBR(nf.data_emissao || nf.created_at)}</div>
+            </div>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+            ${badges.map(b => `
+              <span style="display:inline-flex; align-items:center; gap:4px; background:${b.tone}15; color:${b.tone}; border:1px solid ${b.tone}40; padding:4px 10px; border-radius:20px; font-size:0.72rem; font-weight:800; text-transform:uppercase;">
+                <span class="material-symbols-rounded" style="font-size:14px;">${b.icon}</span>
+                ${b.label}
+              </span>
+            `).join('')}
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <span style="font-size:0.75rem; font-weight:800; color:#2563eb; display:inline-flex; align-items:center; gap:4px;">
+              CORRIGIR / CONTINUAR <span class="material-symbols-rounded" style="font-size:16px;">arrow_forward</span>
+            </span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function getEntradaNFDate(value) {
