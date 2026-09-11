@@ -39,30 +39,34 @@
         anuncios: [
             {
                 id: 'MLB3829104812',
-                item_id: 'MLB3829104812',
+                external_item_id: 'MLB3829104812',
                 titulo: 'Sensor de Estacionamento Universal 4 Pontos Display Led Preto',
-                account: 'DY Auto Parts Oficial',
+                seller_nome: 'DY Auto Parts Oficial',
                 seller_sku: 'SENS-4P-PT',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_892837-MLB48920192837_012022-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_892837-MLB48920192837_012022-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-3829104812',
-                status_ml: 'active',
-                last_sync: 'Hoje, 11:20',
+                marketplace_status: 'active',
+                ultima_sincronizacao: 'Hoje, 11:20',
                 has_variations: false,
-                mapping_status: 'unmapped', // unmapped
+                situacao_mapeamento: 'unmapped', // unmapped
                 mapping: null
             },
             {
                 id: 'MLB2910481920',
-                item_id: 'MLB2910481920',
+                external_item_id: 'MLB2910481920',
                 titulo: 'Encosto de Cabeça Preto Universal Couro Sintético Macio',
-                account: 'DY Auto Parts Oficial',
+                seller_nome: 'DY Auto Parts Oficial',
                 seller_sku: 'ENC-CAB-PRETO',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_782910-MLB39102948192_052023-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_782910-MLB39102948192_052023-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-2910481920',
-                status_ml: 'active',
-                last_sync: 'Hoje, 10:15',
-                has_variations: false,
-                mapping_status: 'mapped', // mapped
+                marketplace_status: 'active',
+                ultima_sincronizacao: 'Hoje, 10:15',
+                has_variations: true,
+                situacao_mapeamento: 'partial',
+                variations: [
+                    { variation_id: 'VAR-EXATO-01', variation_key: null, attribute: 'Acabamento: Preto', seller_sku: 'ENC-CAB-PT', situacao_mapeamento: 'mapped', mapping: { type: 'single', products: [findProduto('DY-001.842')] } },
+                    { variation_id: null, variation_key: 'ACABAMENTO=GRAFITE', attribute: 'Acabamento: Grafite', seller_sku: null, situacao_mapeamento: 'unmapped', mapping: null }
+                ],
                 mapping: {
                     type: 'single',
                     products: [findProduto('DY-001.842')]
@@ -70,16 +74,16 @@
             },
             {
                 id: 'MLB1948201948',
-                item_id: 'MLB1948201948',
+                external_item_id: 'MLB1948201948',
                 titulo: 'Lâmpada Automotiva H7 12V 55W Super Branca Farol Principal Homologada',
-                account: 'DY Auto Parts Acessórios',
+                seller_nome: 'DY Auto Parts Acessórios',
                 seller_sku: 'LAMP-H7-55W',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_654321-MLB1948201948_032023-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_654321-MLB1948201948_032023-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-1948201948',
-                status_ml: 'active',
-                last_sync: 'Hoje, 09:30',
+                marketplace_status: 'active',
+                ultima_sincronizacao: 'Hoje, 09:30',
                 has_variations: false,
-                mapping_status: 'mapped',
+                situacao_mapeamento: 'mapped',
                 mapping: {
                     type: 'equivalents',
                     products: [
@@ -92,52 +96,52 @@
             },
             {
                 id: 'MLB4910294811',
-                item_id: 'MLB4910294811',
+                external_item_id: 'MLB4910294811',
                 titulo: 'Capa Para Volante Automotivo Costurada Emblema Alto Relevo Premium',
-                account: 'DY Auto Parts Oficial',
+                seller_nome: 'DY Auto Parts Oficial',
                 seller_sku: 'CAP-VOL-VAR',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_918273-MLB4910294811_072023-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_918273-MLB4910294811_072023-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-4910294811',
-                status_ml: 'active',
-                last_sync: 'Ontem, 16:45',
+                marketplace_status: 'active',
+                ultima_sincronizacao: 'Ontem, 16:45',
                 has_variations: true,
-                mapping_status: 'partial', // 2 de 3 mapeadas
+                situacao_mapeamento: 'partial', // 2 de 3 mapeadas
                 variations: [
                     {
                         variation_id: 'VAR-883910',
                         attribute: 'Cor: Preto com Linha Vermelha',
                         seller_sku: 'CAP-VOL-PT-VM',
-                        mapping_status: 'mapped',
+                        situacao_mapeamento: 'mapped',
                         mapping: { type: 'single', products: [findProduto('DY-001.204')] }
                     },
                     {
                         variation_id: 'VAR-883911',
                         attribute: 'Cor: Preto com Linha Preta',
                         seller_sku: 'CAP-VOL-PT-PT',
-                        mapping_status: 'mapped',
+                        situacao_mapeamento: 'mapped',
                         mapping: { type: 'single', products: [findProduto('DY-001.205')] }
                     },
                     {
                         variation_id: 'VAR-883912',
                         attribute: 'Cor: Grafite com Linha Cinza',
                         seller_sku: 'CAP-VOL-GF-CZ',
-                        mapping_status: 'unmapped',
+                        situacao_mapeamento: 'unmapped',
                         mapping: null
                     }
                 ]
             },
             {
                 id: 'MLB5019284712',
-                item_id: 'MLB5019284712',
+                external_item_id: 'MLB5019284712',
                 titulo: 'Kit Cuidado Automotivo Completo 4 Itens Lavagem e Brilho com Shampoo e Pretinho',
-                account: 'DY Auto Parts Oficial',
+                seller_nome: 'DY Auto Parts Oficial',
                 seller_sku: 'KIT-CUID-4',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_102938-MLB5019284712_082023-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_102938-MLB5019284712_082023-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-5019284712',
-                status_ml: 'active',
-                last_sync: 'Hoje, 08:50',
+                marketplace_status: 'active',
+                ultima_sincronizacao: 'Hoje, 08:50',
                 has_variations: false,
-                mapping_status: 'mapped',
+                situacao_mapeamento: 'mapped',
                 mapping: {
                     type: 'kit',
                     components: [
@@ -150,16 +154,16 @@
             },
             {
                 id: 'MLB6102938475',
-                item_id: 'MLB6102938475',
+                external_item_id: 'MLB6102938475',
                 titulo: 'Suporte Veicular Magnético Saída de Ar Universal 360 Graus Neodímio',
-                account: 'DY Auto Parts Acessórios',
+                seller_nome: 'DY Auto Parts Acessórios',
                 seller_sku: 'SUP-MAG-360',
-                thumbnail: 'https://http2.mlstatic.com/D_NQ_NP_2X_394820-MLB6102938475_092023-F.webp',
+                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_394820-MLB6102938475_092023-F.webp',
                 permalink: 'https://produto.mercadolivre.com.br/MLB-6102938475',
-                status_ml: 'paused',
-                last_sync: 'Hoje, 07:15',
+                marketplace_status: 'paused',
+                ultima_sincronizacao: 'Hoje, 07:15',
                 has_variations: false,
-                mapping_status: 'review', // precisa revisar
+                situacao_mapeamento: 'review', // precisa revisar
                 mapping: {
                     type: 'single',
                     products: [findProduto('DY-001.771')],
@@ -169,9 +173,39 @@
         ]
     };
 
+    // Contrato normalizado temporário: amanhã o adaptador externo entregará estes mesmos campos.
+    AnunciosState.anuncios = AnunciosState.anuncios.filter((_, index) => [0, 1, 2, 4].includes(index)).map((an, index) => {
+        const states = { unmapped: 'NAO_MAPEADO', mapped: 'MAPEADO', partial: 'PARCIAL', review: 'REVISAR' };
+        const tipo = an.mapping?.type === 'kit' ? 'KIT' : an.mapping?.type === 'equivalents' ? 'EQUIVALENCIA' : an.mapping ? 'PRODUTO' : null;
+        return {
+            id: an.id ?? an.external_item_id ?? `anuncio-${index}`, marketplace: 'MERCADO_LIVRE',
+            account_id: index < 2 ? 101 : 202, account_externo_id: index < 2 ? 'ML-101' : 'ML-202',
+            seller_nome: an.seller_nome ?? null, seller_externo_id: index < 2 ? '101001' : '202002',
+            external_item_id: an.external_item_id ?? null, variation_id: an.variation_id ?? null, variation_key: an.variation_key ?? '',
+            seller_sku: an.seller_sku ?? null, titulo: an.titulo ?? null, thumbnail_url: an.thumbnail_url ?? null, permalink: an.permalink ?? null,
+            marketplace_status: index === 3 ? 'PAUSED' : (String(an.marketplace_status ?? '').toUpperCase() || null),
+            preco_venda: [119.9, 79.9, 39.9, null][index], preco_original: index === 1 ? 89.9 : index === 2 ? 44.9 : null,
+            preco_promocional: index === 1 ? 69.9 : index === 2 ? 34.9 : null, moeda: 'BRL',
+            situacao_mapeamento: states[an.situacao_mapeamento] ?? String(an.situacao_mapeamento ?? 'NAO_MAPEADO').toUpperCase(),
+            mapping_id: an.mapping ? `mapping-mock-${index + 1}` : null, mapping_versao: an.mapping ? 1 : null, tipo_mapeamento: tipo,
+            ultima_sincronizacao: an.ultima_sincronizacao ?? null, payload_original: null,
+            mapping_resumo: tipo === 'PRODUTO' ? { produto: { id_interno: an.mapping?.products?.[0]?.id_interno, nome: an.mapping?.products?.[0]?.nome } }
+                : tipo === 'EQUIVALENCIA' ? { grupo_equivalencia: { nome: 'Grupo H7 12V 55W' }, quantidade_opcoes_equivalentes: an.mapping?.products?.length, quantidade_produtos_permitidos: an.mapping?.products?.length }
+                : tipo === 'KIT' ? { quantidade_componentes: an.mapping?.components?.length ?? 0 } : null,
+            has_variations: Boolean(an.has_variations), variations: (an.variations ?? []).map(v => ({ ...v, situacao_mapeamento: states[v.situacao_mapeamento] ?? String(v.situacao_mapeamento ?? 'NAO_MAPEADO').toUpperCase() })), mapping: an.mapping ?? null
+        };
+    });
+
     // Helpers de Normalização e Sanitização
     const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const normText = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const hasValue = v => v !== null && v !== undefined && String(v).trim() !== '';
+    const accountKey = an => hasValue(an.account_id) ? `id:${an.account_id}` : hasValue(an.account_externo_id) ? `external:${an.account_externo_id}` : hasValue(an.seller_externo_id) ? `seller:${an.seller_externo_id}` : '';
+    const sellerLabel = an => an.seller_nome || an.account_externo_id || an.seller_externo_id || '';
+    const validPrice = v => hasValue(v) && Number.isFinite(Number(v));
+    const money = (v, moeda) => { try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda || 'BRL' }).format(Number(v)); } catch (_) { return Number(v).toFixed(2); } };
+    const priceHTML = an => { const promo = validPrice(an.preco_promocional), value = promo ? an.preco_promocional : an.preco_venda; if (!validPrice(value)) return ''; return `<div style="margin-top:6px"><strong style="font-size:18px">${escapeHtml(money(value, an.moeda))}</strong>${promo && validPrice(an.preco_original) ? ` <small style="text-decoration:line-through;color:#64748b">${escapeHtml(money(an.preco_original, an.moeda))}</small>` : ''}</div>`; };
+    const accountOptions = () => { const found = new Map(); AnunciosState.anuncios.forEach(an => { const key = accountKey(an); if (key && !found.has(key)) found.set(key, sellerLabel(an) || key); }); return [...found].map(([key, label]) => `<option value="${escapeHtml(key)}" ${AnunciosState.accountFilter === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join(''); };
 
     // Filtros de Listagem
     function getFilteredAnuncios() {
@@ -181,23 +215,23 @@
         return AnunciosState.anuncios.filter(an => {
             // Filtro por tab/status
             if (AnunciosState.filter === 'nao_mapeados') {
-                if (an.mapping_status !== 'unmapped' && an.mapping_status !== 'partial') return false;
+                if (an.situacao_mapeamento !== 'NAO_MAPEADO' && an.situacao_mapeamento !== 'PARCIAL') return false;
             } else if (AnunciosState.filter === 'mapeados') {
-                if (an.mapping_status !== 'mapped') return false;
+                if (an.situacao_mapeamento !== 'MAPEADO') return false;
             } else if (AnunciosState.filter === 'revisar') {
-                if (an.mapping_status !== 'review') return false;
+                if (an.situacao_mapeamento !== 'REVISAR') return false;
             }
 
             // Filtro por conta
-            if (acc !== 'todas' && an.account !== acc) return false;
+            if (acc !== 'todas' && accountKey(an) !== acc) return false;
 
             // Filtro por texto
             if (q) {
                 const searchCorpus = [
-                    an.item_id,
+                    an.external_item_id,
                     an.titulo,
                     an.seller_sku,
-                    an.account,
+                    an.seller_nome,
                     an.has_variations ? an.variations.map(v => v.attribute + ' ' + v.seller_sku).join(' ') : '',
                     an.mapping?.products ? an.mapping.products.map(p => p.id_interno + ' ' + p.nome + ' ' + p.marca + ' ' + p.ean).join(' ') : '',
                     an.mapping?.components ? an.mapping.components.map(c => c.product.id_interno + ' ' + c.product.nome).join(' ') : ''
@@ -212,7 +246,7 @@
     // Renderização do Bloco de Mapeamento no Card do Anúncio
     function renderMappingSummary(anuncio) {
         if (anuncio.has_variations) {
-            const mappedCount = anuncio.variations.filter(v => v.mapping_status === 'mapped').length;
+            const mappedCount = anuncio.variations.filter(v => v.situacao_mapeamento === 'MAPEADO').length;
             const totalCount = anuncio.variations.length;
             const isFull = mappedCount === totalCount;
 
@@ -230,7 +264,7 @@
             `;
         }
 
-        if (anuncio.mapping_status === 'unmapped' || !anuncio.mapping) {
+        if (anuncio.situacao_mapeamento === 'NAO_MAPEADO' || !anuncio.mapping) {
             return `
                 <div class="an-mapping-badge unmapped">
                     <span class="material-symbols-rounded">link_off</span>
@@ -242,7 +276,7 @@
             `;
         }
 
-        if (anuncio.mapping_status === 'review') {
+        if (anuncio.situacao_mapeamento === 'REVISAR') {
             const p = anuncio.mapping.products?.[0];
             return `
                 <div class="an-mapping-badge review">
@@ -257,23 +291,27 @@
         }
 
         if (anuncio.mapping.type === 'kit') {
-            const compCount = anuncio.mapping.components.length;
-            const totalUnits = anuncio.mapping.components.reduce((acc, c) => acc + c.qty, 0);
+            const compCount = Number(anuncio.mapping_resumo?.quantidade_componentes) || anuncio.mapping.components?.length || 0;
             return `
                 <div class="an-mapping-badge kit">
                     <span class="material-symbols-rounded">view_in_ar</span>
                     <div class="an-mapping-info">
                         <div class="an-mapping-info-header">
-                            <strong>Mapeado como Kit Composto</strong>
-                            <span class="an-equivalents-tag">${compCount} produtos (${totalUnits} un/kit)</span>
+                            <strong>KIT</strong>
+                            <span class="an-equivalents-tag">${compCount} componentes</span>
                         </div>
-                        <small>${anuncio.mapping.components.map(c => `${escapeHtml(c.product.id_interno)} (${c.qty}x)`).join(' + ')}</small>
                     </div>
                 </div>
             `;
         }
 
-        // Produto único ou com Equivalentes
+        if (anuncio.mapping.type === 'equivalents' || anuncio.tipo_mapeamento === 'EQUIVALENCIA') {
+            const groupName = anuncio.mapping_resumo?.grupo_equivalencia?.nome || 'Grupo de equivalência';
+            const optionCount = anuncio.mapping_resumo?.quantidade_opcoes_equivalentes ?? anuncio.mapping_resumo?.quantidade_produtos_permitidos ?? anuncio.mapping.products?.length ?? 0;
+            return `<div class="an-mapping-badge mapped"><span class="material-symbols-rounded">alt_route</span><div class="an-mapping-info"><div class="an-mapping-info-header"><strong>EQUIVALÊNCIA</strong><span class="an-equivalents-tag">${escapeHtml(optionCount)} opções equivalentes</span></div><small>${escapeHtml(groupName)}</small></div></div>`;
+        }
+
+        // Produto único
         const products = anuncio.mapping.products || [];
         const mainProduct = products[0];
         const equivalentsCount = products.length - 1;
@@ -307,32 +345,36 @@
         }
 
         return rows.map(an => {
-            const isMapped = an.mapping_status === 'mapped';
+            const isMapped = an.situacao_mapeamento === 'MAPEADO';
             const actionLabel = isMapped ? 'Ver / Editar mapeamento' : (an.has_variations ? 'Mapear variações' : 'Mapear produto');
             const actionClass = isMapped ? 'an-btn-edit' : 'an-btn-primary';
             const iconName = isMapped ? 'edit_square' : 'add_link';
 
+            const externalStatus = String(an.marketplace_status || '').trim().toUpperCase();
             return `
                 <article class="an-card" data-anuncio-id="${escapeHtml(an.id)}">
                     <!-- Thumbnail com Zoom -->
-                    <button type="button" class="an-card-image" onclick="anOpenImage('${escapeHtml(an.thumbnail)}', '${escapeHtml(an.titulo)}')" title="Ampliar imagem do anúncio">
-                        <img src="${escapeHtml(an.thumbnail)}" alt="${escapeHtml(an.titulo)}" onerror="this.src='/assets/images/placeholder.webp';">
+                    <button type="button" class="an-card-image" onclick="anOpenImage('${escapeHtml(an.thumbnail_url)}', '${escapeHtml(an.titulo)}')" title="Ampliar imagem do anúncio">
+                        <img src="${escapeHtml(an.thumbnail_url)}" alt="${escapeHtml(an.titulo)}" onerror="this.src='/assets/images/placeholder.webp';">
                     </button>
 
                     <!-- Metadados do Mercado Livre -->
                     <div class="an-card-details">
                         <div class="an-card-meta">
-                            <span class="an-badge-mlb">${escapeHtml(an.item_id)}</span>
+                            ${hasValue(an.marketplace) ? `<span class="an-badge-mlb">${escapeHtml(an.marketplace.replaceAll('_', ' '))}</span>` : ''}
+                            ${hasValue(an.external_item_id) ? `<span class="an-badge-mlb">${escapeHtml(an.external_item_id)}</span>` : ''}
+                            ${hasValue(an.variation_id || an.variation_key) ? `<span class="an-badge-sku">Variação: ${escapeHtml(an.variation_id || an.variation_key)}</span>` : ''}
                             ${an.seller_sku ? `<span class="an-badge-sku">SKU: ${escapeHtml(an.seller_sku)}</span>` : ''}
-                            <span class="an-badge-account"><span class="material-symbols-rounded" style="font-size:14px;">store</span>${escapeHtml(an.account)}</span>
+                            ${sellerLabel(an) ? `<span class="an-badge-account"><span class="material-symbols-rounded" style="font-size:14px;">store</span>${escapeHtml(sellerLabel(an))}</span>` : ''}
                         </div>
                         <h3>${escapeHtml(an.titulo)}</h3>
+                        ${priceHTML(an)}
                         <div class="an-card-submeta">
-                            <span class="an-status-dot ${an.status_ml === 'active' ? 'active' : 'paused'}">
-                                ${an.status_ml === 'active' ? 'Anúncio Ativo' : 'Anúncio Pausado'}
+                            <span class="an-status-dot ${externalStatus === 'ACTIVE' ? 'active' : 'paused'}">
+                                ${externalStatus === 'ACTIVE' ? 'Anúncio Ativo' : 'Anúncio Pausado'}
                             </span>
                             <span>•</span>
-                            <span>Sincronizado: ${escapeHtml(an.last_sync)}</span>
+                            ${hasValue(an.ultima_sincronizacao) ? `<span>Sincronizado: ${escapeHtml(an.ultima_sincronizacao)}</span>` : ''}
                             <span>•</span>
                             <a href="${escapeHtml(an.permalink)}" target="_blank" rel="noopener noreferrer" class="an-link-ml">
                                 Abrir no ML <span class="material-symbols-rounded" style="font-size:13px;">open_in_new</span>
@@ -366,9 +408,9 @@
         if (push && typeof pushNav === 'function') pushNav('anuncios');
 
         const totalCount = AnunciosState.anuncios.length;
-        const unmappedCount = AnunciosState.anuncios.filter(a => a.mapping_status === 'unmapped' || a.mapping_status === 'partial').length;
-        const mappedCount = AnunciosState.anuncios.filter(a => a.mapping_status === 'mapped').length;
-        const reviewCount = AnunciosState.anuncios.filter(a => a.mapping_status === 'review').length;
+        const unmappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'NAO_MAPEADO' || a.situacao_mapeamento === 'PARCIAL').length;
+        const mappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'MAPEADO').length;
+        const reviewCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'REVISAR').length;
 
         const container = document.getElementById('app');
         if (!container) return;
@@ -422,8 +464,7 @@
                                 </label>
                                 <select class="an-account-select" onchange="anOnAccountChange(this.value)" aria-label="Filtrar por conta">
                                     <option value="todas" ${AnunciosState.accountFilter === 'todas' ? 'selected' : ''}>Todas as Contas</option>
-                                    <option value="DY Auto Parts Oficial" ${AnunciosState.accountFilter === 'DY Auto Parts Oficial' ? 'selected' : ''}>DY Auto Parts Oficial</option>
-                                    <option value="DY Auto Parts Acessórios" ${AnunciosState.accountFilter === 'DY Auto Parts Acessórios' ? 'selected' : ''}>DY Auto Parts Acessórios</option>
+                                    ${accountOptions()}
                                 </select>
                             </div>
                         </header>
@@ -478,24 +519,27 @@
     // MODAL DE MAPEAMENTO (PRODUTOS EQUIVALENTES & KITS)
     // =========================================================================
 
-    window.anOpenMappingModal = function (anuncioId, variationId = null) {
+    const getVariationRef = v => hasValue(v?.variation_id) ? `id:${v.variation_id}` : hasValue(v?.variation_key) ? `key:${v.variation_key}` : '';
+    const findVariationByRef = (anuncio, ref) => (anuncio.variations || []).find(v => getVariationRef(v) === ref);
+
+    window.anOpenMappingModal = function (anuncioId, variationRef = null) {
         const anuncio = AnunciosState.anuncios.find(a => a.id === anuncioId);
         if (!anuncio) return;
 
         AnunciosState.activeAnuncioId = anuncioId;
-        AnunciosState.activeVariationId = variationId;
+        const selectedVariation = variationRef ? findVariationByRef(anuncio, variationRef) : null;
+        AnunciosState.activeVariationId = selectedVariation?.variation_id || null;
         AnunciosState.modalSearch = '';
 
         // Se for anúncio com variações e nenhuma foi selecionada ainda, abre seleção
-        if (anuncio.has_variations && !variationId) {
+        if (anuncio.has_variations && !variationRef) {
             anOpenVariationPickerModal(anuncio);
             return;
         }
 
         let targetMapping = anuncio.mapping;
-        if (variationId && anuncio.has_variations) {
-            const v = anuncio.variations.find(x => x.variation_id === variationId);
-            targetMapping = v?.mapping;
+        if (variationRef && anuncio.has_variations) {
+            targetMapping = selectedVariation?.mapping;
         }
 
         // Inicializa estado do modal conforme o mapeamento atual
@@ -509,7 +553,7 @@
             AnunciosState.modalKitComponents = [];
         }
 
-        anRenderMappingModalDOM(anuncio, variationId);
+        anRenderMappingModalDOM(anuncio, variationRef);
     };
 
     function anOpenVariationPickerModal(anuncio) {
@@ -523,7 +567,7 @@
                     <div>
                         <small><span class="material-symbols-rounded" style="font-size:15px;">tune</span> Selecionar Variação</small>
                         <h2>${escapeHtml(anuncio.titulo)}</h2>
-                        <p>item_id: ${escapeHtml(anuncio.item_id)} • Conta: ${escapeHtml(anuncio.account)}</p>
+                        <p>external_item_id: ${escapeHtml(anuncio.external_item_id)} • Conta: ${escapeHtml(anuncio.seller_nome)}</p>
                     </div>
                     <button type="button" class="an-modal-close" onclick="document.getElementById('an-variation-picker-overlay').remove()">
                         <span class="material-symbols-rounded">close</span>
@@ -533,13 +577,13 @@
                     <p style="margin:0 0 12px;font-size:13px;color:#64748b;">Este anúncio possui múltiplas variações. Escolha qual variação deseja mapear:</p>
                     <div style="display:grid;gap:10px;">
                         ${anuncio.variations.map(v => {
-                            const isVMap = v.mapping_status === 'mapped';
+                            const isVMap = v.situacao_mapeamento === 'MAPEADO';
                             const prod = v.mapping?.products?.[0];
                             return `
-                                <button type="button" onclick="document.getElementById('an-variation-picker-overlay').remove(); anOpenMappingModal('${escapeHtml(anuncio.id)}', '${escapeHtml(v.variation_id)}')" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;text-align:left;cursor:pointer;">
+                                <button type="button" onclick="document.getElementById('an-variation-picker-overlay').remove(); anOpenMappingModal('${escapeHtml(anuncio.id)}', '${escapeHtml(getVariationRef(v))}')" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;text-align:left;cursor:pointer;">
                                     <div>
                                         <strong style="display:block;color:#0f172a;font-size:13px;">${escapeHtml(v.attribute)}</strong>
-                                        <small style="color:#64748b;font-size:11px;">SKU: ${escapeHtml(v.seller_sku)} • ${escapeHtml(v.variation_id)}</small>
+                                        <small style="color:#64748b;font-size:11px;">${hasValue(v.seller_sku) ? `SKU: ${escapeHtml(v.seller_sku)} • ` : ''}${escapeHtml(v.variation_id || v.variation_key || 'Identificador não informado')}</small>
                                         <div style="margin-top:4px;">
                                             ${isVMap ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;background:#f0fdf4;color:#166534;font-size:11px;font-weight:700;"><span class="material-symbols-rounded" style="font-size:14px;">check_circle</span> Mapeado: ${escapeHtml(prod?.id_interno)} — ${escapeHtml(prod?.nome)}</span>` : `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;background:#fff7ed;color:#9a3412;font-size:11px;font-weight:700;"><span class="material-symbols-rounded" style="font-size:14px;">link_off</span> Não mapeado</span>`}
                                         </div>
@@ -555,10 +599,10 @@
         document.body.appendChild(overlay);
     }
 
-    function anRenderMappingModalDOM(anuncio, variationId = null) {
+    function anRenderMappingModalDOM(anuncio, variationRef = null) {
         document.getElementById('an-mapping-modal-overlay')?.remove();
 
-        const variation = variationId ? anuncio.variations?.find(v => v.variation_id === variationId) : null;
+        const variation = variationRef ? findVariationByRef(anuncio, variationRef) : null;
         const modalOverlay = document.createElement('div');
         modalOverlay.className = 'an-modal-overlay fade-in';
         modalOverlay.id = 'an-mapping-modal-overlay';
@@ -574,9 +618,9 @@
                         </small>
                         <h2>${escapeHtml(anuncio.titulo)}</h2>
                         <p>
-                            <span>item_id: <b>${escapeHtml(anuncio.item_id)}</b></span>
+                            <span>external_item_id: <b>${escapeHtml(anuncio.external_item_id)}</b></span>
                             ${variation ? `<span>• Variação: <b>${escapeHtml(variation.attribute)}</b> (${escapeHtml(variation.variation_id)})</span>` : ''}
-                            <span>• Conta: <b>${escapeHtml(anuncio.account)}</b></span>
+                            <span>• Conta: <b>${escapeHtml(anuncio.seller_nome)}</b></span>
                         </p>
                     </div>
                     <button type="button" class="an-modal-close" onclick="document.getElementById('an-mapping-modal-overlay').remove()" aria-label="Fechar">
@@ -939,10 +983,11 @@
             }
 
             // Salva transacionalmente no Supabase se DataClient estiver disponivel
-            if (window.DataClient?.saveMercadoLivreItemMappingTransacional && anuncio.item_id) {
+            if (window.DataClient?.saveMercadoLivreItemMappingTransacional && anuncio.external_item_id && hasValue(anuncio.account_id)) {
                 const currentUser = localStorage.getItem('currentUser') || 'usuario';
                 const savedMapping = await window.DataClient.saveMercadoLivreItemMappingTransacional({
-                    itemId: anuncio.item_id,
+                    accountId: anuncio.account_id,
+                    itemId: anuncio.external_item_id,
                     variationId: AnunciosState.activeVariationId || null,
                     tipoIdentificacao: tipoIdentificacao,
                     observacao: `Mapeado via painel em ${new Date().toLocaleString()}`,
@@ -963,13 +1008,13 @@
                 const v = anuncio.variations.find(x => x.variation_id === AnunciosState.activeVariationId);
                 if (v) {
                     v.mapping = newMapping;
-                    v.mapping_status = 'mapped';
+                    v.situacao_mapeamento = 'MAPEADO';
                 }
-                const allMapped = anuncio.variations.every(x => x.mapping_status === 'mapped');
-                anuncio.mapping_status = allMapped ? 'mapped' : 'partial';
+                const allMapped = anuncio.variations.every(x => x.situacao_mapeamento === 'MAPEADO');
+                anuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
             } else {
                 anuncio.mapping = newMapping;
-                anuncio.mapping_status = 'mapped';
+                anuncio.situacao_mapeamento = 'MAPEADO';
             }
 
             document.getElementById('an-mapping-modal-overlay')?.remove();
