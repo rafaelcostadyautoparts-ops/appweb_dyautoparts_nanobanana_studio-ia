@@ -4417,11 +4417,311 @@ function renderPedidosPlaceholder(push = true) {
   renderPedidosScreen('todos');
 }
 
-async function renderPedidosScreen(filtroAba = 'todos') {
+window.PedidosPreviewState = window.PedidosPreviewState || {
+  operacional: 'todos', // 'todos' | 'pendentes' | 'prontos' | 'em_separacao' | 'separados' | 'divergencias'
+  marketplace: 'todos', // 'todos' | 'mercadolibre' | 'shopee'
+  conta: 'todas',
+  busca: ''
+};
+
+function setPedidosFiltroOperacional(op) {
+  window.PedidosPreviewState.operacional = op;
+  renderPedidosScreen();
+}
+
+function setPedidosFiltroMarketplace(mp) {
+  window.PedidosPreviewState.marketplace = mp;
+  renderPedidosScreen();
+}
+
+function setPedidosFiltroConta(conta) {
+  window.PedidosPreviewState.conta = conta;
+  renderPedidosScreen();
+}
+
+function setPedidosBusca(texto) {
+  window.PedidosPreviewState.busca = texto || '';
+  renderPedidosScreen();
+}
+
+function openModalIdentificarPreview(pedidoId, itemIdx = 0) {
+  closeAppCenterModal();
+  const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+  const ped = todosPreview.find(p => p.id === pedidoId);
+  if (!ped) {
+    showToast('Pedido não encontrado na prévia.', 'error');
+    return;
+  }
+
+  const itens = ped.itens || [];
+  const itemAlvo = itens[itemIdx] || itens[0] || {};
+  const isML = ped.platform === 'MERCADOLIBRE';
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop';
+
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:650px;">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;border-radius:10px;background:#fef3c7;color:#b45309;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <span class="material-symbols-rounded" style="font-size:24px;">manage_search</span>
+        </div>
+        <div>
+          <h3 style="font-size:1.15rem;font-weight:800;color:#0f172a;margin:0;">IDENTIFICAÇÃO OPERACIONAL</h3>
+          <span style="font-size:0.75rem;color:#b45309;font-weight:700;text-transform:uppercase;">Modo de Prévia em Homologação</span>
+        </div>
+      </div>
+
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;margin-bottom:16px;">
+        <p style="margin:0;font-size:0.88rem;color:#92400e;line-height:1.45;">
+          <b>Atenção:</b> Este pedido está em modo de prévia visual.<br>
+          A identificação operacional definitiva (vinculando <b>ID_INTERNO</b>, <b>Produto Exato</b>, <b>Kit</b> ou <b>Grupo de Equivalência</b>) será realizada através do motor compartilhado de <b>Mapping de Anúncios</b> quando conectado à base corporativa SQL.
+        </p>
+      </div>
+
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px;">
+        <small style="color:#64748b;font-weight:700;font-size:0.72rem;text-transform:uppercase;display:block;margin-bottom:6px;">Item Selecionado para Mapeamento:</small>
+        <strong style="color:#0f172a;font-size:0.92rem;display:block;line-height:1.35;">${escapeKitAttribute(itemAlvo.titulo || 'Item')}</strong>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.8rem;color:#475569;">
+          <span>Canal: <b>${isML ? 'Mercado Livre' : 'Shopee'}</b></span>
+          <span>ID Anúncio: <b>${escapeKitAttribute(itemAlvo.item_id || '-')}</b></span>
+          ${itemAlvo.seller_sku ? `<span>SKU Vendedor: <b>${escapeKitAttribute(itemAlvo.seller_sku)}</b></span>` : ''}
+          ${itemAlvo.variacao_texto ? `<span>Variação: <i>${escapeKitAttribute(itemAlvo.variacao_texto)}</i></span>` : ''}
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;align-items:center;border-top:1px solid #e2e8f0;padding-top:14px;gap:10px;">
+        <button type="button" class="app-center-modal-primary" onclick="closeAppCenterModal()" style="padding:8px 20px;font-size:0.85rem;background:#4f46e5;">Entendi</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
   const currentUser = localStorage.getItem('currentUser');
   if (!currentUser) return renderLogin();
 
   currentScreen = 'pedidos';
+
+  // Verifica se está no modo preview de pedidos reais
+  const isPreviewMode = Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA) && window.PEDIDOS_PREVIEW_AMOSTRA.length > 0;
+
+  if (isPreviewMode) {
+    const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
+    const state = window.PedidosPreviewState;
+
+    // Se parâmetros foram passados diretamente pela chamada legada, sincroniza com o state
+    if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
+
+    // Contadores Operacionais Principais (foco 100% no fluxo operacional)
+    const countTodos = todosPreview.length; // 30
+    const countPendentes = todosPreview.length; // 30 (todos na preview aguardam mapping consolidado)
+    const countProntos = 0;
+    const countEmSeparacao = 0;
+    const countSeparados = 0;
+    const countDivergencias = 0;
+
+    // Contadores por Canal para os botões de filtro
+    const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
+    const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+
+    // Lista de contas distintas da amostra
+    const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
+
+    // Aplicação determinística dos filtros:
+    let listaExibicao = todosPreview;
+
+    // 1. Filtro Operacional
+    if (state.operacional === 'prontos' || state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+      listaExibicao = [];
+    } else {
+      // 'todos' ou 'pendentes'
+      listaExibicao = todosPreview;
+    }
+
+    // 2. Filtro Secundário: Marketplace
+    if (state.marketplace === 'mercadolibre') {
+      listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
+    } else if (state.marketplace === 'shopee') {
+      listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
+    }
+
+    // 3. Filtro Secundário: Conta
+    if (state.conta && state.conta !== 'todas') {
+      listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
+    }
+
+    // 4. Busca Textual (pedido, título, SKU, variação, conta)
+    const termoBusca = String(state.busca || '').trim().toLowerCase();
+    if (termoBusca) {
+      listaExibicao = listaExibicao.filter(p => {
+        const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
+        const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
+        const itemsMatch = (p.itens || []).some(it =>
+          String(it.titulo || '').toLowerCase().includes(termoBusca) ||
+          String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
+          String(it.item_id || '').toLowerCase().includes(termoBusca) ||
+          String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
+        );
+        return orderMatch || accountMatch || itemsMatch;
+      });
+    }
+
+    app.innerHTML = `
+      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()')}
+        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+        <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:24px 20px;">
+          <div class="app-breadcrumb" style="margin-bottom:16px;">
+            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+            <span class="material-symbols-rounded">chevron_right</span>
+            <span class="app-breadcrumb-current">Gestão de Pedidos</span>
+          </div>
+
+          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
+                <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
+                  <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
+                </span>
+              </div>
+              <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
+                Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
+              </p>
+            </div>
+          </header>
+
+          <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
+          <div class="pedidos-counters-grid">
+            <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
+              <div class="pedidos-counter-label">
+                <span>Todos</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+              </div>
+              <div class="pedidos-counter-val">${countTodos}</div>
+              <span class="pedidos-counter-sub">Total consolidado</span>
+            </div>
+
+            <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
+              <div class="pedidos-counter-label" style="color:#b45309;">
+                <span>Pendentes</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
+              <span class="pedidos-counter-sub">Aguardam mapping</span>
+            </div>
+
+            <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
+              <div class="pedidos-counter-label" style="color:#15803d;">
+                <span>Prontos p/ Separação</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
+              <span class="pedidos-counter-sub">Prontos p/ envio</span>
+            </div>
+
+            <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
+              <div class="pedidos-counter-label" style="color:#1d4ed8;">
+                <span>Em Separação</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
+              <span class="pedidos-counter-sub">Picking em curso</span>
+            </div>
+
+            <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
+              <div class="pedidos-counter-label" style="color:#7e22ce;">
+                <span>Separados</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
+              <span class="pedidos-counter-sub">Aguardam conferência</span>
+            </div>
+
+            <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
+              <div class="pedidos-counter-label" style="color:#b91c1c;">
+                <span>Divergências</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">error</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#b91c1c;">${countDivergencias}</div>
+              <span class="pedidos-counter-sub">Bloqueios de auditoria</span>
+            </div>
+          </div>
+
+          <!-- BARRA DE FILTROS SECUNDÁRIOS: BUSCA, MARKETPLACE E CONTA -->
+          <div class="pedidos-filters-bar">
+            <div class="pedidos-search-wrap">
+              <span class="material-symbols-rounded pedidos-search-icon">search</span>
+              <input type="text"
+                     class="pedidos-search-input"
+                     placeholder="Buscar pedido, título, SKU..."
+                     value="${escapeKitAttribute(state.busca || '')}"
+                     oninput="setPedidosBusca(this.value)">
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <!-- Filtro de Canal / Marketplace (Pills) -->
+              <div class="pedidos-pills-wrap">
+                <button type="button"
+                        class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}"
+                        onclick="setPedidosFiltroMarketplace('todos')">
+                  Todos (${countTodos})
+                </button>
+                <button type="button"
+                        class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}"
+                        onclick="setPedidosFiltroMarketplace('mercadolibre')">
+                  Mercado Livre (${countML})
+                </button>
+                <button type="button"
+                        class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}"
+                        onclick="setPedidosFiltroMarketplace('shopee')">
+                  Shopee (${countShopee})
+                </button>
+              </div>
+
+              <!-- Filtro por Conta -->
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label for="pedidos-filtro-conta" style="font-size:0.8rem;font-weight:700;color:#475569;">Conta:</label>
+                <select id="pedidos-filtro-conta"
+                        onchange="setPedidosFiltroConta(this.value)"
+                        style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.82rem;background:#fff;color:#0f172a;font-weight:600;min-width:170px;cursor:pointer;">
+                  <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
+                  ${contasDisponiveis.map(c => `<option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- LISTAGEM DE PEDIDOS -->
+          <div style="display:grid;gap:14px;">
+            ${listaExibicao.length ? listaExibicao.map(ped => renderPedidoCardHTML(ped)).join('') : `
+              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 20px;text-align:center;color:#64748b;">
+                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;">filter_alt_off</span>
+                <p style="margin:12px 0 4px;font-weight:700;font-size:1rem;color:#1e293b;">Nenhum pedido encontrado para esta combinação de filtros.</p>
+                <small style="color:#64748b;">Na prévia atual, todos os 30 pedidos estão no estado operacional <b>Pendentes de Identificação</b>.</small>
+                <div style="margin-top:16px;">
+                  <button type="button" class="app-center-modal-secondary" onclick="setPedidosFiltroOperacional('todos');setPedidosFiltroMarketplace('todos');setPedidosFiltroConta('todas');setPedidosBusca('');" style="padding:6px 14px;font-size:0.82rem;">
+                    Limpar Filtros
+                  </button>
+                </div>
+              </div>
+            `}
+          </div>
+        </main>
+      </div>
+    `;
+    return;
+  }
+
+  // --- FLUXO ORIGINAL PRESERVADO (quando não em preview) ---
   app.innerHTML = `
     <div class="dashboard-screen internal fade-in module-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -4499,6 +4799,119 @@ async function renderPedidosScreen(filtroAba = 'todos') {
 }
 
 function renderPedidoCardHTML(ped) {
+  // RENDERIZAÇÃO REFINADA PARA PREVIEW DE 30 PEDIDOS REAIS
+  if (ped && ped.preview) {
+    const isML = ped.platform === 'MERCADOLIBRE';
+    const itens = ped.itens || [];
+    const primeiroItem = itens[0] || {};
+    const totalItens = ped.total_itens || itens.length || 1;
+    const hasMultiple = totalItens > 1;
+
+    // Badges
+    const badgePlatform = isML
+      ? `<span class="badge-canal-ml">MERCADO LIVRE</span>`
+      : `<span class="badge-canal-shopee">SHOPEE</span>`;
+
+    const statusMarketplaceBadge = `
+      <span class="badge-status-marketplace" title="Status retornado pelo marketplace">
+        <span class="material-symbols-rounded" style="font-size:14px;color:#64748b;">receipt_long</span> ${escapeKitAttribute(String(ped.status || '').toUpperCase())}
+      </span>
+    `;
+
+    return `
+      <article class="pedidos-card">
+        <!-- CABEÇALHO DO CARD -->
+        <div class="pedidos-card-top">
+          <div>
+            <div class="pedidos-card-title-group">
+              ${badgePlatform}
+              <h3 class="pedidos-card-order-id">Pedido #${escapeKitAttribute(ped.external_order_id)}</h3>
+              <span style="color:#475569;font-weight:600;font-size:0.82rem;background:#f1f5f9;padding:2px 8px;border-radius:4px;">Conta: <b>${escapeKitAttribute(ped.account_name)}</b></span>
+            </div>
+            <span class="pedidos-card-meta">
+              ${escapeKitAttribute(ped.sale_date)} • <b>${totalItens}</b> anúncio(s)/item(ns) • <b>${ped.total_unidades}</b> un. total
+            </span>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${statusMarketplaceBadge}
+          </div>
+        </div>
+
+        <!-- BLOCO DO PRODUTO / ANÚNCIO (COMPACTO E OPERACIONAL) -->
+        <div class="pedidos-card-product-box">
+          ${primeiroItem.imagem_url ? `
+            <img src="${primeiroItem.imagem_url}" alt="Foto" class="pedidos-product-thumb" loading="lazy">
+          ` : `
+            <div class="pedidos-product-thumb-empty">
+              <span class="material-symbols-rounded" style="font-size:26px;">inventory_2</span>
+            </div>
+          `}
+          <div class="pedidos-product-info">
+            <strong class="pedidos-product-title" title="${escapeKitAttribute(primeiroItem.titulo || '')}">
+              ${escapeKitAttribute(primeiroItem.titulo || 'Item sem título')}
+            </strong>
+
+            <div class="pedidos-product-meta-row">
+              <span>Qtd: <b>${primeiroItem.quantidade} un.</b></span>
+              ${primeiroItem.seller_sku ? `<span>SKU anúncio: <b>${escapeKitAttribute(primeiroItem.seller_sku)}</b></span>` : '<span style="color:#94a3b8;">SKU anúncio: Não informado</span>'}
+              ${primeiroItem.variacao_texto ? `<span>Variação: <i>${escapeKitAttribute(primeiroItem.variacao_texto)}</i></span>` : '<span style="color:#94a3b8;">Sem variação</span>'}
+            </div>
+
+            ${hasMultiple ? `
+              <div class="pedidos-multi-item-banner">
+                <span class="pedidos-multi-item-tag">
+                  <span class="material-symbols-rounded" style="font-size:14px;">view_list</span>
+                  + ${totalItens - 1} outro(s) item(ns) neste pedido
+                </span>
+                <span style="color:#475569;font-weight:600;">
+                  0 de ${totalItens} identificados • <b>${totalItens} pendentes</b>
+                </span>
+              </div>
+            ` : ''}
+
+            <!-- ÁREA DE IDENTIFICAÇÃO OPERACIONAL -->
+            <div class="pedidos-card-ident-box">
+              <div class="pedidos-card-ident-msg">
+                <span class="badge-operacional badge-pendente">
+                  <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
+                  PENDENTE DE IDENTIFICAÇÃO
+                </span>
+                <span style="font-size:0.78rem;color:#78350f;margin-left:4px;">
+                  ${hasMultiple ? 'Todos os itens deste pedido ainda precisam ser mapeados.' : 'Este anúncio ainda precisa ser mapeado.'}
+                </span>
+              </div>
+              <button type="button"
+                      class="pedidos-btn-identificar"
+                      onclick="openModalIdentificarPreview('${ped.id}')">
+                <span class="material-symbols-rounded" style="font-size:16px;">manage_search</span>
+                Identificar ${hasMultiple ? 'Itens' : 'Produto'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RODAPÉ DO CARD -->
+        <div class="pedidos-card-footer">
+          <span class="pedidos-card-total">Total: ${formatFinanceiroMoney(ped.amount || 0)}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:7px 14px;font-size:0.83rem;cursor:pointer;">
+              Ver detalhes (${totalItens})
+            </button>
+            <button type="button"
+                    class="app-center-modal-secondary"
+                    disabled
+                    style="padding:7px 14px;font-size:0.83rem;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
+                    title="Disponível somente quando todos os itens estiverem identificados.">
+              <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
+            </button>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  // --- FLUXO ORIGINAL PRESERVADO ---
   const itens = ped.mercadolivre_pedido_itens || [];
   const isCancelled = String(ped.status_mercadolivre || '').toLowerCase() === 'cancelled';
   const isPronto = ped.status_identificacao === 'pronto_separacao' && !isCancelled;
@@ -4591,8 +5004,142 @@ async function enviarPedidoParaSeparacaoUI(pedidoId) {
   }
 }
 
+function renderModalDetalhesPedidoPreview(ped) {
+  const isML = ped.platform === 'MERCADOLIBRE';
+  const itens = ped.itens || [];
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop';
+
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:880px;">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;padding-right:24px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="${isML ? 'badge-canal-ml' : 'badge-canal-shopee'}">
+              ${isML ? 'MERCADO LIVRE' : 'SHOPEE'}
+            </span>
+            <h3 style="font-size:1.25rem;font-weight:800;color:#0f172a;margin:0;">
+              PEDIDO #${escapeKitAttribute(ped.external_order_id)}
+            </h3>
+          </div>
+          <p style="color:#64748b;font-size:0.85rem;margin:6px 0 0;">
+            Conta: <b>${escapeKitAttribute(ped.account_name)}</b> (ID: ${escapeKitAttribute(ped.source_account_id)}) • Data: <b>${escapeKitAttribute(ped.sale_date)}</b>
+          </p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="badge-status-marketplace">
+            STATUS MARKETPLACE: <b style="color:#0f172a;">${escapeKitAttribute(String(ped.status || '').toUpperCase())}</b>
+          </span>
+          <span class="badge-operacional badge-pendente">
+            <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
+            PENDENTE DE IDENTIFICAÇÃO
+          </span>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #e2e8f0;padding-top:14px;margin-bottom:12px;">
+        <small style="color:#64748b;font-size:0.78rem;font-weight:700;text-transform:uppercase;">
+          ITENS DO PEDIDO (${itens.length} anúncio(s) • ${ped.total_unidades} un. total):
+        </small>
+      </div>
+
+      <div style="display:grid;gap:12px;max-height:55vh;overflow-y:auto;padding-right:6px;">
+        ${itens.map((item, idx) => `
+          <div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#f8fafc;display:flex;gap:14px;align-items:flex-start;">
+            ${item.imagem_url ? `
+              <img src="${item.imagem_url}" alt="Foto" class="pedidos-product-thumb" style="width:64px;height:64px;">
+            ` : `
+              <div class="pedidos-product-thumb-empty" style="width:64px;height:64px;">
+                <span class="material-symbols-rounded" style="font-size:28px;">inventory_2</span>
+              </div>
+            `}
+
+            <div style="flex:1;min-width:0;">
+              <strong style="color:#0f172a;font-size:0.95rem;display:block;line-height:1.35;">
+                ${escapeKitAttribute(item.titulo || 'Item sem título')}
+              </strong>
+
+              <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:0.8rem;color:#475569;">
+                <span>ID Anúncio: <b>${escapeKitAttribute(item.item_id || '-')}</b></span>
+                ${item.seller_sku ? `<span>SKU anúncio: <b>${escapeKitAttribute(item.seller_sku)}</b></span>` : '<span style="color:#94a3b8;">SKU anúncio: Não informado</span>'}
+                ${item.variacao_texto ? `<span>Variação: <b>${escapeKitAttribute(item.variacao_texto)}</b></span>` : (item.variation_id ? `<span>Var ID: <b>${escapeKitAttribute(item.variation_id)}</b></span>` : '<span style="color:#94a3b8;">Sem variação</span>')}
+              </div>
+
+              <!-- IDENTIFICAÇÃO OPERACIONAL DO ITEM -->
+              <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span class="badge-operacional badge-pendente" style="font-size:0.72rem;padding:2px 8px;">
+                    PENDENTE DE IDENTIFICAÇÃO
+                  </span>
+                  <span style="font-size:0.76rem;color:#78350f;">Aguardando mapeamento para ID Interno / Equivalência</span>
+                </div>
+                <button type="button"
+                        class="pedidos-btn-identificar"
+                        onclick="openModalIdentificarPreview('${ped.id}', ${idx})">
+                  <span class="material-symbols-rounded" style="font-size:15px;">manage_search</span>
+                  Identificar Item
+                </button>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;flex-wrap:wrap;gap:8px;">
+                <span style="font-size:0.85rem;color:#1e293b;">
+                  Qtd comprada: <b style="color:#0f172a;font-size:0.95rem;">${item.quantidade} un.</b>
+                </span>
+                <div style="text-align:right;">
+                  <span style="font-size:0.8rem;color:#64748b;">Preço hist.: </span>
+                  <b style="color:#0f172a;font-size:0.9rem;">${item.preco_unitario !== null ? formatFinanceiroMoney(item.preco_unitario) : 'Não informado'}</b>
+                  ${item.preco_unitario !== null && item.quantidade > 1 ? `
+                    <span style="font-size:0.8rem;color:#475569;margin-left:6px;">(Subtotal: <b>${formatFinanceiroMoney(item.preco_unitario * item.quantidade)}</b>)</span>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:16px;margin-top:16px;flex-wrap:wrap;gap:12px;">
+        <span style="font-size:1.1rem;font-weight:800;color:#0f172a;">
+          Valor Total do Pedido: ${formatFinanceiroMoney(ped.amount || 0)}
+        </span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()" style="padding:8px 18px;">Fechar</button>
+          <button type="button"
+                  class="app-center-modal-secondary"
+                  disabled
+                  style="padding:8px 18px;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
+                  title="Disponível somente quando todos os itens estiverem identificados.">
+            <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
 async function openModalDetalhesPedido(pedidoId) {
   closeAppCenterModal();
+
+  // PREVIEW DE PEDIDOS
+  if (String(pedidoId).startsWith('preview_')) {
+    const ped = (window.PEDIDOS_PREVIEW_AMOSTRA || []).find(p => p.id === pedidoId);
+    if (!ped) {
+      showToast('Pedido da prévia não encontrado.', 'error');
+      return;
+    }
+    return renderModalDetalhesPedidoPreview(ped);
+  }
+
+  // FLUXO ORIGINAL PRESERVADO
   if (!window.DataClient?.getMercadoLivrePedidoById) return;
 
   const ped = await window.DataClient.getMercadoLivrePedidoById(pedidoId);
