@@ -4444,64 +4444,107 @@ function setPedidosBusca(texto) {
   renderPedidosScreen();
 }
 
-function openModalIdentificarPreview(pedidoId, itemIdx = 0) {
+async function openModalIdentificarPreview(pedidoId, itemIdx = 0) {
   closeAppCenterModal();
   const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA || [];
   const ped = todosPreview.find(p => p.id === pedidoId);
   if (!ped) {
-    showToast('Pedido não encontrado na prévia.', 'error');
+    if (typeof showToast === 'function') showToast('Pedido não encontrado na prévia.', 'error');
+    return;
+  }
+
+  // Regra 4: Shopee não habilitado nesta fase
+  if (ped.platform !== 'MERCADOLIBRE') {
+    if (typeof showToast === 'function') {
+      showToast('A identificação de itens Shopee está bloqueada nesta fase.', 'warning');
+    }
+    return;
+  }
+
+  // Regra 5: Conta não resolvida Mercado Livre
+  let accountIdLocal = ped.accountIdLocal;
+  if (!accountIdLocal || Number(accountIdLocal) <= 0) {
+    accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    ped.accountIdLocal = accountIdLocal;
+  }
+
+  if (!accountIdLocal || Number(accountIdLocal) <= 0) {
+    if (typeof showToast === 'function') {
+      showToast('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.', 'warning');
+    } else {
+      alert('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.');
+    }
+    return;
+  }
+
+  if (typeof window.openSharedItemMappingModal !== 'function') {
+    if (typeof showToast === 'function') showToast('Motor de mapping compartilhado não disponível.', 'error');
     return;
   }
 
   const itens = ped.itens || [];
   const itemAlvo = itens[itemIdx] || itens[0] || {};
-  const isML = ped.platform === 'MERCADOLIBRE';
 
-  const modal = document.createElement('div');
-  modal.id = 'app-center-modal';
-  modal.className = 'app-center-modal-backdrop';
+  // Regra 10: variationId
+  const varIdClean = (itemAlvo.variation_id && String(itemAlvo.variation_id).trim()) ? String(itemAlvo.variation_id).trim() : null;
 
-  modal.innerHTML = `
-    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:650px;">
-      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
-        <span class="material-symbols-rounded">close</span>
-      </button>
+  // Monta mapeamento inicial se o item já possuir hidratação prévia
+  let initialMapping = null;
+  if (itemAlvo.mapping_status === 'IDENTIFICADO' && itemAlvo.mapping_version) {
+    const versao = itemAlvo.mapping_version;
+    const comps = itemAlvo.mapping_componentes || [];
+    initialMapping = {
+      type: versao.tipo_identificacao === 'kit' ? 'kit' : 'equivalents',
+      products: comps.filter(c => c.produto_id || c.produto_referencia_id).map(c => {
+        const p = c.produtos || c.produto_referencia || {};
+        return {
+          id: c.produto_id || c.produto_referencia_id || p.id,
+          id_interno: p.id_interno || 'PROD',
+          nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+          marca: p.marca || '-',
+          ean: p.ean || '-',
+          sku_fornecedor: p.sku_fornecedor || '-'
+        };
+      }),
+      components: comps.map(c => {
+        const p = c.produtos || c.produto_referencia || {};
+        return {
+          product: {
+            id: c.produto_id || c.produto_referencia_id || p.id,
+            id_interno: p.id_interno || 'PROD',
+            nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+            marca: p.marca || '-',
+            ean: p.ean || '-',
+            sku_fornecedor: p.sku_fornecedor || '-'
+          },
+          qty: c.quantidade_por_unidade || 1
+        };
+      })
+    };
+  }
 
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="width:40px;height:40px;border-radius:10px;background:#fef3c7;color:#b45309;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <span class="material-symbols-rounded" style="font-size:24px;">manage_search</span>
-        </div>
-        <div>
-          <h3 style="font-size:1.15rem;font-weight:800;color:#0f172a;margin:0;">IDENTIFICAÇÃO OPERACIONAL</h3>
-          <span style="font-size:0.75rem;color:#b45309;font-weight:700;text-transform:uppercase;">Modo de Prévia em Homologação</span>
-        </div>
-      </div>
-
-      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;margin-bottom:16px;">
-        <p style="margin:0;font-size:0.88rem;color:#92400e;line-height:1.45;">
-          <b>Atenção:</b> Este pedido está em modo de prévia visual.<br>
-          A identificação operacional definitiva (vinculando <b>ID_INTERNO</b>, <b>Produto Exato</b>, <b>Kit</b> ou <b>Grupo de Equivalência</b>) será realizada através do motor compartilhado de <b>Mapping de Anúncios</b> quando conectado à base corporativa SQL.
-        </p>
-      </div>
-
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px;">
-        <small style="color:#64748b;font-weight:700;font-size:0.72rem;text-transform:uppercase;display:block;margin-bottom:6px;">Item Selecionado para Mapeamento:</small>
-        <strong style="color:#0f172a;font-size:0.92rem;display:block;line-height:1.35;">${escapeKitAttribute(itemAlvo.titulo || 'Item')}</strong>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.8rem;color:#475569;">
-          <span>Canal: <b>${isML ? 'Mercado Livre' : 'Shopee'}</b></span>
-          <span>ID Anúncio: <b>${escapeKitAttribute(itemAlvo.item_id || '-')}</b></span>
-          ${itemAlvo.seller_sku ? `<span>SKU Vendedor: <b>${escapeKitAttribute(itemAlvo.seller_sku)}</b></span>` : ''}
-          ${itemAlvo.variacao_texto ? `<span>Variação: <i>${escapeKitAttribute(itemAlvo.variacao_texto)}</i></span>` : ''}
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:flex-end;align-items:center;border-top:1px solid #e2e8f0;padding-top:14px;gap:10px;">
-        <button type="button" class="app-center-modal-primary" onclick="closeAppCenterModal()" style="padding:8px 20px;font-size:0.85rem;background:#4f46e5;">Entendi</button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
+  // Regra 10: Contrato de Pedidos ao chamar openSharedItemMappingModal
+  window.openSharedItemMappingModal({
+    marketplace: 'MERCADO_LIVRE',
+    accountId: accountIdLocal,
+    sourceAccountId: ped.source_account_id,
+    itemId: String(itemAlvo.item_id).trim(),
+    variationId: varIdClean,
+    sellerSku: itemAlvo.seller_sku || null,
+    titulo: itemAlvo.titulo || 'Item do Pedido',
+    thumbnailUrl: itemAlvo.thumbnail_url || null,
+    initialMapping: initialMapping,
+    onSaved: async () => {
+      // Re-executa hidratação dos mappings de Pedidos e atualiza tela
+      await hidratarPedidosPreviewMappings(todosPreview);
+      if (typeof renderPedidosScreen === 'function') {
+        renderPedidosScreen();
+      }
+      if (typeof showToast === 'function') {
+        showToast('Item identificado e mapeamento salvo com sucesso!', 'success');
+      }
+    }
+  });
 }
 
 const contasResolvedMapCache = new Map();
@@ -4984,6 +5027,7 @@ function renderPedidoCardHTML(ped) {
               ${!isPronto ? `
                 <button type="button"
                         class="pedidos-btn-identificar"
+                        ${ped.platform !== 'MERCADOLIBRE' ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="Identificação de itens Shopee indisponível nesta fase"' : ''}
                         onclick="openModalIdentificarPreview('${ped.id}')">
                   <span class="material-symbols-rounded" style="font-size:16px;">manage_search</span>
                   Identificar ${hasMultiple ? 'Itens' : 'Produto'}
@@ -5212,6 +5256,7 @@ function renderModalDetalhesPedidoPreview(ped) {
                   </div>
                   <button type="button"
                           class="pedidos-btn-identificar"
+                          ${ped.platform !== 'MERCADOLIBRE' ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="Identificação de itens Shopee indisponível nesta fase"' : ''}
                           onclick="openModalIdentificarPreview('${ped.id}', ${idx})">
                     <span class="material-symbols-rounded" style="font-size:15px;">manage_search</span>
                     Identificar Item

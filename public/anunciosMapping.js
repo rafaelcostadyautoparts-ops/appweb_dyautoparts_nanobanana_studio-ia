@@ -1889,12 +1889,82 @@
     };
 
     // =========================================================================
-    // MODAL DE MAPEAMENTO (PRODUTOS EQUIVALENTES & KITS)
+    // MODAL DE MAPEAMENTO COMPARTILHADO (PRODUTOS EQUIVALENTES & KITS)
     // =========================================================================
+
+    window.SharedMappingState = {
+        context: null,
+        modalMode: 'equivalents',
+        modalSearch: '',
+        modalAcceptedProducts: [],
+        modalKitComponents: []
+    };
 
     const getVariationRef = v => hasValue(v?.variation_id) ? `id:${v.variation_id}` : hasValue(v?.variation_key) ? `key:${v.variation_key}` : '';
     const findVariationByRef = (anuncio, ref) => (anuncio.variations || []).find(v => getVariationRef(v) === ref);
 
+    // Função Compartilhada de Abertura do Modal de Mapeamento
+    window.openSharedItemMappingModal = function (context) {
+        if (!context) return false;
+
+        const marketplace = context.marketplace || 'MERCADO_LIVRE';
+
+        // Regra 4: Shopee não habilitado nesta fase
+        if (marketplace === 'SHOPEE') {
+            if (typeof showToast === 'function') {
+                showToast('A identificação de itens Shopee está bloqueada nesta fase.', 'warning');
+            }
+            return false;
+        }
+
+        // Regra 5: Conta não resolvida para Mercado Livre (Identificação só abre se houver account_id local resolvido > 0)
+        if (marketplace === 'MERCADO_LIVRE') {
+            const accIdNum = Number(context.accountId);
+            if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+                if (typeof showToast === 'function') {
+                    showToast('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.', 'warning');
+                } else {
+                    alert('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.');
+                }
+                return false;
+            }
+        }
+
+        // Regra 10: Trata variação
+        const varIdClean = (context.variationId && String(context.variationId).trim()) ? String(context.variationId).trim() : null;
+
+        window.SharedMappingState = {
+            context: {
+                ...context,
+                marketplace,
+                variationId: varIdClean
+            },
+            modalMode: 'equivalents',
+            modalSearch: '',
+            modalAcceptedProducts: [],
+            modalKitComponents: []
+        };
+
+        const initialMapping = context.initialMapping;
+        if (initialMapping?.type === 'kit') {
+            window.SharedMappingState.modalMode = 'kit';
+            window.SharedMappingState.modalKitComponents = (initialMapping.components || []).map(c => ({ product: { ...c.product }, qty: c.qty || 1 }));
+        } else {
+            window.SharedMappingState.modalMode = 'equivalents';
+            window.SharedMappingState.modalAcceptedProducts = (initialMapping?.products || []).map(p => ({ ...p }));
+        }
+
+        anRenderMappingModalDOM();
+
+        carregarProdutosCatalogo().then(() => {
+            const resultsEl = document.querySelector('#an-mapping-modal-overlay .an-catalog-results');
+            if (resultsEl) resultsEl.innerHTML = anRenderCatalogResults();
+        });
+
+        return true;
+    };
+
+    // Wrapper para o Módulo de Anúncios
     window.anOpenMappingModal = function (anuncioId, variationRef = null) {
         const anuncio = AnunciosState.anuncios.find(a => a.id === anuncioId);
         if (!anuncio) return;
@@ -1902,7 +1972,6 @@
         AnunciosState.activeAnuncioId = anuncioId;
         const selectedVariation = variationRef ? findVariationByRef(anuncio, variationRef) : null;
         AnunciosState.activeVariationId = selectedVariation?.variation_id || null;
-        AnunciosState.modalSearch = '';
 
         // Se for anúncio com variações e nenhuma foi selecionada ainda, abre seleção
         if (anuncio.has_variations && !variationRef) {
@@ -1915,21 +1984,37 @@
             targetMapping = selectedVariation?.mapping;
         }
 
-        // Inicializa estado do modal conforme o mapeamento atual
-        if (targetMapping?.type === 'kit') {
-            AnunciosState.modalMode = 'kit';
-            AnunciosState.modalAcceptedProducts = [];
-            AnunciosState.modalKitComponents = (targetMapping.components || []).map(c => ({ product: c.product, qty: c.qty }));
-        } else {
-            AnunciosState.modalMode = 'equivalents';
-            AnunciosState.modalAcceptedProducts = (targetMapping?.products || []).map(p => ({ ...p }));
-            AnunciosState.modalKitComponents = [];
-        }
+        const varIdClean = selectedVariation?.variation_id ? String(selectedVariation.variation_id).trim() : null;
 
-        anRenderMappingModalDOM(anuncio, variationRef);
-        carregarProdutosCatalogo().then(() => {
-            const resultsEl = document.querySelector('.an-catalog-results');
-            if (resultsEl) resultsEl.innerHTML = anRenderCatalogResults();
+        window.openSharedItemMappingModal({
+            marketplace: anuncio.marketplace || 'MERCADO_LIVRE',
+            accountId: anuncio.account_id,
+            sourceAccountId: anuncio.source_account_id,
+            itemId: anuncio.external_item_id || anuncio.id,
+            variationId: varIdClean,
+            sellerSku: selectedVariation?.seller_sku || anuncio.seller_sku || null,
+            titulo: anuncio.titulo,
+            thumbnailUrl: anuncio.thumbnail_url,
+            initialMapping: targetMapping,
+            onSaved: async ({ uiMapping }) => {
+                if (AnunciosState.activeVariationId && anuncio.has_variations) {
+                    const v = anuncio.variations.find(x => x.variation_id === AnunciosState.activeVariationId);
+                    if (v) {
+                        v.mapping = uiMapping;
+                        v.situacao_mapeamento = 'MAPEADO';
+                    }
+                    const allMapped = anuncio.variations.every(x => x.situacao_mapeamento === 'MAPEADO');
+                    anuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
+                } else {
+                    anuncio.mapping = uiMapping;
+                    anuncio.situacao_mapeamento = 'MAPEADO';
+                }
+
+                renderAnunciosScreen(false);
+                if (typeof showToast === 'function') {
+                    showToast('Mapeamento de anúncio atualizado e salvo no banco com sucesso!', 'success');
+                }
+            }
         });
     };
 
@@ -1976,10 +2061,12 @@
         document.body.appendChild(overlay);
     }
 
-    function anRenderMappingModalDOM(anuncio, variationRef = null) {
+    function anRenderMappingModalDOM() {
         document.getElementById('an-mapping-modal-overlay')?.remove();
 
-        const variation = variationRef ? findVariationByRef(anuncio, variationRef) : null;
+        const context = window.SharedMappingState.context || {};
+        const state = window.SharedMappingState;
+
         const modalOverlay = document.createElement('div');
         modalOverlay.className = 'an-modal-overlay fade-in';
         modalOverlay.id = 'an-mapping-modal-overlay';
@@ -1991,13 +2078,14 @@
                     <div>
                         <small>
                             <span class="material-symbols-rounded" style="font-size:15px;">link</span>
-                            Mapeamento de Anúncio • Mercado Livre
+                            Mapeamento de Item • ${context.marketplace === 'MERCADO_LIVRE' ? 'Mercado Livre' : escapeHtml(context.marketplace || 'Mercado Livre')}
                         </small>
-                        <h2>${escapeHtml(anuncio.titulo)}</h2>
+                        <h2>${escapeHtml(context.titulo || 'Item sem título')}</h2>
                         <p>
-                            <span>external_item_id: <b>${escapeHtml(anuncio.external_item_id)}</b></span>
-                            ${variation ? `<span>• Variação: <b>${escapeHtml(variation.attribute)}</b> (${escapeHtml(variation.variation_id)})</span>` : ''}
-                            <span>• Conta: <b>${escapeHtml(anuncio.seller_nome)}</b></span>
+                            <span>Item ID: <b>${escapeHtml(context.itemId || '-')}</b></span>
+                            ${context.variationId ? `<span>• Variação: <b>${escapeHtml(context.variationId)}</b></span>` : ''}
+                            ${context.sellerSku ? `<span>• SKU Vendedor: <b>${escapeHtml(context.sellerSku)}</b></span>` : ''}
+                            <span>• Conta ID: <b>${escapeHtml(String(context.accountId || '-'))}</b></span>
                         </p>
                     </div>
                     <button type="button" class="an-modal-close" onclick="document.getElementById('an-mapping-modal-overlay').remove()" aria-label="Fechar">
@@ -2007,14 +2095,14 @@
 
                 <!-- Tabs: Produto / Equivalentes vs Kit -->
                 <div class="an-modal-tabs">
-                    <button type="button" class="an-modal-tab-btn ${AnunciosState.modalMode === 'equivalents' ? 'active' : ''}" onclick="anSetModalMode('equivalents')">
+                    <button type="button" class="an-modal-tab-btn ${state.modalMode === 'equivalents' ? 'active' : ''}" onclick="anSetModalMode('equivalents')">
                         <span class="material-symbols-rounded">alt_route</span>
                         <div>
                             <strong>Produto Único ou Grupo de Equivalentes</strong>
                             <small>Um ou mais produtos de marcas diferentes que podem atender a este anúncio na separação (lógica OU).</small>
                         </div>
                     </button>
-                    <button type="button" class="an-modal-tab-btn ${AnunciosState.modalMode === 'kit' ? 'active' : ''}" onclick="anSetModalMode('kit')">
+                    <button type="button" class="an-modal-tab-btn ${state.modalMode === 'kit' ? 'active' : ''}" onclick="anSetModalMode('kit')">
                         <span class="material-symbols-rounded">view_in_ar</span>
                         <div>
                             <strong>Kit / Composição Múltipla</strong>
@@ -2032,16 +2120,16 @@
                 <footer class="an-modal-footer">
                     <div class="an-modal-footer-info">
                         <small>Regra Operacional de Separação:</small>
-                        <strong>${AnunciosState.modalMode === 'equivalents'
-                            ? (AnunciosState.modalAcceptedProducts.length > 1
-                                ? `${AnunciosState.modalAcceptedProducts.length} produtos aceitos: qualquer um será validado na conferência.`
-                                : (AnunciosState.modalAcceptedProducts.length === 1 ? '1 produto interno vinculado.' : 'Nenhum produto vinculado ainda.'))
-                            : `${AnunciosState.modalKitComponents.length} componente(s) exigido(s) por unidade vendida.`
+                        <strong>${state.modalMode === 'equivalents'
+                            ? (state.modalAcceptedProducts.length > 1
+                                ? `${state.modalAcceptedProducts.length} produtos aceitos: qualquer um será validado na conferência.`
+                                : (state.modalAcceptedProducts.length === 1 ? '1 produto interno vinculado.' : 'Nenhum produto vinculado ainda.'))
+                            : `${state.modalKitComponents.length} componente(s) exigido(s) por unidade vendida.`
                         }</strong>
                     </div>
                     <div style="display:flex;gap:10px;">
                         <button type="button" class="an-btn an-btn-outline" onclick="document.getElementById('an-mapping-modal-overlay').remove()">Cancelar</button>
-                        <button type="button" class="an-btn an-btn-primary" onclick="anConfirmModalMapping()">
+                        <button type="button" class="an-btn an-btn-primary" onclick="confirmSharedModalMapping()">
                             <span class="material-symbols-rounded">save</span>
                             Salvar Mapeamento
                         </button>
@@ -2054,7 +2142,8 @@
     }
 
     function anRenderModalBodyContent() {
-        if (AnunciosState.modalMode === 'kit') {
+        const state = window.SharedMappingState;
+        if (state.modalMode === 'kit') {
             return anRenderKitModalContent();
         }
         return anRenderEquivalentsModalContent();
@@ -2062,14 +2151,15 @@
 
     // Renderiza seção de Produto e Equivalentes
     function anRenderEquivalentsModalContent() {
-        const accepted = AnunciosState.modalAcceptedProducts;
+        const state = window.SharedMappingState;
+        const accepted = state.modalAcceptedProducts;
 
         return `
             <!-- Árvore de Produtos Equivalentes Aceitos -->
             <section class="an-equivalents-section">
                 <header class="an-equivalents-section-header">
                     <div>
-                        <h4>Produtos Aceitos para este Anúncio</h4>
+                        <h4>Produtos Aceitos para este Anúncio / Item</h4>
                         <small>Qualquer um destes produtos internos poderá ser separado e bipado na conferência (relação de equivalência).</small>
                     </div>
                     <span style="font-size:12px;font-weight:800;color:#ea580c;">
@@ -2105,7 +2195,7 @@
                 <label style="font-size:12px;font-weight:800;color:#334155;">Adicionar Produto Interno ou Marca Equivalente:</label>
                 <div class="an-catalog-search-bar">
                     <span class="material-symbols-rounded" style="color:#94a3b8;">search</span>
-                    <input type="text" id="an-catalog-input" value="${escapeHtml(AnunciosState.modalSearch)}" oninput="anOnModalSearchInput(this.value)" placeholder="Pesquisar por ID interno (ex: DY-001.xxx), Nome, Marca (Osram, Philips...), EAN ou SKU...">
+                    <input type="text" id="an-catalog-input" value="${escapeHtml(state.modalSearch)}" oninput="anOnModalSearchInput(this.value)" placeholder="Pesquisar por ID interno (ex: DY-001.xxx), Nome, Marca (Osram, Philips...), EAN ou SKU...">
                 </div>
 
                 <div class="an-catalog-results">
@@ -2117,14 +2207,15 @@
 
     // Renderiza seção de Kit
     function anRenderKitModalContent() {
-        const components = AnunciosState.modalKitComponents;
+        const state = window.SharedMappingState;
+        const components = state.modalKitComponents;
 
         return `
             <section class="an-equivalents-section">
                 <header class="an-equivalents-section-header">
                     <div>
                         <h4>Componentes do Kit Composto</h4>
-                        <small>Defina quais produtos e as quantidades necessárias para compor 1 unidade deste anúncio.</small>
+                        <small>Defina quais produtos e as quantidades necessárias para compor 1 unidade deste anúncio / item.</small>
                     </div>
                     <span style="font-size:12px;font-weight:800;color:#6b21a8;">
                         ${components.length} componente(s)
@@ -2162,7 +2253,7 @@
                 <label style="font-size:12px;font-weight:800;color:#334155;">Pesquisar Componente para o Kit:</label>
                 <div class="an-catalog-search-bar">
                     <span class="material-symbols-rounded" style="color:#94a3b8;">search</span>
-                    <input type="text" id="an-catalog-input" value="${escapeHtml(AnunciosState.modalSearch)}" oninput="anOnModalSearchInput(this.value)" placeholder="Pesquisar produto interno por ID, nome, marca, EAN...">
+                    <input type="text" id="an-catalog-input" value="${escapeHtml(state.modalSearch)}" oninput="anOnModalSearchInput(this.value)" placeholder="Pesquisar produto interno por ID, nome, marca, EAN...">
                 </div>
 
                 <div class="an-catalog-results">
@@ -2172,9 +2263,10 @@
         `;
     }
 
-    // Renderiza resultados de produtos internos na busca do modal (produtos reais com UUID)
+    // Renderiza resultados de produtos internos na busca do modal
     function anRenderCatalogResults() {
-        const q = normText(AnunciosState.modalSearch);
+        const state = window.SharedMappingState;
+        const q = normText(state.modalSearch);
         const catalog = getCatalogoAtual();
 
         if (!catalog.length) {
@@ -2201,8 +2293,8 @@
         }
 
         return filtered.map(p => {
-            const isAlreadyAccepted = AnunciosState.modalMode === 'equivalents'
-                ? AnunciosState.modalAcceptedProducts.some(x => x.id_interno === p.id_interno)
+            const isAlreadyAccepted = state.modalMode === 'equivalents'
+                ? state.modalAcceptedProducts.some(x => x.id_interno === p.id_interno)
                 : false;
 
             return `
@@ -2213,35 +2305,35 @@
                         <small>Marca: <b>${escapeHtml(p.marca)}</b> | EAN: ${escapeHtml(p.ean || '-')} | SKU: ${escapeHtml(p.sku_fornecedor || '-')}</small>
                     </div>
                     <button type="button" ${isAlreadyAccepted ? 'disabled style="background:#cbd5e1;cursor:default;"' : ''}>
-                        ${isAlreadyAccepted ? 'Já adicionado' : (AnunciosState.modalMode === 'kit' ? '+ Adicionar ao Kit' : '+ Adicionar')}
+                        ${isAlreadyAccepted ? 'Já adicionado' : (state.modalMode === 'kit' ? '+ Adicionar ao Kit' : '+ Adicionar')}
                     </button>
                 </div>
             `;
         }).join('');
     }
 
-    // Ações do Modal
+    // Ações do Modal Compartilhado
     window.anSetModalMode = function (mode) {
-        AnunciosState.modalMode = mode;
+        window.SharedMappingState.modalMode = mode;
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
-        // Atualiza tabs
         document.querySelectorAll('.an-modal-tab-btn').forEach(b => {
             b.classList.toggle('active', (mode === 'equivalents' && b.innerText.includes('Grupo')) || (mode === 'kit' && b.innerText.includes('Kit')));
         });
     };
 
     window.anOnModalSearchInput = function (term) {
-        AnunciosState.modalSearch = term;
-        const resultsEl = document.querySelector('.an-catalog-results');
+        window.SharedMappingState.modalSearch = term;
+        const resultsEl = document.querySelector('#an-mapping-modal-overlay .an-catalog-results');
         if (resultsEl) {
             resultsEl.innerHTML = anRenderCatalogResults();
         }
     };
 
     window.anSelectCatalogProduct = async function (idInterno) {
+        const state = window.SharedMappingState;
         const prod = findProduto(idInterno);
         if (!prod) return;
 
@@ -2252,7 +2344,7 @@
                 infoEquivalencia = await window.DataClient.getEquivalenciaResolvidaByProdutoId(prod.id);
             }
         } catch (err) {
-            console.warn('[ANUNCIOS_MAPPING] Erro ao resolver equivalencia do produto:', err);
+            console.warn('[SHARED_MAPPING] Erro ao resolver equivalencia do produto:', err);
         }
 
         const prodComGrupo = {
@@ -2260,14 +2352,14 @@
             _infoEquivalencia: infoEquivalencia
         };
 
-        if (AnunciosState.modalMode === 'equivalents') {
-            AnunciosState.modalAcceptedProducts = [prodComGrupo];
+        if (state.modalMode === 'equivalents') {
+            state.modalAcceptedProducts = [prodComGrupo];
         } else {
-            const existing = AnunciosState.modalKitComponents.find(c => c.product.id_interno === idInterno || c.product.id === prod.id);
+            const existing = state.modalKitComponents.find(c => c.product.id_interno === idInterno || c.product.id === prod.id);
             if (existing) {
                 existing.qty++;
             } else {
-                AnunciosState.modalKitComponents.push({ product: prodComGrupo, qty: 1 });
+                state.modalKitComponents.push({ product: prodComGrupo, qty: 1 });
             }
         }
 
@@ -2278,7 +2370,7 @@
     };
 
     window.anRemoveAcceptedProduct = function (index) {
-        AnunciosState.modalAcceptedProducts.splice(index, 1);
+        window.SharedMappingState.modalAcceptedProducts.splice(index, 1);
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
@@ -2286,7 +2378,7 @@
     };
 
     window.anChangeKitQty = function (index, delta) {
-        const c = AnunciosState.modalKitComponents[index];
+        const c = window.SharedMappingState.modalKitComponents[index];
         if (!c) return;
         c.qty = Math.max(1, c.qty + delta);
         const container = document.getElementById('an-modal-body-container');
@@ -2296,20 +2388,30 @@
     };
 
     window.anRemoveKitComponent = function (index) {
-        AnunciosState.modalKitComponents.splice(index, 1);
+        window.SharedMappingState.modalKitComponents.splice(index, 1);
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
     };
 
-    // Ações do Modal
-    window.anConfirmModalMapping = async function () {
-        const anuncio = AnunciosState.anuncios.find(a => a.id === AnunciosState.activeAnuncioId);
-        if (!anuncio) return;
+    // Confirmação e Salvamento do Mapeamento Compartilhado
+    window.confirmSharedModalMapping = async function () {
+        const state = window.SharedMappingState;
+        if (!state || !state.context) return;
+        const context = state.context;
 
-        const btnSave = document.querySelector('.an-modal-footer .an-btn-primary');
+        const btnSave = document.querySelector('#an-mapping-modal-overlay .an-btn-primary');
         if (btnSave && btnSave.disabled) return;
+
+        // Regra 14: Validação estrita do accountId (Sem fallback)
+        const accIdNum = Number(context.accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            if (typeof showToast === 'function') {
+                showToast('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.', 'warning');
+            }
+            return;
+        }
 
         try {
             if (btnSave) {
@@ -2319,15 +2421,14 @@
 
             let tipoIdentificacao = 'produto';
             let componentesPayload = [];
-
             const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-            if (AnunciosState.modalMode === 'equivalents') {
-                if (!AnunciosState.modalAcceptedProducts.length) {
+            if (state.modalMode === 'equivalents') {
+                if (!state.modalAcceptedProducts.length) {
                     if (typeof showToast === 'function') showToast('Adicione pelo menos um produto ao mapeamento.', 'warning');
                     return;
                 }
-                const p = AnunciosState.modalAcceptedProducts[0];
+                const p = state.modalAcceptedProducts[0];
                 if (!p || !p.id || !UUID_REGEX.test(p.id)) {
                     throw new Error(`Produto ${p?.id_interno || ''} não possui UUID válido da tabela public.produtos.`);
                 }
@@ -2350,12 +2451,12 @@
                     });
                 }
             } else {
-                if (!AnunciosState.modalKitComponents.length) {
+                if (!state.modalKitComponents.length) {
                     if (typeof showToast === 'function') showToast('Adicione pelo menos um componente ao kit.', 'warning');
                     return;
                 }
                 tipoIdentificacao = 'kit';
-                componentesPayload = AnunciosState.modalKitComponents.map(c => {
+                componentesPayload = state.modalKitComponents.map(c => {
                     const infoEq = c.product._infoEquivalencia;
                     if (infoEq && infoEq.possui_grupo && infoEq.grupo) {
                         return {
@@ -2375,50 +2476,39 @@
                 });
             }
 
-            // Salva transacionalmente no Supabase se DataClient estiver disponivel
-            if (window.DataClient?.saveMercadoLivreItemMappingTransacional && anuncio.external_item_id && hasValue(anuncio.account_id)) {
+            // Regra 10: Trata variação
+            const varIdClean = (context.variationId && String(context.variationId).trim()) ? String(context.variationId).trim() : null;
+
+            // Salva transacionalmente no Supabase com accountId explícito
+            if (window.DataClient?.saveMercadoLivreItemMappingTransacional && context.itemId && accIdNum > 0) {
                 const currentUser = localStorage.getItem('currentUser') || 'usuario';
                 const savedMapping = await window.DataClient.saveMercadoLivreItemMappingTransacional({
-                    accountId: anuncio.account_id,
-                    itemId: anuncio.external_item_id,
-                    variationId: AnunciosState.activeVariationId || null,
+                    accountId: accIdNum,
+                    itemId: String(context.itemId).trim(),
+                    variationId: varIdClean,
                     tipoIdentificacao: tipoIdentificacao,
-                    observacao: `Mapeado via painel em ${new Date().toLocaleString()}`,
+                    observacao: `Mapeado via painel compartilhado em ${new Date().toLocaleString()}`,
                     componentes: componentesPayload,
                     criadoPor: currentUser
                 });
-                console.log('[ANUNCIOS_MAPPING] Mapeamento salvo no Supabase:', savedMapping);
+                console.log('[SHARED_MAPPING] Mapeamento salvo no Supabase:', savedMapping);
             }
 
-            // Atualiza estado local na UI
-            const newMapping = {
-                type: tipoIdentificacao === 'kit' ? 'kit' : (AnunciosState.modalAcceptedProducts.length > 1 ? 'equivalents' : 'single'),
-                products: AnunciosState.modalAcceptedProducts.map(p => ({ ...p })),
-                components: AnunciosState.modalKitComponents.map(c => ({ product: { ...c.product }, qty: c.qty }))
+            const uiMapping = {
+                type: tipoIdentificacao === 'kit' ? 'kit' : (state.modalAcceptedProducts.length > 1 ? 'equivalents' : 'single'),
+                products: state.modalAcceptedProducts.map(p => ({ ...p })),
+                components: state.modalKitComponents.map(c => ({ product: { ...c.product }, qty: c.qty }))
             };
 
-            if (AnunciosState.activeVariationId && anuncio.has_variations) {
-                const v = anuncio.variations.find(x => x.variation_id === AnunciosState.activeVariationId);
-                if (v) {
-                    v.mapping = newMapping;
-                    v.situacao_mapeamento = 'MAPEADO';
-                }
-                const allMapped = anuncio.variations.every(x => x.situacao_mapeamento === 'MAPEADO');
-                anuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
-            } else {
-                anuncio.mapping = newMapping;
-                anuncio.situacao_mapeamento = 'MAPEADO';
-            }
-
             document.getElementById('an-mapping-modal-overlay')?.remove();
-            renderAnunciosScreen(false);
-            if (typeof showToast === 'function') {
-                showToast('Mapeamento de anúncio atualizado e salvo no banco com sucesso!', 'success');
+
+            if (typeof context.onSaved === 'function') {
+                await context.onSaved({ uiMapping, tipoIdentificacao, componentesPayload });
             }
         } catch (error) {
-            console.error('[ANUNCIOS_MAPPING] Erro ao salvar mapeamento:', error);
+            console.error('[SHARED_MAPPING] Erro ao salvar mapeamento:', error);
             if (typeof showToast === 'function') {
-                showToast(error.message || 'Erro ao salvar mapeamento do anúncio.', 'error');
+                showToast(error.message || 'Erro ao salvar mapeamento do item.', 'error');
             }
         } finally {
             if (btnSave) {
