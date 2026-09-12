@@ -2061,42 +2061,87 @@
         document.body.appendChild(overlay);
     }
 
-    function anRenderMappingModalDOM() {
-        document.getElementById('an-mapping-modal-overlay')?.remove();
-
-        const context = window.SharedMappingState.context || {};
+    function anGetFooterInfoHtml() {
         const state = window.SharedMappingState;
+        if (!state) return '<small>Regra Operacional de Separação:</small><strong>Nenhum produto vinculado ainda.</strong>';
+
+        if (state.modalMode === 'kit') {
+            const count = state.modalKitComponents ? state.modalKitComponents.length : 0;
+            return `
+                <small>Regra Operacional de Separação:</small>
+                <strong>${count > 0 ? `Kit Composto · ${count} componente(s) exigido(s) por unidade vendida.` : 'Nenhum componente adicionado ao kit.'}</strong>
+            `;
+        }
+
+        const accepted = state.modalAcceptedProducts || [];
+        if (accepted.length === 0) {
+            return `
+                <small>Regra Operacional de Separação:</small>
+                <strong>Nenhum produto vinculado ainda.</strong>
+            `;
+        }
+
+        const firstItem = accepted[0];
+        const infoEq = firstItem?._infoEquivalencia;
+        const isGrupo = Boolean((infoEq && infoEq.possui_grupo && infoEq.grupo) || firstItem?.pertence_grupo);
+
+        if (isGrupo) {
+            const gNome = infoEq?.grupo?.nome || infoEq?.grupo?.codigo_grupo || firstItem?.grupo_equivalencia_nome || 'Grupo de Equivalência';
+            return `
+                <small>Regra Operacional de Separação:</small>
+                <strong>Mapeamento: Grupo de Equivalência · ${escapeHtml(gNome)} · ${accepted.length} produtos aceitos</strong>
+            `;
+        }
+
+        return `
+            <small>Regra Operacional de Separação:</small>
+            <strong>Mapeamento: Produto individual · ${escapeHtml(firstItem.id_interno || 'SKU')}</strong>
+        `;
+    }
+
+    function anUpdateModalFooterInfo() {
+        const el = document.querySelector('#an-mapping-modal-overlay .an-modal-footer-info') || document.getElementById('an-modal-footer-info');
+        if (el) {
+            el.innerHTML = anGetFooterInfoHtml();
+        }
+    }
+
+    function anRenderMappingModalDOM() {
+        const existing = document.getElementById('an-mapping-modal-overlay');
+        if (existing) existing.remove();
+
+        const state = window.SharedMappingState;
+        const context = state.context || {};
+        const title = context.title || 'Mapeamento de Item';
+        const subtitle = context.subtitle || '';
 
         const modalOverlay = document.createElement('div');
-        modalOverlay.className = 'an-modal-overlay fade-in';
         modalOverlay.id = 'an-mapping-modal-overlay';
+        modalOverlay.className = 'an-modal-overlay';
 
         modalOverlay.innerHTML = `
-            <div class="an-modal" onclick="event.stopPropagation()">
+            <div class="an-modal-content">
                 <!-- Header -->
                 <header class="an-modal-header">
                     <div>
-                        <small>
-                            <span class="material-symbols-rounded" style="font-size:15px;">link</span>
-                            Mapeamento de Item • ${context.marketplace === 'MERCADO_LIVRE' ? 'Mercado Livre' : escapeHtml(context.marketplace || 'Mercado Livre')}
-                        </small>
-                        <h2>${escapeHtml(context.titulo || 'Item sem título')}</h2>
-                        <p>
-                            <span>Item ID: <b>${escapeHtml(context.itemId || '-')}</b></span>
-                            ${context.variationId ? `<span>• Variação: <b>${escapeHtml(context.variationId)}</b></span>` : ''}
-                            ${context.sellerSku ? `<span>• SKU Vendedor: <b>${escapeHtml(context.sellerSku)}</b></span>` : ''}
-                            <span>• Conta ID: <b>${escapeHtml(String(context.accountId || '-'))}</b></span>
-                        </p>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span class="material-symbols-rounded" style="color:#ea580c;font-size:22px;">schema</span>
+                            <h3 style="margin:0;font-size:16px;font-weight:800;color:#0f172a;">${escapeHtml(title)}</h3>
+                            <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:12px;background:#fff7ed;color:#ea580c;border:1px solid #ffedd5;text-transform:uppercase;">
+                                ${context.source === 'pedidos' ? 'Pedidos' : 'Anúncios'}
+                            </span>
+                        </div>
+                        <small style="color:#64748b;font-size:12px;">${escapeHtml(subtitle)}</small>
                     </div>
-                    <button type="button" class="an-modal-close" onclick="document.getElementById('an-mapping-modal-overlay').remove()" aria-label="Fechar">
+                    <button type="button" class="an-modal-close-btn" onclick="document.getElementById('an-mapping-modal-overlay').remove()">
                         <span class="material-symbols-rounded">close</span>
                     </button>
                 </header>
 
-                <!-- Tabs: Produto / Equivalentes vs Kit -->
+                <!-- Tabs de Modo de Mapeamento -->
                 <div class="an-modal-tabs">
                     <button type="button" class="an-modal-tab-btn ${state.modalMode === 'equivalents' ? 'active' : ''}" onclick="anSetModalMode('equivalents')">
-                        <span class="material-symbols-rounded">alt_route</span>
+                        <span class="material-symbols-rounded">inventory_2</span>
                         <div>
                             <strong>Produto Único ou Grupo de Equivalentes</strong>
                             <small>Um ou mais produtos de marcas diferentes que podem atender a este anúncio na separação (lógica OU).</small>
@@ -2118,14 +2163,8 @@
 
                 <!-- Footer com Ações -->
                 <footer class="an-modal-footer">
-                    <div class="an-modal-footer-info">
-                        <small>Regra Operacional de Separação:</small>
-                        <strong>${state.modalMode === 'equivalents'
-                            ? (state.modalAcceptedProducts.length > 1
-                                ? `${state.modalAcceptedProducts.length} produtos aceitos: qualquer um será validado na conferência.`
-                                : (state.modalAcceptedProducts.length === 1 ? '1 produto interno vinculado.' : 'Nenhum produto vinculado ainda.'))
-                            : `${state.modalKitComponents.length} componente(s) exigido(s) por unidade vendida.`
-                        }</strong>
+                    <div id="an-modal-footer-info" class="an-modal-footer-info">
+                        ${anGetFooterInfoHtml()}
                     </div>
                     <div style="display:flex;gap:10px;">
                         <button type="button" class="an-btn an-btn-outline" onclick="document.getElementById('an-mapping-modal-overlay').remove()">Cancelar</button>
@@ -2152,19 +2191,41 @@
     // Renderiza seção de Produto e Equivalentes
     function anRenderEquivalentsModalContent() {
         const state = window.SharedMappingState;
-        const accepted = state.modalAcceptedProducts;
+        const accepted = state.modalAcceptedProducts || [];
+
+        const firstItem = accepted[0];
+        const infoEq = firstItem?._infoEquivalencia;
+        const isGrupo = Boolean((infoEq && infoEq.possui_grupo && infoEq.grupo) || firstItem?.pertence_grupo);
+        const grupoNome = isGrupo ? (infoEq?.grupo?.nome || infoEq?.grupo?.codigo_grupo || firstItem?.grupo_equivalencia_nome || '') : '';
+
+        let headerBadgeText = 'Nenhum produto aceito';
+        if (accepted.length > 0) {
+            if (isGrupo) {
+                headerBadgeText = `Grupo de Equivalência · ${accepted.length} produtos`;
+            } else {
+                headerBadgeText = `Produto individual`;
+            }
+        }
 
         return `
             <!-- Árvore de Produtos Equivalentes Aceitos -->
             <section class="an-equivalents-section">
                 <header class="an-equivalents-section-header">
                     <div>
-                        <h4>Produtos Aceitos para este Anúncio / Item</h4>
-                        <small>Qualquer um destes produtos internos poderá ser separado e bipado na conferência (relação de equivalência).</small>
+                        <h4>${isGrupo ? `Grupo de Equivalência${grupoNome ? ` — ${escapeHtml(grupoNome)}` : ''}` : 'Produtos Aceitos para este Anúncio / Item'}</h4>
+                        <small>${isGrupo ? 'Todos os SKUs deste grupo são equivalentes no estoque e qualquer um atende o anúncio.' : 'Qualquer um destes produtos internos poderá ser separado e bipado na conferência (relação de equivalência).'}</small>
                     </div>
-                    <span style="font-size:12px;font-weight:800;color:#ea580c;">
-                        ${accepted.length === 0 ? 'Nenhum produto aceito' : `${accepted.length} produto(s) no grupo`}
-                    </span>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:12px;font-weight:800;color:#ea580c;">
+                            ${headerBadgeText}
+                        </span>
+                        ${accepted.length > 0 ? `
+                            <button type="button" class="an-btn-outline" style="padding:4px 10px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;border-radius:6px;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#334155;" onclick="anOpenEquivalenciaManagerModal()">
+                                <span class="material-symbols-rounded" style="font-size:15px;color:#ea580c;">settings_suggest</span>
+                                ${isGrupo ? 'Gerenciar grupo' : 'Gerenciar equivalência'}
+                            </button>
+                        ` : ''}
+                    </div>
                 </header>
 
                 <div class="an-equiv-tree-list">
@@ -2175,14 +2236,14 @@
                         </div>
                     ` : accepted.map((p, index) => `
                         <div class="an-equiv-tree-item">
-                            <span class="material-symbols-rounded">${index === 0 ? 'star' : 'alt_route'}</span>
+                            <span class="material-symbols-rounded">inventory_2</span>
                             <div class="an-equiv-tree-info">
                                 <strong>${escapeHtml(p.id_interno)} — ${escapeHtml(p.nome)}</strong>
                                 <span>EAN: ${escapeHtml(p.ean || '-')} • SKU Fornecedor: ${escapeHtml(p.sku_fornecedor || '-')}</span>
                             </div>
                             <span class="an-equiv-tree-badge-brand">${escapeHtml(p.marca || 'Marca')}</span>
-                            ${index === 0 ? '<span class="an-equiv-tree-badge-mestre">Principal</span>' : '<span style="font-size:10px;color:#64748b;font-weight:700;">Equivalente</span>'}
-                            <button type="button" class="an-equiv-remove-btn" onclick="anRemoveAcceptedProduct(${index})" title="Remover este produto aceito">
+                            <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;white-space:nowrap;">Produto aceito</span>
+                            <button type="button" class="an-equiv-remove-btn" onclick="anRemoveAcceptedProduct(${index})" title="${isGrupo ? 'Desfazer seleção do grupo' : 'Remover este produto aceito'}">
                                 <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
                             </button>
                         </div>
@@ -2228,24 +2289,71 @@
                             <span class="material-symbols-rounded" style="font-size:36px;color:#cbd5e1;margin-bottom:6px;">view_in_ar</span>
                             <p style="margin:0;font-size:13px;">Nenhum componente adicionado ao kit. Pesquise e adicione produtos abaixo.</p>
                         </div>
-                    ` : components.map((c, index) => `
-                        <div class="an-equiv-tree-item" style="grid-template-columns:32px 1fr auto auto 36px;">
-                            <span class="material-symbols-rounded" style="color:#6b21a8;">inventory_2</span>
-                            <div class="an-equiv-tree-info">
-                                <strong>${escapeHtml(c.product.id_interno)} — ${escapeHtml(c.product.nome)}</strong>
-                                <span>Marca: ${escapeHtml(c.product.marca)} • EAN: ${escapeHtml(c.product.ean || '-')}</span>
+                    ` : components.map((c, index) => {
+                        const isCompGrupo = Boolean((c.product._infoEquivalencia && c.product._infoEquivalencia.possui_grupo && c.product._infoEquivalencia.grupo) || c.product.pertence_grupo || c.product.grupo_equivalencia_id);
+                        const compGrupoNome = isCompGrupo ? (c.product._infoEquivalencia?.grupo?.nome || c.product._infoEquivalencia?.grupo?.codigo_grupo || c.product.grupo_equivalencia_nome || 'Grupo de Equivalência') : '';
+                        const compSkus = isCompGrupo ? (c.product._infoEquivalencia?.skus || []) : [];
+                        const compSkusCount = isCompGrupo ? (compSkus.length || 1) : 1;
+                        const showAceitos = Boolean(c._showAceitos);
+
+                        return `
+                            <div class="an-equiv-tree-item" style="display:flex;flex-direction:column;gap:8px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
+                                    <div style="display:flex;align-items:center;gap:10px;flex:1;">
+                                        <span class="material-symbols-rounded" style="color:#6b21a8;font-size:22px;">${isCompGrupo ? 'schema' : 'inventory_2'}</span>
+                                        <div class="an-equiv-tree-info">
+                                            <strong>${isCompGrupo ? escapeHtml(compGrupoNome) : `${escapeHtml(c.product.id_interno)} — ${escapeHtml(c.product.nome)}`}</strong>
+                                            <span style="font-size:11px;color:#64748b;">${isCompGrupo ? `Grupo de Equivalência · ${compSkusCount} produtos aceitos (${escapeHtml(c.product.id_interno)})` : `Produto individual • Marca: ${escapeHtml(c.product.marca || '-')} • EAN: ${escapeHtml(c.product.ean || '-')}`}</span>
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <button type="button" class="an-btn-outline" style="padding:4px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;border-radius:6px;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#475569;" onclick="anOpenEquivalenciaManagerModal('${escapeHtml(c.product.id_interno)}')">
+                                            <span class="material-symbols-rounded" style="font-size:14px;color:#ea580c;">settings_suggest</span>
+                                            ${isCompGrupo ? 'Gerenciar grupo' : 'Gerenciar equivalência'}
+                                        </button>
+
+                                        ${isCompGrupo ? `
+                                            <button type="button" class="an-btn-outline" style="padding:4px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;border-radius:6px;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#0369a1;" onclick="anToggleKitComponentAceitos(${index})">
+                                                <span class="material-symbols-rounded" style="font-size:14px;color:#0284c7;">${showAceitos ? 'expand_less' : 'visibility'}</span>
+                                                ${showAceitos ? 'Ocultar aceitos' : 'Ver produtos aceitos'}
+                                            </button>
+                                        ` : ''}
+
+                                        <div style="display:flex;align-items:center;gap:6px;background:#f8fafc;padding:3px 8px;border-radius:6px;border:1px solid #cbd5e1;">
+                                            <span style="font-size:11px;font-weight:800;color:#475569;white-space:nowrap;">Quantidade por kit:</span>
+                                            <button type="button" onclick="anChangeKitQty(${index}, -1)" style="width:24px;height:24px;border:1px solid #cbd5e1;border-radius:4px;background:#ffffff;color:#0f172a;cursor:pointer;font-weight:800;font-size:14px;display:inline-flex;align-items:center;justify-content:center;">&minus;</button>
+                                            <strong style="min-width:20px;text-align:center;font-size:13px;color:#0f172a;">${c.qty}</strong>
+                                            <button type="button" onclick="anChangeKitQty(${index}, 1)" style="width:24px;height:24px;border:1px solid #cbd5e1;border-radius:4px;background:#ffffff;color:#0f172a;cursor:pointer;font-weight:800;font-size:14px;display:inline-flex;align-items:center;justify-content:center;">+</button>
+                                        </div>
+
+                                        <button type="button" class="an-equiv-remove-btn" onclick="anRemoveKitComponent(${index})" title="Remover componente" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px;display:flex;align-items:center;">
+                                            <span class="material-symbols-rounded" style="font-size:20px;">delete</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                ${showAceitos ? `
+                                    <div style="margin-top:4px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;width:100%;">
+                                        <div style="font-size:11px;font-weight:800;color:#166534;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                                            <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+                                            Produtos Aceitos na Conferência (${compSkus.length}) — ${escapeHtml(compGrupoNome)}:
+                                        </div>
+                                        <div style="display:flex;flex-direction:column;gap:4px;">
+                                            ${compSkus.length === 0 ? `
+                                                <div style="font-size:11px;color:#166534;">Nenhum detalhe adicional no momento.</div>
+                                            ` : compSkus.map(s => `
+                                                <div style="font-size:11px;color:#0f172a;display:flex;align-items:center;justify-content:space-between;background:#fff;padding:4px 10px;border-radius:4px;border:1px solid #dcfce7;">
+                                                    <span><strong>${escapeHtml(s.id_interno || s.sku || 'SKU')}</strong> — ${escapeHtml(s.nome || '')}</span>
+                                                    <span style="font-size:10px;color:#475569;font-weight:700;">Marca: <b>${escapeHtml(s.marca || '-')}</b></span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
                             </div>
-                            <div style="display:flex;align-items:center;gap:6px;">
-                                <button type="button" onclick="anChangeKitQty(${index}, -1)" style="width:26px;height:26px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-weight:900;">-</button>
-                                <strong style="min-width:24px;text-align:center;font-size:14px;color:#0f172a;">${c.qty}x</strong>
-                                <button type="button" onclick="anChangeKitQty(${index}, 1)" style="width:26px;height:26px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-weight:900;">+</button>
-                            </div>
-                            <span style="font-size:11px;color:#64748b;white-space:nowrap;">por kit</span>
-                            <button type="button" class="an-equiv-remove-btn" onclick="anRemoveKitComponent(${index})" title="Remover componente">
-                                <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
-                            </button>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </section>
 
@@ -2263,10 +2371,80 @@
         `;
     }
 
-    // Renderiza resultados de produtos internos na busca do modal
+    window.anToggleKitComponentAceitos = async function (index) {
+        const state = window.SharedMappingState;
+        if (!state.modalKitComponents || !state.modalKitComponents[index]) return;
+        const c = state.modalKitComponents[index];
+
+        if (!c._showAceitos) {
+            if (!c.product._infoEquivalencia?.skus || !c.product._infoEquivalencia.skus.length) {
+                try {
+                    if (window.DataClient?.getEquivalenciaResolvidaByProdutoId && c.product.id) {
+                        c.product._infoEquivalencia = await window.DataClient.getEquivalenciaResolvidaByProdutoId(c.product.id);
+                    }
+                } catch (err) {
+                    console.warn('[KIT] Erro ao buscar equivalência do componente:', err);
+                }
+            }
+        }
+
+        c._showAceitos = !c._showAceitos;
+        const container = document.getElementById('an-modal-body-container');
+        if (container) {
+            container.innerHTML = anRenderModalBodyContent();
+        }
+    };
+
+    // Auxiliar para verificar se um produto (ou grupo de equivalência) já está presente no Kit
+    function anFindMatchingKitComponent(prod, infoEquivalencia, kitComponents) {
+        if (!prod || !Array.isArray(kitComponents) || kitComponents.length === 0) return null;
+
+        const prodId = prod.id || null;
+        const prodIdInterno = prod.id_interno || null;
+        const prodGroupId = infoEquivalencia?.grupo?.id || prod.grupo_equivalencia_id || null;
+
+        for (const c of kitComponents) {
+            const cProd = c.product || {};
+            const cInfoEq = cProd._infoEquivalencia || null;
+            const cGroupId = cInfoEq?.grupo?.id || cProd.grupo_equivalencia_id || null;
+
+            // 1. Match direto por ID de produto
+            if ((prodId && cProd.id === prodId) || (prodIdInterno && cProd.id_interno === prodIdInterno)) {
+                return c;
+            }
+
+            // 2. Match por ID de grupo de equivalencia
+            if (prodGroupId && cGroupId && prodGroupId === cGroupId) {
+                return c;
+            }
+
+            // 3. Match de membro (se o componente existente é um grupo, verifica se o produto candidato é SKU membro)
+            if (cInfoEq && Array.isArray(cInfoEq.skus)) {
+                const isMember = cInfoEq.skus.some(s =>
+                    (prodId && (s.id === prodId || s.id_interno === prodId)) ||
+                    (prodIdInterno && (s.id_interno === prodIdInterno || s.id === prodIdInterno))
+                );
+                if (isMember) return c;
+            }
+
+            // 4. Match reverso de membro (se o candidato possui infoEquivalencia resolvido com SKUs)
+            if (infoEquivalencia && Array.isArray(infoEquivalencia.skus)) {
+                const cIsMember = infoEquivalencia.skus.some(s =>
+                    (cProd.id && (s.id === cProd.id || s.id_interno === cProd.id)) ||
+                    (cProd.id_interno && (s.id_interno === cProd.id_interno || s.id === cProd.id_interno))
+                );
+                if (cIsMember) return c;
+            }
+        }
+
+        return null;
+    }
+    window.anFindMatchingKitComponent = anFindMatchingKitComponent;
+
+    // Renderiza resultados de produtos internos na busca inteligente do modal
     function anRenderCatalogResults() {
         const state = window.SharedMappingState;
-        const q = normText(state.modalSearch);
+        const rawSearch = String(state.modalSearch || '').trim();
         const catalog = getCatalogoAtual();
 
         if (!catalog.length) {
@@ -2278,24 +2456,100 @@
             `;
         }
 
-        const filtered = catalog.filter(p => {
-            if (!q) return true;
-            const corpus = [p.id_interno, p.nome, p.marca, p.ean, p.sku_fornecedor].join(' ');
-            return normText(corpus).includes(q);
-        });
-
-        if (!filtered.length) {
+        // Regra 3 & 9: Busca vazia ou com menos de 2 caracteres não exibe a lista completa
+        if (rawSearch.length < 2) {
             return `
-                <div style="padding:20px;text-align:center;color:#64748b;font-size:12px;">
-                    Nenhum produto interno encontrado para o termo pesquisado.
+                <div style="padding:24px;text-align:center;color:#64748b;font-size:13px;">
+                    <span class="material-symbols-rounded" style="font-size:28px;color:#94a3b8;display:block;margin:0 auto 6px;">search</span>
+                    Digite pelo menos 2 caracteres para pesquisar.
                 </div>
             `;
         }
 
-        return filtered.map(p => {
-            const isAlreadyAccepted = state.modalMode === 'equivalents'
-                ? state.modalAcceptedProducts.some(x => x.id_interno === p.id_interno)
-                : false;
+        const normQuery = normText(rawSearch);
+        const tokens = normQuery.split(/\s+/).filter(Boolean);
+
+        // Regra 4 & 5: Filtro Multitermo Determinístico (AND lógico entre todos os tokens)
+        const matched = [];
+        for (const p of catalog) {
+            const corpusFields = [p.id_interno, p.nome, p.marca, p.ean, p.sku_fornecedor, p.palavras_chave].filter(Boolean);
+            const corpusNorm = normText(corpusFields.join(' '));
+
+            const isMatch = tokens.every(token => corpusNorm.includes(token));
+            if (!isMatch) continue;
+
+            // Regra 7: Pontuação de Relevância Determinística
+            const normId = normText(p.id_interno);
+            const normEan = normText(p.ean);
+            const normSku = normText(p.sku_fornecedor);
+            const normNome = normText(p.nome);
+
+            let score = 0;
+            if (normId === normQuery) score += 1000;
+            else if (normEan === normQuery) score += 900;
+            else if (normSku === normQuery) score += 800;
+            else if (normNome === normQuery) score += 700;
+            else if (normNome.startsWith(normQuery)) score += 500;
+            else if (normId.startsWith(normQuery)) score += 400;
+            else if (tokens.every(t => normNome.includes(t))) score += 300;
+            else if (tokens.every(t => normId.includes(t))) score += 200;
+            else score += 100;
+
+            matched.push({ product: p, score });
+        }
+
+        // Regra 13: Comportamento Sem Resultados
+        if (!matched.length) {
+            return `
+                <div style="padding:20px;text-align:center;color:#64748b;font-size:12px;">
+                    <span class="material-symbols-rounded" style="font-size:28px;color:#cbd5e1;display:block;margin:0 auto 6px;">search_off</span>
+                    Nenhum produto encontrado. Tente outros termos, ID, marca, EAN ou SKU.
+                </div>
+            `;
+        }
+
+        // Regra 7: Ordenação por relevância (score decrescente, id_interno ascendente)
+        matched.sort((a, b) => b.score - a.score || String(a.product.id_interno).localeCompare(String(b.product.id_interno)));
+
+        // Regra 8 & 12: Limite de Resultados (máximo 15)
+        const totalMatched = matched.length;
+        const displayList = matched.slice(0, 15).map(m => m.product);
+
+        let countNoticeHtml = '';
+        if (totalMatched > 15) {
+            countNoticeHtml = `
+                <div style="padding:6px 12px;margin-bottom:8px;font-size:11px;font-weight:700;color:#9a3412;background:#fff7ed;border:1px solid #ffedd5;border-radius:6px;display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-rounded" style="font-size:15px;">info</span>
+                    Mostrando os 15 primeiros resultados. Refine sua busca.
+                </div>
+            `;
+        } else if (totalMatched === 1) {
+            countNoticeHtml = `
+                <div style="padding:6px 12px;margin-bottom:8px;font-size:11px;font-weight:700;color:#166534;background:#f0fdf4;border:1px solid #dcfce7;border-radius:6px;display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-rounded" style="font-size:15px;">check_circle</span>
+                    1 resultado encontrado.
+                </div>
+            `;
+        } else {
+            countNoticeHtml = `
+                <div style="padding:6px 12px;margin-bottom:8px;font-size:11px;font-weight:700;color:#166534;background:#f0fdf4;border:1px solid #dcfce7;border-radius:6px;display:flex;align-items:center;gap:6px;">
+                    <span class="material-symbols-rounded" style="font-size:15px;">check_circle</span>
+                    ${totalMatched} resultados encontrados.
+                </div>
+            `;
+        }
+
+        const itemsHtml = displayList.map(p => {
+            let isAlreadyAccepted = false;
+            let buttonLabel = '+ Adicionar';
+
+            if (state.modalMode === 'equivalents') {
+                isAlreadyAccepted = state.modalAcceptedProducts.some(x => x.id_interno === p.id_interno || x.id === p.id);
+                buttonLabel = isAlreadyAccepted ? 'Já adicionado' : '+ Adicionar';
+            } else {
+                isAlreadyAccepted = Boolean(anFindMatchingKitComponent(p, null, state.modalKitComponents));
+                buttonLabel = isAlreadyAccepted ? 'Já no Kit' : '+ Adicionar ao Kit';
+            }
 
             return `
                 <div class="an-catalog-item" onclick="anSelectCatalogProduct('${escapeHtml(p.id_interno)}')">
@@ -2305,11 +2559,13 @@
                         <small>Marca: <b>${escapeHtml(p.marca)}</b> | EAN: ${escapeHtml(p.ean || '-')} | SKU: ${escapeHtml(p.sku_fornecedor || '-')}</small>
                     </div>
                     <button type="button" ${isAlreadyAccepted ? 'disabled style="background:#cbd5e1;cursor:default;"' : ''}>
-                        ${isAlreadyAccepted ? 'Já adicionado' : (state.modalMode === 'kit' ? '+ Adicionar ao Kit' : '+ Adicionar')}
+                        ${escapeHtml(buttonLabel)}
                     </button>
                 </div>
             `;
         }).join('');
+
+        return countNoticeHtml + itemsHtml;
     }
 
     // Ações do Modal Compartilhado
@@ -2319,6 +2575,7 @@
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
+        anUpdateModalFooterInfo();
         document.querySelectorAll('.an-modal-tab-btn').forEach(b => {
             b.classList.toggle('active', (mode === 'equivalents' && b.innerText.includes('Grupo')) || (mode === 'kit' && b.innerText.includes('Kit')));
         });
@@ -2347,34 +2604,72 @@
             console.warn('[SHARED_MAPPING] Erro ao resolver equivalencia do produto:', err);
         }
 
-        const prodComGrupo = {
-            ...prod,
-            _infoEquivalencia: infoEquivalencia
-        };
-
         if (state.modalMode === 'equivalents') {
-            state.modalAcceptedProducts = [prodComGrupo];
-        } else {
-            const existing = state.modalKitComponents.find(c => c.product.id_interno === idInterno || c.product.id === prod.id);
-            if (existing) {
-                existing.qty++;
+            if (infoEquivalencia && infoEquivalencia.possui_grupo && Array.isArray(infoEquivalencia.skus) && infoEquivalencia.skus.length > 0) {
+                state.modalAcceptedProducts = infoEquivalencia.skus.map(s => {
+                    const full = findProduto(s.id_interno || s.id) || {};
+                    return {
+                        ...full,
+                        ...s,
+                        id: s.id || full.id,
+                        id_interno: s.id_interno || full.id_interno,
+                        nome: s.nome || full.nome,
+                        marca: s.marca || full.marca,
+                        grupo_equivalencia_id: infoEquivalencia.grupo?.id || null,
+                        grupo_equivalencia_nome: infoEquivalencia.grupo?.nome || infoEquivalencia.grupo?.codigo_grupo || null,
+                        pertence_grupo: true,
+                        _infoEquivalencia: infoEquivalencia
+                    };
+                });
             } else {
-                state.modalKitComponents.push({ product: prodComGrupo, qty: 1 });
+                const prodComGrupo = {
+                    ...prod,
+                    grupo_equivalencia_id: null,
+                    grupo_equivalencia_nome: null,
+                    pertence_grupo: false,
+                    _infoEquivalencia: infoEquivalencia
+                };
+                state.modalAcceptedProducts = [prodComGrupo];
             }
+        } else {
+            const existingComp = anFindMatchingKitComponent(prod, infoEquivalencia, state.modalKitComponents);
+            if (existingComp) {
+                const isGrupo = Boolean(infoEquivalencia?.possui_grupo || existingComp.product?._infoEquivalencia?.possui_grupo);
+                if (isGrupo) {
+                    alert('Este grupo já está adicionado ao Kit. Ajuste a quantidade no componente existente.');
+                } else {
+                    alert('Este produto já está adicionado ao Kit. Ajuste a quantidade no componente existente.');
+                }
+                return;
+            }
+
+            const prodComGrupo = {
+                ...prod,
+                _infoEquivalencia: infoEquivalencia
+            };
+            state.modalKitComponents.push({ product: prodComGrupo, qty: 1 });
         }
 
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
+        anUpdateModalFooterInfo();
     };
 
     window.anRemoveAcceptedProduct = function (index) {
-        window.SharedMappingState.modalAcceptedProducts.splice(index, 1);
+        const state = window.SharedMappingState;
+        const target = state.modalAcceptedProducts[index];
+        if (target?._infoEquivalencia?.possui_grupo || target?.pertence_grupo) {
+            state.modalAcceptedProducts = [];
+        } else {
+            state.modalAcceptedProducts.splice(index, 1);
+        }
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
+        anUpdateModalFooterInfo();
     };
 
     window.anChangeKitQty = function (index, delta) {
@@ -2385,6 +2680,7 @@
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
         }
+        anUpdateModalFooterInfo();
     };
 
     window.anRemoveKitComponent = function (index) {
@@ -2392,6 +2688,499 @@
         const container = document.getElementById('an-modal-body-container');
         if (container) {
             container.innerHTML = anRenderModalBodyContent();
+        }
+        anUpdateModalFooterInfo();
+    };
+
+    // =========================================================================
+    // GERENCIADOR OPERACIONAL DE GRUPOS DE EQUIVALÊNCIA
+    // =========================================================================
+    function anGerarCodigoGrupoFromNome(nome) {
+        if (!nome) return 'EQ_GRUPO';
+        let slug = normText(String(nome))
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        if (!slug) slug = 'GRUPO';
+        return `EQ_${slug}`;
+    }
+
+    function anGerarSugestaoGrupo(targetProd) {
+        if (!targetProd) return { nome: '', codigo: '' };
+        let nomeOriginal = String(targetProd.nome || '').trim();
+        let marca = String(targetProd.marca || '').trim();
+        let nomeSugerido = nomeOriginal;
+
+        if (marca && marca.length >= 2) {
+            nomeSugerido = nomeSugerido.replace(new RegExp(marca.replace(/[^a-zA-Z0-9]/g, '\\$&'), 'gi'), '').trim();
+        }
+
+        nomeSugerido = nomeSugerido.replace(/^(Par|Kit|Jogo|Conjunto)\s+de\s+/i, '');
+        nomeSugerido = nomeSugerido.replace(/^(Par|Kit|Jogo|Conjunto)\s+/i, '');
+        nomeSugerido = nomeSugerido.replace(/[\s\-_]+/g, ' ').trim();
+
+        if (!nomeSugerido || nomeSugerido.length < 3) {
+            nomeSugerido = nomeOriginal || targetProd.id_interno || 'Grupo de Equivalência';
+        }
+
+        const codigoSugerido = anGerarCodigoGrupoFromNome(nomeSugerido);
+        return { nome: nomeSugerido, codigo: codigoSugerido };
+    }
+
+    window.anOnEqManagerNomeInput = function (val) {
+        const state = window.SharedMappingState;
+        if (!state._eqManager) return;
+        const mgr = state._eqManager;
+        mgr.nome = val;
+        if (!mgr.isGrupoExistente && !mgr.isCodigoManualmenteEditado) {
+            mgr.codigo = anGerarCodigoGrupoFromNome(val);
+            const codInput = document.getElementById('an-eq-codigo-input');
+            if (codInput) codInput.value = mgr.codigo;
+        }
+    };
+
+    window.anOnEqManagerCodigoInput = function (val) {
+        const state = window.SharedMappingState;
+        if (!state._eqManager) return;
+        const mgr = state._eqManager;
+        mgr.codigo = val;
+        mgr.isCodigoManualmenteEditado = true;
+    };
+
+    window.anOpenEquivalenciaManagerModal = async function (targetIdInterno = null) {
+        const state = window.SharedMappingState;
+        let targetProd = null;
+
+        if (targetIdInterno) {
+            targetProd = findProduto(targetIdInterno);
+        }
+        if (!targetProd && state.modalAcceptedProducts && state.modalAcceptedProducts.length > 0) {
+            targetProd = state.modalAcceptedProducts[0];
+        }
+
+        if (!targetProd) {
+            if (typeof showToast === 'function') {
+                showToast('Selecione ou adicione um produto primeiro para gerenciar a equivalência.', 'warning');
+            }
+            return;
+        }
+
+        const fullProd = findProduto(targetProd.id_interno || targetProd.id) || {};
+        targetProd = { ...fullProd, ...targetProd };
+
+        let infoEq = targetProd._infoEquivalencia;
+        try {
+            if (window.DataClient?.getEquivalenciaResolvidaByProdutoId && targetProd.id) {
+                infoEq = await window.DataClient.getEquivalenciaResolvidaByProdutoId(targetProd.id);
+            }
+        } catch (err) {
+            console.warn('[EQ_MANAGER] Erro ao buscar equivalência do produto:', err);
+        }
+
+        const isGrupo = Boolean(infoEq && infoEq.possui_grupo && infoEq.grupo);
+        let membrosIniciais = [];
+        if (isGrupo && Array.isArray(infoEq.skus) && infoEq.skus.length > 0) {
+            membrosIniciais = infoEq.skus.map(s => {
+                const full = findProduto(s.id_interno || s.id) || {};
+                return { ...full, ...s };
+            });
+        } else {
+            membrosIniciais = [{ ...targetProd }];
+        }
+
+        const sugestao = anGerarSugestaoGrupo(targetProd);
+        const nomeInicial = isGrupo ? (infoEq.grupo.nome || '') : sugestao.nome;
+        const codigoInicial = isGrupo ? (infoEq.grupo.codigo_grupo || '') : sugestao.codigo;
+
+        state._eqManager = {
+            isOpen: true,
+            targetProduct: targetProd,
+            isGrupoExistente: isGrupo,
+            grupoId: isGrupo ? infoEq.grupo.id : null,
+            nome: nomeInicial,
+            codigo: codigoInicial,
+            isCodigoManualmenteEditado: false,
+            membros: membrosIniciais,
+            search: '',
+            errorMsg: '',
+            saving: false
+        };
+
+        anRenderEquivalenciaManagerDOM();
+    };
+
+    function anRenderEquivalenciaManagerDOM() {
+        const state = window.SharedMappingState;
+        const mgr = state._eqManager;
+        if (!mgr || !mgr.isOpen) return;
+
+        let existing = document.getElementById('an-eq-manager-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'an-eq-manager-overlay';
+        overlay.className = 'an-modal-overlay';
+        overlay.style.zIndex = '100005';
+        overlay.style.background = 'rgba(15, 23, 42, 0.7)';
+        overlay.style.backdropFilter = 'blur(4px)';
+
+        overlay.innerHTML = `
+            <div class="an-modal-content" style="max-width:680px;border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.4);background:#fff;display:flex;flex-direction:column;max-height:85vh;">
+                <header class="an-modal-header" style="border-bottom:1px solid #e2e8f0;padding:16px 20px;">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span class="material-symbols-rounded" style="color:#ea580c;font-size:22px;">settings_suggest</span>
+                            <h3 style="margin:0;font-size:16px;font-weight:800;color:#0f172a;">
+                                ${mgr.isGrupoExistente ? 'Gerenciar Grupo de Equivalência' : 'Criar Grupo de Equivalência'}
+                            </h3>
+                        </div>
+                        <small style="color:#64748b;font-size:12px;">
+                            ${mgr.isGrupoExistente ? 'Edite o nome ou adicione/remova produtos deste grupo de equivalência.' : 'Transforme este produto em um grupo para aceitar marcas alternativas na separação.'}
+                        </small>
+                    </div>
+                    <button type="button" class="an-modal-close-btn" onclick="anCloseEquivalenciaManagerModal()">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
+                </header>
+
+                <div class="an-modal-body" style="padding:20px;overflow-y:auto;flex:1;">
+                    ${mgr.errorMsg ? `
+                        <div style="padding:10px 14px;margin-bottom:14px;font-size:12px;font-weight:700;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:flex;align-items:center;gap:8px;">
+                            <span class="material-symbols-rounded" style="font-size:18px;">warning</span>
+                            <div>${escapeHtml(mgr.errorMsg)}</div>
+                        </div>
+                    ` : ''}
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                        <div>
+                            <label style="font-size:11px;font-weight:800;color:#475569;display:block;margin-bottom:4px;">Nome do Grupo *</label>
+                            <input type="text" id="an-eq-nome-input" value="${escapeHtml(mgr.nome)}" oninput="anOnEqManagerNomeInput(this.value)" placeholder="Ex: Lâmpada LED H1 C6" style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;color:#0f172a;font-weight:600;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:800;color:#475569;display:block;margin-bottom:4px;">Código do Grupo *</label>
+                            <input type="text" id="an-eq-codigo-input" value="${escapeHtml(mgr.codigo)}" ${mgr.isGrupoExistente ? 'disabled style="background:#f1f5f9;color:#64748b;cursor:not-allowed;width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;font-weight:700;"' : 'oninput="anOnEqManagerCodigoInput(this.value)" style="width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;outline:none;color:#0f172a;font-weight:700;"'}>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:20px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <label style="font-size:12px;font-weight:800;color:#1e293b;">Membros do Grupo (${mgr.membros.length})</label>
+                            <span style="font-size:11px;color:#64748b;">Todos estes produtos serão equivalentes.</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0;max-height:160px;overflow-y:auto;">
+                            ${mgr.membros.length === 0 ? `
+                                <span style="font-size:12px;color:#94a3b8;text-align:center;padding:12px;">Nenhum membro no grupo ainda.</span>
+                            ` : mgr.membros.map((m, idx) => `
+                                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;">
+                                    <div>
+                                        <strong style="color:#0f172a;">${escapeHtml(m.id_interno || m.sku || 'SKU')} — ${escapeHtml(m.nome || '')}</strong>
+                                        <span style="font-size:11px;color:#64748b;margin-left:8px;">Marca: <b>${escapeHtml(m.marca || '-')}</b></span>
+                                    </div>
+                                    <button type="button" onclick="anRemoveMemberFromEqManager(${idx})" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px;display:flex;align-items:center;" title="Remover membro do grupo">
+                                        <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="font-size:12px;font-weight:800;color:#1e293b;display:block;margin-bottom:6px;">Pesquisar Produtos Internos para Adicionar:</label>
+                        <div class="an-catalog-search-bar" style="margin-bottom:10px;background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:0 14px;display:flex;align-items:center;gap:10px;">
+                            <span class="material-symbols-rounded" style="color:#64748b;font-size:20px;">search</span>
+                            <input type="text" value="${escapeHtml(mgr.search)}" oninput="anOnEqManagerSearchInput(this.value)" placeholder="Pesquisar por ID interno, Nome, Marca (Osram, Philips...), EAN ou SKU..." style="width:100%;border:none;outline:none;font-size:13px;background:transparent;color:#0f172a;padding:10px 0;font-weight:600;">
+                        </div>
+                        <div id="an-eq-manager-search-results" style="max-height:200px;overflow-y:auto;">
+                            ${anRenderEqManagerSearchResults()}
+                        </div>
+                    </div>
+                </div>
+
+                <footer class="an-modal-footer" style="border-top:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;">
+                    <small style="color:#64748b;font-size:11px;">Cada SKU física pertence a no máximo 1 grupo de equivalência ativo.</small>
+                    <div style="display:flex;gap:10px;">
+                        <button type="button" class="an-btn an-btn-outline" onclick="anCloseEquivalenciaManagerModal()">Cancelar</button>
+                        <button type="button" class="an-btn an-btn-primary" ${mgr.saving ? 'disabled' : ''} onclick="anSaveEqManager()">
+                            <span class="material-symbols-rounded">save</span>
+                            ${mgr.saving ? 'Salvando...' : (mgr.isGrupoExistente ? 'Salvar Alterações' : 'Criar e Vincular Grupo')}
+                        </button>
+                    </div>
+                </footer>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+    }
+
+    window.anCloseEquivalenciaManagerModal = function () {
+        const state = window.SharedMappingState;
+        if (state._eqManager) {
+            state._eqManager.isOpen = false;
+        }
+        const el = document.getElementById('an-eq-manager-overlay');
+        if (el) el.remove();
+    };
+
+    window.anOnEqManagerSearchInput = function (term) {
+        const state = window.SharedMappingState;
+        if (!state._eqManager) return;
+        state._eqManager.search = term;
+        const resEl = document.getElementById('an-eq-manager-search-results');
+        if (resEl) resEl.innerHTML = anRenderEqManagerSearchResults();
+    };
+
+    function anRenderEqManagerSearchResults() {
+        const state = window.SharedMappingState;
+        const mgr = state._eqManager;
+        if (!mgr) return '';
+
+        const rawSearch = String(mgr.search || '').trim();
+        const catalog = getCatalogoAtual();
+
+        if (!catalog.length) {
+            return '<div style="padding:16px;text-align:center;color:#64748b;font-size:12px;">Carregando catálogo...</div>';
+        }
+
+        if (rawSearch.length < 2) {
+            return '<div style="padding:16px;text-align:center;color:#64748b;font-size:12px;">Digite pelo menos 2 caracteres para pesquisar equivalentes.</div>';
+        }
+
+        const normQuery = normText(rawSearch);
+        const tokens = normQuery.split(/\s+/).filter(Boolean);
+
+        const matched = [];
+        for (const p of catalog) {
+            const corpusFields = [p.id_interno, p.nome, p.marca, p.ean, p.sku_fornecedor, p.palavras_chave].filter(Boolean);
+            const corpusNorm = normText(corpusFields.join(' '));
+
+            const isMatch = tokens.every(token => corpusNorm.includes(token));
+            if (!isMatch) continue;
+
+            const normId = normText(p.id_interno);
+            const normEan = normText(p.ean);
+            const normSku = normText(p.sku_fornecedor);
+            const normNome = normText(p.nome);
+
+            let score = 0;
+            if (normId === normQuery) score += 1000;
+            else if (normEan === normQuery) score += 900;
+            else if (normSku === normQuery) score += 800;
+            else if (normNome === normQuery) score += 700;
+            else if (normNome.startsWith(normQuery)) score += 500;
+            else if (normId.startsWith(normQuery)) score += 400;
+            else if (tokens.every(t => normNome.includes(t))) score += 300;
+            else if (tokens.every(t => normId.includes(t))) score += 200;
+            else score += 100;
+
+            matched.push({ product: p, score });
+        }
+
+        if (!matched.length) {
+            return '<div style="padding:16px;text-align:center;color:#64748b;font-size:12px;">Nenhum produto encontrado com os termos pesquisados.</div>';
+        }
+
+        matched.sort((a, b) => b.score - a.score || String(a.product.id_interno).localeCompare(String(b.product.id_interno)));
+        const displayList = matched.slice(0, 15).map(m => m.product);
+
+        return displayList.map(p => {
+            const isMember = mgr.membros.some(m => String(m.id_interno) === String(p.id_interno) || String(m.id || m.produto_id) === String(p.id));
+
+            return `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;">
+                    <div>
+                        <strong style="color:#0f172a;">${escapeHtml(p.id_interno)} — ${escapeHtml(p.nome)}</strong>
+                        <div style="font-size:11px;color:#64748b;">Marca: <b>${escapeHtml(p.marca)}</b> | EAN: ${escapeHtml(p.ean || '-')}</div>
+                    </div>
+                    <button type="button" ${isMember ? 'disabled style="background:#e2e8f0;color:#94a3b8;cursor:default;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;"' : 'style="background:#f97316;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;"'} onclick="anAddMemberToEqManager('${escapeHtml(p.id_interno)}')">
+                        ${isMember ? 'Já no grupo' : '+ Adicionar ao Grupo'}
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.anAddMemberToEqManager = async function (idInterno) {
+        const state = window.SharedMappingState;
+        const mgr = state._eqManager;
+        if (!mgr) return;
+
+        const prod = findProduto(idInterno);
+        if (!prod) return;
+
+        mgr.errorMsg = '';
+
+        // Proteção de Grupo Duplo: verifica se o produto já pertence a outro grupo ativo no banco
+        try {
+            if (window.DataClient?.getEquivalenciaResolvidaByProdutoId && prod.id) {
+                const checkEq = await window.DataClient.getEquivalenciaResolvidaByProdutoId(prod.id);
+                if (checkEq && checkEq.possui_grupo && checkEq.grupo) {
+                    if (String(checkEq.grupo.id) !== String(mgr.grupoId)) {
+                        mgr.errorMsg = `Este produto (${prod.id_interno} — ${prod.nome}) já pertence ao grupo "${checkEq.grupo.nome || checkEq.grupo.codigo_grupo}". Cada SKU pode pertencer a no máximo UM grupo ativo.`;
+                        anRenderEquivalenciaManagerDOM();
+                        return;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('[EQ_MANAGER] Erro ao validar pertencimento do produto:', err);
+        }
+
+        if (!mgr.membros.some(m => String(m.id_interno) === String(prod.id_interno) || String(m.id || m.produto_id) === String(prod.id))) {
+            mgr.membros.push(prod);
+        }
+
+        anRenderEquivalenciaManagerDOM();
+    };
+
+    window.anRemoveMemberFromEqManager = function (index) {
+        const state = window.SharedMappingState;
+        const mgr = state._eqManager;
+        if (!mgr) return;
+
+        mgr.errorMsg = '';
+        mgr.membros.splice(index, 1);
+        anRenderEquivalenciaManagerDOM();
+    };
+
+    window.anSaveEqManager = async function () {
+        const state = window.SharedMappingState;
+        const mgr = state._eqManager;
+        if (!mgr) return;
+
+        mgr.errorMsg = '';
+
+        const nome = String(mgr.nome || '').trim();
+        const codigo = String(mgr.codigo || '').trim();
+
+        if (!nome) {
+            mgr.errorMsg = 'Por favor, informe o Nome do Grupo.';
+            anRenderEquivalenciaManagerDOM();
+            return;
+        }
+
+        if (!codigo) {
+            mgr.errorMsg = 'Por favor, informe o Código do Grupo.';
+            anRenderEquivalenciaManagerDOM();
+            return;
+        }
+
+        if (!mgr.membros.length) {
+            mgr.errorMsg = 'O grupo precisa conter pelo menos 1 produto membro.';
+            anRenderEquivalenciaManagerDOM();
+            return;
+        }
+
+        mgr.saving = true;
+        anRenderEquivalenciaManagerDOM();
+
+        try {
+            let targetGrupoId = mgr.grupoId;
+
+            if (!mgr.isGrupoExistente) {
+                // Validação de unicidade do código
+                try {
+                    if (window.DataClient?.listGruposEquivalencia) {
+                        const todosGrupos = await window.DataClient.listGruposEquivalencia(false);
+                        const codigoUpper = codigo.toUpperCase();
+                        const existe = todosGrupos.some(g => String(g.codigo_grupo || '').trim().toUpperCase() === codigoUpper);
+                        if (existe) {
+                            mgr.saving = false;
+                            mgr.errorMsg = `Já existe um grupo de equivalência cadastrado com este código ("${codigo}"). Por favor, defina um código único.`;
+                            anRenderEquivalenciaManagerDOM();
+                            return;
+                        }
+                    }
+                } catch (errCodeCheck) {
+                    console.warn('[EQ_MANAGER] Erro ao validar unicidade de código:', errCodeCheck);
+                }
+
+                // Criação de novo grupo via DataClient
+                const novoGrupo = await window.DataClient.createGrupoEquivalencia({
+                    codigo_grupo: codigo,
+                    nome: nome,
+                    descricao: `Criado operacionalmente via modal de mapping para ${mgr.targetProduct.id_interno}`
+                });
+                targetGrupoId = novoGrupo.id;
+
+                // Associa membros ao novo grupo
+                for (const m of mgr.membros) {
+                    const prodId = m.id || m.produto_id;
+                    if (prodId) {
+                        await window.DataClient.addSkuAoGrupoEquivalencia(targetGrupoId, prodId);
+                    }
+                }
+            } else {
+                // Atualização do nome do grupo existente
+                await window.DataClient.updateGrupoEquivalencia(targetGrupoId, { nome });
+
+                // Sincronização de membros no banco
+                const dbSkus = await window.DataClient.getSkusGrupoEquivalencia(targetGrupoId);
+                const dbProdIds = dbSkus.map(x => String(x.produto_id));
+                const targetProdIds = mgr.membros.map(x => String(x.id || x.produto_id)).filter(Boolean);
+
+                // Adiciona novos membros
+                for (const m of mgr.membros) {
+                    const pId = String(m.id || m.produto_id);
+                    if (pId && !dbProdIds.includes(pId)) {
+                        await window.DataClient.addSkuAoGrupoEquivalencia(targetGrupoId, pId);
+                    }
+                }
+
+                // Remove membros retirados do grupo
+                for (const itemDb of dbSkus) {
+                    const pIdDb = String(itemDb.produto_id);
+                    if (!targetProdIds.includes(pIdDb)) {
+                        await window.DataClient.removeSkuDoGrupoEquivalencia(targetGrupoId, pIdDb);
+                    }
+                }
+            }
+
+            // Reconsultar o estado atualizado do produto alvo
+            const freshInfo = await window.DataClient.getEquivalenciaResolvidaByProdutoId(mgr.targetProduct.id);
+
+            if (state.modalMode === 'equivalents') {
+                if (freshInfo && freshInfo.possui_grupo && Array.isArray(freshInfo.skus) && freshInfo.skus.length > 0) {
+                    state.modalAcceptedProducts = freshInfo.skus.map(s => {
+                        const full = findProduto(s.id_interno || s.id) || {};
+                        return {
+                            ...full,
+                            ...s,
+                            id: s.id || full.id,
+                            id_interno: s.id_interno || full.id_interno,
+                            nome: s.nome || full.nome,
+                            marca: s.marca || full.marca,
+                            grupo_equivalencia_id: freshInfo.grupo?.id || null,
+                            grupo_equivalencia_nome: freshInfo.grupo?.nome || freshInfo.grupo?.codigo_grupo || null,
+                            pertence_grupo: true,
+                            _infoEquivalencia: freshInfo
+                        };
+                    });
+                }
+            } else if (state.modalMode === 'kit') {
+                // Atualiza componente correspondente no Kit
+                const compIndex = state.modalKitComponents.findIndex(c => c.product.id === mgr.targetProduct.id || c.product.id_interno === mgr.targetProduct.id_interno);
+                if (compIndex >= 0) {
+                    state.modalKitComponents[compIndex].product._infoEquivalencia = freshInfo;
+                }
+            }
+
+            anCloseEquivalenciaManagerModal();
+
+            const container = document.getElementById('an-modal-body-container');
+            if (container) {
+                container.innerHTML = anRenderModalBodyContent();
+            }
+            anUpdateModalFooterInfo();
+
+            if (typeof showToast === 'function') {
+                showToast('Grupo de equivalência salvo com sucesso!', 'success');
+            }
+        } catch (err) {
+            console.error('[EQ_MANAGER] Erro ao salvar grupo de equivalência:', err);
+            mgr.saving = false;
+            mgr.errorMsg = err.message || 'Erro ao salvar grupo de equivalência. Tente novamente.';
+            anRenderEquivalenciaManagerDOM();
         }
     };
 
@@ -2455,7 +3244,7 @@
                     if (typeof showToast === 'function') showToast('Adicione pelo menos um componente ao kit.', 'warning');
                     return;
                 }
-                tipoIdentificacao = 'kit';
+                tipoIdentificacao = componentesPayload.length >= 2 ? 'kit' : 'produto';
                 componentesPayload = state.modalKitComponents.map(c => {
                     const infoEq = c.product._infoEquivalencia;
                     if (infoEq && infoEq.possui_grupo && infoEq.grupo) {

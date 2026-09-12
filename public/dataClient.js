@@ -3646,12 +3646,14 @@ const DataClient = (function () {
             mappingId = novoMap.id;
         }
 
+        const tipoIdentificacaoEfetivo = (componentes && componentes.length >= 2) ? 'kit' : 'produto';
+
         const { data: novaVersao, error: errNovaVersao } = await client
             .from('mercadolivre_item_mapping_versions')
             .insert([{
                 mapping_id: mappingId,
                 versao: proximaVersao,
-                tipo_identificacao: tipoIdentificacao,
+                tipo_identificacao: tipoIdentificacaoEfetivo,
                 observacao: observacao || null,
                 criado_por: criadoPor,
                 criado_em: new Date().toISOString()
