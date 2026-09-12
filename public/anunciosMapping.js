@@ -1,27 +1,56 @@
 (function () {
     window.__anunciosMappingLoaded = true;
 
-    // Catálogo mockado de produtos internos para pesquisa e mapeamento
-    const CATALOGO_PRODUTOS = [
-        { id_interno: 'DY-001.842', nome: 'Encosto de cabeca preto universal', marca: 'DY Parts', ean: '7891000018421', sku_fornecedor: 'ENC-842', preco: 45.00 },
-        { id_interno: 'DY-001.771', nome: 'Jogo de tapetes PVC preto universal', marca: 'DY Parts', ean: '7891000017712', sku_fornecedor: 'TAP-771', preco: 89.90 },
-        { id_interno: 'DY-001.204', nome: 'Capa para volante costurada preta com linha vermelha', marca: 'SportGrip', ean: '7891000012043', sku_fornecedor: 'CAP-204-VM', preco: 35.00 },
-        { id_interno: 'DY-001.205', nome: 'Capa para volante costurada preta com linha preta', marca: 'SportGrip', ean: '7891000012050', sku_fornecedor: 'CAP-205-PT', preco: 35.00 },
-        { id_interno: 'DY-001.206', nome: 'Capa para volante costurada grafite com linha cinza', marca: 'SportGrip', ean: '7891000012067', sku_fornecedor: 'CAP-206-GF', preco: 35.00 },
-        { id_interno: 'DY-002.101', nome: 'Lampada H7 12V 55W Super Branca', marca: 'Osram', ean: '7891234567890', sku_fornecedor: 'OSR-H7-SB', preco: 28.50, codigo_equivalente: 'EQ-LAMP-H7-55W' },
-        { id_interno: 'DY-002.102', nome: 'Lampada H7 12V 55W Super Branca', marca: 'Philips', ean: '7891234567891', sku_fornecedor: 'PHI-H7-SB', preco: 29.90, codigo_equivalente: 'EQ-LAMP-H7-55W' },
-        { id_interno: 'DY-002.103', nome: 'Lampada H7 12V 55W Super Branca', marca: 'TechOne', ean: '7891234567892', sku_fornecedor: 'TCH-H7-SB', preco: 22.00, codigo_equivalente: 'EQ-LAMP-H7-55W' },
-        { id_interno: 'DY-002.104', nome: 'Lampada H7 12V 55W Super Branca', marca: 'Gauss', ean: '7891234567893', sku_fornecedor: 'GAU-H7-SB', preco: 24.00, codigo_equivalente: 'EQ-LAMP-H7-55W' },
-        { id_interno: 'DY-001.451', nome: 'Pano de microfibra premium 40 x 40 cm', marca: 'Detailer', ean: '7891000014515', sku_fornecedor: 'MIC-451', preco: 12.00 },
-        { id_interno: 'DY-001.520', nome: 'Aplicador de espuma anatomico automotivo', marca: 'Detailer', ean: '7891000015208', sku_fornecedor: 'APL-520', preco: 6.50 },
-        { id_interno: 'DY-001.648', nome: 'Shampoo automotivo neutro com cera 500ml', marca: 'AutoShine', ean: '7891000016489', sku_fornecedor: 'SHP-648', preco: 18.00 },
-        { id_interno: 'DY-001.702', nome: 'Pretinho revitalizador para pneus 500ml', marca: 'AutoShine', ean: '7891000017028', sku_fornecedor: 'PRT-702', preco: 19.50 },
-        { id_interno: 'DY-003.501', nome: 'Sensor de estacionamento universal 4 pontos preto com display', marca: 'TechOne', ean: '7891000035015', sku_fornecedor: 'SENS-501', preco: 65.00 },
-        { id_interno: 'DY-003.502', nome: 'Sensor de estacionamento universal 4 pontos preto com display', marca: 'Positron', ean: '7891000035022', sku_fornecedor: 'SENS-502', preco: 85.00 }
-    ];
+    // Catálogo de produtos internos (integrado com tabela public.produtos via UUID)
+    let CATALOGO_PRODUTOS_REAIS = null;
+    let carregandoProdutosPromise = null;
 
-    // Helper para buscar produto por id_interno
-    const findProduto = id => CATALOGO_PRODUTOS.find(p => p.id_interno === id);
+    async function carregarProdutosCatalogo() {
+        if (CATALOGO_PRODUTOS_REAIS && CATALOGO_PRODUTOS_REAIS.length > 0) return CATALOGO_PRODUTOS_REAIS;
+        if (carregandoProdutosPromise) return carregandoProdutosPromise;
+
+        carregandoProdutosPromise = (async () => {
+            try {
+                let prods = [];
+                if (window.DataClient?.loadModule) {
+                    const mod = await window.DataClient.loadModule('produtos');
+                    if (mod && Array.isArray(mod.products) && mod.products.length > 0) {
+                        prods = mod.products;
+                    }
+                }
+                if (!prods.length && window.supabaseClient) {
+                    const { data, error } = await window.supabaseClient
+                        .from('produtos')
+                        .select('id, id_interno, descricao_completa, marca, ean, sku_fornecedor, preco_varejo, preco_custo, status')
+                        .eq('status', 'ativo')
+                        .limit(500);
+                    if (!error && Array.isArray(data)) {
+                        prods = data;
+                    }
+                }
+                if (prods.length > 0) {
+                    CATALOGO_PRODUTOS_REAIS = prods.map(p => ({
+                        id: p.id,
+                        id_interno: p.id_interno || p.codigo,
+                        nome: p.descricao_completa || p.nome || p.id_interno,
+                        marca: p.marca || '-',
+                        ean: p.ean || '-',
+                        sku_fornecedor: p.sku_fornecedor || '-',
+                        preco: Number(p.preco_varejo || p.preco_custo || 0)
+                    }));
+                    return CATALOGO_PRODUTOS_REAIS;
+                }
+            } catch (e) {
+                console.warn('[ANUNCIOS_MAPPING] Erro ao carregar produtos reais do Supabase:', e);
+            }
+            return [];
+        })();
+
+        return carregandoProdutosPromise;
+    }
+
+    const getCatalogoAtual = () => (CATALOGO_PRODUTOS_REAIS && CATALOGO_PRODUTOS_REAIS.length > 0) ? CATALOGO_PRODUTOS_REAIS : [];
+    const findProduto = id => getCatalogoAtual().find(p => p.id_interno === id || p.id === id);
 
     // Estado do Módulo de Anúncios
     const AnunciosState = {
@@ -34,167 +63,1391 @@
         modalSearch: '',
         modalAcceptedProducts: [], // array de produtos equivalentes
         modalKitComponents: [],    // array de { product, qty }
-        
-        // Dados simbólicos de Anúncios Mercado Livre
+               // Anúncios Reais (10 Mercado Livre da conta 238451947 + 10 Shopee da conta 284803847)
         anuncios: [
-            {
-                id: 'MLB3829104812',
-                external_item_id: 'MLB3829104812',
-                titulo: 'Sensor de Estacionamento Universal 4 Pontos Display Led Preto',
-                seller_nome: 'DY Auto Parts Oficial',
-                seller_sku: 'SENS-4P-PT',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_892837-MLB48920192837_012022-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-3829104812',
-                marketplace_status: 'active',
-                ultima_sincronizacao: 'Hoje, 11:20',
-                has_variations: false,
-                situacao_mapeamento: 'unmapped', // unmapped
-                mapping: null
-            },
-            {
-                id: 'MLB2910481920',
-                external_item_id: 'MLB2910481920',
-                titulo: 'Encosto de Cabeça Preto Universal Couro Sintético Macio',
-                seller_nome: 'DY Auto Parts Oficial',
-                seller_sku: 'ENC-CAB-PRETO',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_782910-MLB39102948192_052023-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-2910481920',
-                marketplace_status: 'active',
-                ultima_sincronizacao: 'Hoje, 10:15',
-                has_variations: true,
-                situacao_mapeamento: 'partial',
-                variations: [
-                    { variation_id: 'VAR-EXATO-01', variation_key: null, attribute: 'Acabamento: Preto', seller_sku: 'ENC-CAB-PT', situacao_mapeamento: 'mapped', mapping: { type: 'single', products: [findProduto('DY-001.842')] } },
-                    { variation_id: null, variation_key: 'ACABAMENTO=GRAFITE', attribute: 'Acabamento: Grafite', seller_sku: null, situacao_mapeamento: 'unmapped', mapping: null }
-                ],
-                mapping: {
-                    type: 'single',
-                    products: [findProduto('DY-001.842')]
-                }
-            },
-            {
-                id: 'MLB1948201948',
-                external_item_id: 'MLB1948201948',
-                titulo: 'Lâmpada Automotiva H7 12V 55W Super Branca Farol Principal Homologada',
-                seller_nome: 'DY Auto Parts Acessórios',
-                seller_sku: 'LAMP-H7-55W',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_654321-MLB1948201948_032023-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-1948201948',
-                marketplace_status: 'active',
-                ultima_sincronizacao: 'Hoje, 09:30',
-                has_variations: false,
-                situacao_mapeamento: 'mapped',
-                mapping: {
-                    type: 'equivalents',
-                    products: [
-                        findProduto('DY-002.101'),
-                        findProduto('DY-002.102'),
-                        findProduto('DY-002.103'),
-                        findProduto('DY-002.104')
-                    ]
-                }
-            },
-            {
-                id: 'MLB4910294811',
-                external_item_id: 'MLB4910294811',
-                titulo: 'Capa Para Volante Automotivo Costurada Emblema Alto Relevo Premium',
-                seller_nome: 'DY Auto Parts Oficial',
-                seller_sku: 'CAP-VOL-VAR',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_918273-MLB4910294811_072023-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-4910294811',
-                marketplace_status: 'active',
-                ultima_sincronizacao: 'Ontem, 16:45',
-                has_variations: true,
-                situacao_mapeamento: 'partial', // 2 de 3 mapeadas
-                variations: [
-                    {
-                        variation_id: 'VAR-883910',
-                        attribute: 'Cor: Preto com Linha Vermelha',
-                        seller_sku: 'CAP-VOL-PT-VM',
-                        situacao_mapeamento: 'mapped',
-                        mapping: { type: 'single', products: [findProduto('DY-001.204')] }
-                    },
-                    {
-                        variation_id: 'VAR-883911',
-                        attribute: 'Cor: Preto com Linha Preta',
-                        seller_sku: 'CAP-VOL-PT-PT',
-                        situacao_mapeamento: 'mapped',
-                        mapping: { type: 'single', products: [findProduto('DY-001.205')] }
-                    },
-                    {
-                        variation_id: 'VAR-883912',
-                        attribute: 'Cor: Grafite com Linha Cinza',
-                        seller_sku: 'CAP-VOL-GF-CZ',
-                        situacao_mapeamento: 'unmapped',
-                        mapping: null
-                    }
-                ]
-            },
-            {
-                id: 'MLB5019284712',
-                external_item_id: 'MLB5019284712',
-                titulo: 'Kit Cuidado Automotivo Completo 4 Itens Lavagem e Brilho com Shampoo e Pretinho',
-                seller_nome: 'DY Auto Parts Oficial',
-                seller_sku: 'KIT-CUID-4',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_102938-MLB5019284712_082023-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-5019284712',
-                marketplace_status: 'active',
-                ultima_sincronizacao: 'Hoje, 08:50',
-                has_variations: false,
-                situacao_mapeamento: 'mapped',
-                mapping: {
-                    type: 'kit',
-                    components: [
-                        { product: findProduto('DY-001.451'), qty: 2 },
-                        { product: findProduto('DY-001.520'), qty: 1 },
-                        { product: findProduto('DY-001.648'), qty: 1 },
-                        { product: findProduto('DY-001.702'), qty: 1 }
-                    ]
-                }
-            },
-            {
-                id: 'MLB6102938475',
-                external_item_id: 'MLB6102938475',
-                titulo: 'Suporte Veicular Magnético Saída de Ar Universal 360 Graus Neodímio',
-                seller_nome: 'DY Auto Parts Acessórios',
-                seller_sku: 'SUP-MAG-360',
-                thumbnail_url: 'https://http2.mlstatic.com/D_NQ_NP_2X_394820-MLB6102938475_092023-F.webp',
-                permalink: 'https://produto.mercadolivre.com.br/MLB-6102938475',
-                marketplace_status: 'paused',
-                ultima_sincronizacao: 'Hoje, 07:15',
-                has_variations: false,
-                situacao_mapeamento: 'review', // precisa revisar
-                mapping: {
-                    type: 'single',
-                    products: [findProduto('DY-001.771')],
-                    review_reason: 'Produto interno substituído por nova versão de fábrica.'
-                }
-            }
+          {
+                    "id": "MLB1096816640",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1096816640",
+                    "variation_id": "42874954132",
+                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
+                    "seller_sku": null,
+                    "titulo": "Par H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 7200lm C6",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_857856-MLB73225010878_122023-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1096816640-par-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-7200lm-c6-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 78.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "18/08/2026 03:11",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "42874954132",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H7",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954237",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H9",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H9",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954153",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954181",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H11",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "64605684907",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 (PSX24W)",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 (PSX24W)",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954172",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H8",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H8",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "64638075023",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 (PGJ19)",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 (PGJ19)",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954163",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H27",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H27",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954195",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB4",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB4",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954144",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H1",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H1",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "42874954215",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1204939243",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1204939243",
+                    "variation_id": "173985461425",
+                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 PSX24W",
+                    "seller_sku": null,
+                    "titulo": "Par Lâmpadas H16 Super Led Full Branca 6000k 7200 Lumens C6",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_610416-MLB73709288187_122023-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1204939243-par-lmpadas-h16-super-led-full-branca-6000k-7200-lumens-c6-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 78.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "26/07/2026 22:50",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "173985461425",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 PSX24W",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 PSX24W",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "173985461426",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 PGJ19",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 PGJ19",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1205646824",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1205646824",
+                    "variation_id": "34858496132",
+                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
+                    "seller_sku": null,
+                    "titulo": "Par H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 7200 Lumens C6",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_896861-MLB91582569775_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1205646824-par-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-7200-lumens-c6-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "26/07/2026 22:50",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "34858496132",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H7",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496140",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H1",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H1",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496147",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496154",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H27",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H27",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496161",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H8",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H8",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496168",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H11",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H11",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496175",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H16 - Tipo 2",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H16 - Tipo 2",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "34858496182",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB4",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB4",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1228481882",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1228481882",
+                    "variation_id": "36814463991",
+                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
+                    "seller_sku": null,
+                    "titulo": "Kit 10 Pares H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_730672-MLB74694972532_022024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1228481882-kit-10-pares-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 599.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "26/07/2026 22:50",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "36814463991",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H7",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464004",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H1",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H1",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464011",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464018",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H27",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H27",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464025",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H8",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H8",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464034",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H11",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H11",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464041",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H16 - Tipo 2",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H16 - Tipo 2",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464048",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB4",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB4",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "36814464055",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1446105806",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1446105806",
+                    "variation_id": "51170113969",
+                    "variation_key": "custom=Branco",
+                    "seller_sku": null,
+                    "titulo": "Fita Led Luz Interna Neon Painel Carro 5m Metros Tunning",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_877128-MLB73373224627_122023-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1446105806-fita-led-luz-interna-neon-painel-carro-5m-metros-tunning-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 78.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "11/09/2026 10:22",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "51170113969",
+                                        "variation_key": "custom=Branco",
+                                        "attribute": "Cor: Branco",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "51170113978",
+                                        "variation_key": "custom=Azul Gelo",
+                                        "attribute": "Cor: Azul Gelo",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "61136977879",
+                                        "variation_key": "custom=Amarelo",
+                                        "attribute": "Cor: Amarelo",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "51170114003",
+                                        "variation_key": "custom=Roxo",
+                                        "attribute": "Cor: Roxo",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "59861083726",
+                                        "variation_key": "custom=Azul",
+                                        "attribute": "Cor: Azul",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "51170113987",
+                                        "variation_key": "custom=Vermelho Alaranjado",
+                                        "attribute": "Cor: Vermelho Alaranjado",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "60808217548",
+                                        "variation_key": "custom=Verde",
+                                        "attribute": "Cor: Verde",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "59465369631",
+                                        "variation_key": "custom=Verde Fluorescente",
+                                        "attribute": "Cor: Verde Fluorescente",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "51170113995",
+                                        "variation_key": "custom=Rosa",
+                                        "attribute": "Cor: Rosa",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "51170197459",
+                                        "variation_key": "custom=Laranja Âmbar",
+                                        "attribute": "Cor: Laranja Âmbar",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1575591367",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1575591367",
+                    "variation_id": "58919628239",
+                    "variation_key": "COLOR=Preto",
+                    "seller_sku": null,
+                    "titulo": "Sensor Ré Estacionamento Display Sonoro Preto Branco Prata",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_851202-MLB73376317259_122023-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1575591367-sensor-re-estacionamento-display-sonoro-preto-branco-prata-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 150,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "16/08/2026 20:35",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "58919628239",
+                                        "variation_key": "COLOR=Preto",
+                                        "attribute": "Cor: Preto",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "58919628241",
+                                        "variation_key": "COLOR=Prateado",
+                                        "attribute": "Cor: Prateado",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "58919628243",
+                                        "variation_key": "COLOR=Branco",
+                                        "attribute": "Cor: Branco",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1575598033",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1575598033",
+                    "variation_id": "58919575934",
+                    "variation_key": "COLOR=Preto",
+                    "seller_sku": null,
+                    "titulo": "Sensor Ré Estacionamento Display Sonoro Preto Branco Prata",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_821078-MLB112005166533_052026-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1575598033-sensor-re-estacionamento-display-sonoro-preto-branco-prata-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 129.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "26/07/2026 23:22",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "58919575934",
+                                        "variation_key": "COLOR=Preto",
+                                        "attribute": "Cor: Preto",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "58919575937",
+                                        "variation_key": "COLOR=Prata",
+                                        "attribute": "Cor: Prata",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "58919575940",
+                                        "variation_key": "COLOR=Branco",
+                                        "attribute": "Cor: Branco",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1778807007",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1778807007",
+                    "variation_id": "74199899176",
+                    "variation_key": "COLOR=Cinza",
+                    "seller_sku": null,
+                    "titulo": "Carregador Celular 3 Entradas Usb Porta Copo 12v 24v Carro",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_963158-MLB92165867587_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1778807007-carregador-celular-3-entradas-usb-porta-copo-12v-24v-carro-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 39.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "13/08/2026 21:34",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "74199899176",
+                                        "variation_key": "COLOR=Cinza",
+                                        "attribute": "Cor: Cinza",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "74199899160",
+                                        "variation_key": "COLOR=Preto",
+                                        "attribute": "Cor: Preto",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1797149159",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1797149159",
+                    "variation_id": "76259778108",
+                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
+                    "seller_sku": null,
+                    "titulo": "Lâmpada H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 3600lm",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_978142-MLB73328076115_122023-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1797149159-lmpada-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-3600lm-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 49.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "26/07/2026 23:13",
+                    "payload_original": null,
+                    "has_variations": true,
+                    "variations": [
+                              {
+                                        "variation_id": "76259778108",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H11",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778093",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778131",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H1",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H1",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778179",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H8",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H8",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778116",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB3",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB3",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778101",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 (PGJ19)",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 (PGJ19)",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778087",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H7",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778168",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H9",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H9",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778123",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 (PSX24W)",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 (PSX24W)",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778139",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H27",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H27",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              },
+                              {
+                                        "variation_id": "76259778155",
+                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB4",
+                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB4",
+                                        "seller_sku": null,
+                                        "situacao_mapeamento": "NAO_MAPEADO",
+                                        "mapping": null
+                              }
+                    ],
+                    "mapping": null
+          },
+          {
+                    "id": "MLB1862105883",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "source_account_id": "238451947",
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1862105883",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": null,
+                    "titulo": "Par Lâmpadas H1 Farol Alto Astra 1999 Super Led Nano S14 H1 Branco Branco-frio",
+                    "thumbnail_url": "http://http2.mlstatic.com/D_801588-MLB91733740249_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1862105883-par-lmpadas-h1-farol-alto-astra-1999-super-led-nano-s14-h1-branco-branco-frio-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 139.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "11/09/2026 03:09",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "ml_MLB1248464127",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1248464127",
+                    "seller_sku": "MLB1248464127",
+                    "titulo": "Central Multimídia Universal Mp5 Touch 2 Din 7 Usb Bluetooth",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_707730-MLB75381747893_032024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1248464127-central-multimidia-universal-mp5-touch-2-din-7-usb-bluetooth-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 999.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 23:21",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1811816952",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1811816952",
+                    "seller_sku": null,
+                    "titulo": "Kit Farol Milha Gol G7 2016/2018 Moldura Botão Shocklight",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_967359-MLB74723450790_032024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1811816952-kit-farol-milha-gol-g7-20162018-moldura-boto-shocklight-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 449.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:51",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1433567301",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1433567301",
+                    "seller_sku": "MLB1433567301",
+                    "titulo": "Par Espelhos Retrovisores Câmera De Ré E Frontal 4,3 Full",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_895378-MLB74179471827_012024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1433567301-par-espelhos-retrovisores-cmera-de-re-e-frontal-43-full-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 479.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:51",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1427731939",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1427731939",
+                    "seller_sku": "MLB1427731939_50220518246",
+                    "titulo": "Rádio Automotivo Bluetooth Usb Sd Som Carro Controle Mp3",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_827017-MLB92575240339_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1427731939-radio-automotivo-bluetooth-usb-sd-som-carro-controle-mp3-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 249.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "10/08/2026 03:26",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1298745229",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1298745229",
+                    "seller_sku": "MLKIT_MLB1298745229_42142392443",
+                    "titulo": "Par Encosto Tela Lcd 7 Polegadas Independente Controle Vídeo Imagem Usb Micro Sd Fone De Ouvido Cinza Preto/prata",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_742632-MLB107081265147_022026-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1298745229-par-encosto-tela-lcd-7-polegadas-independente-controle-video-imagem-usb-micro-sd-fone-de-ouvido-cinza-pretoprata-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 1699.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "09/08/2026 03:09",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1789721097",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1789721097",
+                    "seller_sku": null,
+                    "titulo": "Kit 13 Fitas Led Interna Rgb 64 Cores Neon App Carro Tunning",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_786299-MLB74179571255_012024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1789721097-kit-13-fitas-led-interna-rgb-64-cores-neon-app-carro-tunning-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 3250,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "11/08/2026 21:01",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1623274631",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1623274631",
+                    "seller_sku": "MLKIT_MLB1623274631_61665546086",
+                    "titulo": "Kit Par Hb4 + Par Hb3 +  Par H11 Ultra Led 6000k Shocklight Hb4 Branco Branco-frio",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_901584-MLB91918632546_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1623274631-kit-par-hb4-par-hb3-par-h11-ultra-led-6000k-shocklight-hb4-branco-branco-frio-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 749.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:51",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1065406191",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1065406191",
+                    "seller_sku": "MLKIT_MLB1065406191",
+                    "titulo": "20 Lâmpadas H1 Halogena P14.5s 24v 70w Amarelo Conv. Gerlux",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_922653-MLB74309669919_012024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1065406191-20-lmpadas-h1-halogena-p145s-24v-70w-amarelo-conv-gerlux-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 159.99,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:50",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1856969886",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1856969886",
+                    "seller_sku": null,
+                    "titulo": "Par Lâmpadas H4 Alto Baixo Ranger 2004 Super Led Nano S14 H4 Branco Branco-frio",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_988910-MLB91699173017_092025-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1856969886-par-lmpadas-h4-alto-baixo-ranger-2004-super-led-nano-s14-h4-branco-branco-frio-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 159.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:53",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "ml_MLB1631771847",
+                    "marketplace": "MERCADO_LIVRE",
+                    "account_id": 1,
+                    "account_externo_id": "238451947",
+                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
+                    "seller_externo_id": "238451947",
+                    "external_item_id": "MLB1631771847",
+                    "seller_sku": "MLB1631771847",
+                    "titulo": "Kit 50 1 Polo + 50 2 Polos 12v + 50 1 Polo + 50 2 Polos 24v",
+                    "thumbnail_url": "https://http2.mlstatic.com/D_986995-MLB75249005254_032024-I.jpg",
+                    "permalink": "https://produto.mercadolivre.com.br/MLB-1631771847-kit-50-1-polo-50-2-polos-12v-50-1-polo-50-2-polos-24v-_JM",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 359.9,
+                    "preco_original": null,
+                    "preco_promocional": null,
+                    "ultimo_preco_venda": null,
+                    "ultima_sincronizacao": "26/07/2026 22:51",
+                    "has_variations": false,
+                    "situacao_mapeamento": "NAO_MAPEADO",
+                    "mapped_product_id": null,
+                    "mapped_product_sku": null,
+                    "mapped_product_nome": null,
+                    "mapped_variations_count": 0,
+                    "total_variations_count": 0,
+                    "variations": []
+          },
+          {
+                    "id": "18097497298",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497298",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "DY-COMPC6-0095",
+                    "titulo": "Fita Barra Led P/ Painel RGB Jac J2 2012 2013 2014 2015 2016 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497298",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497315",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497315",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLB900538129",
+                    "titulo": "Fita Barra Led P/ Painel RGB Ford Fiesta 2003 2004 2005 2006 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497315",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497319",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497319",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLKIT_MLB1088307789",
+                    "titulo": "Fita Barra Led P/ Painel RGB Ford Fiesta 1997 1998 2007 2008 2009 2010 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497319",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497327",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497327",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "DY-COMPC6-0072",
+                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2010 2011 2012 2013 2014 2015 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497327",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497328",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497328",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "DY-COMPC6-0070",
+                    "titulo": "Fita Barra Led P/ Painel RGB Golf 1998 1999 2000 2001 2002 2003 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497328",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497330",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497330",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLB1623344237_61669212722",
+                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2000 2001 2002 2003 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497330",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497332",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497332",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLKIT_MLB1061704958",
+                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2004 2005 2006 2007 2008 2009 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497332",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497333",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497333",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLB1155941936_33931016785",
+                    "titulo": "Fita Barra Led P/ Painel RGB Golf 2002 2003 2004 2005 2006 2007 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497333",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18097497348",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18097497348",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLB1155941936_33931016785",
+                    "titulo": "Fita Barra Led P/ Painel RGB Mitsubishi ASX 2011 2012 2013 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18097497348",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          },
+          {
+                    "id": "18099073609",
+                    "marketplace": "SHOPEE",
+                    "account_id": null,
+                    "source_account_id": "284803847",
+                    "account_externo_id": "284803847",
+                    "seller_nome": "DJOZU AUTO PEÇAS",
+                    "seller_externo_id": "284803847",
+                    "external_item_id": "18099073609",
+                    "variation_id": null,
+                    "variation_key": "",
+                    "seller_sku": "MLB1209647498_35166842137",
+                    "titulo": "Fita Barra Led P/ Painel RGB Renault Logan 2011 2012 2013 5m Tunning Tomada Conector USB",
+                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
+                    "permalink": "https://shopee.com.br/product/284803847/18099073609",
+                    "marketplace_status": "ACTIVE",
+                    "preco_venda": 99.9,
+                    "preco_original": 99.9,
+                    "preco_promocional": null,
+                    "moeda": "BRL",
+                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
+                    "mapping_id": null,
+                    "mapping_versao": null,
+                    "tipo_mapeamento": null,
+                    "mapping_resumo": null,
+                    "ultima_sincronizacao": "25/08/2026 18:22",
+                    "payload_original": null,
+                    "has_variations": false,
+                    "variations": [],
+                    "mapping": null
+          }
         ]
     };
-
-    // Contrato normalizado temporário: amanhã o adaptador externo entregará estes mesmos campos.
-    AnunciosState.anuncios = AnunciosState.anuncios.filter((_, index) => [0, 1, 2, 4].includes(index)).map((an, index) => {
-        const states = { unmapped: 'NAO_MAPEADO', mapped: 'MAPEADO', partial: 'PARCIAL', review: 'REVISAR' };
-        const tipo = an.mapping?.type === 'kit' ? 'KIT' : an.mapping?.type === 'equivalents' ? 'EQUIVALENCIA' : an.mapping ? 'PRODUTO' : null;
-        return {
-            id: an.id ?? an.external_item_id ?? `anuncio-${index}`, marketplace: 'MERCADO_LIVRE',
-            account_id: index < 2 ? 101 : 202, account_externo_id: index < 2 ? 'ML-101' : 'ML-202',
-            seller_nome: an.seller_nome ?? null, seller_externo_id: index < 2 ? '101001' : '202002',
-            external_item_id: an.external_item_id ?? null, variation_id: an.variation_id ?? null, variation_key: an.variation_key ?? '',
-            seller_sku: an.seller_sku ?? null, titulo: an.titulo ?? null, thumbnail_url: an.thumbnail_url ?? null, permalink: an.permalink ?? null,
-            marketplace_status: index === 3 ? 'PAUSED' : (String(an.marketplace_status ?? '').toUpperCase() || null),
-            preco_venda: [119.9, 79.9, 39.9, null][index], preco_original: index === 1 ? 89.9 : index === 2 ? 44.9 : null,
-            preco_promocional: index === 1 ? 69.9 : index === 2 ? 34.9 : null, moeda: 'BRL',
-            situacao_mapeamento: states[an.situacao_mapeamento] ?? String(an.situacao_mapeamento ?? 'NAO_MAPEADO').toUpperCase(),
-            mapping_id: an.mapping ? `mapping-mock-${index + 1}` : null, mapping_versao: an.mapping ? 1 : null, tipo_mapeamento: tipo,
-            ultima_sincronizacao: an.ultima_sincronizacao ?? null, payload_original: null,
-            mapping_resumo: tipo === 'PRODUTO' ? { produto: { id_interno: an.mapping?.products?.[0]?.id_interno, nome: an.mapping?.products?.[0]?.nome } }
-                : tipo === 'EQUIVALENCIA' ? { grupo_equivalencia: { nome: 'Grupo H7 12V 55W' }, quantidade_opcoes_equivalentes: an.mapping?.products?.length, quantidade_produtos_permitidos: an.mapping?.products?.length }
-                : tipo === 'KIT' ? { quantidade_componentes: an.mapping?.components?.length ?? 0 } : null,
-            has_variations: Boolean(an.has_variations), variations: (an.variations ?? []).map(v => ({ ...v, situacao_mapeamento: states[v.situacao_mapeamento] ?? String(v.situacao_mapeamento ?? 'NAO_MAPEADO').toUpperCase() })), mapping: an.mapping ?? null
-        };
-    });
 
     // Helpers de Normalização e Sanitização
     const escapeHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -204,7 +1457,16 @@
     const sellerLabel = an => an.seller_nome || an.account_externo_id || an.seller_externo_id || '';
     const validPrice = v => hasValue(v) && Number.isFinite(Number(v));
     const money = (v, moeda) => { try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda || 'BRL' }).format(Number(v)); } catch (_) { return Number(v).toFixed(2); } };
-    const priceHTML = an => { const promo = validPrice(an.preco_promocional), value = promo ? an.preco_promocional : an.preco_venda; if (!validPrice(value)) return ''; return `<div style="margin-top:6px"><strong style="font-size:18px">${escapeHtml(money(value, an.moeda))}</strong>${promo && validPrice(an.preco_original) ? ` <small style="text-decoration:line-through;color:#64748b">${escapeHtml(money(an.preco_original, an.moeda))}</small>` : ''}</div>`; };
+    const priceHTML = an => {
+        const promo = validPrice(an.preco_promocional), value = promo ? an.preco_promocional : an.preco_venda;
+        if (validPrice(value)) {
+            return `<div style="margin-top:6px"><strong style="font-size:18px">${escapeHtml(money(value, an.moeda))}</strong>${promo && validPrice(an.preco_original) ? ` <small style="text-decoration:line-through;color:#64748b">${escapeHtml(money(an.preco_original, an.moeda))}</small>` : ''}</div>`;
+        }
+        if (validPrice(an.ultimo_preco_venda)) {
+            return `<div style="margin-top:6px;font-size:13px;color:#64748b;"><span>Último preço vendido: </span><strong style="color:#0f172a;font-size:15px;">${escapeHtml(money(an.ultimo_preco_venda, an.moeda))}</strong></div>`;
+        }
+        return '';
+    };
     const accountOptions = () => { const found = new Map(); AnunciosState.anuncios.forEach(an => { const key = accountKey(an); if (key && !found.has(key)) found.set(key, sellerLabel(an) || key); }); return [...found].map(([key, label]) => `<option value="${escapeHtml(key)}" ${AnunciosState.accountFilter === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join(''); };
 
     // Filtros de Listagem
@@ -476,6 +1738,117 @@
                 </main>
             </div>
         `;
+
+        // Hidratar mappings salvos no Supabase ao carregar a tela
+        hidratarMappingsPersistidos();
+    };
+
+    function atualizarContadoresResumo() {
+        const totalCount = AnunciosState.anuncios.length;
+        const unmappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'NAO_MAPEADO' || a.situacao_mapeamento === 'PARCIAL').length;
+        const mappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'MAPEADO').length;
+        const reviewCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'REVISAR').length;
+
+        const tabTodos = document.querySelector('.an-summary .tab-todos strong');
+        if (tabTodos) tabTodos.textContent = totalCount;
+        const tabNaoMap = document.querySelector('.an-summary .tab-nao-mapeados strong');
+        if (tabNaoMap) tabNaoMap.textContent = unmappedCount;
+        const tabMap = document.querySelector('.an-summary .tab-mapeados strong');
+        if (tabMap) tabMap.textContent = mappedCount;
+        const tabRev = document.querySelector('.an-summary .tab-revisar strong');
+        if (tabRev) tabRev.textContent = reviewCount;
+    }
+
+    async function hidratarMappingsPersistidos() {
+        if (!window.DataClient?.listMercadoLivreItemMappings) return;
+
+        // Contas Mercado Livre na amostra atual com account_id válido (ex: 1)
+        const accountIds = [...new Set(
+            AnunciosState.anuncios
+                .filter(a => a.marketplace === 'MERCADO_LIVRE' && hasValue(a.account_id))
+                .map(a => Number(a.account_id))
+        )].filter(id => Number.isInteger(id) && id > 0);
+
+        let houveMudanca = false;
+
+        for (const accId of accountIds) {
+            try {
+                const mappings = await window.DataClient.listMercadoLivreItemMappings(accId);
+                if (!Array.isArray(mappings) || !mappings.length) continue;
+
+                for (const mapRecord of mappings) {
+                    if (!mapRecord.ativo || !mapRecord.current_version_id) continue;
+                    const versao = mapRecord.mercadolivre_item_mapping_versions;
+                    if (!versao) continue;
+
+                    const componentes = versao.mercadolivre_item_mapping_componentes || [];
+                    if (!componentes.length) continue;
+
+                    // Identidade do mapping: account_id + external_item_id
+                    const targetAnuncio = AnunciosState.anuncios.find(a =>
+                        a.marketplace === 'MERCADO_LIVRE' &&
+                        Number(a.account_id) === Number(mapRecord.mercadolivre_account_id) &&
+                        String(a.external_item_id) === String(mapRecord.item_id)
+                    );
+                    if (!targetAnuncio) continue;
+
+                    const mappedProducts = componentes.map(c => {
+                        const p = c.produtos || c.produto_referencia || {};
+                        return {
+                            id: p.id || c.produto_id,
+                            id_interno: p.id_interno || 'DY-???',
+                            nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+                            marca: p.marca || '-',
+                            ean: p.ean || '-',
+                            sku_fornecedor: p.sku_fornecedor || '-'
+                        };
+                    });
+
+                    const uiMapping = {
+                        type: versao.tipo_identificacao === 'kit' ? 'kit' : (mappedProducts.length > 1 ? 'equivalents' : 'single'),
+                        products: mappedProducts,
+                        components: componentes.map(c => ({
+                            product: mappedProducts.find(mp => mp.id === c.produto_id) || mappedProducts[0],
+                            qty: c.quantidade_por_unidade || 1
+                        }))
+                    };
+
+                    const targetVarKey = mapRecord.variation_key || '__SEM_VARIACAO__';
+
+                    if (targetAnuncio.has_variations && Array.isArray(targetAnuncio.variations)) {
+                        const targetVar = targetAnuncio.variations.find(v =>
+                            (hasValue(v.variation_id) && String(v.variation_id) === String(mapRecord.variation_id)) ||
+                            (hasValue(v.variation_key) && String(v.variation_key) === targetVarKey)
+                        );
+                        if (targetVar) {
+                            targetVar.mapping = uiMapping;
+                            targetVar.situacao_mapeamento = 'MAPEADO';
+                            houveMudanca = true;
+                        }
+                        const allMapped = targetAnuncio.variations.every(v => v.situacao_mapeamento === 'MAPEADO');
+                        targetAnuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
+                    } else {
+                        if (targetVarKey === '__SEM_VARIACAO__' || !targetAnuncio.variation_key || targetAnuncio.variation_key === targetVarKey) {
+                            targetAnuncio.mapping = uiMapping;
+                            targetAnuncio.situacao_mapeamento = 'MAPEADO';
+                            targetAnuncio.mapping_id = mapRecord.id;
+                            targetAnuncio.mapping_versao = versao.versao;
+                            houveMudanca = true;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[ANUNCIOS_MAPPING] Erro ao carregar mappings da conta ' + accId + ':', err);
+            }
+        }
+
+        if (houveMudanca) {
+            const listContainer = document.getElementById('an-list-container');
+            if (listContainer) {
+                listContainer.innerHTML = renderAnunciosCards();
+            }
+            atualizarContadoresResumo();
+        }
     };
 
     // Event Handlers de Filtros e Busca
@@ -554,6 +1927,10 @@
         }
 
         anRenderMappingModalDOM(anuncio, variationRef);
+        carregarProdutosCatalogo().then(() => {
+            const resultsEl = document.querySelector('.an-catalog-results');
+            if (resultsEl) resultsEl.innerHTML = anRenderCatalogResults();
+        });
     };
 
     function anOpenVariationPickerModal(anuncio) {
@@ -795,10 +2172,21 @@
         `;
     }
 
-    // Renderiza resultados de produtos internos na busca do modal
+    // Renderiza resultados de produtos internos na busca do modal (produtos reais com UUID)
     function anRenderCatalogResults() {
         const q = normText(AnunciosState.modalSearch);
-        const filtered = CATALOGO_PRODUTOS.filter(p => {
+        const catalog = getCatalogoAtual();
+
+        if (!catalog.length) {
+            return `
+                <div style="padding:24px;text-align:center;color:#64748b;font-size:13px;">
+                    <span class="material-symbols-rounded" style="font-size:24px;color:#f97316;animation:spin 1s linear infinite;display:block;margin:0 auto 8px;">sync</span>
+                    Carregando catálogo de produtos do sistema...
+                </div>
+            `;
+        }
+
+        const filtered = catalog.filter(p => {
             if (!q) return true;
             const corpus = [p.id_interno, p.nome, p.marca, p.ean, p.sku_fornecedor].join(' ');
             return normText(corpus).includes(q);
@@ -932,13 +2320,18 @@
             let tipoIdentificacao = 'produto';
             let componentesPayload = [];
 
+            const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
             if (AnunciosState.modalMode === 'equivalents') {
                 if (!AnunciosState.modalAcceptedProducts.length) {
                     if (typeof showToast === 'function') showToast('Adicione pelo menos um produto ao mapeamento.', 'warning');
                     return;
                 }
-                tipoIdentificacao = 'produto';
                 const p = AnunciosState.modalAcceptedProducts[0];
+                if (!p || !p.id || !UUID_REGEX.test(p.id)) {
+                    throw new Error(`Produto ${p?.id_interno || ''} não possui UUID válido da tabela public.produtos.`);
+                }
+                tipoIdentificacao = 'produto';
                 const infoEq = p._infoEquivalencia;
 
                 if (infoEq && infoEq.possui_grupo && infoEq.grupo) {

@@ -1021,3 +1021,226 @@ html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-
         padding-top: 76px !important;
     }
 }
+
+
+/* --- MODAL SIMPLIFICADO --- */
+.an-modal-question {
+    padding: 16px 24px 8px;
+    background: #fafbfc;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.an-modal-question h4 {
+    margin: 0 0 10px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.an-modal-choice-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.an-choice-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+}
+
+.an-choice-btn:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.an-choice-btn.active {
+    border-color: #ea580c;
+    background: #fff7ed;
+}
+
+.an-choice-btn .material-symbols-rounded {
+    font-size: 24px;
+    color: #94a3b8;
+}
+
+.an-choice-btn.active .material-symbols-rounded {
+    color: #ea580c;
+}
+
+.an-choice-btn strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.an-choice-btn small {
+    display: block;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* Estado Vazio Compacto */
+.an-empty-selection-compact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.an-empty-selection-compact .material-symbols-rounded {
+    color: #94a3b8;
+    font-size: 18px;
+}
+
+/* Card do Produto Selecionado */
+.an-selected-card {
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    background: #f0fdf4;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.an-selected-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.an-selected-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #166534;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.an-btn-unselect {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.an-btn-unselect:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+
+.an-selected-card-body strong {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.an-selected-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: #475569;
+    flex-wrap: wrap;
+}
+
+.an-selected-card-meta span b {
+    color: #0f172a;
+}
+
+.an-equiv-notice {
+    margin-top: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #3730a3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.an-equiv-notice .material-symbols-rounded {
+    font-size: 18px;
+    color: #4f46e5;
+    flex-shrink: 0;
+}
+
+/* Área de Busca Principal */
+.an-main-search-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.an-main-search-wrapper label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #334155;
+}
+
+.an-main-search-input-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    transition: border-color 0.15s;
+}
+
+.an-main-search-input-box:focus-within {
+    border-color: #ea580c;
+}
+
+.an-main-search-input-box .material-symbols-rounded {
+    color: #94a3b8;
+    font-size: 22px;
+}
+
+.an-main-search-input-box input {
+    width: 100%;
+    padding: 12px 0;
+    border: 0;
+    outline: 0;
+    font-size: 14px;
+    color: #0f172a;
+    background: transparent;
+}
