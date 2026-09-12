@@ -4504,6 +4504,105 @@ function openModalIdentificarPreview(pedidoId, itemIdx = 0) {
   document.body.appendChild(modal);
 }
 
+const contasResolvedMapCache = new Map();
+
+async function resolverAccountIdLocalParaPedido(sourceAccountId) {
+  const strId = String(sourceAccountId || '').trim();
+  if (!strId) return null;
+
+  if (contasResolvedMapCache.has(strId)) {
+    return contasResolvedMapCache.get(strId);
+  }
+
+  if (window.supabaseClient) {
+    try {
+      const { data, error } = await window.supabaseClient.rpc('resolver_marketplace_account_id', {
+        p_source_account_id: strId
+      });
+      if (!error && Array.isArray(data) && data.length > 0 && data[0].account_id) {
+        const resolvedId = Number(data[0].account_id);
+        contasResolvedMapCache.set(strId, resolvedId);
+        return resolvedId;
+      }
+    } catch (e) {
+      console.warn('[PEDIDOS PREVIEW] Erro ao chamar RPC resolver_marketplace_account_id:', e);
+    }
+  }
+
+  contasResolvedMapCache.set(strId, null);
+  return null;
+}
+
+async function hidratarPedidosPreviewMappings(todosPreview) {
+  if (!Array.isArray(todosPreview) || !window.DataClient?.listMercadoLivreItemMappings) return;
+
+  const mappingsPorConta = new Map();
+
+  for (const ped of todosPreview) {
+    // Isolamento estrito: Shopee não consulta mapping do Mercado Livre
+    if (ped.platform !== 'MERCADOLIBRE') {
+      ped.status_identificacao_preview = 'pendente_identificacao';
+      ped.conta_resolvida = false;
+      continue;
+    }
+
+    let accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    ped.accountIdLocal = accountIdLocal;
+
+    if (!accountIdLocal) {
+      ped.status_identificacao_preview = 'pendente_identificacao';
+      ped.conta_resolvida = false;
+      continue;
+    }
+
+    ped.conta_resolvida = true;
+
+    if (!mappingsPorConta.has(accountIdLocal)) {
+      try {
+        const list = await window.DataClient.listMercadoLivreItemMappings(accountIdLocal);
+        mappingsPorConta.set(accountIdLocal, list || []);
+      } catch (err) {
+        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accountIdLocal, err);
+        mappingsPorConta.set(accountIdLocal, []);
+      }
+    }
+
+    const accountMappings = mappingsPorConta.get(accountIdLocal) || [];
+    let todosItensIdentificados = (ped.itens || []).length > 0;
+
+    for (const item of (ped.itens || [])) {
+      const varKey = (item.variation_id && String(item.variation_id).trim()) ? String(item.variation_id).trim() : '__SEM_VARIACAO__';
+
+      const mapRecord = accountMappings.find(m =>
+        m.ativo &&
+        m.current_version_id &&
+        String(m.item_id) === String(item.item_id) &&
+        (m.variation_key === varKey || String(m.variation_id) === String(item.variation_id) || (varKey === '__SEM_VARIACAO__' && (!m.variation_key || m.variation_key === '__SEM_VARIACAO__')))
+      );
+
+      if (mapRecord && mapRecord.mercadolivre_item_mapping_versions) {
+        const versao = mapRecord.mercadolivre_item_mapping_versions;
+        const comps = versao.mercadolivre_item_mapping_componentes || [];
+        if (comps.length > 0) {
+          item.mapping_status = 'IDENTIFICADO';
+          item.mapping_id = mapRecord.id;
+          item.mapping_version = versao;
+          item.mapping_componentes = comps;
+          continue;
+        }
+      }
+
+      item.mapping_status = 'PENDENTE';
+      item.mapping_id = null;
+      item.mapping_version = null;
+      item.mapping_componentes = [];
+      todosItensIdentificados = false;
+    }
+
+    ped.status_identificacao_preview = todosItensIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+  }
+}
+
 async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
   const currentUser = localStorage.getItem('currentUser');
   if (!currentUser) return renderLogin();
@@ -4517,13 +4616,20 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
     const state = window.PedidosPreviewState;
 
+    // Hidrata os mappings da preview via DataClient/Supabase em memória
+    try {
+      await hidratarPedidosPreviewMappings(todosPreview);
+    } catch (errHidratar) {
+      console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings:', errHidratar);
+    }
+
     // Se parâmetros foram passados diretamente pela chamada legada, sincroniza com o state
     if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
 
-    // Contadores Operacionais Principais (foco 100% no fluxo operacional)
+    // Contadores Operacionais Principais (dinâmicos baseados no mapping real)
     const countTodos = todosPreview.length; // 30
-    const countPendentes = todosPreview.length; // 30 (todos na preview aguardam mapping consolidado)
-    const countProntos = 0;
+    const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
+    const countPendentes = countTodos - countProntos;
     const countEmSeparacao = 0;
     const countSeparados = 0;
     const countDivergencias = 0;
@@ -4539,10 +4645,14 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     let listaExibicao = todosPreview;
 
     // 1. Filtro Operacional
-    if (state.operacional === 'prontos' || state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+    if (state.operacional === 'prontos') {
+      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
+    } else if (state.operacional === 'pendentes') {
+      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
+    } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
       listaExibicao = [];
     } else {
-      // 'todos' ou 'pendentes'
+      // 'todos'
       listaExibicao = todosPreview;
     }
 
@@ -4647,71 +4757,55 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
             </div>
 
             <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
-              <div class="pedidos-counter-label" style="color:#b91c1c;">
+              <div class="pedidos-counter-label" style="color:#dc2626;">
                 <span>Divergências</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">error</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#b91c1c;">${countDivergencias}</div>
-              <span class="pedidos-counter-sub">Bloqueios de auditoria</span>
+              <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
+              <span class="pedidos-counter-sub">Revisão necessária</span>
             </div>
           </div>
 
-          <!-- BARRA DE FILTROS SECUNDÁRIOS: BUSCA, MARKETPLACE E CONTA -->
+          <!-- BARRA DE FILTROS SECUNDÁRIOS -->
           <div class="pedidos-filters-bar">
             <div class="pedidos-search-wrap">
               <span class="material-symbols-rounded pedidos-search-icon">search</span>
               <input type="text"
                      class="pedidos-search-input"
-                     placeholder="Buscar pedido, título, SKU..."
-                     value="${escapeKitAttribute(state.busca || '')}"
+                     placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
+                     value="${escapeKitAttribute(state.busca)}"
                      oninput="setPedidosBusca(this.value)">
             </div>
 
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-              <!-- Filtro de Canal / Marketplace (Pills) -->
-              <div class="pedidos-pills-wrap">
-                <button type="button"
-                        class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}"
-                        onclick="setPedidosFiltroMarketplace('todos')">
-                  Todos (${countTodos})
-                </button>
-                <button type="button"
-                        class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}"
-                        onclick="setPedidosFiltroMarketplace('mercadolibre')">
-                  Mercado Livre (${countML})
-                </button>
-                <button type="button"
-                        class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}"
-                        onclick="setPedidosFiltroMarketplace('shopee')">
-                  Shopee (${countShopee})
-                </button>
-              </div>
+            <div class="pedidos-pills-wrap">
+              <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
+                Todos Canais (${todosPreview.length})
+              </button>
+              <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
+                Mercado Livre (${countML})
+              </button>
+              <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
+                Shopee (${countShopee})
+              </button>
+            </div>
 
-              <!-- Filtro por Conta -->
-              <div style="display:flex;align-items:center;gap:6px;">
-                <label for="pedidos-filtro-conta" style="font-size:0.8rem;font-weight:700;color:#475569;">Conta:</label>
-                <select id="pedidos-filtro-conta"
-                        onchange="setPedidosFiltroConta(this.value)"
-                        style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.82rem;background:#fff;color:#0f172a;font-weight:600;min-width:170px;cursor:pointer;">
-                  <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
-                  ${contasDisponiveis.map(c => `<option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>`).join('')}
-                </select>
-              </div>
+            <div style="min-width:200px;">
+              <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
+                <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
+                ${contasDisponiveis.map(c => `
+                  <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
+                `).join('')}
+              </select>
             </div>
           </div>
 
-          <!-- LISTAGEM DE PEDIDOS -->
-          <div style="display:grid;gap:14px;">
-            ${listaExibicao.length ? listaExibicao.map(ped => renderPedidoCardHTML(ped)).join('') : `
-              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 20px;text-align:center;color:#64748b;">
-                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;">filter_alt_off</span>
-                <p style="margin:12px 0 4px;font-weight:700;font-size:1rem;color:#1e293b;">Nenhum pedido encontrado para esta combinação de filtros.</p>
-                <small style="color:#64748b;">Na prévia atual, todos os 30 pedidos estão no estado operacional <b>Pendentes de Identificação</b>.</small>
-                <div style="margin-top:16px;">
-                  <button type="button" class="app-center-modal-secondary" onclick="setPedidosFiltroOperacional('todos');setPedidosFiltroMarketplace('todos');setPedidosFiltroConta('todas');setPedidosBusca('');" style="padding:6px 14px;font-size:0.82rem;">
-                    Limpar Filtros
-                  </button>
-                </div>
+          <!-- LISTA DE CARDS DE PEDIDOS -->
+          <div style="display:grid;gap:16px;">
+            ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
+              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
+                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
+                <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
+                <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
               </div>
             `}
           </div>
@@ -4807,6 +4901,10 @@ function renderPedidoCardHTML(ped) {
     const totalItens = ped.total_itens || itens.length || 1;
     const hasMultiple = totalItens > 1;
 
+    const isPronto = ped.status_identificacao_preview === 'pronto_separacao';
+    const identificadosCount = itens.filter(i => i.mapping_status === 'IDENTIFICADO').length;
+    const pendentesCount = totalItens - identificadosCount;
+
     // Badges
     const badgePlatform = isML
       ? `<span class="badge-canal-ml">MERCADO LIVRE</span>`
@@ -4817,6 +4915,10 @@ function renderPedidoCardHTML(ped) {
         <span class="material-symbols-rounded" style="font-size:14px;color:#64748b;">receipt_long</span> ${escapeKitAttribute(String(ped.status || '').toUpperCase())}
       </span>
     `;
+
+    const statusOperacionalBadge = isPronto
+      ? `<span class="badge-operacional badge-pronto"><span class="material-symbols-rounded" style="font-size:14px;">check_circle</span> PRONTO PARA SEPARAÇÃO</span>`
+      : `<span class="badge-operacional badge-pendente"><span class="material-symbols-rounded" style="font-size:14px;">pending</span> PENDENTE DE IDENTIFICAÇÃO</span>`;
 
     return `
       <article class="pedidos-card">
@@ -4835,6 +4937,7 @@ function renderPedidoCardHTML(ped) {
 
           <div style="display:flex;align-items:center;gap:8px;">
             ${statusMarketplaceBadge}
+            ${statusOperacionalBadge}
           </div>
         </div>
 
@@ -4865,7 +4968,7 @@ function renderPedidoCardHTML(ped) {
                   + ${totalItens - 1} outro(s) item(ns) neste pedido
                 </span>
                 <span style="color:#475569;font-weight:600;">
-                  0 de ${totalItens} identificados • <b>${totalItens} pendentes</b>
+                  ${identificadosCount} de ${totalItens} identificados • <b>${pendentesCount} pendente(s)</b>
                 </span>
               </div>
             ` : ''}
@@ -4873,20 +4976,19 @@ function renderPedidoCardHTML(ped) {
             <!-- ÁREA DE IDENTIFICAÇÃO OPERACIONAL -->
             <div class="pedidos-card-ident-box">
               <div class="pedidos-card-ident-msg">
-                <span class="badge-operacional badge-pendente">
-                  <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
-                  PENDENTE DE IDENTIFICAÇÃO
-                </span>
+                ${statusOperacionalBadge}
                 <span style="font-size:0.78rem;color:#78350f;margin-left:4px;">
-                  ${hasMultiple ? 'Todos os itens deste pedido ainda precisam ser mapeados.' : 'Este anúncio ainda precisa ser mapeado.'}
+                  ${isPronto ? 'Todos os itens deste pedido estão identificados.' : (hasMultiple ? `${pendentesCount} de ${totalItens} item(ns) precisam de mapeamento.` : 'Este anúncio ainda precisa ser mapeado.')}
                 </span>
               </div>
-              <button type="button"
-                      class="pedidos-btn-identificar"
-                      onclick="openModalIdentificarPreview('${ped.id}')">
-                <span class="material-symbols-rounded" style="font-size:16px;">manage_search</span>
-                Identificar ${hasMultiple ? 'Itens' : 'Produto'}
-              </button>
+              ${!isPronto ? `
+                <button type="button"
+                        class="pedidos-btn-identificar"
+                        onclick="openModalIdentificarPreview('${ped.id}')">
+                  <span class="material-symbols-rounded" style="font-size:16px;">manage_search</span>
+                  Identificar ${hasMultiple ? 'Itens' : 'Produto'}
+                </button>
+              ` : ''}
             </div>
           </div>
         </div>
@@ -4902,7 +5004,7 @@ function renderPedidoCardHTML(ped) {
                     class="app-center-modal-secondary"
                     disabled
                     style="padding:7px 14px;font-size:0.83rem;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
-                    title="Disponível somente quando todos os itens estiverem identificados.">
+                    title="Envio para separação desabilitado na prévia de homologação.">
               <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
             </button>
           </div>
@@ -5007,6 +5109,7 @@ async function enviarPedidoParaSeparacaoUI(pedidoId) {
 function renderModalDetalhesPedidoPreview(ped) {
   const isML = ped.platform === 'MERCADOLIBRE';
   const itens = ped.itens || [];
+  const isPronto = ped.status_identificacao_preview === 'pronto_separacao';
 
   const modal = document.createElement('div');
   modal.id = 'app-center-modal';
@@ -5037,10 +5140,17 @@ function renderModalDetalhesPedidoPreview(ped) {
           <span class="badge-status-marketplace">
             STATUS MARKETPLACE: <b style="color:#0f172a;">${escapeKitAttribute(String(ped.status || '').toUpperCase())}</b>
           </span>
-          <span class="badge-operacional badge-pendente">
-            <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
-            PENDENTE DE IDENTIFICAÇÃO
-          </span>
+          ${isPronto ? `
+            <span class="badge-operacional badge-pronto">
+              <span class="material-symbols-rounded" style="font-size:14px;">check_circle</span>
+              PRONTO PARA SEPARAÇÃO
+            </span>
+          ` : `
+            <span class="badge-operacional badge-pendente">
+              <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
+              PENDENTE DE IDENTIFICAÇÃO
+            </span>
+          `}
         </div>
       </div>
 
@@ -5051,7 +5161,11 @@ function renderModalDetalhesPedidoPreview(ped) {
       </div>
 
       <div style="display:grid;gap:12px;max-height:55vh;overflow-y:auto;padding-right:6px;">
-        ${itens.map((item, idx) => `
+        ${itens.map((item, idx) => {
+          const itemIdentificado = item.mapping_status === 'IDENTIFICADO';
+          const comps = item.mapping_componentes || [];
+          const versao = item.mapping_version || {};
+          return `
           <div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#f8fafc;display:flex;gap:14px;align-items:flex-start;">
             ${item.imagem_url ? `
               <img src="${item.imagem_url}" alt="Foto" class="pedidos-product-thumb" style="width:64px;height:64px;">
@@ -5073,20 +5187,37 @@ function renderModalDetalhesPedidoPreview(ped) {
               </div>
 
               <!-- IDENTIFICAÇÃO OPERACIONAL DO ITEM -->
-              <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                <div style="display:flex;align-items:center;gap:6px;">
-                  <span class="badge-operacional badge-pendente" style="font-size:0.72rem;padding:2px 8px;">
-                    PENDENTE DE IDENTIFICAÇÃO
-                  </span>
-                  <span style="font-size:0.76rem;color:#78350f;">Aguardando mapeamento para ID Interno / Equivalência</span>
+              ${itemIdentificado ? `
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-top:10px;">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                    <span class="badge-operacional badge-pronto" style="font-size:0.72rem;padding:2px 8px;">
+                      ITEM IDENTIFICADO (v${versao.versao || 1} • ${escapeKitAttribute(String(versao.tipo_identificacao || 'PRODUTO').toUpperCase())})
+                    </span>
+                  </div>
+                  <div style="font-size:0.82rem;color:#166534;">
+                    ${comps.map(c => {
+                      const p = c.produtos || c.produto_referencia || {};
+                      const g = c.grupos_equivalencia || {};
+                      return `• <b>${escapeKitAttribute(p.id_interno || g.nome || 'COMPONENTE')}</b>: ${escapeKitAttribute(p.descricao_completa || g.nome || 'Produto')} (${c.quantidade_por_unidade || 1} un/item)`;
+                    }).join('<br>')}
+                  </div>
                 </div>
-                <button type="button"
-                        class="pedidos-btn-identificar"
-                        onclick="openModalIdentificarPreview('${ped.id}', ${idx})">
-                  <span class="material-symbols-rounded" style="font-size:15px;">manage_search</span>
-                  Identificar Item
-                </button>
-              </div>
+              ` : `
+                <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="badge-operacional badge-pendente" style="font-size:0.72rem;padding:2px 8px;">
+                      PENDENTE DE IDENTIFICAÇÃO
+                    </span>
+                    <span style="font-size:0.76rem;color:#78350f;">Aguardando mapeamento para ID Interno / Equivalência</span>
+                  </div>
+                  <button type="button"
+                          class="pedidos-btn-identificar"
+                          onclick="openModalIdentificarPreview('${ped.id}', ${idx})">
+                    <span class="material-symbols-rounded" style="font-size:15px;">manage_search</span>
+                    Identificar Item
+                  </button>
+                </div>
+              `}
 
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;flex-wrap:wrap;gap:8px;">
                 <span style="font-size:0.85rem;color:#1e293b;">
@@ -5102,7 +5233,8 @@ function renderModalDetalhesPedidoPreview(ped) {
               </div>
             </div>
           </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:16px;margin-top:16px;flex-wrap:wrap;gap:12px;">
@@ -5115,7 +5247,7 @@ function renderModalDetalhesPedidoPreview(ped) {
                   class="app-center-modal-secondary"
                   disabled
                   style="padding:8px 18px;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
-                  title="Disponível somente quando todos os itens estiverem identificados.">
+                  title="Envio para separação desabilitado na prévia de homologação.">
             <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
           </button>
         </div>
