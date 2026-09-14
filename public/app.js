@@ -530,6 +530,7 @@ window.addEventListener('online', () => scheduleConferenceProgressSync(true));
 // ==== NAVIGATION MANAGEMENT ====
 // Texto validado em UTF-8.
 window.addEventListener('popstate', (event) => {
+ closeFinalizedGroupingCorrection();
  if (event.state && event.state.screen) {
  console.log('[NAV] Popstate para:', event.state.screen);
  renderScreenByName(event.state.screen, false);
@@ -547,6 +548,7 @@ function pushNav(screen) {
 }
 
 function goBack() {
+ closeFinalizedGroupingCorrection();
  // Texto validado em UTF-8.
  if (history.state && history.state.screen && history.state.screen !== 'login') {
  console.log('[NAV] history.back()');
@@ -560,6 +562,7 @@ function goBack() {
 }
 
 function renderScreenByName(name, push = true) {
+ closeFinalizedGroupingCorrection();
  switch (name) {
  case 'menu': renderMenu(push); break;
  case 'search': renderSearchScreen(push); break;
@@ -4309,6 +4312,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
 }
 
 function renderMenu(push = true) {
+ closeFinalizedGroupingCorrection();
  stopScanner();
  currentScreen = 'menu';
  document.body.classList.remove('login-active');
@@ -4731,8 +4735,8 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
       <div class="dashboard-screen internal fade-in module-screen app-page-shell">
         ${getTopBarHTML(currentUser, 'renderMenu()')}
         ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
-        <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:24px 20px;">
-          <div class="app-breadcrumb" style="margin-bottom:16px;">
+        <main class="container ped-shell app-page-container">
+          <div class="app-breadcrumb">
             <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
             <span class="material-symbols-rounded">chevron_right</span>
             <span class="app-breadcrumb-current">Gestão de Pedidos</span>
@@ -4863,7 +4867,7 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     <div class="dashboard-screen internal fade-in module-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
-      <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:20px;">
+      <main class="container ped-shell app-page-container">
         <div class="pedidos-loading" style="text-align:center;padding:40px;color:#64748b;">
           <span class="material-symbols-rounded" style="font-size:36px;animation:spin 1s linear infinite;">sync</span>
           <p>Carregando pedidos do marketplace...</p>
@@ -4890,8 +4894,8 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
       <div class="dashboard-screen internal fade-in module-screen app-page-shell">
         ${getTopBarHTML(currentUser, 'renderMenu()')}
         ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
-        <main class="container app-page-container" style="max-width:1200px;margin:0 auto;padding:24px 20px;">
-          <div class="app-breadcrumb" style="margin-bottom:16px;">
+        <main class="container ped-shell app-page-container">
+          <div class="app-breadcrumb">
             <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
             <span class="material-symbols-rounded">chevron_right</span>
             <span class="app-breadcrumb-current">Pedidos & Identificação</span>
@@ -10563,74 +10567,155 @@ async function updateInventoryItemsList() {
  return;
  }
 
- const isView = appData.currentInventory?.mode === 'view' || appData.currentInventory?.status === 'FECHADO' || appData.currentInventory?.status === 'ANULADO';
+  function calculateInventoryQsepForItem(idInterno, localRaw, countedAt) {
+    if (!idInterno) return { qSep: 0, hasNullOrigin: false };
+    const localNorm = String(localRaw || '').trim().toUpperCase();
+    const countedMs = countedAt ? new Date(countedAt).getTime() : Date.now();
+    let qSep = 0;
+    let hasNullOrigin = false;
 
- list.innerHTML = items.map((item, displayIndex) => {
- // Enriquecer com dados do produto (SKU, EAN, cor) pelo id_interno original
- const product = (appData.products || []).find(p => String(p.id_interno) === String(item.id_interno));
- const sku = product?.sku_fornecedor || item.sku || '-';
- const ean = product?.ean || item.ean || '-';
- const cor = product?.cor || item.cor || '';
- const nome = product?.descricao_completa || product?.descricao_base || item.name || 'Produto';
- const expectedQty = parseStockQty(item.saldo_sistema ?? getStockQtyByLocal(getProductStockEntriesFromCache(item.id_interno), appData.currentInventory?.local));
- const realIndex = displayIndex;
- const productImg = product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
- const qtyLabel = isInitialInventoryType(appData.currentInventory?.type) ? 'SALDO INICIAL' : 'CONTADO';
- const costInfo = resolveInventoryUnitCost(item.id_interno);
- item.valor_unitario = costInfo.value;
- item.valor_diferenca = Number(item.diferenca || 0) * costInfo.value;
- item.sem_preco_custo = !costInfo.hasCost;
- const costWarning = item.sem_preco_custo
- ? `<span class="inv-cost-warning"><span class="material-symbols-rounded">info</span>Produto sem preAo de custo cadastrado</span>`
- : `<span class="inv-cost-readonly"><span class="material-symbols-rounded">lock</span>Custo ${formatPrice(item.valor_unitario)}</span>`;
+    const separacoes = appData.separacoes || appData.separacao || [];
+    const activeSepIds = new Set(
+        separacoes
+            .filter(s => ['em_separacao', 'separado', 'em_conferencia'].includes(String(s.status || '').toLowerCase()))
+            .map(s => String(s.separacao_id || s.id))
+    );
 
- return `
- <div class="inventory-item">
- <div class="inv-item-index">${String(displayIndex + 1).padStart(2, '0')}</div>
- <div class="inv-item-thumb">
- ${productImg ? `<img src="${productImg}" alt="">` : `<span class="material-symbols-rounded">inventory_2</span>`}
- </div>
- <!-- ESQUERDA: Informacoes -->
- <div class="inv-col-info">
- <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">tag</span><span class="inv-info-label">ID</span><span class="inv-info-val">${item.id_interno}</span></div>
- <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">inventory_2</span><span class="inv-info-label">SKU</span><span class="inv-info-val">${sku}</span></div>
- <div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">barcode</span><span class="inv-info-label">EAN</span><span class="inv-info-val">${ean}</span></div>
- ${cor ? `<div class="inv-info-row"><span class="inv-info-icon material-symbols-rounded">palette</span><span class="inv-info-label">COR</span><span class="inv-info-val">${cor}</span></div>` : ''}
- </div>
- <!-- CENTRO: Produto -->
- <div class="inv-col-product">
- <span class="inv-product-code">${item.id_interno}</span>
- <span class="inv-product-name">${nome}</span>
- <span class="inv-product-meta"><strong>SKU</strong> ${sku} <strong>EAN</strong> ${ean}</span>
- ${costWarning}
- ${renderInventoryQuantitySummary(product, item, expectedQty)}
- </div>
- <!-- DIREITA: Quantidade + Remover -->
- <div class="inv-col-qty" style="flex-direction: row; justify-content: flex-end; width: 100%;">
- <div class="inv-qty-label">${qtyLabel}</div>
- <div class="inv-qty-control" style="opacity: ${isView ? '0.5' : '1'}">
- <button class="inv-qty-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, -1)`}" ${isView ? 'disabled' : ''}>-</button>
- <input
- class="inv-qty-num inv-qty-input"
- type="number"
- inputmode="numeric"
- min="1"
- step="1"
- value="${item.qty}"
- aria-label="Quantidade do item ${escapeKitAttribute(nome)}"
- ${isView ? 'readonly disabled' : ''}
- onfocus="this.select()"
- onchange="setInventoryQty(${realIndex}, this.value)"
- onkeydown="if(event.key === 'Enter'){ event.preventDefault(); this.blur(); setTimeout(() => document.getElementById('inv-ean-input')?.focus(), 80); }"
- >
- <button class="inv-qty-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, 1)`}" ${isView ? 'disabled' : ''}>+</button>
- </div>
- <div class="inv-qty-unit">UNIDADES</div>
- ${isView ? '' : `<button class="inv-btn-remove" onclick="removeInventoryItem(${realIndex})" style="margin-top: 0;"><span class="material-symbols-rounded" style="font-size: 18px;">delete</span></button>`}
- </div>
- </div>`;
- }).join('');
- requestAnimationFrame(updateInventoryBackToTopButton);
+    const bipagens = appData.separacao_item_bipagens || [];
+    bipagens.forEach(b => {
+        if (!activeSepIds.has(String(b.separacao_id))) return;
+        if (String(b.id_interno || '').toUpperCase() !== String(idInterno).toUpperCase()) return;
+        
+        const scanMs = b.bipado_em ? new Date(b.bipado_em).getTime() : 0;
+        if (scanMs && scanMs > countedMs) return;
+
+        if (!b.local_origem) {
+            hasNullOrigin = true;
+        } else if (String(b.local_origem).trim().toUpperCase() === localNorm) {
+            qSep += Number(b.quantidade || 1);
+        }
+    });
+
+    return { qSep, hasNullOrigin };
+  }
+
+  const isView = appData.currentInventory?.mode === 'view' || appData.currentInventory?.status === 'FECHADO' || appData.currentInventory?.status === 'ANULADO';
+
+  list.innerHTML = items.map((item, displayIndex) => {
+    const product = (appData.products || []).find(p => String(p.id_interno) === String(item.id_interno));
+    const marca = product?.marca || item.brand || '';
+    const sku = product?.sku_fornecedor || item.sku || '-';
+    const ean = product?.ean || item.ean || '-';
+    const cor = product?.cor || item.cor || '';
+    const nome = product?.descricao_completa || product?.descricao_base || item.name || 'Produto';
+    const expectedQty = parseStockQty(item.saldo_sistema ?? getStockQtyByLocal(getProductStockEntriesFromCache(item.id_interno), appData.currentInventory?.local));
+    const countedQty = Number(item.qty || item.saldo_fisico || 0);
+    const localRaw = appData.currentInventory?.local || 'TERREO';
+    
+    // FASE 2B.1: Usar q_sep_snapshot congelado no banco
+    let qSep = 0;
+    let hasNullOrigin = false;
+    let needsReconfirmation = false;
+
+    if (item.q_sep_snapshot_em) {
+        qSep = Number(item.q_sep_snapshot || 0);
+    } else {
+        const qSepInfo = calculateInventoryQsepForItem(item.id_interno, localRaw, item.auditado_em || item.atualizado_em);
+        qSep = qSepInfo.qSep;
+        hasNullOrigin = qSepInfo.hasNullOrigin;
+        needsReconfirmation = true;
+    }
+
+    const reconciliadoQty = countedQty + qSep;
+    const diffQty = reconciliadoQty - expectedQty;
+    const realIndex = displayIndex;
+    const productImg = product?.image_path || product?.url_imagem ? formatImageUrl(product.image_path || product.url_imagem) : '';
+    const localFormatted = prettyLocal(localRaw);
+    const costInfo = resolveInventoryUnitCost(item.id_interno);
+    item.valor_unitario = costInfo.value;
+    item.valor_diferenca = Number(item.diferenca || 0) * costInfo.value;
+    item.sem_preco_custo = !costInfo.hasCost;
+
+    const diffClass = diffQty === 0 ? 'status-ok' : (diffQty < 0 ? 'status-falta' : 'status-sobra');
+    const localSlug = String(localRaw).toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+    return `
+    <div class="inventory-item inventory-item-card ${diffClass}">
+      <div class="inv-card-index">${String(displayIndex + 1).padStart(2, '0')}</div>
+
+      <div class="inv-card-thumb">
+        ${productImg 
+          ? `<img src="${productImg}" alt="${escapeKitAttribute(nome)}" loading="lazy">` 
+          : `<span class="material-symbols-rounded inv-no-img-icon" aria-hidden="true">image_not_supported</span>`
+        }
+      </div>
+
+      <div class="inv-card-info">
+        <div class="inv-card-top-bar">
+          <span class="inv-id-badge">${item.id_interno}</span>
+          ${needsReconfirmation ? `<span class="inv-null-origin-warning" style="background:#fff3cd;color:#856404;border-color:#ffeeba;" title="Contagem realizada antes do snapshot. Reconfirme a contagem física."><span class="material-symbols-rounded">warning</span> RECONFIRMAR CONTAGEM</span>` : ''}
+          ${hasNullOrigin ? `<span class="inv-null-origin-warning" title="Existe material em separação com local de origem não registrado (NULL)"><span class="material-symbols-rounded">warning</span> SEPARAÇÃO SEM ORIGEM</span>` : ''}
+        </div>
+        <h2 class="inv-card-title">${nome}</h2>
+        <div class="inv-card-meta">
+          ${marca ? `<span><strong>Marca:</strong> ${marca}</span>` : ''}
+          <span><strong>SKU:</strong> ${sku}</span>
+          ${cor ? `<span><strong>Cor:</strong> ${cor}</span>` : ''}
+        </div>
+      </div>
+
+      <div class="inv-card-metrics">
+        <div class="inv-metric-block mod-sistema">
+          <span class="inv-metric-label">SISTEMA</span>
+          <span class="inv-metric-value">${formatStockNumber(expectedQty)}</span>
+        </div>
+        <div class="inv-metric-block mod-fisico">
+          <span class="inv-metric-label">PRATELEIRA</span>
+          <span class="inv-metric-value">${formatStockNumber(countedQty)}</span>
+        </div>
+        ${qSep > 0 ? `
+        <div class="inv-metric-block mod-qsep">
+          <span class="inv-metric-label" title="Fotografia imutável da separação no momento da contagem">EM SEPARAÇÃO</span>
+          <span class="inv-metric-value">+${formatStockNumber(qSep)}</span>
+        </div>
+        <div class="inv-metric-block mod-reconciliado">
+          <span class="inv-metric-label">RECONCILIADO</span>
+          <span class="inv-metric-value">${formatStockNumber(reconciliadoQty)}</span>
+        </div>
+        ` : ''}
+        <div class="inv-metric-block mod-diferenca ${diffQty === 0 ? 'diff-ok' : (diffQty < 0 ? 'diff-falta' : 'diff-sobra')}">
+          <span class="inv-metric-label">DIFERENÇA</span>
+          <span class="inv-metric-value">${diffQty > 0 ? '+' : ''}${formatStockNumber(diffQty)}</span>
+        </div>
+        <div class="inv-metric-block mod-local local-badge-${localSlug}">
+          <span class="inv-metric-label">LOCAL</span>
+          <span class="inv-metric-value local-name">${localFormatted}</span>
+        </div>
+      </div>
+
+      <div class="inv-card-controls" style="opacity: ${isView ? '0.5' : '1'}">
+        <div class="inv-qty-stepper">
+          <button type="button" class="inv-step-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, -1)`}" ${isView ? 'disabled' : ''}>-</button>
+          <input
+            class="inv-step-input"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            step="1"
+            value="${item.qty}"
+            aria-label="Quantidade do item ${escapeKitAttribute(nome)}"
+            ${isView ? 'readonly disabled' : ''}
+            onfocus="this.select()"
+            onchange="setInventoryQty(${realIndex}, this.value)"
+            onkeydown="if(event.key === 'Enter'){ event.preventDefault(); this.blur(); setTimeout(() => document.getElementById('inv-ean-input')?.focus(), 80); }"
+          >
+          <button type="button" class="inv-step-btn" onclick="${isView ? '' : `adjustInventoryQty(${realIndex}, 1)`}" ${isView ? 'disabled' : ''}>+</button>
+        </div>
+        ${!isView ? `<button type="button" class="inv-remove-btn" onclick="removeInventoryItem(${realIndex})" title="Remover item"><span class="material-symbols-rounded">delete</span></button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  requestAnimationFrame(updateInventoryBackToTopButton);
 }
 
 function updateInventoryBackToTopButton() {
@@ -10800,152 +10885,79 @@ async function addInventoryItem(scannedEan = null) {
 
 async function saveInventoryItemToServer(item) {
  if (!isCurrentInventoryEditable()) {
- console.warn('[INV-DIAG] tentativa de salvar em sessao nao editavel');
- return false;
+  console.warn('[INV-DIAG] tentativa de salvar em sessao nao editavel');
+  return false;
  }
 
  const client = window.supabaseClient;
  if (!client) {
- console.warn('[INV-DIAG] Supabase indisponivel para salvar item do inventario');
- showToast('Nao foi possivel conectar ao banco para salvar o item.', 'error');
- return false;
+  console.warn('[INV-DIAG] Supabase indisponivel para salvar item do inventario');
+  showToast('Nao foi possivel conectar ao banco para salvar o item.', 'error');
+  return false;
  }
 
  const inv = appData.currentInventory;
  if (!inv || !inv.id) {
- console.log('[INFO] Operacao registrada.');
- showToast('Operacao concluida.', 'info');
- return false;
+  showToast('Sessao de inventario nao encontrada.', 'error');
+  return false;
  }
 
  if (inv.isNewSession) {
- console.log('[INFO] Operacao registrada.');
- const payload = {
- inventario_id: inv.id,
- tipo: inv.type,
- status: 'ABERTO',
- criado_por: inv.user,
- usuario_responsavel: inv.user,
- data_inicio: inv.date,
- local: inv.local
- };
- const { error } = await client.from('inventarios').insert([payload]);
- if (error) {
- console.log('[INFO] Operacao registrada.');
- showToast('Operacao concluida.', 'info');
- return false;
+  const payload = {
+   inventario_id: inv.id,
+   tipo: inv.type,
+   status: 'ABERTO',
+   criado_por: inv.user,
+   usuario_responsavel: inv.user,
+   data_inicio: inv.date,
+   local: inv.local
+  };
+  const { error } = await client.from('inventarios').insert([payload]);
+  if (error) {
+   console.error('[INV-DIAG] erro ao criar sessao de inventario:', error);
+   showToast('Nao foi possivel iniciar a sessao no servidor.', 'error');
+   return false;
+  }
+  inv.isNewSession = false;
+  
+  if (!appData.inventario) appData.inventario = [];
+  appData.inventario.unshift(payload);
  }
- inv.isNewSession = false;
- 
- if (!appData.inventario) appData.inventario = [];
- appData.inventario.unshift(payload);
- }
-
- // Buscar saldo_sistema REAL do Supabase (id_interno + local)
- const estoqueReal = await DataClient.fetchEstoqueItemLocalSupabase(item.id_interno, inv.local);
- const saldo_sistema = estoqueReal ? parseFloat(estoqueReal.saldo_disponivel || 0) : 0;
- const saldo_fisico = Number(item.qty || 0);
- const diferenca = saldo_fisico - saldo_sistema;
- item.saldo_sistema = saldo_sistema;
-
- const costInfo = resolveInventoryUnitCost(item.id_interno);
- const valor_unitario = costInfo.value;
- item.valor_unitario = valor_unitario;
- item.valor_diferenca = diferenca * valor_unitario;
- item.sem_preco_custo = !costInfo.hasCost;
- if (!costInfo.hasCost) {
- showToast('Operacao concluida.', 'info');
- }
-
- const payload = {
- inventario_id: inv.id,
- id_interno: item.id_interno,
- local: inv.local,
- saldo_sistema: saldo_sistema,
- saldo_fisico: saldo_fisico,
- diferenca: diferenca,
- valor_unitario: valor_unitario,
- valor_diferenca: diferenca * valor_unitario,
- auditado_por: auditUser.name,
- auditado_em: getDataHoraBrasil(),
- atualizado_em: getDataHoraBrasil()
- };
-
- console.log('[INV-DIAG] payload inventarios_itens:', payload);
 
  try {
- // Texto validado em UTF-8.
- // SELECT em lista evita que duplicados antigos quebrem a consulta.
- const { data: existingRows, error: selectErr } = await client
- .from('inventarios_itens')
- .select('id')
- .eq('inventario_id', inv.id)
- .eq('id_interno', item.id_interno);
+  const itemLocal = String(item.local || inv.local || 'TERREO').toUpperCase();
+  const auditUser = getInventoryAuditUser();
+  const rpcData = await DataClient.salvarContagemInventarioItemSupabase({
+   inventario_id: inv.id,
+   id_interno: item.id_interno,
+   local: itemLocal,
+   saldo_fisico: Number(item.qty || 0),
+   usuario: auditUser.name || localStorage.getItem('currentUser') || inv.user || 'Sistema',
+   valor_unitario: item.unitValue != null ? Number(item.unitValue) : null
+  });
 
- console.log('[INFO] Operacao registrada.');
+  if (!rpcData) {
+   throw new Error('A RPC transacional de contagem nao retornou dados.');
+  }
 
- let result;
- if ((existingRows || []).length > 0) {
- console.log('[INFO] Operacao registrada.');
- result = await client
- .from('inventarios_itens')
- .update(payload)
- .eq('inventario_id', inv.id)
- .eq('id_interno', item.id_interno);
- } else {
- console.log('[INV-DIAG] item novo, executando INSERT...');
- result = await client
- .from('inventarios_itens')
- .insert([payload]);
- }
+  item.systemStock = rpcData.saldo_sistema ?? item.systemStock;
+  item.q_sep_snapshot = rpcData.q_sep_snapshot;
+  item.q_sep_snapshot_em = rpcData.q_sep_snapshot_em;
+  item.auditado_em = rpcData.auditado_em;
+  item.isConfirmedInDb = true;
 
- if (result.error) {
- if (result.error.code === '23505') {
- console.warn('[INV-DIAG] insert conflitou com item existente, refazendo UPDATE...');
- result = await client
- .from('inventarios_itens')
- .update(payload)
- .eq('inventario_id', inv.id)
- .eq('id_interno', item.id_interno);
- }
- }
-
- if (result.error) {
- console.error('[INV-DIAG] Erro ao persistir no banco:', result.error.message);
- showToast("Erro ao salvar: " + result.error.message, "error");
- return false;
- } else {
- console.log('[INFO] Operacao registrada.');
- 
- // Texto validado em UTF-8.
- const { data: check, error: checkError } = await client
- .from('inventarios_itens')
- .select('*')
- .eq('inventario_id', inv.id)
- .eq('id_interno', item.id_interno);
-
- console.log('[INFO] Operacao registrada.');
-
- if (!check || check.length === 0) {
- console.log('[INFO] Operacao registrada.');
- showToast('Operacao concluida.', 'info');
- // Texto validado em UTF-8.
- throw new Error("PersistAAncia falhou");
- } else {
- item.db_ids = (check || []).map(row => row.id).filter(Boolean);
- const savedRow = check?.[0] || payload;
- item.valor_unitario = parseInventoryMoney(savedRow.valor_unitario);
- item.valor_diferenca = parseInventoryMoney(savedRow.valor_diferenca);
- item.diferenca = Number(savedRow.diferenca ?? item.diferenca ?? 0);
- item.sem_preco_custo = item.valor_unitario <= 0;
- console.log('[INFO] Operacao registrada.');
- return true;
- }
- }
+  return true;
  } catch (e) {
- console.error('[INV-DIAG] Erro inesperado ao salvar item:', e);
- showToast('Operacao concluida.', 'info');
- return false;
+  console.error('[INV-DIAG] Erro ao salvar contagem via RPC:', e);
+  let userMsg = e.message || 'Nao foi possivel confirmar a contagem com seguranca. A contagem nao foi salva. Tente novamente.';
+  if (e.code === 'PGRST202' || e.code === '42883' || userMsg.includes('salvar_contagem_inventario_item') || userMsg.includes('migracao')) {
+   userMsg = 'A funcao de reconciliacao de inventario (salvar_contagem_inventario_item) ainda nao foi aplicada no Supabase. A contagem foi bloqueada por seguranca.';
+  } else if (userMsg.includes('local_origem NULL') || userMsg.includes('local_origem')) {
+   userMsg = 'Existe material deste produto em separacao sem local de origem registrado (local_origem NULL). Resolva a separacao antes de confirmar a contagem.';
+  }
+  showToast(userMsg, 'error');
+  item.isConfirmedInDb = false;
+  return false;
  }
 }
 
@@ -11006,21 +11018,7 @@ async function applyStockChangeWithRequiredMovement({ idInterno, local, operacao
             `required:${contextLabel || tipo}:${idInterno}:${local}`
     });
 }
-async function applyInventoryStockWithRequiredMovement({ item, itemLocal, saldoFisico, saldoSistema, movPayload, contextLabel }) {
- const stockResult = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldoFisico);
- if (!stockResult) throw new Error(`Falha ao refletir inventario no estoque do item ${item.id_interno}`);
 
- try {
- const savedMov = await saveRequiredMovimentoSupabase(movPayload, contextLabel);
- return savedMov;
- } catch (error) {
- const reverted = await DataClient.aplicarSaldoFisicoInventarioSupabase(item.id_interno, itemLocal, saldoSistema);
- if (!reverted) {
- throw new Error(`Falha critica: estoque do inventario alterado e rollback nao confirmado para ${item.id_interno}. Verifique o estoque antes de continuar.`);
- }
- throw error;
- }
-}
 
 
 window.finishInventorySession = async function () {
@@ -11276,19 +11274,70 @@ function renderInventarioSubMenu() {
  { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventarios abertos, fechados e anulados.' }
  ];
 
+ const activeInv = appData.currentInventory && !['FECHADO', 'ANULADO'].includes(appData.currentInventory.status) ? appData.currentInventory : null;
+ let ongoingHTML = '';
+
+ if (activeInv) {
+ const invTypeLabel = getInventoryTypeLabel(activeInv.tipo || activeInv.type || 'geral');
+ const itemsCount = activeInv.items ? activeInv.items.length : 0;
+ const diffCount = (activeInv.items || []).filter(i => {
+ const expected = parseStockQty(i.saldo_sistema ?? getStockQtyByLocal(getProductStockEntriesFromCache(i.id_interno), activeInv.local));
+ const counted = Number(i.qty || 0);
+ return (counted - expected) !== 0;
+ }).length;
+ 
+ let startTimeStr = '08:42';
+ if (activeInv.data_inicio || activeInv.criado_em || activeInv.date) {
+ try {
+ const d = new Date(activeInv.data_inicio || activeInv.criado_em || activeInv.date);
+ if (!isNaN(d.getTime())) {
+ startTimeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+ }
+ } catch (e) {}
+ }
+
+ ongoingHTML = `
+ <section class="inv-ongoing-banner fade-in">
+ <div class="inv-ongoing-header">
+ <div class="inv-ongoing-title-group">
+ <h2 class="inv-ongoing-title">INVENT\u00c1RIO ${invTypeLabel.toUpperCase()}</h2>
+ <span class="inv-ongoing-status-badge"><i class="inv-status-dot"></i> EM ANDAMENTO</span>
+ </div>
+ <button type="button" class="btn-inv-continue" onclick="renderInventarioInicialScreen('${activeInv.id}', 'edit')">
+ <span class="material-symbols-rounded">play_arrow</span> CONTINUAR
+ </button>
+ </div>
+ <div class="inv-ongoing-metrics">
+ <div class="inv-ongoing-metric">
+ <strong>${itemsCount}</strong> <span>SKUs contados</span>
+ </div>
+ <div class="inv-ongoing-divider"></div>
+ <div class="inv-ongoing-metric">
+ <strong class="${diffCount > 0 ? 'has-diff' : ''}">${diffCount}</strong> <span>diverg\u00eancias</span>
+ </div>
+ <div class="inv-ongoing-divider"></div>
+ <div class="inv-ongoing-metric text-muted">
+ <span>Iniciado \u00e0s <strong>${startTimeStr}</strong></span>
+ </div>
+ </div>
+ </section>
+ `;
+ }
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen app-page-shell">
-  ${getTopBarHTML(currentUser, 'renderMenu()')}
-  ${getModuleSidebarHTML('inventario')}
+ ${getTopBarHTML(currentUser, 'renderMenu()')}
+ ${getModuleSidebarHTML('inventario')}
 
-  <main class="container app-page-container">
-   <div class="app-breadcrumb">
-    <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
-    <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
-    <span class="app-breadcrumb-current">Inventário</span>
-   </div>
-   ${getStandardModuleCardsHTML(subItems)}
-  </main>
+ <main class="container app-page-container">
+ <div class="app-breadcrumb">
+ <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">In\u00edcio</span>
+ <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ <span class="app-breadcrumb-current">Invent\u00e1rio</span>
+ </div>
+ ${getStandardModuleCardsHTML(subItems)}
+ ${ongoingHTML}
+ </main>
  </div>
  `;
 }
@@ -11725,56 +11774,41 @@ async function saveInventoryLocationCount(item, countedQty) {
  const auditUser = getInventoryAuditUser();
 
  try {
- const stockLocal = normalizeLocal(countPayload.adjustLocal || inventoryLocationState.stockLocal || 'TERREO');
- const currentStock = await DataClient.fetchEstoqueItemLocalSupabase(item.id_interno, stockLocal);
- const saldoAtual = toInventoryLocationNumber(currentStock?.saldo_disponivel ?? currentStock?.saldo_total ?? item.saldo_total ?? 0);
- const saldoFisico = countPayload.saldo_fisico;
- const diferencaAtual = saldoFisico - saldoAtual;
- const valorDiferencaAtual = diferencaAtual * countPayload.valor_unitario;
+  const stockLocal = String(countPayload.adjustLocal || inventoryLocationState.stockLocal || 'TERREO').toUpperCase();
+  const result = await DataClient.salvarContagemInventarioItemSupabase({
+   inventario_id: session.id,
+   id_interno: item.id_interno,
+   local: stockLocal,
+   saldo_fisico: Number(countPayload.saldo_fisico ?? 0),
+   usuario: auditUser.name || localStorage.getItem('currentUser') || 'Sistema',
+   valor_unitario: countPayload.valor_unitario
+  });
 
- countPayload.adjustLocal = stockLocal;
- countPayload.saldo_sistema = saldoAtual;
- countPayload.diferenca = diferencaAtual;
- countPayload.valor_diferenca = valorDiferencaAtual;
+  if (!result || !result.ok) {
+   throw new Error(result?.message || 'A RPC de contagem nao retornou confirmacao.');
+  }
 
- const payload = {
- inventario_id: session.id,
- id_interno: item.id_interno,
- local: stockLocal,
- localizacao_fisica: countPayload.localizacao_estoque,
- saldo_sistema: saldoAtual,
- saldo_fisico: saldoFisico,
- diferenca: diferencaAtual,
- valor_unitario: countPayload.valor_unitario,
- valor_diferenca: valorDiferencaAtual,
- auditado_por: auditUser.name,
- auditado_em: getDataHoraBrasil(),
- atualizado_em: getDataHoraBrasil()
- };
+  countPayload.adjustLocal = stockLocal;
+  countPayload.saldo_sistema = result.saldo_sistema ?? countPayload.saldo_sistema;
+  countPayload.diferenca = result.diferenca ?? (countPayload.saldo_fisico - countPayload.saldo_sistema);
+  countPayload.valor_diferenca = countPayload.diferenca * countPayload.valor_unitario;
+  countPayload.q_sep_snapshot = result.q_sep_snapshot;
+  countPayload.q_sep_snapshot_em = result.q_sep_snapshot_em;
+  countPayload.auditado_em = result.auditado_em;
 
-        // A contagem apenas registra a evidencia. O saldo sera aplicado atomicamente na finalizacao.
-
- const { data: existingRows, error: selectError } = await client
- .from('inventarios_itens')
- .select('id')
- .eq('inventario_id', session.id)
- .eq('id_interno', item.id_interno);
- if (selectError) throw selectError;
-
- const result = (existingRows || []).length
- ? await client.from('inventarios_itens').update(payload).eq('inventario_id', session.id).eq('id_interno', item.id_interno)
- : await client.from('inventarios_itens').insert([payload]);
- if (result.error) throw result.error;
-
- session.items[String(item.id_interno)] = countPayload;
- DataClient.invalidateCache?.('inventarios');
- DataClient.invalidateCache?.('produtos');
- DataClient.invalidateCache?.('movimentos');
- return true;
+  session.items[String(item.id_interno)] = countPayload;
+  DataClient.invalidateCache?.('inventarios');
+  return true;
  } catch (error) {
- console.error('[INV_LOCALIZACAO] erro ao salvar contagem:', error);
- showToast('Erro ao salvar contagem: ' + (error.message || error), 'error');
- return false;
+  console.error('[INV_LOCALIZACAO] erro ao salvar contagem via RPC:', error);
+  let userMsg = error.message || 'Erro ao salvar contagem.';
+  if (error.code === 'PGRST202' || error.code === '42883' || userMsg.includes('salvar_contagem_inventario_item') || userMsg.includes('migracao')) {
+   userMsg = 'A funcao de reconciliacao de inventario (salvar_contagem_inventario_item) ainda nao foi aplicada no Supabase. A contagem foi bloqueada por seguranca.';
+  } else if (userMsg.includes('local_origem NULL') || userMsg.includes('local_origem')) {
+   userMsg = 'Existe material deste produto em separacao sem local de origem registrado (local_origem NULL). Resolva a separacao antes de confirmar a contagem.';
+  }
+  showToast(userMsg, 'error');
+  return false;
  }
 }
 async function setInventoryLocationPhysicalCount(idInterno, value, options = {}) {
@@ -13702,7 +13736,7 @@ async function renderSearchScreen(push = true) {
  <div class="dashboard-screen fade-in internal product-search-screen">
  ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderProductSubMenu()')}
  
- <main class="container product-search-center">
+ <main class="container product-search-center prod-shell app-page-container">
  <div id="scanner-container" class="hidden">
  <div class="scanner-mobile-top">
  <button class="scanner-mobile-close" type="button" onclick="stopScanner()" aria-label="Fechar camera">
@@ -14604,142 +14638,207 @@ function updateProductSearchSummary(resultCount = 0, hasSearched = false) {
  if (commandBar) commandBar.classList.toggle('is-pristine', !hasSearched);
 }
 
+function renderSearchProductMetaThirdRow(p) {
+  if (!p) return '';
+  const marca = cleanProductSearchText(p.marca || p.col_E || '');
+  const ean = cleanProductSearchText(p.ean || p.col_B || '');
+  const sku = cleanProductSearchText(p.sku_fornecedor || p.sku || '');
+  const attrs = typeof getProductAttrMap === 'function' ? getProductAttrMap(p) : {};
+  const cor = cleanProductSearchText(p.cor || p.atributo_cor || p.col_D || attrs.cor || attrs.atributo_cor || '');
 
-function renderSearchResults(results, totalResults = results.length, shouldResetScroll = true) {
- const resultsContainer = document.getElementById('search-results');
- if (!resultsContainer) return;
+  const parts = [];
+  if (isFilledValue(marca)) {
+    parts.push(`<span><strong style="color:#64748b; font-weight:600;">Marca:</strong> ${marca.toUpperCase()}</span>`);
+  }
+  if (isSearchProductMetaValue(sku)) {
+    parts.push(`<span><strong style="color:#64748b; font-weight:600;">SKU:</strong> ${sku}</span>`);
+  } else if (isSearchProductMetaValue(ean)) {
+    parts.push(`<span><strong style="color:#64748b; font-weight:600;">EAN:</strong> ${ean}</span>`);
+  }
+  if (isFilledValue(cor)) {
+    parts.push(`<span><strong style="color:#64748b; font-weight:600;">Cor:</strong> ${cor}</span>`);
+  }
 
- const query = document.getElementById('search-input')?.value?.trim().toLowerCase() || '';
+  if (!parts.length) return '';
+  return `<div class="card-meta-third-row" style="display:flex; align-items:center; gap:20px; font-size:0.78rem;">${parts.join('')}</div>`;
+}
 
- if (totalResults === 0) {
- if (query.length < 2) {
- resultsContainer.innerHTML = renderSearchInitialStateHTML();
- updateProductSearchSummary(0, false);
- return;
- }
- resultsContainer.innerHTML = `
- <div class="search-no-results">
- <span class="material-symbols-rounded">search_off</span>
- <h3>Nenhum produto encontrado</h3>
- </div>
- `;
- updateProductSearchSummary(0, true);
- return;
- }
+function renderSearchProductStockPerLocation(product) {
+  const productId = product?.id_interno || product?.col_A;
+  const locations = [
+    { key: 'TERREO', label: 'TÉRREO', icon: 'home', classSuffix: 'terreo' },
+    { key: 'PRIMEIRO_ANDAR', label: '1º ANDAR', icon: 'layers', classSuffix: '1andar' },
+    { key: 'MOSTRUARIO', label: 'MOSTRUÁRIO', icon: 'grid_view', classSuffix: 'mostruario' }
+  ]
+  .map(location => ({
+    ...location,
+    qty: getSearchCardSellableLocationQty(productId, location.key)
+  }));
 
- const cardsHtml = results.map((p, index) => {
- const idInterno = p.id_interno || p.col_A || '-';
- const desc = cleanProductSearchText(p.descricao_completa || p.descricao_base || p.descricao || p.nome || p.col_C || 'Produto sem descrição');
- const marca = cleanProductSearchText(p.marca || p.col_E || '');
- const imgUrl = getProductImageUrl(p);
- const precoVarejo = p.preco_varejo || p.col_G || 0;
- const precoAtacado = p.preco_atacado ?? p.col_I ?? p.preco_revenda ?? precoVarejo;
- const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
- const isAtivo = status === 'SIM' || status === 'TRUE' || status === '1';
+  return `
+    <div class="stock-per-location-container">
+      <div class="stock-per-location-blocks">
+        ${locations.map(loc => `
+          <div class="stock-loc-box stock-loc-${loc.classSuffix}">
+            <div class="stock-loc-header">
+              <span class="material-symbols-rounded stock-loc-icon">${loc.icon}</span>
+              <span class="stock-loc-label">${loc.label}</span>
+            </div>
+            <div class="stock-loc-value">${formatStockNumber(loc.qty)} <small>UN</small></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
- const estoque = getSearchCardStockQty(p);
- const pack = getSearchProductPackInfo(p, estoque);
- const showCx = pack && pack.caixas > 0;
- const equivs = (typeof getEquivalentProductsForDetail === 'function') ? getEquivalentProductsForDetail(p) : [];
+function renderSearchResults(results, totalResults = (Array.isArray(results) ? results.length : 0), shouldResetScroll = true) {
+  const resultsContainer = document.getElementById('search-results');
+  if (!resultsContainer) return;
 
- return `
- <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
- onclick="showProductDetails('${idInterno}')" 
- role="option" 
- data-index="${index}"
- tabindex="0"
- onkeydown="handleSearchKeyDown(event)"
- style="position:relative; background:#ffffff; border:1px solid rgba(15,23,42,0.08); border-radius:16px; padding:14px 16px; display:grid; grid-template-columns:84px minmax(0,1fr) auto auto; gap:16px; align-items:center; box-shadow:0 4px 14px rgba(15,23,42,0.03); cursor:pointer; transition:transform 0.15s ease, box-shadow 0.15s ease; ${!isAtivo ? 'opacity:0.65;' : ''}">
- 
- <div class="card-image-wrapper" style="width:84px; height:84px; background:#f8fafc; border:1px solid rgba(148,163,184,0.18); border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
- ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" style="width:100%; height:100%; object-fit:contain;" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<div style=\\'display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;\\'><span class=\\'material-symbols-rounded\\' style=\\'font-size:28px;color:#cbd5e1;\\'>inventory_2</span><span style=\\'font-size:0.6rem;font-weight:700;margin-top:2px;color:#94a3b8;\\'>Sem foto</span></div>';">` : `
- <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;">
- <span class="material-symbols-rounded" style="font-size:28px;color:#cbd5e1;">inventory_2</span>
- <span style="font-size:0.6rem;font-weight:700;margin-top:2px;color:#94a3b8;">Sem foto</span>
- </div>
- `}
- </div>
+  const query = document.getElementById('search-input')?.value?.trim().toLowerCase() || '';
+  const list = Array.isArray(results) ? results : [];
 
- <div class="card-main-info" style="min-width:0; display:flex; flex-direction:column; gap:4px;">
- <div class="card-header-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
- <span class="product-id-badge" style="display:inline-flex; align-items:center; gap:4px; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#ffffff; padding:3px 10px; border-radius:8px; font-weight:800; font-size:0.78rem; letter-spacing:0.4px; box-shadow:0 2px 6px rgba(37,99,235,0.22);">
- <small style="font-size:0.62rem; opacity:0.85; font-weight:700; text-transform:uppercase;">ID</small>
- <strong>${idInterno}</strong>
- </span>
- ${!isAtivo ? `<span style="display:inline-flex; background:#ef444415; color:#ef4444; border:1px solid #ef444440; padding:2px 8px; border-radius:6px; font-size:0.68rem; font-weight:800; text-transform:uppercase;">INATIVO</span>` : ''}
- ${renderSearchProductLocationBadge(p)}
- </div>
+  if (totalResults === 0 || list.length === 0) {
+    if (query.length < 2) {
+      resultsContainer.innerHTML = renderSearchInitialStateHTML();
+      updateProductSearchSummary(0, false);
+      return;
+    }
+    resultsContainer.innerHTML = `
+      <div class="search-no-results">
+        <span class="material-symbols-rounded">search_off</span>
+        <h3>Nenhum produto encontrado</h3>
+      </div>
+    `;
+    updateProductSearchSummary(0, true);
+    return;
+  }
 
- <h3 class="card-title" style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-weight:800; color:#0f172a; font-size:0.95rem; line-height:1.3; margin:2px 0 2px 0;" title="${desc}">${desc}</h3>
+  const cardsHtml = list.map((p, index) => {
+    if (!p) return '';
+    const idInterno = p.id_interno || p.col_A || '-';
+    const desc = cleanProductSearchText(p.descricao_completa || p.descricao_base || p.descricao || p.nome || p.col_C || 'Produto sem descrição');
+    const imgUrl = getProductImageUrl(p) || '';
+    const precoVarejo = p.preco_varejo || p.col_G || 0;
+    const precoAtacado = p.preco_atacado ?? p.col_I ?? p.preco_revenda ?? precoVarejo;
+    const status = (p.ativo || p.col_H || 'SIM').toString().toUpperCase();
+    const isAtivo = status === 'SIM' || status === 'TRUE' || status === '1';
 
- <div class="card-meta-line" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:0.75rem;">
- ${isFilledValue(marca) ? `<span style="font-weight:800; color:#475569; text-transform:uppercase;">${marca}</span>` : ''}
- ${renderSearchProductMeta(p)}
- </div>
+    const estoque = getSearchCardStockQty(p) || 0;
+    const pack = getSearchProductPackInfo(p, estoque);
+    const showCx = pack && pack.caixas > 0;
+    const equivs = (typeof getEquivalentProductsForDetail === 'function') ? (getEquivalentProductsForDetail(p) || []) : [];
 
- ${equivs.length > 0 ? `
- <div style="margin-top:2px;">
- <span class="product-card-equivalents-badge" style="display:inline-flex; align-items:center; gap:4px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:800; cursor:pointer;" onclick="event.stopPropagation(); showProductDetails('${idInterno}')" title="Ver produtos equivalentes">
- <span class="material-symbols-rounded" style="font-size:13px;">sync_alt</span>
- + ${equivs.length} ${equivs.length === 1 ? 'EQUIVALENTE' : 'EQUIVALENTES'}
- </span>
- </div>
- ` : ''}
- </div>
+    return `
+    <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
+      onclick="showProductDetails('${idInterno}')" 
+      role="option" 
+      data-index="${index}"
+      tabindex="0"
+      onkeydown="handleSearchKeyDown(event)">
+      
+      <!-- 1. IMAGEM DO PRODUTO (Sem texto quando não houver foto) -->
+      <div class="card-image-wrapper">
+        ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<div class=\\\'card-no-image\\\'><span class=\\\'material-symbols-rounded\\\'>no_photography</span></div>';">` : `
+        <div class="card-no-image">
+          <span class="material-symbols-rounded">no_photography</span>
+        </div>
+        `}
+      </div>
 
- <div class="card-stock-block" style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:4px; min-width:130px;">
- <span class="stock-label" style="font-size:0.65rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">ESTOQUE TOTAL</span>
- <div class="stock-quantity-row" style="display:flex; align-items:baseline; gap:4px;">
- <span class="stock-value ${estoque <= 0 ? 'out' : ''}" style="font-size:1.15rem; font-weight:900; color:${estoque > 0 ? '#16a34a' : '#dc2626'};">
- ${formatStockNumber(estoque)} <small style="font-size:0.75rem; font-weight:700; color:#64748b;">UN</small>
- </span>
- ${showCx ? `
- <span style="font-size:0.78rem; font-weight:700; color:#475569;">(${formatStockNumber(pack.caixas)} CX)</span>
- ` : ''}
- </div>
- ${renderSearchProductSellableLocations(p)}
- </div>
+      <!-- 2. INFORMAÇÕES DO PRODUTO -->
+      <div class="card-main-info">
+        <!-- 1ª Linha: ID Interno Amarelo Suave sem Ícone -->
+        <div class="card-id-row">
+          <span class="product-id-badge-yellow">${idInterno}</span>
+          ${!isAtivo ? `<span class="badge-status-inactive">INATIVO</span>` : ''}
+        </div>
 
- <div class="card-price-block" style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:2px; min-width:110px; opacity:0.85; border-left:1px solid rgba(15,23,42,0.06); padding-left:12px;">
- <div style="font-size:0.7rem; color:#64748b; font-weight:600;">
- Varejo: <strong style="color:#0f172a; font-size:0.82rem;">${formatPrice(precoVarejo)}</strong>
- </div>
- ${precoAtacado && precoAtacado !== precoVarejo ? `
- <div style="font-size:0.68rem; color:#94a3b8; font-weight:500;">
- Atacado: <strong style="color:#475569;">${formatPrice(precoAtacado)}</strong>
- </div>
- ` : ''}
- </div>
+        <!-- 2ª Linha: Nome Completo (Fonte Oswald Original) -->
+        <h3 class="card-title" title="${desc}">${desc}</h3>
 
- </div>
- `;
- }).join('');
+        <!-- 3ª Linha: Marca, SKU, Cor -->
+        ${renderSearchProductMetaThirdRow(p)}
 
- const hasMoreResults = results.length < totalResults;
- const loadMoreHtml = hasMoreResults ? `
- <div class="product-search-load-more">
- <span>Exibindo ${formatStockNumber(results.length)} de ${formatStockNumber(totalResults)} produtos</span>
- <button type="button" class="btn-action" onclick="loadMoreProductSearchResults()">
- <span class="material-symbols-rounded">expand_more</span>
- Carregar mais
- </button>
- </div>
- ` : `
- <div class="product-search-load-more product-search-load-more-complete">
- <span>Exibindo ${formatStockNumber(results.length)} de ${formatStockNumber(totalResults)} produtos</span>
- </div>
- `;
+        ${equivs.length > 0 ? `
+          <div class="card-equivs-row">
+            <span class="product-card-equivalents-badge" onclick="event.stopPropagation(); showProductDetails('${idInterno}')" title="Ver produtos equivalentes">
+              <span class="material-symbols-rounded" style="font-size:13px;">sync_alt</span>
+              + ${equivs.length} ${equivs.length === 1 ? 'EQUIVALENTE' : 'EQUIVALENTES'}
+            </span>
+          </div>
+        ` : ''}
+      </div>
 
- resultsContainer.innerHTML = `
- <div class="product-search-results-list">
- ${cardsHtml}
- </div>
- ${loadMoreHtml}
- `;
- if (shouldResetScroll) resetProductSearchScroll();
+      <!-- 3. ESTOQUE TOTAL -->
+      <div class="card-total-stock-block">
+        <span class="total-stock-title">ESTOQUE TOTAL</span>
+        <div class="total-stock-value">
+          <strong>${formatStockNumber(estoque)}</strong>
+          <small>UN</small>
+        </div>
+        ${showCx ? `<span class="stock-cx-pill">(${formatStockNumber(pack.caixas)} CX)</span>` : ''}
+      </div>
 
- updateProductSearchStatus(query);
- updateProductSearchSummary(totalResults, true);
+      <!-- 4. ESTOQUE POR LOCAL (Térreo, 1º Andar, Mostruário) -->
+      ${renderSearchProductStockPerLocation(p)}
+
+      <!-- 5. PREÇOS (Varejo e Atacado) -->
+      <div class="card-price-block">
+        <div class="card-price-box card-price-box-retail">
+          <div class="price-box-header">
+            <span class="material-symbols-rounded price-box-icon">shopping_cart</span>
+            <span class="price-box-label">VAREJO</span>
+          </div>
+          <div class="price-box-value">${formatPrice(precoVarejo)}</div>
+        </div>
+        ${precoAtacado ? `
+        <div class="card-price-box card-price-box-wholesale">
+          <div class="price-box-header">
+            <span class="material-symbols-rounded price-box-icon">sell</span>
+            <span class="price-box-label">ATACADO</span>
+          </div>
+          <div class="price-box-value">${formatPrice(precoAtacado)}</div>
+        </div>
+        ` : ''}
+      </div>
+
+      <!-- 6. SETA DE ACESSO -->
+      <div class="card-access-block" aria-hidden="true">
+        <span class="material-symbols-rounded chevron-icon">chevron_right</span>
+      </div>
+
+    </div>
+    `;
+  }).join('');
+
+  const hasMoreResults = list.length < totalResults;
+  const loadMoreHtml = hasMoreResults ? `
+    <div class="product-search-load-more">
+      <span>Exibindo ${formatStockNumber(list.length)} de ${formatStockNumber(totalResults)} produtos</span>
+      <button type="button" class="btn-action" onclick="loadMoreProductSearchResults()">
+        <span class="material-symbols-rounded">expand_more</span>
+        Carregar mais
+      </button>
+    </div>
+  ` : `
+    <div class="product-search-load-more product-search-load-more-complete">
+      <span>Exibindo ${formatStockNumber(list.length)} de ${formatStockNumber(totalResults)} produtos</span>
+    </div>
+  `;
+
+  resultsContainer.innerHTML = `
+    <div class="product-search-results-list">
+      ${cardsHtml}
+    </div>
+    ${loadMoreHtml}
+  `;
+
+  if (shouldResetScroll) resetProductSearchScroll();
+
+  updateProductSearchStatus(query);
+  updateProductSearchSummary(totalResults, true);
 }
 
 function highlightMatch(text, query) {
@@ -15933,7 +16032,7 @@ async function renderProductDetails(p) {
   <div class="dashboard-screen fade-in internal">
   ${getTopBarHTML(currentUser, 'renderProductsScreen()')}
 
-  <main class="container product-detail-screen" style="max-width: 1280px; margin: 0 auto; padding: 16px 20px;">
+  <main class="container product-detail-screen prod-detail-shell app-page-container">
     
     <!-- BOTÃO VOLTAR -->
     <div style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
@@ -19840,7 +19939,10 @@ function getPickItemsTotal(items = currentSessionItems) {
 }
 
 function normalizePickPackageAssignments(item = {}) {
- const qty = Math.max(0, Math.floor(Number(item.qty || item.qtd_separada || item.quantidade || 0)));
+ const rawQty = item.qty !== undefined && item.qty !== null
+  ? item.qty
+  : (item.qtd_separada !== undefined && item.qtd_separada !== null ? item.qtd_separada : (item.quantidade ?? 0));
+ const qty = Math.max(0, Math.floor(Number(rawQty || 0)));
  const values = Array.isArray(item.pick_package_assignments) ? item.pick_package_assignments.slice(0, qty) : [];
  while (values.length < qty) values.push(null);
  item.pick_package_assignments = values.map(value => value ? String(value) : null);
@@ -21702,20 +21804,41 @@ function getPickChannelDailyPackageTotal(context = {}) {
  return [...totalsBySession.values()].reduce((sum, value) => sum + normalizePickPackageCount(value), 0);
 }
 
-function getConferenceChannelDailyPackageTotal() {
- const sessionId = String(currentPackSession?.id || '').trim();
- const pickingData = currentPackSession?.pickingData || {};
- const expectedPackageCount = getPickPackageCountFrom(pickingData);
- return getPickChannelDailyPackageTotal({
-  sessionId,
-  channelLabel: pickingData.canal_nome || currentPackSession?.channel || '',
-  packageCount: Math.max(expectedPackageCount, getConferencePackageCount())
+function getConferenceDailyPackageTotal(context = {}) {
+ const activeSessionId = String(context.sessionId ?? currentPackSession?.id ?? currentPackSession?.pickingData?.separacao_id ?? '').trim();
+ const activePackageCount = normalizePickPackageCount(context.packageCount ?? getConferencePackageCount(context.rows ?? currentPackSession?.conferenceRows ?? []));
+
+ const finalizedSessions = new Map();
+ const completedConferences = (appData.conferencia || []).filter(record => isPackSessionFinished(record) && isPackRecordFromToday(record));
+
+ completedConferences.forEach(record => {
+  const sessionId = String(record.separacao_id || record.rom_id || '').trim();
+  if (!sessionId) return;
+  const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === sessionId) || {};
+  const packageCount = getPickPackageCountFrom(session);
+  finalizedSessions.set(sessionId, Math.max(finalizedSessions.get(sessionId) || 0, packageCount));
  });
+
+ let total = 0;
+ finalizedSessions.forEach(count => {
+  total += count;
+ });
+
+ if (activeSessionId && !finalizedSessions.has(activeSessionId)) {
+  total += activePackageCount;
+ } else if (!activeSessionId) {
+  total += activePackageCount;
+ }
+
+ return total;
 }
 
-function getConferenceDisplayedPackageCount() {
- const expected = getPickPackageCountFrom(currentPackSession?.pickingData || {});
- return Math.max(expected, getConferencePackageCount());
+function getConferenceChannelDailyPackageTotal(context = {}) {
+ return getConferenceDailyPackageTotal(context);
+}
+
+function getConferenceDisplayedPackageCount(rows = currentPackSession?.conferenceRows || []) {
+ return getConferencePackageCount(rows);
 }
 
 function updatePickSummaryUI() {
@@ -23403,19 +23526,20 @@ function adjustPickRow(index, delta, sessionId, channelId, channelLabel, channel
 
 function buildFastPickingFinalRows(items, sessionId) {
  const grouped = (items || []).reduce((acc, item) => {
- const key = getPickingProductId(item);
+ const qty = Number(item.qty || item.qtd_separada || item.quantidade || 0);
+ if (qty <= 0) return acc;
+ const key = getPickingProductId(item) || item.id_interno || '';
  if (!key) return acc;
  if (!acc[key]) {
  acc[key] = {
  id_interno: item.id_interno || item.col_a || item.col_A || key,
  ean: item.ean || '',
- descricao: getPickItemTitle(item),
+ descricao: getPickItemTitle(item) || item.descricao || key,
  qtd_separada: 0,
  qtd_conferida: 0,
  separacao_id: sessionId
  };
  }
- const qty = Number(item.qty || item.qtd_separada || 1);
  acc[key].qtd_separada += qty;
  acc[key].qtd_conferida += qty;
  return acc;
@@ -23425,16 +23549,28 @@ function buildFastPickingFinalRows(items, sessionId) {
 }
 
 async function finalizeFastPickingWithoutConference(payload = {}) {
- const currentUser = payload.user || localStorage.getItem('currentUser') || 'N/A';
- const sessionId = String(payload.sessionId || '').trim();
- const channelLabel = payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '';
- if (!sessionId) throw new Error('separacao_id nao informado');
- assertValidPickSessionForPersist(sessionId, channelLabel, 'finalizar separacao rapida');
+ const currentUser = payload.user || payload.usuario || localStorage.getItem('currentUser') || 'N/A';
+ const draftId = String(payload.draftId || payload.sessionId || payload.separacao_id || '').trim();
+ const canalId = String(payload.canalId || payload.channelId || payload.canal_id || currentPickingContext?.channelId || '').trim();
+ const canalNome = String(payload.canalNome || payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '').trim();
+ if (!draftId) throw new Error('Identificador da separacao obrigatorio');
+ assertValidPickSessionForPersist(draftId, canalNome, 'finalizar separacao rapida');
+
+ const rawItems = Array.isArray(payload.items) ? payload.items : (Array.isArray(payload.rows) ? payload.rows : (currentSessionItems || []));
+ const validItems = (rawItems || []).filter(item => Number(item.qty || item.qtd_separada || item.quantidade || 0) > 0);
+ const pacotes = Array.isArray(payload.pacotes) && payload.pacotes.length > 0
+  ? payload.pacotes
+  : buildPickPackagesSyncPayload(validItems);
 
  const result = await DataClient.finalizarSeparacaoRapidaAtomicaSupabase({
- sessionId,
- usuario: currentUser,
- permitirNegativo: isSaidaEstoqueZeroPermitida()
+  draftId,
+  canalId,
+  canalNome,
+  pacotes,
+  usuario: currentUser,
+  permitirNegativo: payload.permitirNegativo === true || isSaidaEstoqueZeroPermitida(),
+  observacao: payload.observacao || null,
+  executionId: payload.executionId || payload.execution_id || null
  });
 
  await Promise.all([
@@ -23448,7 +23584,9 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
 
  return {
   ok: true,
-  sessionId,
+  sessionId: result?.separacao_id || draftId,
+  oficialId: result?.separacao_id || draftId,
+  draftIdAnterior: result?.draft_id_anterior || draftId,
   movimentos: Number(result?.movimentos || 0),
   idempotente: result?.idempotente === true
  };
@@ -23554,33 +23692,17 @@ async function flushPickingItemsBeforeFinalization(sessionId) {
 
 async function finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now) {
   const currentUser = localStorage.getItem('currentUser');
-  const stats = getPickingOperationalStats(currentPickSession.items);
-
-  if (isDraftPickSessionId(sessionId) || !isValidOfficialPickSessionId(sessionId)) {
-    if (navigator.onLine) {
-      try {
-        const alloc = await DataClient.alocarNumeroSeparacaoDefinitivaSupabase({
-          draftId: sessionId,
-          canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
-          canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
-          criadoPor: currentUser || localStorage.getItem('currentUser') || 'N/A',
-          observacao: 'SAIDA_RAPIDA AUTOMATICA'
-        });
-        if (alloc?.separacao_id) {
-          const oldDraftId = sessionId;
-          sessionId = alloc.separacao_id;
-          currentPickingContext.sessionId = sessionId;
-          if (currentPickSession) {
-            currentPickSession.sessionId = sessionId;
-            if (currentPickSession.items) currentPickSession.items.forEach(it => { it.separacao_id = sessionId; });
-          }
-          removeLocalDraftPickSession(oldDraftId);
-        }
-      } catch (err) {
-        console.warn('[SEP] Erro ao alocar numero definitivo online:', err);
-      }
-    }
+  const rawItems = currentPickSession?.items || [];
+  const validItems = rawItems.filter(item => Number(item.qty || item.qtd_separada || item.quantidade || 0) > 0);
+  if (validItems.length === 0) {
+    throw new Error('Nenhum item valido com quantidade maior que zero para finalizar no modo rapido.');
   }
+  const stats = getPickingOperationalStats(validItems);
+
+  const executionId = draft?.executionId || currentPickingContext?.executionId || currentPickSession?.executionId || generateExecutionId();
+  if (draft) draft.executionId = executionId;
+  if (currentPickingContext) currentPickingContext.executionId = executionId;
+  if (currentPickSession) currentPickSession.executionId = executionId;
 
   await flushPickingItemsBeforeFinalization(sessionId);
 
@@ -23596,27 +23718,38 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     total_produtos_separados: stats.total_produtos_separados,
     total_itens_separados: stats.total_itens_separados,
     total_pacotes_montados: stats.total_pacotes_montados,
-    totalPacotesMontados: stats.total_pacotes_montados
-  }, currentPickSession.items);
+    totalPacotesMontados: stats.total_pacotes_montados,
+    executionId
+  }, validItems);
   if (draftResult?.queued) draftPersistenceQueued = true;
 
-  const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
+  const rows = buildFastPickingFinalRows(validItems, sessionId);
   if (rows.length === 0) {
     throw new Error('Nenhum item valido para finalizar no modo rapido.');
   }
 
+  const pacotes = buildPickPackagesSyncPayload(validItems);
+
   const fastPayload = {
     sessionId,
+    draftId: sessionId,
+    channelId,
     channelLabel,
+    canalId: channelId,
+    canalNome: channelLabel,
     isFastMode: true,
     modo_rapido: true,
     observacao: PICK_FAST_OBSERVATION,
     user: currentUser,
+    usuario: currentUser,
     rows,
+    items: validItems,
+    pacotes,
     total_produtos_separados: stats.total_produtos_separados,
     total_itens_separados: stats.total_itens_separados,
     total_pacotes_montados: stats.total_pacotes_montados,
-    executionId: draft.executionId || generateExecutionId()
+    executionId,
+    permitirNegativo: isSaidaEstoqueZeroPermitida()
   };
 
   let finalizationResult;
@@ -23625,21 +23758,23 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
       module: 'separacao',
       sessionId
     });
-    finalizationResult = { queued: true };
+    finalizationResult = { queued: true, sessionId };
   } else {
     finalizationResult = await finalizeFastPickingWithoutConference(fastPayload);
   }
 
+  const finalOfficialId = finalizationResult?.oficialId || finalizationResult?.sessionId || sessionId;
+
   if (!appData.separacao) appData.separacao = [];
   const localSession = {
     ...buildPickingSessionPayload(
-      sessionId,
+      finalOfficialId,
       channelId,
       channelLabel,
       finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
-      draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+      draft?.createdAt || currentPickSession?.pickingData?.criado_em || now
     ),
-    separacao_id: sessionId,
+    separacao_id: finalOfficialId,
     canal_nome: channelLabel,
     status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
     finalizado_em: now,
@@ -23650,21 +23785,26 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     isFastMode: true,
     modo_rapido: true
   };
-  const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+  const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === finalOfficialId || (s.separacao_id || s.col_a) === sessionId);
   if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
   else appData.separacao.unshift(localSession);
-  rememberPickPackageTotal(sessionId, localSession);
+  rememberPickPackageTotal(finalOfficialId, localSession);
   saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
 
-  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId && s.id !== finalOfficialId);
   setActivePickSessions(activeSessions);
   await clearFinishedPickingDraftState(sessionId, {
     keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
   });
+  if (finalOfficialId !== sessionId) {
+    await clearFinishedPickingDraftState(finalOfficialId, {
+      keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
+    });
+  }
 
   showToast(finalizationResult?.queued
-    ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
-    : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
+    ? `Saida rapida ${finalOfficialId} salva localmente para sincronizar.`
+    : `Saida rapida ${finalOfficialId} finalizada e estoque baixado!`);
   await showAppModal({
     type: 'success',
     title: 'Saída rápida finalizada!',
@@ -24729,8 +24869,8 @@ function updatePackChrome() {
  const rows = currentPackSession?.conferenceRows || [];
  const alertEl = document.getElementById('pack-divergence-alert');
  if (alertEl) {
- alertEl.classList.add('hidden');
- alertEl.innerHTML = '';
+  alertEl.classList.add('hidden');
+  alertEl.innerHTML = '';
  }
 
  const packagesEl = document.getElementById('conference-summary-packages');
@@ -24738,17 +24878,18 @@ function updatePackChrome() {
  const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
  const standaloneRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits === 0);
  const groupedRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits > 0);
- const checkedUnits = rows.reduce((sum, r) => sum + Number(r.qtd_conferida || 0), 0);
+ const currentPackages = getConferencePackageCount(rows);
+ const totalPackages = getConferenceDailyPackageTotal({ rows, packageCount: currentPackages });
 
- if (packagesEl) packagesEl.textContent = String(checkedUnits);
- if (channelPackagesEl) channelPackagesEl.textContent = String(checkedUnits);
+ if (packagesEl) packagesEl.textContent = String(currentPackages);
+ if (channelPackagesEl) channelPackagesEl.textContent = String(totalPackages);
 
  const filterCounts = { all: scannedRows.length, standalone: standaloneRows.length, kits: groupedRows.length };
  Object.entries(filterCounts).forEach(([key, value]) => {
- const count = document.getElementById(`conference-filter-${key}-count`);
- const button = document.getElementById(`conference-filter-${key}`);
- if (count) count.textContent = String(value);
- if (button) button.classList.toggle('active', conferenceViewFilter === key);
+  const count = document.getElementById(`conference-filter-${key}-count`);
+  const button = document.getElementById(`conference-filter-${key}`);
+  if (count) count.textContent = String(value);
+  if (button) button.classList.toggle('active', conferenceViewFilter === key);
  });
 }
 
@@ -38536,7 +38677,7 @@ async function renderFinalizedSeparationsScreen(scope = 'today') {
  } catch (error) { console.warn('[SEP HIST] Falha ao atualizar:', error); }
  const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.createdAt)).sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
  const channels = [...new Set(rows.map(row => row.channel.label).filter(Boolean))].sort();
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS · CRIADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">CANCELAR ITEM</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>Criada ${escapeKitAttribute(formatPackSeparationDate(row.createdAt))} · Finalizada ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS · CRIADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">LOCALIZAR ITEM PARA CANCELAR</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>Criada ${escapeKitAttribute(formatPackSeparationDate(row.createdAt))} · Finalizada ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
 }
 
 function closeCancelSeparationModal() {
@@ -38705,47 +38846,141 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
 }
 
 let finalizedGroupingCorrectionState = null;
+let finalizedGroupingCorrectionRequest = 0;
+let finalizedGroupingCorrectionObserver = null;
+let finalizedGroupingCorrectionSource = null;
+let finalizedGroupingCorrectionFocus = null;
+let finalizedGroupingCorrectionPreviousInert = null;
 
-function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
+function isFinalizedGroupingCorrectionActive(request) {
+ return request === finalizedGroupingCorrectionRequest && !!finalizedGroupingCorrectionSource?.isConnected
+  && app.firstElementChild === finalizedGroupingCorrectionSource;
+}
+
+function buildFinalizedGroupingCorrectionUnitsFromItems(items = [], packages = []) {
  const units = [];
- getSeparationItemsForSession(session).forEach(item => {
+ (items || []).forEach(item => {
   const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
-  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? 0) || 0);
-  for (let index = 0; index < quantity; index++) units.push({ key: `${productId}:${index + 1}`, id_interno: productId, descricao: getPickItemTitle(item), ean: item.ean || '', ordinal: index + 1, pacote_id: null, selected: false });
+  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? item.quantidade ?? 0) || 0);
+  if (!productId || quantity <= 0) return;
+  for (let index = 0; index < quantity; index++) {
+   units.push({
+    key: `${productId}:${index + 1}`,
+    id_interno: productId,
+    descricao: getPickItemTitle(item) || item.descricao || productId,
+    ean: item.ean || '',
+    ordinal: index + 1,
+    pacote_id: null,
+    selected: false
+   });
+  }
  });
- packages.filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO').forEach(pkg => {
-  (pkg.itens || []).forEach(pkgItem => {
-   let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
-   units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
-    if (remaining <= 0) return;
-    if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
-    remaining--;
+ const activePackages = (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO');
+ if (activePackages.length > 0) {
+  activePackages.forEach(pkg => {
+   (pkg.itens || []).forEach(pkgItem => {
+    let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
+    units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
+     if (remaining <= 0) return;
+     if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
+     remaining--;
+    });
    });
   });
- });
+ }
  return units;
 }
 
+function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
+ const items = getSeparationItemsForSession(session);
+ return buildFinalizedGroupingCorrectionUnitsFromItems(items, packages);
+}
+
 async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today') {
- if (!navigator.onLine) return showToast('A correção de agrupamento exige conexão com o Supabase.', 'warning');
- const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
- if (!pin) return;
- if (!/^\d{4}$/.test(String(pin))) return showToast('O PIN deve ter exatamente 4 dígitos.', 'warning');
+ closeFinalizedGroupingCorrection();
+ if (!navigator.onLine) return showAppModal({ type: 'warning', title: 'Conexão necessária', message: 'A correção de agrupamento exige conexão com o servidor.' });
+ const request = finalizedGroupingCorrectionRequest;
+ finalizedGroupingCorrectionSource = app.firstElementChild;
+ finalizedGroupingCorrectionFocus = document.activeElement;
+ finalizedGroupingCorrectionObserver = new MutationObserver(() => {
+  if (!isFinalizedGroupingCorrectionActive(request)) closeFinalizedGroupingCorrection();
+ });
+ finalizedGroupingCorrectionObserver.observe(app, { childList: true });
+ const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para autorizar a edição do agrupamento de ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
+ if (!isFinalizedGroupingCorrectionActive(request)) return;
+ if (!pin) return closeFinalizedGroupingCorrection();
+ if (!/^\d{4}$/.test(String(pin))) {
+  closeFinalizedGroupingCorrection();
+  return showAppModal({ type: 'error', title: 'PIN inválido', message: 'O PIN mestre deve conter exatamente 4 dígitos numéricos.' });
+ }
  try {
   const deviceId = getOrCreateDeviceId();
   const auth = await DataClient.autorizarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId, pin, operador: localStorage.getItem('currentUser') || 'N/A', deviceId });
-  if (!auth?.ok) return showToast(auth?.motivo === 'TENTATIVAS_EXCEDIDAS' ? 'Muitas tentativas. Aguarde 15 minutos.' : 'PIN incorreto.', 'error');
-  const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
-  if (!session) throw new Error('Separação não encontrada na tela atual.');
-  const packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
-  finalizedGroupingCorrectionState = { sessionId, returnScope, token: auth.token, deviceId, expiraEm: auth.expira_em, units: buildFinalizedGroupingCorrectionUnits(session, packages) };
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  if (!auth?.ok) {
+   closeFinalizedGroupingCorrection();
+   if (auth?.motivo === 'PIN_INVALIDO') {
+    return showAppModal({ type: 'error', title: 'PIN mestre incorreto', message: 'PIN mestre incorreto.' });
+   }
+   if (auth?.motivo === 'TENTATIVAS_EXCEDIDAS') {
+    return showAppModal({ type: 'warning', title: 'Tentativas excedidas', message: 'Dispositivo temporariamente bloqueado por excesso de tentativas. Tente novamente após o período de bloqueio.' });
+   }
+   return showAppModal({ type: 'error', title: 'Não elegível / Recusado', message: auth?.motivo || 'Não foi possível autorizar a correção de agrupamento.' });
+  }
+  if (!auth.token) throw new Error('Autorização de correção não recebida.');
+
+  let sessionItems = [];
+  try {
+   sessionItems = await DataClient.listarItensSeparacaoSupabase(sessionId);
+  } catch (err) {
+   console.warn('[CORR AGRUP] Falha ao consultar separacao_itens no Supabase:', err);
+  }
+  if (!sessionItems || !sessionItems.length) {
+   const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
+   if (session) {
+    sessionItems = getSeparationItemsForSession(session).filter(it => Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) > 0);
+   }
+  }
+  if (!sessionItems || !sessionItems.length) {
+   throw new Error('Nenhum item válido encontrado para esta separação.');
+  }
+
+  let packages = [];
+  try {
+   packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
+  } catch (error) {
+   console.warn('[CORR AGRUP] Pacotes não carregados:', error);
+  }
+
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  finalizedGroupingCorrectionState = {
+   request,
+   sessionId,
+   returnScope,
+   token: auth.token,
+   deviceId,
+   expiraEm: auth.expira_em,
+   units: buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems, packages)
+  };
   renderFinalizedGroupingCorrectionModal();
- } catch (error) { showToast(error.message || 'Não foi possível autorizar a correção.', 'error'); }
+ } catch (error) {
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  closeFinalizedGroupingCorrection();
+  showAppModal({ type: 'error', title: 'Erro de comunicação técnica', message: error.message || 'Não foi possível autorizar a correção de agrupamento.' });
+ }
 }
 
 function closeFinalizedGroupingCorrection() {
+ finalizedGroupingCorrectionRequest++;
+ finalizedGroupingCorrectionObserver?.disconnect();
+ finalizedGroupingCorrectionObserver = null;
+ finalizedGroupingCorrectionSource = null;
  finalizedGroupingCorrectionState = null;
  document.getElementById('finalized-grouping-correction-modal')?.remove();
+ if (finalizedGroupingCorrectionPreviousInert !== null) app.inert = finalizedGroupingCorrectionPreviousInert;
+ finalizedGroupingCorrectionPreviousInert = null;
+ if (finalizedGroupingCorrectionFocus?.isConnected) finalizedGroupingCorrectionFocus.focus();
+ finalizedGroupingCorrectionFocus = null;
 }
 
 function toggleFinalizedGroupingUnit(key) {
@@ -38781,7 +39016,9 @@ function buildFinalizedGroupingCorrectionPayload() {
 
 function renderFinalizedGroupingCorrectionModal() {
  const state = finalizedGroupingCorrectionState;
- if (!state) return;
+ if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return closeFinalizedGroupingCorrection();
+ const oldModal = document.getElementById('finalized-grouping-correction-modal');
+ const focusIndex = oldModal ? [...oldModal.querySelectorAll('button')].indexOf(document.activeElement) : 0;
  document.getElementById('finalized-grouping-correction-modal')?.remove();
  const groupedIds = [...new Set(state.units.map(unit => unit.pacote_id).filter(Boolean))];
  const modal = document.createElement('div');
@@ -38789,23 +39026,44 @@ function renderFinalizedGroupingCorrectionModal() {
  modal.className = 'finalized-grouping-correction-modal';
  modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title"><header><div><small>CORREÇÃO PÓS-FINALIZAÇÃO</small><h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2><p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p></div><button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="finalized-grouping-lock"><span class="material-symbols-rounded">lock</span><span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span></div><div class="finalized-grouping-units">${state.units.map(unit=>`<button type="button" class="${unit.selected?'is-selected':''}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})"><span class="material-symbols-rounded">${unit.selected?'check_box':'check_box_outline_blank'}</span><div><strong>${escapeKitAttribute(unit.descricao)}</strong><small>ID ${escapeKitAttribute(unit.id_interno)} · unidade ${unit.ordinal}</small></div><em>${unit.pacote_id?'AGRUPADO':'AVULSO'}</em></button>`).join('')}</div><div class="finalized-grouping-actions"><button type="button" onclick="groupSelectedFinalizedUnits()"><span class="material-symbols-rounded">inventory_2</span>AGRUPAR SELECIONADAS</button></div>${groupedIds.length?`<div class="finalized-grouping-current"><h3>AGRUPAMENTOS ATUAIS</h3>${groupedIds.map((id,index)=>{const members=state.units.filter(unit=>unit.pacote_id===id);return `<article><div><strong>Pacote agrupado ${index+1}</strong><small>${members.length} unidade(s) · ${[...new Set(members.map(unit=>unit.descricao))].map(escapeKitAttribute).join(', ')}</small></div><button type="button" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">DESFAZER</button></article>`;}).join('')}</div>`:''}<footer><button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button><button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button></footer></section>`;
  document.body.appendChild(modal);
+ if (finalizedGroupingCorrectionPreviousInert === null) finalizedGroupingCorrectionPreviousInert = app.inert;
+ app.inert = true;
+ const buttons = [...modal.querySelectorAll('button')];
+ (buttons[Math.max(0, focusIndex)] || buttons[0])?.focus({ preventScroll: true });
+ modal.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { event.preventDefault(); closeFinalizedGroupingCorrection(); }
+  if (event.key === 'Tab') {
+   const first = buttons[0], last = buttons[buttons.length - 1];
+   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+ });
 }
 
 async function saveFinalizedGroupingCorrection() {
  const state = finalizedGroupingCorrectionState;
- if (!state) return;
+ if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return;
  const packages = buildFinalizedGroupingCorrectionPayload();
  const confirmed = await showAppConfirm({ title: 'Salvar novo agrupamento?', message: `${packages.length} pacote(s) serão registrados.`, detail: 'Produtos, quantidades, estoque e movimentos permanecerão inalterados.', confirmLabel: 'Salvar correção', cancelLabel: 'Voltar' });
- if (!confirmed) return;
+ if (!confirmed || !isFinalizedGroupingCorrectionActive(state.request)) return;
+ const source = finalizedGroupingCorrectionSource;
+ let closedRequest = null;
  try {
   await DataClient.salvarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId: state.sessionId, token: state.token, pacotes: packages, operador: localStorage.getItem('currentUser') || 'N/A', deviceId: state.deviceId });
+  if (!isFinalizedGroupingCorrectionActive(state.request)) return;
   const sessionId = state.sessionId, returnScope = state.returnScope;
   closeFinalizedGroupingCorrection();
+  closedRequest = finalizedGroupingCorrectionRequest;
   const fresh = await DataClient.loadModule('separacao', true);
+  if (closedRequest !== finalizedGroupingCorrectionRequest || !source.isConnected || app.firstElementChild !== source) return;
   if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; }
   showToast('Agrupamento corrigido e autorização encerrada.', 'success');
   await renderFinalizedSeparationDetails(sessionId, returnScope);
- } catch (error) { showToast(error.message || 'Não foi possível salvar a correção.', 'error'); }
+ } catch (error) {
+  if (isFinalizedGroupingCorrectionActive(state.request) || (closedRequest === finalizedGroupingCorrectionRequest && source.isConnected && app.firstElementChild === source)) {
+   showToast(error.message || 'Não foi possível salvar a correção.', 'error');
+  }
+ }
 }
 
 /* Rel. Vendas / Devolucoes: contas multiplas e disponibilidade financeira real. */
