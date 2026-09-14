@@ -75528,3 +75528,81 @@ body:not(.login-active) .pick-feedback-toast .pick-feedback-qty-val small {
     padding: 2px 5px !important;
   }
 }
+
+/* Correcao de agrupamento: overlay isolado das telas e do modal de confirmacao. */
+body:has(> .finalized-grouping-correction-modal) { overflow: hidden !important; }
+body:has(> .finalized-grouping-correction-modal) > #app { position: relative; isolation: isolate; z-index: 0; }
+.finalized-grouping-correction-modal {
+  --grouping-surface: #fff;
+  --grouping-text: #172033;
+  --grouping-muted: #526175;
+  --grouping-border: #dbe3ee;
+  --grouping-soft: #eff6ff;
+  position: fixed;
+  inset: 0;
+  z-index: 2147482400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .65);
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--grouping-text);
+}
+.finalized-grouping-correction-modal,
+.finalized-grouping-correction-modal * { box-sizing: border-box; }
+.finalized-grouping-correction-modal > section {
+  width: min(100%, 780px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--grouping-surface);
+  border: 1px solid var(--grouping-border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .3);
+}
+.finalized-grouping-correction-modal header,
+.finalized-grouping-correction-modal footer,
+.finalized-grouping-correction-modal .finalized-grouping-current article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.finalized-grouping-correction-modal h2 { margin: 4px 0; font-size: 1.3rem; color: inherit; }
+.finalized-grouping-correction-modal h3 { font-size: .95rem; color: inherit; }
+.finalized-grouping-correction-modal p { margin: 4px 0; }
+.finalized-grouping-correction-modal small,
+.finalized-grouping-correction-modal p { color: var(--grouping-muted); overflow-wrap: anywhere; }
+.finalized-grouping-correction-modal button {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--grouping-border);
+  border-radius: 9px;
+  background: var(--grouping-surface);
+  color: var(--grouping-text);
+  cursor: pointer;
+}
+.finalized-grouping-correction-modal button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+.finalized-grouping-correction-modal .finalized-grouping-lock { display: flex; gap: 10px; margin: 16px 0; padding: 12px; background: var(--grouping-soft); border-radius: 9px; }
+.finalized-grouping-correction-modal .finalized-grouping-units { display: grid; gap: 8px; }
+.finalized-grouping-correction-modal .finalized-grouping-units > button { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; }
+.finalized-grouping-correction-modal .finalized-grouping-units > button > div { flex: 1; min-width: 0; }
+.finalized-grouping-correction-modal strong,
+.finalized-grouping-correction-modal small { display: block; overflow-wrap: anywhere; }
+.finalized-grouping-correction-modal em { font-size: .75rem; font-style: normal; }
+.finalized-grouping-correction-modal .is-selected { border-color: #2563eb; background: var(--grouping-soft); }
+.finalized-grouping-correction-modal .finalized-grouping-actions { margin: 12px 0; }
+.finalized-grouping-correction-modal .finalized-grouping-current article { padding: 10px 0; border-top: 1px solid var(--grouping-border); }
+.finalized-grouping-correction-modal footer { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--grouping-border); flex-wrap: wrap; }
+.finalized-grouping-correction-modal .is-save { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+html[data-theme="dark"] .finalized-grouping-correction-modal { --grouping-surface: #151922; --grouping-text: #f1f5f9; --grouping-muted: #bac6d6; --grouping-border: #3b4759; --grouping-soft: #1e293b; }
+@media (max-width: 600px) {
+  .finalized-grouping-correction-modal { padding: 10px; }
+  .finalized-grouping-correction-modal > section { padding: 14px; max-height: calc(100dvh - 20px); }
+  .finalized-grouping-correction-modal .finalized-grouping-units > button { flex-wrap: wrap; }
+  .finalized-grouping-correction-modal .finalized-grouping-units em { margin-left: 34px; }
+  .finalized-grouping-correction-modal footer > button { flex: 1; }
+}
