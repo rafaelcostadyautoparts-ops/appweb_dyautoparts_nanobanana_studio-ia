@@ -17085,7 +17085,17 @@ function getPickItemsTotal(items = currentSessionItems) {
 }
 
 function normalizePickPackageAssignments(item = {}) {
- const qty = Math.max(0, Math.floor(Number(item.qty || item.qtd_separada || item.quantidade || 0)));
+ const rawQty =
+  item.qty !== undefined && item.qty !== null
+    ? item.qty
+    : (
+        item.qtd_separada !== undefined &&
+        item.qtd_separada !== null
+          ? item.qtd_separada
+          : (item.quantidade ?? 0)
+      );
+
+ const qty = Math.max(0, Math.floor(Number(rawQty || 0)));
  const values = Array.isArray(item.pick_package_assignments) ? item.pick_package_assignments.slice(0, qty) : [];
  while (values.length < qty) values.push(null);
  item.pick_package_assignments = values.map(value => value ? String(value) : null);
@@ -18947,20 +18957,41 @@ function getPickChannelDailyPackageTotal(context = {}) {
  return [...totalsBySession.values()].reduce((sum, value) => sum + normalizePickPackageCount(value), 0);
 }
 
-function getConferenceChannelDailyPackageTotal() {
- const sessionId = String(currentPackSession?.id || '').trim();
- const pickingData = currentPackSession?.pickingData || {};
- const expectedPackageCount = getPickPackageCountFrom(pickingData);
- return getPickChannelDailyPackageTotal({
-  sessionId,
-  channelLabel: pickingData.canal_nome || currentPackSession?.channel || '',
-  packageCount: Math.max(expectedPackageCount, getConferencePackageCount())
+function getConferenceDailyPackageTotal(context = {}) {
+ const activeSessionId = String(context.sessionId ?? currentPackSession?.id ?? currentPackSession?.pickingData?.separacao_id ?? '').trim();
+ const activePackageCount = normalizePickPackageCount(context.packageCount ?? getConferencePackageCount(context.rows ?? currentPackSession?.conferenceRows ?? []));
+
+ const finalizedSessions = new Map();
+ const completedConferences = (appData.conferencia || []).filter(record => isPackSessionFinished(record) && isPackRecordFromToday(record));
+
+ completedConferences.forEach(record => {
+  const sessionId = String(record.separacao_id || record.rom_id || '').trim();
+  if (!sessionId) return;
+  const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === sessionId) || {};
+  const packageCount = getPickPackageCountFrom(session);
+  finalizedSessions.set(sessionId, Math.max(finalizedSessions.get(sessionId) || 0, packageCount));
  });
+
+ let total = 0;
+ finalizedSessions.forEach(count => {
+  total += count;
+ });
+
+ if (activeSessionId && !finalizedSessions.has(activeSessionId)) {
+  total += activePackageCount;
+ } else if (!activeSessionId) {
+  total += activePackageCount;
+ }
+
+ return total;
 }
 
-function getConferenceDisplayedPackageCount() {
- const expected = getPickPackageCountFrom(currentPackSession?.pickingData || {});
- return Math.max(expected, getConferencePackageCount());
+function getConferenceChannelDailyPackageTotal(context = {}) {
+ return getConferenceDailyPackageTotal(context);
+}
+
+function getConferenceDisplayedPackageCount(rows = currentPackSession?.conferenceRows || []) {
+ return getConferencePackageCount(rows);
 }
 
 function updatePickSummaryUI() {
@@ -21978,10 +22009,14 @@ function updatePackChrome() {
  const scannedRows = rows.filter(row => parseFloat(row.qtd_conferida || 0) > 0);
  const standaloneRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits === 0);
  const groupedRows = scannedRows.filter(row => getConferenceKitSummary(row).kitUnits > 0);
- const checkedUnits = rows.reduce((sum, r) => sum + Number(r.qtd_conferida || 0), 0);
+ const currentPackages = getConferencePackageCount(rows);
+ const totalPackages = getConferenceDailyPackageTotal({
+  rows,
+  packageCount: currentPackages
+ });
 
- if (packagesEl) packagesEl.textContent = String(checkedUnits);
- if (channelPackagesEl) channelPackagesEl.textContent = String(checkedUnits);
+ if (packagesEl) packagesEl.textContent = String(currentPackages);
+ if (channelPackagesEl) channelPackagesEl.textContent = String(totalPackages);
 
  const filterCounts = { all: scannedRows.length, standalone: standaloneRows.length, kits: groupedRows.length };
  Object.entries(filterCounts).forEach(([key, value]) => {
@@ -22023,7 +22058,7 @@ function getConferencePackageLabel(packageId) {
 function buildConferencePackagesSyncPayload(rows = currentPackSession?.conferenceRows || []) {
  return buildPickPackagesSyncPayload((rows || []).map(row => ({ ...row, qty: Math.max(0, Number(row.qtd_conferida || 0)), pick_package_assignments: normalizeConferencePackageAssignments(row).slice() })));
 }
-function getConferencePackageCount() { return buildConferencePackagesSyncPayload().length; }
+function getConferencePackageCount(rows = currentPackSession?.conferenceRows || []) { return buildConferencePackagesSyncPayload(rows).length; }
 function getPendingConferencePackageSelectionCount() { return [...conferenceKitSelection.values()].reduce((sum, selection) => sum + Number(selection.qty || 0), 0); }
 
 async function toggleConferenceItemSelection(index) {
