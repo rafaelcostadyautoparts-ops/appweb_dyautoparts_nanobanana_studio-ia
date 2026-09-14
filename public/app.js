@@ -16373,7 +16373,9 @@ function getSeparationItemsForSession(session) {
 }
 
 function getSeparationProductTotal(session) {
- const sessionItems = getSeparationItemsForSession(session);
+ const sessionItems = getSeparationItemsForSession(session).filter(
+  it => (Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) || 0) > 0
+ );
  if (sessionItems.length > 0) {
  const uniqueProducts = new Set(sessionItems
  .map(item => getPickingProductId(item) || String(item.id_interno || item.ean || item.descricao || '').trim())
@@ -35617,7 +35619,9 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  const view = getFinalizedSeparationViewModel(session);
  let packages = [];
  try { packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId); } catch (error) { console.warn('[SEP HIST] Pacotes não carregados:', error); }
- const items = getSeparationItemsForSession(session);
+ const items = getSeparationItemsForSession(session).filter(
+  it => (Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) || 0) > 0
+ );
  let itemCancellations = [];
  try { const response = await window.supabaseClient.from('separacao_item_cancelamentos').select('*').eq('separacao_id', sessionId).order('cancelado_em', { ascending: true }); if (response.error) throw response.error; itemCancellations = response.data || []; } catch (error) { console.warn('[SEP HIST] Cancelamentos nao carregados:', error); }
  const cancelledByProduct = new Map();
