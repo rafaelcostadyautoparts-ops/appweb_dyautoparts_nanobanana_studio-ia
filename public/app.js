@@ -20670,16 +20670,28 @@ function buildFastPickingFinalRows(items, sessionId) {
 }
 
 async function finalizeFastPickingWithoutConference(payload = {}) {
- const currentUser = payload.user || localStorage.getItem('currentUser') || 'N/A';
- const sessionId = String(payload.sessionId || '').trim();
- const channelLabel = payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '';
- if (!sessionId) throw new Error('separacao_id nao informado');
- assertValidPickSessionForPersist(sessionId, channelLabel, 'finalizar separacao rapida');
+ const currentUser = payload.user || payload.usuario || localStorage.getItem('currentUser') || 'N/A';
+ const draftId = String(payload.draftId || payload.sessionId || payload.separacao_id || '').trim();
+ const canalId = String(payload.canalId || payload.channelId || payload.canal_id || currentPickingContext?.channelId || '').trim();
+ const canalNome = String(payload.canalNome || payload.channelLabel || payload.canal_nome || currentPickingContext?.channelLabel || '').trim();
+ if (!draftId) throw new Error('Identificador da separacao obrigatorio');
+ assertValidPickSessionForPersist(draftId, canalNome, 'finalizar separacao rapida');
+
+ const rawItems = Array.isArray(payload.items) ? payload.items : (Array.isArray(payload.rows) ? payload.rows : (currentSessionItems || []));
+ const validItems = (rawItems || []).filter(item => Number(item.qty || item.qtd_separada || item.quantidade || 0) > 0);
+ const pacotes = Array.isArray(payload.pacotes) && payload.pacotes.length > 0
+  ? payload.pacotes
+  : buildPickPackagesSyncPayload(validItems);
 
  const result = await DataClient.finalizarSeparacaoRapidaAtomicaSupabase({
- sessionId,
- usuario: currentUser,
- permitirNegativo: isSaidaEstoqueZeroPermitida()
+  draftId,
+  canalId,
+  canalNome,
+  pacotes,
+  usuario: currentUser,
+  permitirNegativo: payload.permitirNegativo === true || isSaidaEstoqueZeroPermitida(),
+  observacao: payload.observacao || null,
+  executionId: payload.executionId || payload.execution_id || null
  });
 
  await Promise.all([
@@ -20693,7 +20705,9 @@ async function finalizeFastPickingWithoutConference(payload = {}) {
 
  return {
   ok: true,
-  sessionId,
+  sessionId: result?.separacao_id || draftId,
+  oficialId: result?.separacao_id || draftId,
+  draftIdAnterior: result?.draft_id_anterior || draftId,
   movimentos: Number(result?.movimentos || 0),
   idempotente: result?.idempotente === true
  };
@@ -20799,33 +20813,17 @@ async function flushPickingItemsBeforeFinalization(sessionId) {
 
 async function finalizeFastPickingSession(sessionId, channelId, channelLabel, channelColor, draft, now) {
   const currentUser = localStorage.getItem('currentUser');
-  const stats = getPickingOperationalStats(currentPickSession.items);
-
-  if (isDraftPickSessionId(sessionId) || !isValidOfficialPickSessionId(sessionId)) {
-    if (navigator.onLine) {
-      try {
-        const alloc = await DataClient.alocarNumeroSeparacaoDefinitivaSupabase({
-          draftId: sessionId,
-          canalId: channelId || currentPickingContext?.channelId || currentPickSession?.channelId || currentPickSession?.pickingData?.canal_id || '',
-          canalNome: channelLabel || currentPickingContext?.channelLabel || currentPickSession?.channel || currentPickSession?.pickingData?.canal_nome || 'GERAL',
-          criadoPor: currentUser || localStorage.getItem('currentUser') || 'N/A',
-          observacao: 'SAIDA_RAPIDA AUTOMATICA'
-        });
-        if (alloc?.separacao_id) {
-          const oldDraftId = sessionId;
-          sessionId = alloc.separacao_id;
-          currentPickingContext.sessionId = sessionId;
-          if (currentPickSession) {
-            currentPickSession.sessionId = sessionId;
-            if (currentPickSession.items) currentPickSession.items.forEach(it => { it.separacao_id = sessionId; });
-          }
-          removeLocalDraftPickSession(oldDraftId);
-        }
-      } catch (err) {
-        console.warn('[SEP] Erro ao alocar numero definitivo online:', err);
-      }
-    }
+  const rawItems = currentPickSession?.items || [];
+  const validItems = rawItems.filter(item => Number(item.qty || item.qtd_separada || item.quantidade || 0) > 0);
+  if (validItems.length === 0) {
+    throw new Error('Nenhum item valido com quantidade maior que zero para finalizar no modo rapido.');
   }
+  const stats = getPickingOperationalStats(validItems);
+
+  const executionId = draft?.executionId || currentPickingContext?.executionId || currentPickSession?.executionId || generateExecutionId();
+  if (draft) draft.executionId = executionId;
+  if (currentPickingContext) currentPickingContext.executionId = executionId;
+  if (currentPickSession) currentPickSession.executionId = executionId;
 
   await flushPickingItemsBeforeFinalization(sessionId);
 
@@ -20841,27 +20839,38 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     total_produtos_separados: stats.total_produtos_separados,
     total_itens_separados: stats.total_itens_separados,
     total_pacotes_montados: stats.total_pacotes_montados,
-    totalPacotesMontados: stats.total_pacotes_montados
-  }, currentPickSession.items);
+    totalPacotesMontados: stats.total_pacotes_montados,
+    executionId
+  }, validItems);
   if (draftResult?.queued) draftPersistenceQueued = true;
 
-  const rows = buildFastPickingFinalRows(currentPickSession.items, sessionId);
+  const rows = buildFastPickingFinalRows(validItems, sessionId);
   if (rows.length === 0) {
     throw new Error('Nenhum item valido para finalizar no modo rapido.');
   }
 
+  const pacotes = buildPickPackagesSyncPayload(validItems);
+
   const fastPayload = {
     sessionId,
+    draftId: sessionId,
+    channelId,
     channelLabel,
+    canalId: channelId,
+    canalNome: channelLabel,
     isFastMode: true,
     modo_rapido: true,
     observacao: PICK_FAST_OBSERVATION,
     user: currentUser,
+    usuario: currentUser,
     rows,
+    items: validItems,
+    pacotes,
     total_produtos_separados: stats.total_produtos_separados,
     total_itens_separados: stats.total_itens_separados,
     total_pacotes_montados: stats.total_pacotes_montados,
-    executionId: draft.executionId || generateExecutionId()
+    executionId,
+    permitirNegativo: isSaidaEstoqueZeroPermitida()
   };
 
   let finalizationResult;
@@ -20870,21 +20879,23 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
       module: 'separacao',
       sessionId
     });
-    finalizationResult = { queued: true };
+    finalizationResult = { queued: true, sessionId };
   } else {
     finalizationResult = await finalizeFastPickingWithoutConference(fastPayload);
   }
 
+  const finalOfficialId = finalizationResult?.oficialId || finalizationResult?.sessionId || sessionId;
+
   if (!appData.separacao) appData.separacao = [];
   const localSession = {
     ...buildPickingSessionPayload(
-      sessionId,
+      finalOfficialId,
       channelId,
       channelLabel,
       finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
-      draft.createdAt || currentPickSession?.pickingData?.criado_em || now
+      draft?.createdAt || currentPickSession?.pickingData?.criado_em || now
     ),
-    separacao_id: sessionId,
+    separacao_id: finalOfficialId,
     canal_nome: channelLabel,
     status: finalizationResult?.queued ? 'pendente_sync' : PICK_STATUS_FINISHED,
     finalizado_em: now,
@@ -20895,25 +20906,30 @@ async function finalizeFastPickingSession(sessionId, channelId, channelLabel, ch
     isFastMode: true,
     modo_rapido: true
   };
-  const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
+  const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === finalOfficialId || (s.separacao_id || s.col_a) === sessionId);
   if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
   else appData.separacao.unshift(localSession);
-  rememberPickPackageTotal(sessionId, localSession);
+  rememberPickPackageTotal(finalOfficialId, localSession);
   saveOperationalCatalog(appData.products, appData.estoque).catch(error => console.warn('[OFFLINE] Falha ao salvar estado operacional:', error));
 
-  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId);
+  const activeSessions = getActivePickSessions().filter(s => s.id !== sessionId && s.id !== finalOfficialId);
   setActivePickSessions(activeSessions);
   await clearFinishedPickingDraftState(sessionId, {
     keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
   });
+  if (finalOfficialId !== sessionId) {
+    await clearFinishedPickingDraftState(finalOfficialId, {
+      keepQueuedDraftOperations: Boolean(finalizationResult?.queued || draftPersistenceQueued)
+    });
+  }
 
   showToast(finalizationResult?.queued
-    ? `Saida rapida ${sessionId} salva localmente para sincronizar.`
-    : `Saida rapida ${sessionId} finalizada e estoque baixado!`);
+    ? `Saida rapida ${finalOfficialId} salva localmente para sincronizar.`
+    : `Saida rapida ${finalOfficialId} finalizada e estoque baixado!`);
   await showAppModal({
     type: 'success',
-    title: 'Saída rápida finalizada!',
-    message: 'Estoque atualizado com sucesso.',
+    title: 'Saida rapida finalizada!',
+    message: `Separacao oficial ${finalOfficialId} gerada e estoque atualizado com sucesso.`,
     confirmText: 'OK'
   });
   playBeep('success');
@@ -35581,14 +35597,14 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
 
 let finalizedGroupingCorrectionState = null;
 
-function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
+function buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems = [], packages = []) {
  const units = [];
- getSeparationItemsForSession(session).forEach(item => {
+ (sessionItems || []).forEach(item => {
   const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
-  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? 0) || 0);
-  for (let index = 0; index < quantity; index++) units.push({ key: `${productId}:${index + 1}`, id_interno: productId, descricao: getPickItemTitle(item), ean: item.ean || '', ordinal: index + 1, pacote_id: null, selected: false });
+  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? item.quantidade ?? 0) || 0);
+  for (let index = 0; index < quantity; index++) units.push({ key: `${productId}:${index + 1}`, id_interno: productId, descricao: getPickItemTitle(item) || item.descricao || productId, ean: item.ean || '', ordinal: index + 1, pacote_id: null, selected: false });
  });
- packages.filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO').forEach(pkg => {
+ (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO').forEach(pkg => {
   (pkg.itens || []).forEach(pkgItem => {
    let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
    units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
@@ -35601,21 +35617,47 @@ function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
  return units;
 }
 
+function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
+ const items = getSeparationItemsForSession(session);
+ return buildFinalizedGroupingCorrectionUnitsFromItems(items, packages);
+}
+
 async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today') {
- if (!navigator.onLine) return showToast('A correção de agrupamento exige conexão com o Supabase.', 'warning');
- const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
+ if (!navigator.onLine) return showToast('A correcao de agrupamento exige conexao com o Supabase.', 'warning');
+ const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 digitos para ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
  if (!pin) return;
- if (!/^\d{4}$/.test(String(pin))) return showToast('O PIN deve ter exatamente 4 dígitos.', 'warning');
+ if (!/^\d{4}$/.test(String(pin))) return showToast('O PIN deve ter exatamente 4 digitos.', 'warning');
  try {
   const deviceId = getOrCreateDeviceId();
   const auth = await DataClient.autorizarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId, pin, operador: localStorage.getItem('currentUser') || 'N/A', deviceId });
   if (!auth?.ok) return showToast(auth?.motivo === 'TENTATIVAS_EXCEDIDAS' ? 'Muitas tentativas. Aguarde 15 minutos.' : 'PIN incorreto.', 'error');
-  const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
-  if (!session) throw new Error('Separação não encontrada na tela atual.');
-  const packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
-  finalizedGroupingCorrectionState = { sessionId, returnScope, token: auth.token, deviceId, expiraEm: auth.expira_em, units: buildFinalizedGroupingCorrectionUnits(session, packages) };
+
+  let sessionItems = [];
+  try {
+   sessionItems = await DataClient.listarItensSeparacaoSupabase(sessionId);
+  } catch (err) {
+   console.warn('[CORR AGRUP] Falha ao consultar separacao_itens no Supabase:', err);
+  }
+  if (!sessionItems || !sessionItems.length) {
+   const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
+   if (session) {
+    sessionItems = getSeparationItemsForSession(session).filter(it => Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) > 0);
+   }
+  }
+  if (!sessionItems || !sessionItems.length) {
+   throw new Error('Nenhum item valido encontrado para esta separacao.');
+  }
+
+  let packages = [];
+  try {
+   packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
+  } catch (error) {
+   console.warn('[CORR AGRUP] Pacotes nao carregados:', error);
+  }
+
+  finalizedGroupingCorrectionState = { sessionId, returnScope, token: auth.token, deviceId, expiraEm: auth.expira_em, units: buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems, packages) };
   renderFinalizedGroupingCorrectionModal();
- } catch (error) { showToast(error.message || 'Não foi possível autorizar a correção.', 'error'); }
+ } catch (error) { showToast(error.message || 'Nao foi possivel autorizar a correcao.', 'error'); }
 }
 
 function closeFinalizedGroupingCorrection() {

@@ -583,13 +583,21 @@ const DataClient = (function () {
     async function finalizarSeparacaoRapidaAtomicaSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
-        const sessionId = String(payload.sessionId || payload.separacao_id || '').trim();
-        if (!sessionId) throw new Error('Separacao nao informada');
-        const { data, error } = await client.rpc('finalizar_separacao_rapida_atomica_temporario', {
-            p_separacao_id: sessionId,
+        const draftId = String(payload.draftId || payload.sessionId || payload.separacao_id || '').trim();
+        if (!draftId) throw new Error('Identificador da separacao obrigatorio');
+
+        const rpcPayload = {
+            p_draft_id: draftId,
+            p_canal_id: String(payload.canalId || payload.canal_id || '').trim(),
+            p_canal_nome: String(payload.canalNome || payload.canal_nome || '').trim(),
+            p_pacotes: Array.isArray(payload.pacotes) ? payload.pacotes : [],
             p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
-            p_permitir_negativo: payload.permitirNegativo === true
-        });
+            p_permitir_negativo: payload.permitirNegativo === true || payload.permitir_negativo === true,
+            p_observacao: payload.observacao ? String(payload.observacao).trim() : null,
+            p_execution_id: payload.executionId || payload.execution_id ? String(payload.executionId || payload.execution_id).trim() : null
+        };
+
+        const { data, error } = await client.rpc('finalizar_separacao_rapida_atomica', rpcPayload);
         if (error) {
             const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('finalizar_separacao_rapida_atomica');
             throw new Error(missingRpc
@@ -1546,6 +1554,25 @@ const DataClient = (function () {
         invalidateCache('conferencia');
         return data;
     }
+    async function listarItensSeparacaoSupabase(sessionId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const cleanSessionId = String(sessionId || '').trim();
+        if (!cleanSessionId) return [];
+        const { data, error } = await client
+            .from('separacao_itens')
+            .select('*')
+            .eq('separacao_id', cleanSessionId)
+            .gt('qtd_separada', 0)
+            .order('id_interno');
+        if (error) {
+            const missingTable = error.code === '42P01' || String(error.message || '').includes('separacao_itens');
+            if (missingTable) return [];
+            throw error;
+        }
+        return data || [];
+    }
+
     async function listarPacotesSeparacaoSupabase(sessionId) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -2814,6 +2841,7 @@ const DataClient = (function () {
         savePickingDraftItemsBatchSupabase,
         removerItemSeparacaoSupabase,
         esvaziarSeparacaoParaReutilizacaoSupabase,
+        listarItensSeparacaoSupabase,
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
         aplicarOperacaoProgressoSupabase,
