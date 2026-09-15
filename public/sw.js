@@ -114,7 +114,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Network-first para arquivos principais da aplicacao
-  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/pedidosIdentification.js') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
+  if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/pedidosIdentification.js') || url.includes('/anunciosMapping.js') || url.includes('/anunciosMapping.css') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();

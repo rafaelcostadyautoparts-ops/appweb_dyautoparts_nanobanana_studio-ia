@@ -9,7 +9,10 @@
     background: #f4f6fa;
 }
 
-html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen:not(.menu-screen) > main.container.an-shell {
+html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen:not(.menu-screen) > main.container.an-shell,
+html body:not(.login-active) #app > .dashboard-screen.internal.module-screen:not(.menu-screen) > main.container.ped-shell,
+html body:not(.login-active) #app > .dashboard-screen.internal.product-search-screen:not(.menu-screen) > main.container.prod-shell,
+html body:not(.login-active) #app > .dashboard-screen.internal:not(.menu-screen) > main.container.prod-detail-shell {
     box-sizing: border-box !important;
     width: min(1520px, calc(100% - 48px)) !important;
     max-width: 1520px !important;
@@ -103,7 +106,7 @@ html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-
     font-weight: 700;
 }
 
-/* Cores especÃ­ficas dos filtros */
+/* Cores específicas dos filtros */
 .an-summary button.tab-todos {
     border-color: #cbd5e1;
 }
@@ -230,7 +233,7 @@ html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-
     cursor: pointer;
 }
 
-/* --- Lista de AnÃºncios --- */
+/* --- Lista de Anúncios --- */
 .an-list {
     display: grid;
     divide-y: 1px solid #f1f5f9;
@@ -254,7 +257,7 @@ html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-
     background: #fafbfd;
 }
 
-/* Imagem do anÃºncio */
+/* Imagem do anúncio */
 .an-card-image {
     position: relative;
     display: flex;
@@ -291,7 +294,7 @@ a.an-card-image:hover {
     cursor: default;
 }
 
-/* Detalhes do AnÃºncio (ML) */
+/* Detalhes do Anúncio (ML) */
 .an-card-details {
     display: grid;
     gap: 6px;
@@ -474,7 +477,7 @@ a.an-card-image:hover {
     font-weight: 700;
 }
 
-/* AÃ§Ãµes */
+/* Ações */
 .an-card-actions {
     display: flex;
     flex-direction: column;
@@ -546,7 +549,7 @@ a.an-card-image:hover {
     text-decoration: underline;
 }
 
-/* VariaÃ§Ãµes Lista ExpansÃ­vel */
+/* Variações Lista Expansível */
 .an-variations-box {
     margin-top: 8px;
     padding: 10px 12px;
@@ -710,14 +713,14 @@ a.an-card-image:hover {
     margin-top: 2px;
 }
 
-/* ConteÃºdo do Modal */
+/* Conteúdo do Modal */
 .an-modal-body {
     padding: 20px 24px;
     display: grid;
     gap: 20px;
 }
 
-/* Ãrvore / Lista de Equivalentes Aceitos */
+/* Árvore / Lista de Equivalentes Aceitos */
 .an-equivalents-section {
     border: 1px solid #e2e8f0;
     border-radius: 14px;
@@ -821,7 +824,7 @@ a.an-card-image:hover {
     background: #fef2f2;
 }
 
-/* SeÃ§Ã£o de Busca de Produtos Internos */
+/* Seção de Busca de Produtos Internos */
 .an-catalog-section {
     display: grid;
     gap: 10px;
@@ -1016,7 +1019,7 @@ a.an-card-image:hover {
 .an-screen > .top-action-group .back-button-standard,
 .an-screen > .top-action-group .back-button-standard .app-back-icon { color: #d97706 !important; }
 .an-screen > .top-action-group .back-button-standard .app-back-icon path { stroke: #d97706 !important; }
-/* SeÃ§Ã£o de Busca de Produtos Internos */
+/* Seção de Busca de Produtos Internos */
 .an-catalog-section {
     display: grid;
     gap: 10px;
@@ -1217,13 +1220,13 @@ a.an-card-image:hover {
 }
 
 @media (max-width: 700px) {
-    html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen:not(.menu-screen) > main.container.an-shell {
-    box-sizing: border-box !important;
-    width: min(1520px, calc(100% - 48px)) !important;
-    max-width: 1520px !important;
-    margin: 0 auto !important;
-    padding: 86px 0 64px !important;
-}
+    html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen:not(.menu-screen) > main.container.an-shell,
+    html body:not(.login-active) #app > .dashboard-screen.internal.module-screen:not(.menu-screen) > main.container.ped-shell,
+    html body:not(.login-active) #app > .dashboard-screen.internal.product-search-screen:not(.menu-screen) > main.container.prod-shell,
+    html body:not(.login-active) #app > .dashboard-screen.internal:not(.menu-screen) > main.container.prod-detail-shell {
+        width: calc(100% - 16px) !important;
+        padding-top: 76px !important;
+    }
 }
 
 
@@ -1406,7 +1409,7 @@ a.an-card-image:hover {
     flex-shrink: 0;
 }
 
-/* Ãrea de Busca Principal */
+/* Área de Busca Principal */
 .an-main-search-wrapper {
     display: flex;
     flex-direction: column;
@@ -1449,7 +1452,7 @@ a.an-card-image:hover {
     background: transparent;
 }
 
-/* --- Mapeamento em Massa (SeleÃ§Ã£o e Barra de AÃ§Ã£o) --- */
+/* --- Mapeamento em Massa (Seleção e Barra de Ação) --- */
 .an-card {
     grid-template-columns: 28px 74px minmax(240px, 1.3fr) minmax(240px, 1.4fr) auto !important;
 }
@@ -1471,6 +1474,37 @@ a.an-card-image:hover {
     white-space: nowrap;
     border: 1px solid transparent;
     transition: all 0.15s ease;
+}
+
+.an-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: #ea580c;
+    cursor: pointer;
+    vertical-align: middle;
+    margin: 0;
+}
+
+.an-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.an-mass-action-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    margin: 16px 20px 0;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.18);
+    animation: fadeIn 0.2s ease-out;
+}
+
+.an-mass-action-bar.active {
+    display: flex;
 }
 
 .an-mass-bar-info {
