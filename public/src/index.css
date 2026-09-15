@@ -4014,9 +4014,9 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* Full-screen dark override for search screen container */
-        
 
-        
+
+
 
 
 
@@ -4134,7 +4134,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         /* Product Search Screen - Professional ERP design */
-        
+
 
         .product-search-center {
             width: 100%;
@@ -4144,13 +4144,13 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             align-items: center;
         }
 
-        
 
-        
 
-        
 
-        
+
+
+
+
 
         /* Search Dropdown Items */
         #garantia-search-dropdown .search-item:hover {
@@ -4511,7 +4511,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
         }
 
-        
+
 
         .kit-lamp-card .card-subtitle {
             color: #555555 !important;
@@ -4654,7 +4654,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         @media (max-width: 640px) {
-            
+
 
             .product-search-center {
                 padding: 0 18px 40px 18px !important;
@@ -4667,11 +4667,11 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
                 align-items: center !important;
             }
 
-            
 
-            
 
-            
+
+
+
 
             .product-search-results {
                 width: 100% !important;
@@ -4723,7 +4723,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         }
 
         @media (min-width: 768px) {
-            
+
 
             .product-search-center {
                 max-width: none;
@@ -4946,11 +4946,11 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             border: 1px solid #e5e7eb;
         }
 
-        
 
-        
 
-        
+
+
+
 
         .product-stock-unit {
             font-size: 0.7rem;
@@ -8204,19 +8204,19 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
    FIX: Remover faixa/topo escuro das telas operacionais
    Layout
 */
-        
+
 
         /* Ocultar barra de topo residual */
-        
+
 
         /* Remover pseudo-elementos que possam criar sombras ou faixas */
-        
+
 
         /* ===================================================
    MELHORIA DE CONTRASTE - BUSCA E DETALHES
    =================================================== */
 
-        
+
 
         /* ===================================================
            OPERATIONAL IDENTITY (SIDEBAR & TOP BAR)
@@ -8796,15 +8796,15 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         min-height: min(62vh, 420px);
     }
 
-    
 
-    
 
-    
 
-    
 
-    
+
+
+
+
+
 
     .search-quick-stats {
         gap: 20px !important;
@@ -8814,7 +8814,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         font-size: 2rem !important;
     }
 
-    
+
 }
 
         /* Layout */
@@ -8973,7 +8973,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
             }
 
             /* Layout */
-            
+
         }
 
         /* ===================================================
@@ -9837,7 +9837,7 @@ body.login-active #login-screen .top-hover-zone .btn-floating-app.btn-fullscreen
         width: clamp(110px, 34vw, 140px) !important;
     }
 
-    
+
 }
 
 .picking-footer {
@@ -12513,11 +12513,11 @@ button.quick-action-item {
     flex: 0 0 auto !important;
   }
 
-  
 
-  
 
-  
+
+
+
 
   .dashboard-screen.product-detail {
     padding-top: calc(var(--mobile-topbar-h-final, 54px) + env(safe-area-inset-top, 0px)) !important;
@@ -12926,21 +12926,21 @@ button.quick-action-item {
 }
 
 @media (max-width: 767px) {
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
 
   .product-search-status-line {
     width: min(100%, calc(100vw - 36px)) !important;
@@ -12950,46 +12950,46 @@ button.quick-action-item {
     box-sizing: border-box !important;
   }
 
-  
+
 }
 
 
 
 /* Mobile product search layout repair */
 @media (max-width: 767px) {
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   .product-search-status-line {
     text-align: center !important;
@@ -14795,7 +14795,7 @@ button.quick-action-item {
     font-size: clamp(2.95rem, 13vw, 3.85rem) !important;
   }
 
-  
+
 
   .product-price-breakdown {
     gap: 8px 16px !important;
@@ -16303,7 +16303,7 @@ button.quick-action-item {
 }
 
 @media (max-width: 767px) {
-    
+
 
     .top-action-group .fab-voltar {
         left: 12px !important;
@@ -25850,25 +25850,25 @@ html body:not(.login-active) #app > .dashboard-screen.menu-screen .menu-card sma
 }
 
 @media (max-width: 900px) {
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
 
   .product-summary-metric strong {
     font-size: 1.18rem !important;
   }
 
-  
+
 }
 
 /* Product search usability fixes: readable cards and contained results scroll */
@@ -42682,7 +42682,7 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-act
     height: 62px;
   }
 
-  
+
 
   .pick-info-card strong {
     font-size: 1.05rem;
@@ -42814,7 +42814,7 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .quick-act
     font-size: 31px !important;
   }
 
-  
+
 
   .pick-scanner-btn {
     background: #ffffff !important;
@@ -48268,31 +48268,31 @@ html[data-theme="dark"] .label-import-dialog textarea {
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36) !important;
   }
 
-  
+
 
   html[data-theme="dark"] body:not(.login-active) #app > .dashboard-screen.module-screen:not(.menu-screen) :where(.standard-module-card-copy small,.operational-menu-card .standard-module-card-copy small,p,small,.helper-text,.muted) {
     color: #cbd5e1 !important;
   }
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
 
 
 }
@@ -57143,9 +57143,9 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
 
 /* Final mobile safety pass: keep internal screens contained while each block is refined. */
 @media (max-width: 767px) {
-  
 
-  
+
+
 
   html body:not(.login-active) #app > .dashboard-screen :where(.container,.content,.screen-content,.workspace,.page,.panel,.card,.section,form) {
     box-sizing: border-box !important;
@@ -57218,17 +57218,17 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
     color: #f8fafc !important;
   }
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
 
   html body:not(.login-active) #app > .dashboard-screen.no-top-bar > main.product-detail-screen {
     width: 100% !important;
@@ -57310,33 +57310,33 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
     line-height: 1.08 !important;
   }
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
 
 /* Product screens must stay themed even if body keeps a stale login-active class. */
@@ -57373,21 +57373,21 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
     text-shadow: none !important;
   }
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
 }
 
 /* Desktop dark contrast: separation workflow must not inherit light surfaces. */
@@ -57429,9 +57429,9 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
     color: #f8fafc !important;
   }
 
-  
 
-  
+
+
 
   html[data-theme="dark"] #app > .dashboard-screen.picking-screen.pick-workflow-screen .pick-scanner-btn {
     background: #15171c !important;
@@ -57525,119 +57525,119 @@ body:not(.login-active) #app > .dashboard-screen.pick-workflow-screen .pick-prod
 
 
 @media (max-width: 900px) {
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   #scanner-container:not(.hidden) {
     position: fixed !important;
@@ -57838,30 +57838,30 @@ html[data-theme="dark"] .inventory-money-negative strong {
 
 /* Desktop product search/detail refinements. Mobile keeps its dedicated layout above. */
 @media (min-width: 901px) {
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
-/* [CLEANUP-BLOCK-A-SEARCH] */   
-/* [CLEANUP-BLOCK-A-SEARCH] */ 
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
+/* [CLEANUP-BLOCK-A-SEARCH] */
   html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.product-detail {
     background: #eef2f7 !important;
     color: #0f172a !important;
@@ -57891,7 +57891,7 @@ html[data-theme="dark"] .inventory-money-negative strong {
     color: #f8fafc !important;
   }
 
-  
+
 
   html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.product-detail :where(.product-detail-title,.product-detail-title-block h1,.product-detail-meta-item,.product-detail-meta-item strong,.product-detail-meta-item span,.product-stock-title,.product-stock-group-title) {
     color: #101827 !important;
@@ -57901,9 +57901,9 @@ html[data-theme="dark"] .inventory-money-negative strong {
     color: #f8fafc !important;
   }
 
-  
 
-  
+
+
 
   html[data-theme="light"] body:not(.login-active) #app > .dashboard-screen.product-detail .product-detail-img {
     background: #f8fafc !important;
@@ -57917,8 +57917,8 @@ html[data-theme="dark"] .inventory-money-negative strong {
 }
 
 /* Final product search card override: approved desktop/mobile mockup. */
-/* [CLEANUP-BLOCK-B-SEARCH] */ 
-/* [CLEANUP-BLOCK-B-SEARCH] */ 
+/* [CLEANUP-BLOCK-B-SEARCH] */
+/* [CLEANUP-BLOCK-B-SEARCH] */
 
 
 /* Product search card fine-tuning requested after visual review. */
@@ -57926,16 +57926,16 @@ html[data-theme="dark"] .inventory-money-negative strong {
 
 
 
-/* [CLEANUP-BLOCK-C-SEARCH] */ 
-/* [CLEANUP-BLOCK-C-SEARCH] */ 
+/* [CLEANUP-BLOCK-C-SEARCH] */
+/* [CLEANUP-BLOCK-C-SEARCH] */
 
 
 /* Product search stock block: single divider and two-column location line. */
-/* [CLEANUP-BLOCK-D-SEARCH] */ 
-/* [CLEANUP-BLOCK-D-SEARCH] */ 
+/* [CLEANUP-BLOCK-D-SEARCH] */
+/* [CLEANUP-BLOCK-D-SEARCH] */
 /* [CLEANUP-BLOCK-D-SEARCH] */ /* Keep hover zoom, but remove the extra vertical line from the card hover layer. */
-/* [CLEANUP-BLOCK-D-SEARCH] */ 
-/* [CLEANUP-BLOCK-D-SEARCH] */ 
+/* [CLEANUP-BLOCK-D-SEARCH] */
+/* [CLEANUP-BLOCK-D-SEARCH] */
 
 /* ========================================================================= */
 /* PRODUCT SEARCH CANONICAL LAYOUT SYSTEM                                    */
@@ -75605,4 +75605,492 @@ html[data-theme="dark"] .finalized-grouping-correction-modal { --grouping-surfac
   .finalized-grouping-correction-modal .finalized-grouping-units > button { flex-wrap: wrap; }
   .finalized-grouping-correction-modal .finalized-grouping-units em { margin-left: 34px; }
   .finalized-grouping-correction-modal footer > button { flex: 1; }
+}
+
+/* ==========================================================================
+   GESTÃO DE PEDIDOS — FLUXO OPERACIONAL (PREVIEW & OPERAÇÃO)
+   ========================================================================== */
+
+/* Grid de Contadores Operacionais Principais */
+.pedidos-counters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.pedidos-counter-card {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  position: relative;
+  user-select: none;
+}
+
+.pedidos-counter-card:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.pedidos-counter-card.active {
+  border-color: #4f46e5 !important;
+  background: #fdfefe !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12) !important;
+}
+
+.pedidos-counter-card.card-todos.active { border-color: #4f46e5 !important; }
+.pedidos-counter-card.card-pendentes.active { border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.12) !important; }
+.pedidos-counter-card.card-prontos.active { border-color: #16a34a !important; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important; }
+.pedidos-counter-card.card-em-separacao.active { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important; }
+.pedidos-counter-card.card-separados.active { border-color: #7c3aed !important; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12) !important; }
+.pedidos-counter-card.card-divergencias.active { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12) !important; }
+
+.pedidos-counter-label {
+  color: #64748b;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pedidos-counter-val {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 6px 0 2px;
+  line-height: 1.1;
+}
+
+.pedidos-counter-sub {
+  font-size: 0.73rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Barra de Filtros Secundários (Marketplace, Conta, Busca) */
+.pedidos-filters-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.pedidos-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+  max-width: 380px;
+}
+
+.pedidos-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 18px;
+  pointer-events: none;
+}
+
+.pedidos-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.pedidos-search-input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.pedidos-pills-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 8px;
+  gap: 4px;
+}
+
+.pedidos-pill-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.pedidos-pill-btn:hover {
+  color: #0f172a;
+}
+
+.pedidos-pill-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.pedidos-pill-btn.pill-ml.active {
+  color: #1d4ed8;
+  background: #ffffff;
+}
+
+.pedidos-pill-btn.pill-shopee.active {
+  color: #c2410c;
+  background: #ffffff;
+}
+
+/* Card de Pedido Refinado */
+.pedidos-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.pedidos-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.pedidos-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pedidos-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pedidos-card-order-id {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.pedidos-card-meta {
+  color: #64748b;
+  font-size: 0.82rem;
+  display: block;
+  margin-top: 4px;
+}
+
+/* Bloco do Produto / Anúncio */
+.pedidos-card-product-box {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.pedidos-product-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  background: #ffffff;
+}
+
+.pedidos-product-thumb-empty {
+  width: 60px;
+  height: 60px;
+  background: #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.pedidos-product-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pedidos-product-title {
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pedidos-product-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+/* Área de Identificação Operacional */
+.pedidos-card-ident-box {
+  border-left: 3px solid #d97706;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pedidos-card-ident-msg {
+  font-size: 0.8rem;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pedidos-btn-identificar {
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  color: #b45309;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.pedidos-btn-identificar:hover {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #78350f;
+}
+
+/* Bloco Multi-Item */
+.pedidos-multi-item-banner {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.pedidos-multi-item-tag {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Rodapé do Card */
+.pedidos-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pedidos-card-total {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+/* Badges Operacionais Padronizados */
+.badge-operacional {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge-operacional.badge-pendente {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.badge-operacional.badge-pronto {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.badge-operacional.badge-em-separacao {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-operacional.badge-separado {
+  background: #faf5ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+
+.badge-operacional.badge-em-conferencia {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.badge-operacional.badge-conferido {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-operacional.badge-divergencia {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* Badges de Canal */
+.badge-canal-ml {
+  font-weight: 800;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  background: #dbeafe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-canal-shopee {
+  font-weight: 800;
+  color: #c2410c;
+  font-size: 0.78rem;
+  background: #ffedd5;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #fed7aa;
+}
+
+/* Badge Status Marketplace Neutro */
+.badge-status-marketplace {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-weight: 700;
+  font-size: 0.76rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Responsividade Mobile (375px) */
+@media (max-width: 768px) {
+  .pedidos-counters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .pedidos-filters-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+  .pedidos-search-wrap {
+    max-width: none;
+    width: 100%;
+  }
+  .pedidos-pills-wrap {
+    width: 100%;
+    justify-content: space-around;
+  }
+  .pedidos-card {
+    padding: 14px;
+  }
+  .pedidos-card-product-box {
+    padding: 10px;
+    gap: 10px;
+  }
+  .pedidos-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pedidos-card-footer > div {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+  .pedidos-card-footer button {
+    width: 100%;
+    justify-content: center;
+  }
 }

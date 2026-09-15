@@ -468,7 +468,7 @@ async function handleProductScan(rawValue, context = 'search') {
 
  if (product) {
  showScanFeedback('success', 'Produto Encontrado');
- 
+
  // Na busca, leitura por scanner/camera deve voltar para a lista de resultados.
  if (context === 'search') {
  const input = document.getElementById('search-input');
@@ -481,7 +481,7 @@ async function handleProductScan(rawValue, context = 'search') {
  } else if (context === 'garantia') {
  const input = document.getElementById('garantia-search-input');
  if (input) input.value = '';
- 
+
  setTimeout(() => {
  stopScanner();
  if (typeof window.selectGarantiaProduct === 'function') {
@@ -491,13 +491,13 @@ async function handleProductScan(rawValue, context = 'search') {
  } else if (context === 'edit') {
  const input = document.getElementById('edit-search-input');
  if (input) input.value = '';
- 
+
  setTimeout(() => {
  stopScanner();
  renderEditProductForm(product);
  }, 600);
  }
- 
+
  return product;
  } else {
  // Texto validado em UTF-8.
@@ -579,7 +579,7 @@ window.handleUserClick = async function(e) {
  }
  console.log('CLICK USUARIO OK');
  showToast('CLICK USUARIO OK', 'success'); // Opcional, feedback no sistema do app
- 
+
  // Texto validado em UTF-8.
  if (typeof renderConfigSubMenu === 'function') {
  renderConfigSubMenu();
@@ -642,7 +642,7 @@ function toggleFullscreen() {
  }
  document.body.classList.remove('fullscreen-mode');
  }
- 
+
  if (typeof removeLegacyLoginFullscreenControls === 'function') {
  removeLegacyLoginFullscreenControls();
  setTimeout(removeLegacyLoginFullscreenControls, 100);
@@ -758,7 +758,7 @@ async function copyToClipboard(text, elementId = null) {
  } else {
  showToast("Copiado: " + text);
  }
- 
+
  if (elementId) {
  const el = document.getElementById(elementId);
  if (el) {
@@ -782,8 +782,8 @@ function toggleAllStock() {
  const btn = document.getElementById('btn-toggle-stock');
  if (grid && btn) {
  const isShowingAll = grid.classList.toggle('show-all');
- btn.innerHTML = isShowingAll ? 
- '<span class="material-symbols-rounded">expand_less</span> VER MENOS' : 
+ btn.innerHTML = isShowingAll ?
+ '<span class="material-symbols-rounded">expand_less</span> VER MENOS' :
  '<span class="material-symbols-rounded">expand_more</span> VER TODOS';
  }
 }
@@ -799,7 +799,7 @@ function highlightText(text, term) {
  if (!term) return text;
  const cleanTerm = normalizar(term);
  if (!cleanTerm) return text;
- 
+
  // Regex para encontrar o termo ignorando acentos e caixa
  // Nota: Para manter o texto original mas com tags, usamos uma abordagem mais simplificada
  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
@@ -896,7 +896,7 @@ function normalizeSheetValue(sheet, field, value) {
  const lower = str.toLowerCase();
 
  // Texto validado em UTF-8.
- 
+
  // ABA: Produtos
  if (sheet === 'produtos' && field === 'status') {
  return (lower === 'inativo') ? 'inativo' : 'ativo';
@@ -969,7 +969,7 @@ function normalizePayloadForSheet(payload) {
 
  // Texto validado em UTF-8.
  const fieldsToCheck = [
- 'status', 'tipo', 'local', 'local_origem', 'local_destino', 
+ 'status', 'tipo', 'local', 'local_origem', 'local_destino',
  'ativo', 'perfil'
  ];
 
@@ -1018,7 +1018,7 @@ async function revertStockMovement(sessionId, row, operatorId) {
  tipo: 'SAIDA', // Normalizado para 'saida' (estorno A uma saida de correcao)
  id_interno: row.id_interno,
  local: '1andar', // Canonical 1andar
- quantidade: row.qtd_conferida, 
+ quantidade: row.qtd_conferida,
  data_hora: now,
  usuario: operatorId,
  origem: 'MANUAL',
@@ -1594,19 +1594,19 @@ function getLogoForHeader(headerBgColor) {
  if (!headerBgColor) {
  return LOGO_LIGHT_BG;
  }
- 
+
  const bg = headerBgColor.toLowerCase().trim();
- 
+
  // Fundo escuro
  if (bg === '#101018' || bg === '#000000' || bg === 'transparent' || bg.startsWith('rgba(16,')) {
  return LOGO_DARK_BG;
  }
- 
+
  // Fundo claro
  if (bg === '#ffffff' || bg === '#fff' || bg.startsWith('rgba(255,')) {
  return LOGO_LIGHT_BG;
  }
- 
+
  // Texto validado em UTF-8.
  return LOGO_LIGHT_BG;
 }
@@ -1617,7 +1617,7 @@ function getLogoForHeader(headerBgColor) {
 // Texto validado em UTF-8.
 function formatImageUrl(url) {
  if (!url) return '';
- 
+
  // Texto validado em UTF-8.
  if (url.startsWith('produtos/') || url.startsWith('branding/')) {
  try {
@@ -1627,10 +1627,10 @@ function formatImageUrl(url) {
  console.log('[INFO] Operacao registrada.');
  }
  }
- 
+
  if (url.includes('drive.google.com')) {
  // Handle various Drive link formats (preview, file, view, id=, etc)
- const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || 
+ const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
  url.match(/id=([a-zA-Z0-9_-]+)/) ||
  url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
  if (match && match[1]) {
@@ -1706,10 +1706,10 @@ function isValidUrl(value) {
  if (!value) return false;
  const s = String(value).trim();
  const low = s.toLowerCase();
- 
+
  // Bloqueio de valores vazios ou placeholders comuns vindos de bancos de dados
  if (!s || low === 'null' || low === 'undefined' || low === 'n/a' || low === 'vazio') return false;
- 
+
  try {
  // Aceita URLs absolutas HTTP/HTTPS
  const url = new URL(s);
@@ -1867,10 +1867,10 @@ async function ensureFreshData(callback) {
  }
 
  addTechnicalLog('SYNC_CHECK', 'STALE', 'Dados antigos. Disparando sync obrigatAria...');
- 
+
  // Texto validado em UTF-8.
- const success = await loadAllData(false); 
- 
+ const success = await loadAllData(false);
+
  if (success) {
  callback();
  } else {
@@ -1992,7 +1992,7 @@ function withTimeout(promise, ms, label) {
 async function initApp() {
  applyAppFont();
  window.loginCustomBgImage = null;
- 
+
  try {
  loadFromIndexedDB('loginBgImage', function(data) {
  if (data && typeof data === 'string' && data.startsWith('data:image')) {
@@ -2002,7 +2002,7 @@ async function initApp() {
  } catch (e) {
  console.log('[INIT] Error loading custom bg, using default');
  }
- 
+
  // Texto validado em UTF-8.
  if (bootstrapState.running) {
  console.log('[INFO] Operacao registrada.');
@@ -2083,12 +2083,12 @@ async function initApp() {
  if (navigator.onLine) ensureProdutosLoaded(false).catch(error => console.warn('[OFFLINE] Preparacao do catalogo falhou:', error));
  runStartupUpdateCheck().catch(error => console.warn('[BOOT] Verificação de atualização em segundo plano falhou:', error));
  }, 0);
- 
+
  // 10. CONCLUIR BOOTSTRAP
  clearTimeout(totalTimeout);
  bootstrapState.completed = true;
  bootstrapState.running = false;
- 
+
  const elapsed = Date.now() - bootstrapState.startTime;
  console.log('[BOOT] ==========================================');
  console.log('[INFO] Operacao registrada.');
@@ -2099,7 +2099,7 @@ async function initApp() {
  clearTimeout(totalTimeout);
  console.log('[INFO] Operacao registrada.');
  addSyncTrace('initApp', 'ERROR', err.message);
- 
+
  // SEMPRE renderizar login em caso de erro
  hideSplash();
  try {
@@ -2107,7 +2107,7 @@ async function initApp() {
  } catch (e2) {
  console.log('[INFO] Operacao registrada.');
  }
- 
+
  bootstrapState.completed = true;
  bootstrapState.running = false;
  }
@@ -2123,7 +2123,7 @@ async function loadUsersWithFallback() {
  BOOT_CONFIG.TIMEOUT_MS,
  'fetchUsuariosSupabase'
  );
- 
+
  if (data && data.length > 0) {
  appData.users = data.map(u => ({
  ...u,
@@ -2133,7 +2133,7 @@ async function loadUsersWithFallback() {
  console.log(`[DATA] Google Sheets ignorado para 'usuarios'`);
  return true;
  }
- 
+
  console.log('[INFO] Operacao registrada.');
  } catch (e) {
  console.log('[INFO] Operacao registrada.');
@@ -2470,7 +2470,7 @@ async function processSyncQueue(caller = 'unknown') {
  addSyncTrace('processSyncQueue', 'BLOCK', `online=${navigator.onLine} isSyncing=${isSyncing}`);
  return;
  }
- 
+
  const outboxProcessed = await syncOperationOutbox(caller);
 
  addSyncTrace('processSyncQueue', 'START', caller);
@@ -2565,16 +2565,16 @@ async function safePost(payload) {
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify(syncItem.payload)
  });
- 
+
  // Texto validado em UTF-8.
  console.log('[INFO] Operacao registrada.');
  return true;
  } catch (error) {
  console.log('[INFO] Operacao registrada.');
- 
+
  // Adicionar a fila mesmo em caso de erro
  await queueOperation('google_sheets_post', syncItem.payload, { backupTarget: 'google_sheets' });
- 
+
  // Texto validado em UTF-8.
  if (error.name === 'TypeError' && error.message.includes('fetch')) {
  showToast('Operacao concluida.', 'info');
@@ -2642,7 +2642,7 @@ async function fetchSheetData(sheetName, timeoutMs = 20000) {
  });
  } catch (error) {
  console.error(`Error fetching sheet ${sheetName}:`, error);
- 
+
  if (sheetName === 'estoque_atual') return null;
 
  if (error.name === 'AbortError') {
@@ -2754,13 +2754,13 @@ function updateMenuStatusUI() {
  const statusDot = document.querySelector('.status-dot');
  const statusText = document.querySelector('.status-text');
  const pendingCount = document.querySelector('.pending-count');
- 
+
  if (statusDot && statusText) {
  const isOnline = navigator.onLine;
  statusDot.className = `status-dot ${isOnline ? 'online' : 'offline'}`;
  statusText.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
  }
- 
+
  if (pendingCount) {
  pendingCount.textContent = `${getOfflinePendingCount()} pendentes`;
  }
@@ -2898,7 +2898,7 @@ function getOperationalIdentityHTML(type = 'PICKING') {
  const mobileGradient = isPick
  ? 'linear-gradient(90deg, #2563EB 0%, #1D4ED8 100%)'
  : 'linear-gradient(90deg, #0891B2 0%, #0E7490 100%)';
- 
+
  return `
  <div class="operational-top-bar${getDesignSystemOperationalClass(type)}" style="background:${mobileGradient}!important;">
  <div class="top-bar-icon-wrap">
@@ -3086,7 +3086,7 @@ async function loadAllData(silent = false, caller = 'unknown') {
  // Texto validado em UTF-8.
  appData.lastSyncTime = formatTimeBR();
  appData.lastSyncTimestamp = Date.now();
- 
+
  addTechnicalLog('SYNC', 'SUCCESS');
 
  // Texto validado em UTF-8.
@@ -3104,7 +3104,7 @@ async function loadAllData(silent = false, caller = 'unknown') {
  isAppLoading = false;
  appData.isLoading = false;
  addSyncTrace('loadAllData', 'FINALLY', `caller=${caller} screen=${currentScreen}`);
- 
+
  // Texto validado em UTF-8.
  if (!silent && currentScreen === 'menu') {
  renderMenu();
@@ -3263,23 +3263,23 @@ async function ensureCanaisLoaded(force = false) {
  console.log(`[CANAIS DEBUG] Usando ${appData.channels.length} canais do cache appData`);
  return true;
  }
- 
+
  try {
  console.log('[CANAIS DEBUG] supabase client existe?', !!window.supabaseClient);
  console.log('[CANAIS DEBUG] buscando tabela canais_envio via DataClient...');
- 
+
  // Texto validado em UTF-8.
  const data = await window.DataClient.loadModule('channels', true);
- 
+
  console.log('[CANAIS DEBUG] resposta DataClient.loadModule:', data);
- 
+
  if (data && data.channels && data.channels.length > 0) {
  appData.channels = data.channels;
  console.log(`[CANAIS DEBUG] quantidade retornada: ${appData.channels.length}`);
  console.log(`[CANAIS DEBUG] canais retornados:`, appData.channels.map(c => c.nome || c.col_B));
  return true;
  }
- 
+
  // Fallback: tentar busca direta no Supabase se DataClient falhou
  console.warn('[CANAIS DEBUG] DataClient retornou vazio, tentando busca direta...');
  if (window.supabaseClient) {
@@ -3288,7 +3288,7 @@ async function ensureCanaisLoaded(force = false) {
  .select('*')
  .eq('ativo', true)
  .order('nome', { ascending: true });
- 
+
  if (error) {
  console.error('[CANAIS DEBUG] erro supabase direto:', error);
  } else if (directData && directData.length > 0) {
@@ -3300,7 +3300,7 @@ async function ensureCanaisLoaded(force = false) {
  console.warn('[CANAIS DEBUG] busca direta retornou 0 canais');
  }
  }
- 
+
  console.warn('[CANAIS DEBUG] Nenhum canal retornado do Supabase');
  appData.channels = appData.channels || [];
  return false;
@@ -3516,11 +3516,11 @@ function logout() {
  localStorage.removeItem('currentUserProfile');
  localStorage.removeItem(PICK_CURRENT_DRAFT_STORAGE_KEY);
  localStorage.removeItem(PICK_DRAFT_SESSIONS_STORAGE_KEY);
- 
+
  // Texto validado em UTF-8.
  currentPackSession = null;
  currentSessionItems = [];
- 
+
  renderLogin();
 }
 
@@ -3530,11 +3530,11 @@ function logout() {
 function toggleCostVisibility() {
  const isVisible = localStorage.getItem('cost_visible') === 'true';
  localStorage.setItem('cost_visible', !isVisible);
- 
+
  // Se o elemento existir na tela atual, atualiza na hora sem re-renderizar tudo
  const costField = document.getElementById('product-cost-field');
  const toggleIcon = document.getElementById('cost-toggle-icon');
- 
+
  if (costField && toggleIcon) {
  if (!isVisible) {
  // Estava oculto, vai mostrar
@@ -3742,7 +3742,7 @@ function renderLogin(push = true) {
  // Fallback visual do login acompanha o tema, sem tocar no fluxo operacional.
  const backgroundStyleValue = getLoginBackgroundStyleValue();
  const backgroundStyle = `style="background: ${backgroundStyleValue};"`;
- 
+
  const userGridHTML = usersToRender.map((u, index) => {
  const initials = getUserInitials(u.nome);
  const nameParts = (u.nome || '').trim().split(/\s+/).filter(Boolean);
@@ -3754,7 +3754,7 @@ function renderLogin(push = true) {
  const safeInitials = escapeKitAttribute(initials);
  const automotiveIconHTML = getLoginAutomotiveIconHTML(initials, index);
  const loginClickAction = `try{window.playLoginSound&&window.playLoginSound(${index})}catch(e){};setUser(${quoteKitInlineArg(u.nome)},${quoteKitInlineArg(u.id)},${quoteKitInlineArg(u.perfil)})`;
- 
+
  return `
  <div class="user-card login-user-card" onclick="${loginClickAction}">
  <span class="login-card-glow login-card-glow-top" aria-hidden="true"></span>
@@ -3844,7 +3844,7 @@ function getNextInternalId() {
  appData.products.forEach(p => {
  const idVal = String(p.id_interno || p.col_a || p.col_A || p.col_0 || "");
  if (idVal && idVal.trim() !== "") {
- // Extract numeric part. 
+ // Extract numeric part.
  // For "DY-000.197", we want 197.
  // We look for the last sequence of digits.
  const match = idVal.match(/(\d+)$/);
@@ -4036,12 +4036,12 @@ function getMenuItemsFromConfig() {
  .map(module => {
  let isDisabled = !navigator.onLine && !['pick', 'pack', 'produtos', 'dashboard'].includes(module.id);
  let badge = null;
- 
+
  if (module.type === 'em_breve') {
  badge = 'EM BREVE';
  }
  if (isDisabled && module.type !== 'em_breve') badge = 'AGUARDE INTERNET';
- 
+
  return {
  id: module.id,
  label: module.label,
@@ -4163,7 +4163,7 @@ function getQuickActionsHTML(modoRapidoAtivo) {
  </button>
  </div>
  </div>
- 
+
  <button class="quick-action-fab fab-icon-btn fab-funcoes" type="button" onclick="toggleQuickActions()" aria-label="Funcoes rApidas" title="Funcoes rApidas">
  <img class="quick-action-fab-img quick-action-mode-img" src="${quickActionImage}" alt="" aria-hidden="true" onerror="this.style.display='none'">
  <span class="quick-action-fab-fallback material-symbols-rounded notranslate" translate="no" aria-hidden="true">menu</span>
@@ -4219,23 +4219,1001 @@ async function renderDashboard() {
 }
 
 function renderPedidosPlaceholder(push = true) {
- const currentUser = localStorage.getItem('currentUser');
- if (!currentUser) return renderLogin();
+  renderPedidosScreen('todos');
+}
 
- currentScreen = 'pedidos';
- if (push) pushNav('pedidos');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- <main class="container">
- <div class="kit-premium-state">
- <span class="material-symbols-rounded">receipt_long</span>
- <h2>Pedidos</h2>
- <p>M&oacute;dulo em prepara&ccedil;&atilde;o.</p>
- </div>
- </main>
- </div>
- `;
+window.PedidosPreviewState = window.PedidosPreviewState || {
+  operacional: 'todos', // 'todos' | 'pendentes' | 'prontos' | 'em_separacao' | 'separados' | 'divergencias'
+  marketplace: 'todos', // 'todos' | 'mercadolibre' | 'shopee'
+  conta: 'todas',
+  busca: ''
+};
+
+function setPedidosFiltroOperacional(op) {
+  window.PedidosPreviewState.operacional = op;
+  renderPedidosScreen();
+}
+
+function setPedidosFiltroMarketplace(mp) {
+  window.PedidosPreviewState.marketplace = mp;
+  renderPedidosScreen();
+}
+
+function setPedidosFiltroConta(conta) {
+  window.PedidosPreviewState.conta = conta;
+  renderPedidosScreen();
+}
+
+function setPedidosBusca(texto) {
+  window.PedidosPreviewState.busca = texto || '';
+  renderPedidosScreen();
+}
+
+async function openModalIdentificarPreview(pedidoId, itemIdx = 0) {
+  closeAppCenterModal();
+  const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+  const ped = todosPreview.find(p => p.id === pedidoId);
+  if (!ped) {
+    if (typeof showToast === 'function') showToast('Pedido não encontrado na prévia.', 'error');
+    return;
+  }
+
+  // Regra 4: Shopee não habilitado nesta fase
+  if (ped.platform !== 'MERCADOLIBRE') {
+    if (typeof showToast === 'function') {
+      showToast('A identificação de itens Shopee está bloqueada nesta fase.', 'warning');
+    }
+    return;
+  }
+
+  // Regra 5: Conta não resolvida Mercado Livre
+  let accountIdLocal = ped.accountIdLocal;
+  if (!accountIdLocal || Number(accountIdLocal) <= 0) {
+    accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    ped.accountIdLocal = accountIdLocal;
+  }
+
+  if (!accountIdLocal || Number(accountIdLocal) <= 0) {
+    if (typeof showToast === 'function') {
+      showToast('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.', 'warning');
+    } else {
+      alert('Conta operacional ainda não vinculada. A identificação ficará disponível após a conta ser reconciliada.');
+    }
+    return;
+  }
+
+  if (typeof window.openSharedItemMappingModal !== 'function') {
+    if (typeof showToast === 'function') showToast('Motor de mapping compartilhado não disponível.', 'error');
+    return;
+  }
+
+  const itens = ped.itens || [];
+  const itemAlvo = itens[itemIdx] || itens[0] || {};
+
+  // Regra 10: variationId
+  const varIdClean = (itemAlvo.variation_id && String(itemAlvo.variation_id).trim()) ? String(itemAlvo.variation_id).trim() : null;
+
+  // Monta mapeamento inicial se o item já possuir hidratação prévia
+  let initialMapping = null;
+  if (itemAlvo.mapping_status === 'IDENTIFICADO' && itemAlvo.mapping_version) {
+    const versao = itemAlvo.mapping_version;
+    const comps = itemAlvo.mapping_componentes || [];
+    initialMapping = {
+      type: versao.tipo_identificacao === 'kit' ? 'kit' : 'equivalents',
+      products: comps.filter(c => c.produto_id || c.produto_referencia_id).map(c => {
+        const p = c.produtos || c.produto_referencia || {};
+        return {
+          id: c.produto_id || c.produto_referencia_id || p.id,
+          id_interno: p.id_interno || 'PROD',
+          nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+          marca: p.marca || '-',
+          ean: p.ean || '-',
+          sku_fornecedor: p.sku_fornecedor || '-'
+        };
+      }),
+      components: comps.map(c => {
+        const p = c.produtos || c.produto_referencia || {};
+        return {
+          product: {
+            id: c.produto_id || c.produto_referencia_id || p.id,
+            id_interno: p.id_interno || 'PROD',
+            nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+            marca: p.marca || '-',
+            ean: p.ean || '-',
+            sku_fornecedor: p.sku_fornecedor || '-'
+          },
+          qty: c.quantidade_por_unidade || 1
+        };
+      })
+    };
+  }
+
+  // Regra 10: Contrato de Pedidos ao chamar openSharedItemMappingModal
+  window.openSharedItemMappingModal({
+    marketplace: 'MERCADO_LIVRE',
+    accountId: accountIdLocal,
+    sourceAccountId: ped.source_account_id,
+    itemId: String(itemAlvo.item_id).trim(),
+    variationId: varIdClean,
+    sellerSku: itemAlvo.seller_sku || null,
+    titulo: itemAlvo.titulo || 'Item do Pedido',
+    thumbnailUrl: itemAlvo.thumbnail_url || null,
+    initialMapping: initialMapping,
+    onSaved: async () => {
+      // Re-executa hidratação dos mappings de Pedidos e atualiza tela
+      await hidratarPedidosPreviewMappings(todosPreview);
+      if (typeof renderPedidosScreen === 'function') {
+        renderPedidosScreen();
+      }
+      if (typeof showToast === 'function') {
+        showToast('Item identificado e mapeamento salvo com sucesso!', 'success');
+      }
+    }
+  });
+}
+
+const contasResolvedMapCache = new Map();
+
+async function resolverAccountIdLocalParaPedido(sourceAccountId) {
+  const strId = String(sourceAccountId || '').trim();
+  if (!strId) return null;
+
+  if (contasResolvedMapCache.has(strId)) {
+    return contasResolvedMapCache.get(strId);
+  }
+
+  if (window.supabaseClient) {
+    try {
+      const { data, error } = await window.supabaseClient.rpc('resolver_marketplace_account_id', {
+        p_source_account_id: strId
+      });
+      if (!error && Array.isArray(data) && data.length > 0 && data[0].account_id) {
+        const resolvedId = Number(data[0].account_id);
+        contasResolvedMapCache.set(strId, resolvedId);
+        return resolvedId;
+      }
+    } catch (e) {
+      console.warn('[PEDIDOS PREVIEW] Erro ao chamar RPC resolver_marketplace_account_id:', e);
+    }
+  }
+
+  contasResolvedMapCache.set(strId, null);
+  return null;
+}
+
+async function hidratarPedidosPreviewMappings(todosPreview) {
+  if (!Array.isArray(todosPreview) || !window.DataClient?.listMercadoLivreItemMappings) return;
+
+  const mappingsPorConta = new Map();
+
+  for (const ped of todosPreview) {
+    // Isolamento estrito: Shopee não consulta mapping do Mercado Livre
+    if (ped.platform !== 'MERCADOLIBRE') {
+      ped.status_identificacao_preview = 'pendente_identificacao';
+      ped.conta_resolvida = false;
+      continue;
+    }
+
+    let accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    ped.accountIdLocal = accountIdLocal;
+
+    if (!accountIdLocal) {
+      ped.status_identificacao_preview = 'pendente_identificacao';
+      ped.conta_resolvida = false;
+      continue;
+    }
+
+    ped.conta_resolvida = true;
+
+    if (!mappingsPorConta.has(accountIdLocal)) {
+      try {
+        const list = await window.DataClient.listMercadoLivreItemMappings(accountIdLocal);
+        mappingsPorConta.set(accountIdLocal, list || []);
+      } catch (err) {
+        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accountIdLocal, err);
+        mappingsPorConta.set(accountIdLocal, []);
+      }
+    }
+
+    const accountMappings = mappingsPorConta.get(accountIdLocal) || [];
+    let todosItensIdentificados = (ped.itens || []).length > 0;
+
+    for (const item of (ped.itens || [])) {
+      const varKey = (item.variation_id && String(item.variation_id).trim()) ? String(item.variation_id).trim() : '__SEM_VARIACAO__';
+
+      const mapRecord = accountMappings.find(m =>
+        m.ativo &&
+        m.current_version_id &&
+        String(m.item_id) === String(item.item_id) &&
+        (m.variation_key === varKey || String(m.variation_id) === String(item.variation_id) || (varKey === '__SEM_VARIACAO__' && (!m.variation_key || m.variation_key === '__SEM_VARIACAO__')))
+      );
+
+      if (mapRecord && mapRecord.mercadolivre_item_mapping_versions) {
+        const versao = mapRecord.mercadolivre_item_mapping_versions;
+        const comps = versao.mercadolivre_item_mapping_componentes || [];
+        if (comps.length > 0) {
+          item.mapping_status = 'IDENTIFICADO';
+          item.mapping_id = mapRecord.id;
+          item.mapping_version = versao;
+          item.mapping_componentes = comps;
+          continue;
+        }
+      }
+
+      item.mapping_status = 'PENDENTE';
+      item.mapping_id = null;
+      item.mapping_version = null;
+      item.mapping_componentes = [];
+      todosItensIdentificados = false;
+    }
+
+    ped.status_identificacao_preview = todosItensIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+  }
+}
+
+async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
+  const currentUser = localStorage.getItem('currentUser');
+  if (!currentUser) return renderLogin();
+
+  currentScreen = 'pedidos';
+
+  // Verifica se está no modo preview de pedidos reais
+  const isPreviewMode = Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA) && window.PEDIDOS_PREVIEW_AMOSTRA.length > 0;
+
+  if (isPreviewMode) {
+    const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
+    const state = window.PedidosPreviewState;
+
+    // Hidrata os mappings da preview via DataClient/Supabase em memória
+    try {
+      await hidratarPedidosPreviewMappings(todosPreview);
+    } catch (errHidratar) {
+      console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings:', errHidratar);
+    }
+
+    // Se parâmetros foram passados diretamente pela chamada legada, sincroniza com o state
+    if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
+
+    // Contadores Operacionais Principais (dinâmicos baseados no mapping real)
+    const countTodos = todosPreview.length; // 30
+    const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
+    const countPendentes = countTodos - countProntos;
+    const countEmSeparacao = 0;
+    const countSeparados = 0;
+    const countDivergencias = 0;
+
+    // Contadores por Canal para os botões de filtro
+    const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
+    const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+
+    // Lista de contas distintas da amostra
+    const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
+
+    // Aplicação determinística dos filtros:
+    let listaExibicao = todosPreview;
+
+    // 1. Filtro Operacional
+    if (state.operacional === 'prontos') {
+      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
+    } else if (state.operacional === 'pendentes') {
+      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
+    } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+      listaExibicao = [];
+    } else {
+      // 'todos'
+      listaExibicao = todosPreview;
+    }
+
+    // 2. Filtro Secundário: Marketplace
+    if (state.marketplace === 'mercadolibre') {
+      listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
+    } else if (state.marketplace === 'shopee') {
+      listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
+    }
+
+    // 3. Filtro Secundário: Conta
+    if (state.conta && state.conta !== 'todas') {
+      listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
+    }
+
+    // 4. Busca Textual (pedido, título, SKU, variação, conta)
+    const termoBusca = String(state.busca || '').trim().toLowerCase();
+    if (termoBusca) {
+      listaExibicao = listaExibicao.filter(p => {
+        const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
+        const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
+        const itemsMatch = (p.itens || []).some(it =>
+          String(it.titulo || '').toLowerCase().includes(termoBusca) ||
+          String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
+          String(it.item_id || '').toLowerCase().includes(termoBusca) ||
+          String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
+        );
+        return orderMatch || accountMatch || itemsMatch;
+      });
+    }
+
+    app.innerHTML = `
+      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()')}
+        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+        <main class="container ped-shell app-page-container">
+          <div class="app-breadcrumb">
+            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+            <span class="material-symbols-rounded">chevron_right</span>
+            <span class="app-breadcrumb-current">Gestão de Pedidos</span>
+          </div>
+
+          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
+                <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
+                  <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
+                </span>
+              </div>
+              <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
+                Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
+              </p>
+            </div>
+          </header>
+
+          <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
+          <div class="pedidos-counters-grid">
+            <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
+              <div class="pedidos-counter-label">
+                <span>Todos</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+              </div>
+              <div class="pedidos-counter-val">${countTodos}</div>
+              <span class="pedidos-counter-sub">Total consolidado</span>
+            </div>
+
+            <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
+              <div class="pedidos-counter-label" style="color:#b45309;">
+                <span>Pendentes</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
+              <span class="pedidos-counter-sub">Aguardam mapping</span>
+            </div>
+
+            <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
+              <div class="pedidos-counter-label" style="color:#15803d;">
+                <span>Prontos p/ Separação</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
+              <span class="pedidos-counter-sub">Prontos p/ envio</span>
+            </div>
+
+            <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
+              <div class="pedidos-counter-label" style="color:#1d4ed8;">
+                <span>Em Separação</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
+              <span class="pedidos-counter-sub">Picking em curso</span>
+            </div>
+
+            <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
+              <div class="pedidos-counter-label" style="color:#7e22ce;">
+                <span>Separados</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
+              <span class="pedidos-counter-sub">Aguardam conferência</span>
+            </div>
+
+            <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
+              <div class="pedidos-counter-label" style="color:#dc2626;">
+                <span>Divergências</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
+              <span class="pedidos-counter-sub">Revisão necessária</span>
+            </div>
+          </div>
+
+          <!-- BARRA DE FILTROS SECUNDÁRIOS -->
+          <div class="pedidos-filters-bar">
+            <div class="pedidos-search-wrap">
+              <span class="material-symbols-rounded pedidos-search-icon">search</span>
+              <input type="text"
+                     class="pedidos-search-input"
+                     placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
+                     value="${escapeKitAttribute(state.busca)}"
+                     oninput="setPedidosBusca(this.value)">
+            </div>
+
+            <div class="pedidos-pills-wrap">
+              <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
+                Todos Canais (${todosPreview.length})
+              </button>
+              <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
+                Mercado Livre (${countML})
+              </button>
+              <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
+                Shopee (${countShopee})
+              </button>
+            </div>
+
+            <div style="min-width:200px;">
+              <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
+                <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
+                ${contasDisponiveis.map(c => `
+                  <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
+                `).join('')}
+              </select>
+            </div>
+          </div>
+
+          <!-- LISTA DE CARDS DE PEDIDOS -->
+          <div style="display:grid;gap:16px;">
+            ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
+              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
+                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
+                <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
+                <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
+              </div>
+            `}
+          </div>
+        </main>
+      </div>
+    `;
+    return;
+  }
+
+  // --- FLUXO ORIGINAL PRESERVADO (quando não em preview) ---
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+      <main class="container ped-shell app-page-container">
+        <div class="pedidos-loading" style="text-align:center;padding:40px;color:#64748b;">
+          <span class="material-symbols-rounded" style="font-size:36px;animation:spin 1s linear infinite;">sync</span>
+          <p>Carregando pedidos do marketplace...</p>
+        </div>
+      </main>
+    </div>
+  `;
+
+  try {
+    let pedidos = [];
+    if (window.DataClient?.listMercadoLivrePedidos) {
+      pedidos = await window.DataClient.listMercadoLivrePedidos();
+    }
+
+    const totalTodos = pedidos.length;
+    const listPendentes = pedidos.filter(p => p.status_identificacao === 'pendente_identificacao' || p.status_identificacao === 'novo');
+    const listProntos = pedidos.filter(p => p.status_identificacao === 'pronto_separacao' && p.status_mercadolivre !== 'cancelled');
+
+    let listaExibicao = pedidos;
+    if (filtroAba === 'pendentes') listaExibicao = listPendentes;
+    if (filtroAba === 'prontos') listaExibicao = listProntos;
+
+    app.innerHTML = `
+      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()')}
+        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+        <main class="container ped-shell app-page-container">
+          <div class="app-breadcrumb">
+            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+            <span class="material-symbols-rounded">chevron_right</span>
+            <span class="app-breadcrumb-current">Pedidos & Identificação</span>
+          </div>
+
+          <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+            <div>
+              <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
+              <p style="color:#64748b;font-size:0.9rem;margin:4px 0 0;">Acompanhe a identificação dos anúncios e o snapshot congelado de equivalentes.</p>
+            </div>
+          </header>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
+            <div onclick="renderPedidosScreen('todos')" style="background:#fff;border:2px solid ${filtroAba === 'todos' ? '#4f46e5' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#64748b;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Todos os Pedidos</small>
+              <h2 style="font-size:1.8rem;color:#0f172a;margin:6px 0 0;">${totalTodos}</h2>
+            </div>
+            <div onclick="renderPedidosScreen('pendentes')" style="background:#fff;border:2px solid ${filtroAba === 'pendentes' ? '#ea580c' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#c2410c;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Pendentes de Identificação</small>
+              <h2 style="font-size:1.8rem;color:#c2410c;margin:6px 0 0;">${listPendentes.length}</h2>
+            </div>
+            <div onclick="renderPedidosScreen('prontos')" style="background:#fff;border:2px solid ${filtroAba === 'prontos' ? '#16a34a' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
+              <small style="color:#15803d;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Prontos para Separação</small>
+              <h2 style="font-size:1.8rem;color:#15803d;margin:6px 0 0;">${listProntos.length}</h2>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:16px;">
+            ${listaExibicao.length ? listaExibicao.map(ped => renderPedidoCardHTML(ped)).join('') : `
+              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:40px;text-align:center;color:#64748b;">
+                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;">inbox</span>
+                <p style="margin-top:12px;font-weight:600;">Nenhum pedido encontrado nesta categoria.</p>
+              </div>
+            `}
+          </div>
+        </main>
+      </div>
+    `;
+  } catch (err) {
+    console.error('[PEDIDOS] Erro ao renderizar tela:', err);
+  }
+}
+
+function renderPedidoCardHTML(ped) {
+  // RENDERIZAÇÃO REFINADA PARA PREVIEW DE 30 PEDIDOS REAIS
+  if (ped && ped.preview) {
+    const isML = ped.platform === 'MERCADOLIBRE';
+    const itens = ped.itens || [];
+    const primeiroItem = itens[0] || {};
+    const totalItens = ped.total_itens || itens.length || 1;
+    const hasMultiple = totalItens > 1;
+
+    const isPronto = ped.status_identificacao_preview === 'pronto_separacao';
+    const identificadosCount = itens.filter(i => i.mapping_status === 'IDENTIFICADO').length;
+    const pendentesCount = totalItens - identificadosCount;
+
+    // Badges
+    const badgePlatform = isML
+      ? `<span class="badge-canal-ml">MERCADO LIVRE</span>`
+      : `<span class="badge-canal-shopee">SHOPEE</span>`;
+
+    const statusMarketplaceBadge = `
+      <span class="badge-status-marketplace" title="Status retornado pelo marketplace">
+        <span class="material-symbols-rounded" style="font-size:14px;color:#64748b;">receipt_long</span> ${escapeKitAttribute(String(ped.status || '').toUpperCase())}
+      </span>
+    `;
+
+    const statusOperacionalBadge = isPronto
+      ? `<span class="badge-operacional badge-pronto"><span class="material-symbols-rounded" style="font-size:14px;">check_circle</span> PRONTO PARA SEPARAÇÃO</span>`
+      : `<span class="badge-operacional badge-pendente"><span class="material-symbols-rounded" style="font-size:14px;">pending</span> PENDENTE DE IDENTIFICAÇÃO</span>`;
+
+    return `
+      <article class="pedidos-card">
+        <!-- CABEÇALHO DO CARD -->
+        <div class="pedidos-card-top">
+          <div>
+            <div class="pedidos-card-title-group">
+              ${badgePlatform}
+              <h3 class="pedidos-card-order-id">Pedido #${escapeKitAttribute(ped.external_order_id)}</h3>
+              <span style="color:#475569;font-weight:600;font-size:0.82rem;background:#f1f5f9;padding:2px 8px;border-radius:4px;">Conta: <b>${escapeKitAttribute(ped.account_name)}</b></span>
+            </div>
+            <span class="pedidos-card-meta">
+              ${escapeKitAttribute(ped.sale_date)} • <b>${totalItens}</b> anúncio(s)/item(ns) • <b>${ped.total_unidades}</b> un. total
+            </span>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${statusMarketplaceBadge}
+            ${statusOperacionalBadge}
+          </div>
+        </div>
+
+        <!-- BLOCO DO PRODUTO / ANÚNCIO (COMPACTO E OPERACIONAL) -->
+        <div class="pedidos-card-product-box">
+          ${primeiroItem.imagem_url ? `
+            <img src="${primeiroItem.imagem_url}" alt="Foto" class="pedidos-product-thumb" loading="lazy">
+          ` : `
+            <div class="pedidos-product-thumb-empty">
+              <span class="material-symbols-rounded" style="font-size:26px;">inventory_2</span>
+            </div>
+          `}
+          <div class="pedidos-product-info">
+            <strong class="pedidos-product-title" title="${escapeKitAttribute(primeiroItem.titulo || '')}">
+              ${escapeKitAttribute(primeiroItem.titulo || 'Item sem título')}
+            </strong>
+
+            <div class="pedidos-product-meta-row">
+              <span>Qtd: <b>${primeiroItem.quantidade} un.</b></span>
+              ${primeiroItem.seller_sku ? `<span>SKU anúncio: <b>${escapeKitAttribute(primeiroItem.seller_sku)}</b></span>` : '<span style="color:#94a3b8;">SKU anúncio: Não informado</span>'}
+              ${primeiroItem.variacao_texto ? `<span>Variação: <i>${escapeKitAttribute(primeiroItem.variacao_texto)}</i></span>` : '<span style="color:#94a3b8;">Sem variação</span>'}
+            </div>
+
+            ${hasMultiple ? `
+              <div class="pedidos-multi-item-banner">
+                <span class="pedidos-multi-item-tag">
+                  <span class="material-symbols-rounded" style="font-size:14px;">view_list</span>
+                  + ${totalItens - 1} outro(s) item(ns) neste pedido
+                </span>
+                <span style="color:#475569;font-weight:600;">
+                  ${identificadosCount} de ${totalItens} identificados • <b>${pendentesCount} pendente(s)</b>
+                </span>
+              </div>
+            ` : ''}
+
+            <!-- ÁREA DE IDENTIFICAÇÃO OPERACIONAL -->
+            <div class="pedidos-card-ident-box">
+              <div class="pedidos-card-ident-msg">
+                ${statusOperacionalBadge}
+                <span style="font-size:0.78rem;color:#78350f;margin-left:4px;">
+                  ${isPronto ? 'Todos os itens deste pedido estão identificados.' : (hasMultiple ? `${pendentesCount} de ${totalItens} item(ns) precisam de mapeamento.` : 'Este anúncio ainda precisa ser mapeado.')}
+                </span>
+              </div>
+              ${!isPronto ? `
+                <button type="button"
+                        class="pedidos-btn-identificar"
+                        ${ped.platform !== 'MERCADOLIBRE' ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="Identificação de itens Shopee indisponível nesta fase"' : ''}
+                        onclick="openModalIdentificarPreview('${ped.id}')">
+                  <span class="material-symbols-rounded" style="font-size:16px;">manage_search</span>
+                  Identificar ${hasMultiple ? 'Itens' : 'Produto'}
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+
+        <!-- RODAPÉ DO CARD -->
+        <div class="pedidos-card-footer">
+          <span class="pedidos-card-total">Total: ${formatFinanceiroMoney(ped.amount || 0)}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:7px 14px;font-size:0.83rem;cursor:pointer;">
+              Ver detalhes (${totalItens})
+            </button>
+            <button type="button"
+                    class="app-center-modal-secondary"
+                    disabled
+                    style="padding:7px 14px;font-size:0.83rem;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
+                    title="Envio para separação desabilitado na prévia de homologação.">
+              <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
+            </button>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  // --- FLUXO ORIGINAL PRESERVADO ---
+  const itens = ped.mercadolivre_pedido_itens || [];
+  const isCancelled = String(ped.status_mercadolivre || '').toLowerCase() === 'cancelled';
+  const isPronto = ped.status_identificacao === 'pronto_separacao' && !isCancelled;
+  const isPendente = ped.status_identificacao === 'pendente_identificacao' || ped.status_identificacao === 'novo';
+  const hasSeparacao = Boolean(ped.separacao_id);
+
+  const totalQtd = itens.reduce((s, i) => s + (i.quantidade_comprada || 1), 0);
+  const dataFmt = ped.date_created ? new Date(ped.date_created).toLocaleString() : '-';
+
+  return `
+    <article style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:800;color:#4f46e5;font-size:0.85rem;background:#e0e7ff;padding:4px 8px;border-radius:6px;">Mercado Livre</span>
+            <h3 style="font-size:1.1rem;font-weight:700;color:#0f172a;margin:0;">Pedido #${escapeKitAttribute(ped.external_order_id)}</h3>
+          </div>
+          <small style="color:#64748b;display:block;margin-top:4px;">${dataFmt} • ${itens.length} anúncio(s) • ${totalQtd} unidade(s)</small>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${hasSeparacao ? `
+            <span style="background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">local_shipping</span> ENVIADO PARA SEPARAÇÃO
+            </span>
+          ` : isCancelled ? `
+            <span style="background:#fef2f2;color:#991b1b;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">cancel</span> CANCELADO NO MARKETPLACE
+            </span>
+          ` : isPronto ? `
+            <span style="background:#f0fdf4;color:#166534;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span> PRONTO PARA SEPARAÇÃO
+            </span>
+          ` : `
+            <span style="background:#fff7ed;color:#9a3412;font-weight:700;font-size:0.8rem;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+              <span class="material-symbols-rounded" style="font-size:16px;">pending</span> IDENTIFICAÇÃO PENDENTE
+            </span>
+          `}
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f1f5f9;padding-top:12px;flex-wrap:wrap;gap:10px;">
+        <span style="font-weight:700;color:#0f172a;">Total: ${formatFinanceiroMoney(ped.total_amount || 0)}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;">
+            Ver detalhes
+          </button>
+
+          ${hasSeparacao ? `
+            <button type="button" class="app-center-modal-primary" onclick="showToast('Separação ${escapeKitAttribute(ped.separacao_id)} já vinculada ao pedido.', 'info')" style="padding:6px 14px;font-size:0.85rem;background:#2563eb;">
+              Ver separação (${escapeKitAttribute(ped.separacao_id)})
+            </button>
+          ` : isPronto ? `
+            <button type="button" id="btn-enviar-sep-${ped.id}" class="app-center-modal-primary" onclick="enviarPedidoParaSeparacaoUI('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;background:#16a34a;">
+              <span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+async function enviarPedidoParaSeparacaoUI(pedidoId) {
+  const btn = document.getElementById(`btn-enviar-sep-${pedidoId}`);
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px;animation:spin 1s linear infinite;vertical-align:middle;">sync</span> Enviando...';
+  }
+
+  try {
+    const usuario = localStorage.getItem('currentUser') || 'Sistema';
+    if (!window.DataClient?.enviarPedidoParaSeparacaoTransacional) {
+      throw new Error('Função DataClient.enviarPedidoParaSeparacaoTransacional não está disponível.');
+    }
+
+    const res = await window.DataClient.enviarPedidoParaSeparacaoTransacional(pedidoId, usuario);
+    if (res && res.separacao_id) {
+      showToast(`Pedido enviado para Separação (${res.separacao_id}) com sucesso!`, 'success');
+    }
+    renderPedidosScreen();
+  } catch (err) {
+    console.error('[PEDIDOS] Erro ao enviar para separacao:', err);
+    showToast(err.message || 'Erro ao enviar pedido para separação', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação';
+    }
+  }
+}
+
+function renderModalDetalhesPedidoPreview(ped) {
+  const isML = ped.platform === 'MERCADOLIBRE';
+  const itens = ped.itens || [];
+  const isPronto = ped.status_identificacao_preview === 'pronto_separacao';
+
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop';
+
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:880px;">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;padding-right:24px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="${isML ? 'badge-canal-ml' : 'badge-canal-shopee'}">
+              ${isML ? 'MERCADO LIVRE' : 'SHOPEE'}
+            </span>
+            <h3 style="font-size:1.25rem;font-weight:800;color:#0f172a;margin:0;">
+              PEDIDO #${escapeKitAttribute(ped.external_order_id)}
+            </h3>
+          </div>
+          <p style="color:#64748b;font-size:0.85rem;margin:6px 0 0;">
+            Conta: <b>${escapeKitAttribute(ped.account_name)}</b> (ID: ${escapeKitAttribute(ped.source_account_id)}) • Data: <b>${escapeKitAttribute(ped.sale_date)}</b>
+          </p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="badge-status-marketplace">
+            STATUS MARKETPLACE: <b style="color:#0f172a;">${escapeKitAttribute(String(ped.status || '').toUpperCase())}</b>
+          </span>
+          ${isPronto ? `
+            <span class="badge-operacional badge-pronto">
+              <span class="material-symbols-rounded" style="font-size:14px;">check_circle</span>
+              PRONTO PARA SEPARAÇÃO
+            </span>
+          ` : `
+            <span class="badge-operacional badge-pendente">
+              <span class="material-symbols-rounded" style="font-size:14px;">pending</span>
+              PENDENTE DE IDENTIFICAÇÃO
+            </span>
+          `}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #e2e8f0;padding-top:14px;margin-bottom:12px;">
+        <small style="color:#64748b;font-size:0.78rem;font-weight:700;text-transform:uppercase;">
+          ITENS DO PEDIDO (${itens.length} anúncio(s) • ${ped.total_unidades} un. total):
+        </small>
+      </div>
+
+      <div style="display:grid;gap:12px;max-height:55vh;overflow-y:auto;padding-right:6px;">
+        ${itens.map((item, idx) => {
+          const itemIdentificado = item.mapping_status === 'IDENTIFICADO';
+          const comps = item.mapping_componentes || [];
+          const versao = item.mapping_version || {};
+          return `
+          <div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#f8fafc;display:flex;gap:14px;align-items:flex-start;">
+            ${item.imagem_url ? `
+              <img src="${item.imagem_url}" alt="Foto" class="pedidos-product-thumb" style="width:64px;height:64px;">
+            ` : `
+              <div class="pedidos-product-thumb-empty" style="width:64px;height:64px;">
+                <span class="material-symbols-rounded" style="font-size:28px;">inventory_2</span>
+              </div>
+            `}
+
+            <div style="flex:1;min-width:0;">
+              <strong style="color:#0f172a;font-size:0.95rem;display:block;line-height:1.35;">
+                ${escapeKitAttribute(item.titulo || 'Item sem título')}
+              </strong>
+
+              <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:0.8rem;color:#475569;">
+                <span>ID Anúncio: <b>${escapeKitAttribute(item.item_id || '-')}</b></span>
+                ${item.seller_sku ? `<span>SKU anúncio: <b>${escapeKitAttribute(item.seller_sku)}</b></span>` : '<span style="color:#94a3b8;">SKU anúncio: Não informado</span>'}
+                ${item.variacao_texto ? `<span>Variação: <b>${escapeKitAttribute(item.variacao_texto)}</b></span>` : (item.variation_id ? `<span>Var ID: <b>${escapeKitAttribute(item.variation_id)}</b></span>` : '<span style="color:#94a3b8;">Sem variação</span>')}
+              </div>
+
+              <!-- IDENTIFICAÇÃO OPERACIONAL DO ITEM -->
+              ${itemIdentificado ? `
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-top:10px;">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                    <span class="badge-operacional badge-pronto" style="font-size:0.72rem;padding:2px 8px;">
+                      ITEM IDENTIFICADO (v${versao.versao || 1} • ${escapeKitAttribute(String(versao.tipo_identificacao || 'PRODUTO').toUpperCase())})
+                    </span>
+                  </div>
+                  <div style="font-size:0.82rem;color:#166534;">
+                    ${comps.map(c => {
+                      const p = c.produtos || c.produto_referencia || {};
+                      const g = c.grupos_equivalencia || {};
+                      return `• <b>${escapeKitAttribute(p.id_interno || g.nome || 'COMPONENTE')}</b>: ${escapeKitAttribute(p.descricao_completa || g.nome || 'Produto')} (${c.quantidade_por_unidade || 1} un/item)`;
+                    }).join('<br>')}
+                  </div>
+                </div>
+              ` : `
+                <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="badge-operacional badge-pendente" style="font-size:0.72rem;padding:2px 8px;">
+                      PENDENTE DE IDENTIFICAÇÃO
+                    </span>
+                    <span style="font-size:0.76rem;color:#78350f;">Aguardando mapeamento para ID Interno / Equivalência</span>
+                  </div>
+                  <button type="button"
+                          class="pedidos-btn-identificar"
+                          ${ped.platform !== 'MERCADOLIBRE' ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="Identificação de itens Shopee indisponível nesta fase"' : ''}
+                          onclick="openModalIdentificarPreview('${ped.id}', ${idx})">
+                    <span class="material-symbols-rounded" style="font-size:15px;">manage_search</span>
+                    Identificar Item
+                  </button>
+                </div>
+              `}
+
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;flex-wrap:wrap;gap:8px;">
+                <span style="font-size:0.85rem;color:#1e293b;">
+                  Qtd comprada: <b style="color:#0f172a;font-size:0.95rem;">${item.quantidade} un.</b>
+                </span>
+                <div style="text-align:right;">
+                  <span style="font-size:0.8rem;color:#64748b;">Preço hist.: </span>
+                  <b style="color:#0f172a;font-size:0.9rem;">${item.preco_unitario !== null ? formatFinanceiroMoney(item.preco_unitario) : 'Não informado'}</b>
+                  ${item.preco_unitario !== null && item.quantidade > 1 ? `
+                    <span style="font-size:0.8rem;color:#475569;margin-left:6px;">(Subtotal: <b>${formatFinanceiroMoney(item.preco_unitario * item.quantidade)}</b>)</span>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:16px;margin-top:16px;flex-wrap:wrap;gap:12px;">
+        <span style="font-size:1.1rem;font-weight:800;color:#0f172a;">
+          Valor Total do Pedido: ${formatFinanceiroMoney(ped.amount || 0)}
+        </span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()" style="padding:8px 18px;">Fechar</button>
+          <button type="button"
+                  class="app-center-modal-secondary"
+                  disabled
+                  style="padding:8px 18px;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
+                  title="Envio para separação desabilitado na prévia de homologação.">
+            <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function openModalDetalhesPedido(pedidoId) {
+  closeAppCenterModal();
+
+  // PREVIEW DE PEDIDOS
+  if (String(pedidoId).startsWith('preview_')) {
+    const ped = (window.PEDIDOS_PREVIEW_AMOSTRA || []).find(p => p.id === pedidoId);
+    if (!ped) {
+      showToast('Pedido da prévia não encontrado.', 'error');
+      return;
+    }
+    return renderModalDetalhesPedidoPreview(ped);
+  }
+
+  // FLUXO ORIGINAL PRESERVADO
+  if (!window.DataClient?.getMercadoLivrePedidoById) return;
+
+  const ped = await window.DataClient.getMercadoLivrePedidoById(pedidoId);
+  if (!ped) {
+    showToast('Pedido não encontrado.', 'error');
+    return;
+  }
+
+  const itens = ped.mercadolivre_pedido_itens || [];
+  const modal = document.createElement('div');
+  modal.id = 'app-center-modal';
+  modal.className = 'app-center-modal-backdrop';
+
+  modal.innerHTML = `
+    <div class="app-center-modal-card wide" role="dialog" aria-modal="true" style="max-width:850px;">
+      <button type="button" class="app-center-modal-close" onclick="closeAppCenterModal()" aria-label="Fechar">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+      <h3>DETALHES DO PEDIDO #${escapeKitAttribute(ped.external_order_id)}</h3>
+      <p style="color:#64748b;font-size:0.85rem;margin-bottom:16px;">Importado em ${new Date(ped.importado_em).toLocaleString()} | Status: ${escapeKitAttribute(ped.status_identificacao)}</p>
+
+      <div style="display:grid;gap:16px;max-height:60vh;overflow-y:auto;padding-right:8px;">
+        ${itens.map(item => {
+          const hasMapping = Boolean(item.mapping_version_id);
+          const snapshot = item.snapshot_componentes || [];
+          return `
+            <div style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                <div>
+                  <strong style="color:#0f172a;display:block;">${escapeKitAttribute(item.titulo)}</strong>
+                  <small style="color:#64748b;">item_id: ${escapeKitAttribute(item.item_id)} ${item.variation_id ? `| var_id: ${escapeKitAttribute(item.variation_id)}` : ''} | Qtd comprada: <b>${item.quantidade_comprada}</b></small>
+                </div>
+                ${hasMapping ? `
+                  <span style="background:#f0fdf4;color:#166534;font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:4px;">MAPEADO (V${item.mapping_version_id})</span>
+                ` : `
+                  <button type="button" class="app-center-modal-primary" onclick="closeAppCenterModal(); openAnuncioMappingModalParaItem('${escapeKitAttribute(item.item_id)}', '${escapeKitAttribute(item.variation_id || '')}', '${ped.id}')" style="padding:4px 10px;font-size:0.75rem;background:#ea580c;">
+                    Mapar Anúncio Pendente
+                  </button>
+                `}
+              </div>
+
+              ${hasMapping && snapshot.length ? `
+                <div style="margin-top:12px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px;">
+                  <small style="font-weight:800;color:#475569;text-transform:uppercase;display:block;margin-bottom:8px;">Snapshot Congelado de Componentes & Equivalentes Aceitos:</small>
+                  <div style="display:grid;gap:8px;">
+                    ${snapshot.map(comp => `
+                      <div style="font-size:0.85rem;color:#1e293b;border-bottom:1px dashed #e2e8f0;padding-bottom:6px;">
+                        <div>
+                          <strong>${comp.tipo_componente === 'grupo' ? `Grupo: ${comp.grupo_nome}` : 'Produto Isolado'}</strong>
+                          <span style="color:#4f46e5;font-weight:700;"> — ${comp.quantidade_total_calculada} un. total (${comp.quantidade_por_unidade} un/kit × ${item.quantidade_comprada} kits)</span>
+                        </div>
+                        <small style="color:#64748b;display:block;margin-top:2px;">
+                          SKUs válidos no momento do pedido (${(comp.skus_validos_snapshot || []).length}):
+                          <b>${(comp.skus_validos_snapshot || []).map(s => `${s.id_interno} (${s.marca || '-'})`).join(', ')}</b>
+                        </small>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="app-center-modal-actions" style="margin-top:20px;">
+        <button type="button" class="app-center-modal-secondary" onclick="closeAppCenterModal()">Fechar</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function openAnuncioMappingModalParaItem(itemId, variationId, pedidoId) {
+  if (typeof anOpenMappingModal === 'function') {
+    // Abre o modal de mapeamento do anuncio
+    anOpenMappingModal(itemId, variationId);
+    // Ao fechar ou atualizar o mapeamento do anuncio, reprocessa o pedido
+    const originalSave = window.anConfirmModalMapping;
+    window.anConfirmModalMapping = async function() {
+      await originalSave();
+      if (window.DataClient?.reprocessarIdentificacaoPedidoTransacional) {
+        await window.DataClient.reprocessarIdentificacaoPedidoTransacional(pedidoId);
+        showToast('Pedido reprocessado com sucesso!', 'success');
+        renderPedidosScreen('todos');
+      }
+      window.anConfirmModalMapping = originalSave;
+    };
+  } else {
+    showToast('Módulo de Mapeamento de Anúncios não está carregado.', 'warning');
+  }
 }
 
 
@@ -4280,11 +5258,11 @@ function renderDevolucoesSubMenu() {
 }
 async function renderEstoqueAtual() {
  await ensureProdutosLoaded();
- 
+
  console.log("[DIAGNOSTICO] renderEstoqueAtual iniciado.");
  console.log(`[DIAGNOSTICO] Itens em appData.products: ${appData.products ? appData.products.length : 0}`);
  console.log(`[DIAGNOSTICO] Itens em appData.estoque: ${appData.estoque ? appData.estoque.length : 0}`);
- 
+
  const currentUser = localStorage.getItem('currentUser');
 
  // Consolidate stock by id_interno
@@ -4341,7 +5319,7 @@ async function renderEstoqueAtual() {
  <div class="sub-menu-header">
  <h2 style="font-size: 1.2rem; font-weight: 700;">ESTOQUE ATUAL</h2>
  </div>
- 
+
  <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px;">
  ${stockList.length === 0 ? `
  <div style="text-align: center; padding: 60px 20px; background: var(--surface); border-radius: 24px; border: 1px dashed rgba(255,255,255,0.1);">
@@ -4364,7 +5342,7 @@ async function renderEstoqueAtual() {
  <div style="font-size: 0.55rem; color: var(--muted); text-transform: uppercase; font-weight: 700;">Total Geral</div>
  </div>
  </div>
- 
+
  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
  <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 8px; text-align: center;">
  <div style="font-size: 0.5rem; color: var(--muted); text-transform: uppercase;">DISPON\u00cdVEL</div>
@@ -5214,7 +6192,7 @@ function filterMovimentacoes() {
  let filtered = appData.movimentacoes || [];
 
  if (search) {
- filtered = filtered.filter(m => 
+ filtered = filtered.filter(m =>
  (m.id_interno || '').toLowerCase().includes(search) ||
  (m.descricao || '').toLowerCase().includes(search)
  );
@@ -6316,7 +7294,7 @@ function openNovaMovimentacaoModal() {
  console.log('[INFO] Operacao registrada.');
  console.log('[MOV] abrindo modal');
  const isInitialType = false;
- 
+
  const modalHTML = `
  <div id="nova-mov-modal" class="modal-overlay" onclick="closeNovaMovimentacaoModal(event)">
  <div class="modal-content" onclick="event.stopPropagation()">
@@ -6358,7 +7336,7 @@ function openNovaMovimentacaoModal() {
  `;
 
  document.body.insertAdjacentHTML('beforeend', modalHTML);
- 
+
  const modal = document.getElementById('nova-mov-modal');
  modal.style.opacity = '0';
  modal.style.transition = 'opacity 0.2s ease';
@@ -6976,10 +7954,10 @@ function selectTipoMovimentacao(tipo, btn) {
  });
  btn.style.borderColor = 'var(--primary)';
  btn.style.background = 'rgba(227,6,19,0.15)';
- 
+
  selectedTipoMovimentacao = tipo;
  selectedProductForMov = null;
- 
+
  renderMovimentacaoForm(tipo);
 }
 
@@ -7132,7 +8110,7 @@ function selectProductForMovInModal(id) {
  console.log('[MOV] produto selecionado - ID:', id);
  selectedProductForMov = (appData.products || []).find(p => p.ean == id || p.id_interno == id);
  console.log('[MOV] selectedProduct atual:', selectedProductForMov);
- 
+
  if (!selectedProductForMov) return;
 
  document.getElementById('mov-search').value = selectedProductForMov.descricao_base || selectedProductForMov.nome || '';
@@ -7146,7 +8124,7 @@ function selectProductForMovInModal(id) {
  <div style="font-size: 0.7rem; color: var(--muted);">ID: ${selectedProductForMov.id_interno || selectedProductForMov.id}</div>
  `;
  }
- 
+
  console.log('[MOV] produto vinculado ao state');
 }
 
@@ -7241,7 +8219,7 @@ function renderTransferenciaForm() {
  <div id="mov-search-results" style="margin-top: 8px; max-height: 150px; overflow-y: auto;"></div>
  </div>
  <div id="mov-selected-info" class="hidden full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--primary);"></div>
- 
+
  <div class="input-group">
  <label>Origem</label>
  <select id="mov-origem" class="input-field">
@@ -7262,7 +8240,7 @@ function renderTransferenciaForm() {
  <label>Observacao</label>
  <input type="text" id="mov-obs" class="input-field" placeholder="Opcional">
  </div>
- 
+
  <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
  <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
  <button class="btn-action" style="flex: 2; justify-content: center;" onclick="sio('TRANSFER)">Confirmar</button>
@@ -7302,7 +8280,7 @@ function renderDefeitoForm() {
  <div id="mov-search-results" style="margin-top: 8px; max-height: 150px; overflow-y: auto;"></div>
  </div>
  <div id="mov-selected-info" class="hidden full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--danger);"></div>
- 
+
  <div class="input-group">
  <label>Local de Origem</label>
  <select id="mov-origem" class="input-field">
@@ -7318,7 +8296,7 @@ function renderDefeitoForm() {
  <label>Motivo / Observacao</label>
  <input type="text" id="mov-obs" class="input-field" placeholder="Descreva o defeito...">
  </div>
- 
+
  <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
  <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
  <button class="btn-action" style="flex: 2; justify-content: center; background: var(--danger) !important;" onclick="saveMovimentacao('ENVIO_DEFEITO')">Registrar Defeito</button>
@@ -7440,9 +8418,9 @@ async function renderTransferenciaScreen() {
 
  // TAREFA 1 & 2: Garantir produtos carregados (Sempre aguardar para garantir)
  console.log('[INFO] Operacao registrada.');
- 
+
  const needsLoadingUI = !appData.products || appData.products.length === 0;
- 
+
  if (needsLoadingUI) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;">
@@ -7452,7 +8430,7 @@ async function renderTransferenciaScreen() {
  </div>
  `;
  }
- 
+
  await ensureProdutosLoaded(true); // TAREFA 1: Garantir carregamento real
 
  const locals = [
@@ -7609,7 +8587,7 @@ async function renderTransferenciaScreen() {
 function validateTransferLocals() {
  const origem = document.getElementById('trans-origem')?.value;
  const destino = document.getElementById('trans-destino')?.value;
- 
+
  if (origem && destino && origem === destino) {
  showToast("Origem e destino devem ser diferentes!", "warning");
  return false;
@@ -7694,7 +8672,7 @@ async function addTransferItem() {
 
  // TAREFA A: Buscar primeiro em appData.products
  let product = appData.products.find(p => p.ean == ean || p.id_interno == ean);
- 
+
  // Texto validado em UTF-8.
  if (!product) {
  console.log('[INFO] Operacao registrada.');
@@ -7743,7 +8721,7 @@ async function addTransferItem() {
  console.log('[TRANSF-DIAG] origem selecionada:', origem);
  console.log('[TRANSF-DIAG] origem normalizada:', origemNorm);
  console.log('[TRANSF-DIAG] estoque origem encontrado:', stockData);
- 
+
  const available = Number(stockData.saldo_disponivel || 0);
  const requested = Number((existing ? existing.quantidade : 0) + 1);
 
@@ -7928,7 +8906,7 @@ async function confirmTransferencia() {
  const confirmBtn = document.getElementById('btn-confirm-transfer');
  confirmBtn.disabled = true;
  confirmBtn.innerText = "PROCESSANDO...";
- 
+
  showToast("Iniciando transfer\u00eancia...");
 
  try {
@@ -7952,7 +8930,7 @@ async function confirmTransferencia() {
  } catch (err) {
  console.error('[TRANSF-DIAG] Erro fatal na transfer\u00eancia:', err);
  showToast("ERRO: " + (err.message || "Falha no servidor"), "error");
- 
+
  await showAppAlert({
  title: 'Falha na transfer\u00eancia',
  message: err.message || 'Falha no servidor',
@@ -8438,7 +9416,7 @@ async function saveAjusteEstoque() {
 async function renderInventorySetup(type) {
  const currentUser = localStorage.getItem('currentUser');
  const backAction = type === 'parcial' ? 'renderInventarioParcialMenu()' : 'renderInventarioSubMenu()';
- 
+
  // UI de Carregamento inicial
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in" style="background: #232323; min-height: 100vh;">
@@ -8921,7 +9899,7 @@ async function createNewInventorySession(type) {
  const date = new Date();
  const dateStr = date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
  const prefix = type === 'inicial' ? 'INI' : (type === 'geral' ? 'GER' : 'PAR');
- 
+
  // Texto validado em UTF-8.
  const sameDayPrefix = `INV-${prefix}-${dateStr}-`;
  const sameDayInventories = (appData.inventario || []).filter(inv => {
@@ -8938,10 +9916,10 @@ async function createNewInventorySession(type) {
  });
  nextSeq = Math.max(...lastSeqs) + 1;
  }
- 
+
  const seq = String(nextSeq).padStart(3, '0');
  const sessionId = `INV-${prefix}-${dateStr}-${seq}`;
- 
+
  console.log('[INFO] Operacao registrada.');
  console.log('[INV-DIAG] Maior seq encontrado hoje:', nextSeq - 1);
 
@@ -9119,7 +10097,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
  await ensureProdutosLoaded(true);
  } else {
  // Texto validado em UTF-8.
- ensureProdutosLoaded(); 
+ ensureProdutosLoaded();
  }
 
  app.innerHTML = `
@@ -9193,7 +10171,7 @@ async function renderInventarioInicialScreen(sessionId, mode = 'edit') {
  </button>
  <div class="inv-footer-bar">
  <div class="inv-footer-inner">
- ${isView ? 
+ ${isView ?
  `
  <div style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px;">
  <span class="inv-total-label">Total de itens: <span id="inv-total-count" class="inv-total-num">0</span></span>
@@ -9281,7 +10259,7 @@ async function gerarPdfPreInventario() {
 
  doc.setFontSize(16);
  doc.text(title, 105, 15, { align: 'center' });
- 
+
  doc.setFontSize(10);
  doc.text(`ID Inao: ${inv.id}`, 14, 25);
  doc.text(`Status: ${status}`, 14, 30);
@@ -9471,7 +10449,7 @@ if (typeof window !== 'undefined') {
 async function handleInventoryCamera(input) {
  if (!input.files || !input.files[0]) return;
  showToast('Operacao concluida.', 'info');
- 
+
  // Texto validado em UTF-8.
  // No futuro, aqui integraria com uma lib de OCR ou Barcode reader
  setTimeout(() => {
@@ -9497,7 +10475,7 @@ async function addInventoryItem(scannedEan = null) {
  if(eanInput) eanInput.focus();
  return;
  }
- 
+
  if (eanInput) eanInput.value = ""; // Limpa campo imediatamente para novo bip
 
  console.log('[INV-DIAG] currentInventory.id:', appData.currentInventory?.id);
@@ -9519,7 +10497,7 @@ async function addInventoryItem(scannedEan = null) {
  product = appData.products.find(p => (p.ean?.toString() === ean) || (p.id_interno?.toString() === ean) || (p.sku_fornecedor?.toString() === ean));
  }
 
- if (!product) { 
+ if (!product) {
  console.log('[INFO] Operacao registrada.');
  showScanFeedback('warning', 'Produto sem cadastro');
  showToast("Produto n\u00e3o encontrado!", "error");
@@ -9531,9 +10509,9 @@ async function addInventoryItem(scannedEan = null) {
  danger: true,
  icon: 'barcode_off'
  });
- if(eanInput) eanInput.value = ''; 
+ if(eanInput) eanInput.value = '';
  if(eanInput) eanInput.focus();
- return; 
+ return;
  }
 
  appData.currentInventory.items = groupInventoryItemsByProduct(appData.currentInventory.items || []);
@@ -9571,12 +10549,12 @@ async function addInventoryItem(scannedEan = null) {
  }
  });
  }
- 
- if(eanInput) eanInput.value = ''; 
- if(eanInput) eanInput.focus(); 
+
+ if(eanInput) eanInput.value = '';
+ if(eanInput) eanInput.focus();
  showScanFeedback('success', 'Produto bipado');
- updateInventoryItemsList(); 
- 
+ updateInventoryItemsList();
+
  console.log('[INV-DIAG] inventario atual:', appData.currentInventory.id);
  console.log('[INV-DIAG] salvando item:', {
  inventario_id: appData.currentInventory.id,
@@ -9648,7 +10626,7 @@ async function saveInventoryItemToServer(item) {
  return false;
  }
  inv.isNewSession = false;
- 
+
  if (!appData.inventario) appData.inventario = [];
  appData.inventario.unshift(payload);
  }
@@ -9728,7 +10706,7 @@ async function saveInventoryItemToServer(item) {
  return false;
  } else {
  console.log('[INFO] Operacao registrada.');
- 
+
  // Texto validado em UTF-8.
  const { data: check, error: checkError } = await client
  .from('inventarios_itens')
@@ -10050,7 +11028,7 @@ function renderInventorySuccessScreen() {
  <span class="material-symbols-rounded" style="font-size: 80px; color: #22c55e; margin-bottom: 20px;">check_circle</span>
  <h2 style="font-size: 1.8rem; margin-bottom: 10px; color: white;">INVENTARIO SALVO!</h2>
  <p style="color: var(--muted); margin-bottom: 30px;">Dados processados e salvos com sucesso no Supabase.</p>
- 
+
  <div style="background: rgba(34, 197, 94, 0.1); padding: 16px; border-radius: 16px; margin-bottom: 30px; text-align: left; border: 1px solid rgba(34, 197, 94, 0.2);">
  <div style="display: flex; align-items: center; gap: 10px; color: #4ade80; font-size: 0.8rem; font-weight: 700; margin-bottom: 8px;">
  <span class="material-symbols-rounded" style="font-size: 18px;">check_circle</span>
@@ -10074,12 +11052,12 @@ function renderInventorySuccessScreen() {
 
 function renderInventarioSubMenu() {
  stopScanner();
- 
+
  if (appData.currentInventory && appData.currentInventory.isNewSession) {
  console.log('[INFO] Operacao registrada.');
  appData.currentInventory = null;
  }
- 
+
  const currentUser = localStorage.getItem('currentUser');
  const subItems = [
  { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
@@ -11942,7 +12920,7 @@ async function renderInventarioHistory() {
  document.body.style.overflow = '';
  document.body.style.overflowY = 'auto';
  document.documentElement.style.overflowY = 'auto';
- 
+
  // UI de Carregamento
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in inventory-history-screen">
@@ -12031,7 +13009,7 @@ async function deleteTestInventory(sessionId) {
  danger: true
  });
  if (!confirmed) return;
- 
+
  try {
  const client = window.supabaseClient;
  if (!client) return;
@@ -12039,7 +13017,7 @@ async function deleteTestInventory(sessionId) {
 
  // 1. Deletar itens
  await client.from('inventarios_itens').delete().eq('inventario_id', sessionId);
- 
+
  // 2. Deletar movimentos relacionados
  await client.from('movimentacoes').delete().ilike('observacao', `%inventario ${sessionId}%`);
 
@@ -12257,7 +13235,7 @@ async function renderStockCritical() {
  <div style="flex: 1;">
  <div style="font-weight: 700; color: white; font-size: 0.9rem; margin-bottom: 4px;">${p.descricao_base || 'Sem Descricao'}</div>
  <div style="font-size: 0.75rem; color: var(--muted);">SKU: ${p.sku_fornecedor || '-'} | EAN: ${p.ean || '-'}</div>
- 
+
  </div>
  <span class="material-symbols-rounded" style="color: var(--muted)">chevron_right</span>
  </div>
@@ -12495,7 +13473,7 @@ async function renderSearchScreen(push = true) {
  }
  const currentUser = localStorage.getItem('currentUser');
  if (!currentUser) return renderLogin();
- 
+
  await ensureProdutosLoaded();
 
  currentScreen = 'search';
@@ -12504,11 +13482,11 @@ async function renderSearchScreen(push = true) {
  document.body.style.overflowY = 'auto';
  document.documentElement.style.overflowY = 'auto';
  window.scrollTo(0, 0);
- 
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal product-search-screen">
  ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderProductSubMenu()')}
- 
+
  <main class="container product-search-center">
  <div id="scanner-container" class="hidden">
  <div class="scanner-mobile-top">
@@ -12544,7 +13522,7 @@ async function renderSearchScreen(push = true) {
  </div>
  `;
  resetProductSearchScroll();
- 
+
  setTimeout(() => {
  const input = document.getElementById('search-input');
  if (input) {
@@ -12740,7 +13718,7 @@ async function startScanner(isPicking = false, isConference = false, isInventory
  }
 
  product = await handleProductScan(decodedText, context);
- 
+
 
  // Texto validado em UTF-8.
  if (product) {
@@ -13003,7 +13981,7 @@ const doPerformSearch = async () => {
  const start = performance.now();
  const input = document.getElementById('search-input');
  if (!input) return;
- 
+
  const queryRaw = input.value.trim();
  console.log('[BUSCA MOBILE DEBUG] termo digitado:', queryRaw);
  const activeStockFilter = getProductStockFilter();
@@ -13042,7 +14020,7 @@ const doPerformSearch = async () => {
  const statusB = String(b.status || "ativo").toLowerCase();
  const isAtivoA = statusA === 'ativo' || statusA === 'sim' || statusA === '1';
  const isAtivoB = statusB === 'ativo' || statusB === 'sim' || statusB === '1';
- 
+
  if (isAtivoA && !isAtivoB) return -1;
  if (!isAtivoA && isAtivoB) return 1;
 
@@ -13078,9 +14056,9 @@ const doPerformSearch = async () => {
 
  const end = performance.now();
  console.log(`[BUSCA DEBUG] Local: "${queryRaw}" | Filtro estoque: ${activeStockFilter.key} | Encontrados: ${finalResults.length} | Exibindo: ${visibleResults.length} | Tempo: ${Math.round(end - start)}ms`);
- 
+
  renderSearchResults(visibleResults, finalResults.length);
- 
+
  if (finalResults.length > 0) {
  showPageSearchSignal('success');
  }
@@ -13387,16 +14365,16 @@ function renderSearchResults(results, totalResults = results.length, shouldReset
  const pack = getSearchProductPackInfo(p, estoque);
  const showCx = pack && pack.caixas > 0;
  return `
- <div class="search-result-card ${!isAtivo ? 'inactive' : ''}" 
- onclick="showProductDetails('${idInterno}')" 
- role="option" 
+ <div class="search-result-card ${!isAtivo ? 'inactive' : ''}"
+ onclick="showProductDetails('${idInterno}')"
+ role="option"
  data-index="${index}"
  tabindex="0"
  onkeydown="handleSearchKeyDown(event)">
  <div class="card-image-wrapper">
  ${imgUrl ? `<img src="${imgUrl}" alt="${desc}" loading="lazy" onerror="const parent = this.parentElement; if (parent) parent.innerHTML='<span class=\\'material-symbols-rounded\\'>image</span>';">` : `<span class="material-symbols-rounded">image</span>`}
  </div>
- 
+
  <div class="card-main-info">
  <div class="card-header-row">
  <span class="card-id">
@@ -13475,9 +14453,9 @@ function highlightMatch(text, query) {
  try {
  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
- return parts.map(part => 
- part.toLowerCase() === query.toLowerCase() 
- ? `<span class="search-highlight">${part}</span>` 
+ return parts.map(part =>
+ part.toLowerCase() === query.toLowerCase()
+ ? `<span class="search-highlight">${part}</span>`
  : part
  ).join('');
  } catch (e) {
@@ -13529,7 +14507,7 @@ function openImageModal(url) {
  const modal = document.createElement('div');
  modal.id = 'image-modal';
  modal.className = 'image-modal';
- 
+
  // Closer on background click
  modal.onclick = (e) => {
  if (e.target.id === 'image-modal' || e.target.className === 'image-modal-content') {
@@ -14053,14 +15031,14 @@ function getComparableAttr(attrMap, names) {
 
 function getEquivalentProducts(p) {
  if (!appData.products || !p) return [];
- 
+
  const attrs = safeParseAtributos(p.atributos);
  const norm = (val) => String(val || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
  // Texto validado em UTF-8.
  const codEquivalenteAttr = attrs.find(a => norm(a.nome).includes('equivalente'));
  const codEquivalente = (codEquivalenteAttr && norm(codEquivalenteAttr.valor)) ? norm(codEquivalenteAttr.valor) : null;
- 
+
  if (codEquivalente && codEquivalente !== 'null' && codEquivalente !== 'undefined') {
  return appData.products.filter(other => {
  if (other.id_interno === p.id_interno) return false;
@@ -14069,12 +15047,12 @@ function getEquivalentProducts(p) {
  return otherCod && norm(otherCod.valor) === codEquivalente;
  }).slice(0, 5);
  }
- 
+
  // Texto validado em UTF-8.
  const ATRIBUTOS_OBRIGATORIOS = ['tipo', 'modelo', 'encaixe', 'tensao', 'potencia', 'polos', 'pinos', 'aplicacao'];
  const ATRIBUTOS_CONDICIONAIS = ['cor', 'lado', 'acabamento'];
  const ATRIBUTOS_CHAVE = [...ATRIBUTOS_OBRIGATORIOS, ...ATRIBUTOS_CONDICIONAIS];
- 
+
  const pTechAttrs = {};
  attrs.forEach(a => {
  const nome = norm(a.nome);
@@ -14090,13 +15068,13 @@ function getEquivalentProducts(p) {
  const pDesc = norm(p.descricao_base);
  const pCat = norm(p.categoria);
  const pSub = norm(p.subcategoria);
- 
+
  // Texto validado em UTF-8.
  if (!pDesc || !pCat) return [];
 
  return appData.products.filter(other => {
  if (other.id_interno === p.id_interno) return false;
- 
+
  // Texto validado em UTF-8.
  if (norm(other.marca) === norm(p.marca)) return false;
 
@@ -14104,7 +15082,7 @@ function getEquivalentProducts(p) {
  if (norm(other.descricao_base) !== pDesc) return false;
  if (norm(other.categoria) !== pCat) return false;
  if (norm(other.subcategoria) !== pSub) return false;
- 
+
  // Texto validado em UTF-8.
  const otherAttrs = safeParseAtributos(other.atributos);
  const otherTechAttrs = {};
@@ -14114,12 +15092,12 @@ function getEquivalentProducts(p) {
  otherTechAttrs[nome] = norm(a.valor);
  }
  });
- 
+
  // Texto validado em UTF-8.
  for (const key of ATRIBUTOS_OBRIGATORIOS) {
  if (pTechAttrs[key] !== otherTechAttrs[key]) return false;
  }
- 
+
  // Texto validado em UTF-8.
  for (const key of ATRIBUTOS_CONDICIONAIS) {
  if (pTechAttrs[key] && pTechAttrs[key] !== otherTechAttrs[key]) return false;
@@ -14217,11 +15195,11 @@ window.toggleMoreInfo = function() {
  const content = document.getElementById('more-info-content');
  const label = document.getElementById('more-info-label');
  const mobileSecondary = document.querySelectorAll('.collapsible-mobile');
- 
+
  if (content && label) {
  const isHidden = content.classList.toggle('hidden');
  const isOpen = !isHidden;
- 
+
  // Toggle mobile-specific secondary info
  mobileSecondary.forEach(el => {
  if (isHidden) el.classList.remove('open');
@@ -14392,7 +15370,7 @@ async function renderProductDetails(p) {
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal no-top-bar product-detail">
  ${getTopBarHTML(localStorage.getItem('currentUser'), 'renderSearchScreen()')}
- 
+
  <main class="container product-detail-screen">
  <div class="product-detail-card">
  <div class="product-detail-top-actions">
@@ -14401,7 +15379,7 @@ async function renderProductDetails(p) {
  <span class="material-symbols-rounded">picture_as_pdf</span>
  </a>
  ` : ''}
- 
+
  <!-- BotAo Editar Produto -->
  <button type="button" onclick="event.stopPropagation(); renderEditProductFormByEan('${(p.ean || idInterno).toString().replace(/'/g, "\\'")}')" class="product-edit-btn" title="Editar Produto">
  <span class="material-symbols-rounded">edit</span>
@@ -14457,7 +15435,7 @@ async function renderProductDetails(p) {
  const t = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'TERREO')?.saldo_total || 0);
  const m = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'MOSTRUARIO')?.saldo_total || 0);
  const p1 = parseFloat(productStockEntries.find(e => normalizeLocal(e.local) === 'PRIMEIRO_ANDAR')?.saldo_total || 0);
- 
+
  if (false && t === 0 && m === 0 && p1 > 0) {
  return `
  <div style="margin-top: 20px; padding: 14px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 14px; display: flex; align-items: center; gap: 12px;">
@@ -14547,7 +15525,7 @@ async function renderProductDetails(p) {
  <span class="material-symbols-rounded">info</span>
  <span id="more-info-label">Info</span>
  </button>
- 
+
  <div id="more-info-content" class="hidden" style="padding: 20px 10px 0;">
  <div class="product-info-blocks">
  ${commercialInfoHTML}
@@ -14804,15 +15782,15 @@ function renderAddProduct(initialEan = '') {
 
 async function saveNewProduct() {
  const nextId = getNextInternalId();
- 
+
  let image_path = null;
  let manual_path = null;
  let url_imagem = null;
  let url_pdf = null;
- 
+
  const imgFile = document.getElementById('add-img-file').files[0];
  const pdfFile = document.getElementById('add-pdf-file').files[0];
- 
+
  try {
  if (imgFile) {
  console.log('[PRODUTO] Arquivo imagem selecionado:', imgFile.name);
@@ -14820,7 +15798,7 @@ async function saveNewProduct() {
  url_imagem = getPublicUrl(image_path);
  console.log('[PRODUTO] Imagem salva. path:', image_path, 'URL:', url_imagem);
  }
- 
+
  if (pdfFile) {
  console.log('[PRODUTO] Arquivo PDF selecionado:', pdfFile.name);
  manual_path = await uploadFile(pdfFile, 'manual');
@@ -14847,7 +15825,7 @@ async function saveNewProduct() {
  return;
  }
  }
- 
+
  const qtdPorCaixa = readQtdPorCaixaInput('add-qtd-caixa');
  if (qtdPorCaixa === null) return;
 
@@ -14948,24 +15926,24 @@ function markRemovePDF() {
 
 async function saveEditProduct(originalId) {
  const existingProduct = appData.products.find(p => (p.id_interno || p.col_A) == originalId);
- 
+
  let newImagePath = existingProduct?.image_path || null;
  let newManualPath = existingProduct?.manual_path || null;
  let url_imagem = existingProduct?.url_imagem || null;
  let url_pdf = existingProduct?.url_pdf_manual || null;
- 
+
  const oldImagePath = existingProduct?.image_path || null;
  const oldManualPath = existingProduct?.manual_path || null;
- 
+
  const newImgFile = document.getElementById('edit-img-file')?.files[0];
  const newPdfFile = document.getElementById('edit-pdf-file')?.files[0];
- 
+
  try {
  if (newImgFile) {
  newImagePath = await uploadFile(newImgFile, 'produto');
  url_imagem = getPublicUrl(newImagePath);
  removeImageFlag = false;
- 
+
  if (oldImagePath && oldImagePath !== newImagePath) {
  await deleteFile(oldImagePath);
  }
@@ -14974,12 +15952,12 @@ async function saveEditProduct(originalId) {
  newImagePath = null;
  url_imagem = null;
  }
- 
+
  if (newPdfFile) {
  newManualPath = await uploadFile(newPdfFile, 'manual');
  url_pdf = getPublicUrl(newManualPath);
  removePDFFlag = false;
- 
+
  if (oldManualPath && oldManualPath !== newManualPath) {
  await deleteFile(oldManualPath);
  }
@@ -15011,7 +15989,7 @@ async function saveEditProduct(originalId) {
 
  const qtdPorCaixa = readQtdPorCaixaInput('edit-qtd-caixa');
  if (qtdPorCaixa === null) return;
- 
+
  const product = {
  id_interno: document.getElementById('edit-id').value.trim(),
  ean: document.getElementById('edit-ean').value.trim(),
@@ -15079,7 +16057,7 @@ function renderEditProductSearch() {
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal product-search-screen">
  ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
- 
+
  <main class="container product-search-center">
  <div class="screen-mini-title">
  <div class="mini-icon">
@@ -15112,7 +16090,7 @@ function renderEditProductSearch() {
  </button>
  </div>
  </div>
- 
+
  <div id="edit-search-results" class="product-search-results">
  <!-- Resultados -->
  </div>
@@ -15201,7 +16179,7 @@ function openProductCreate() {
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal">
  ${getTopBarHTML(currentUser, 'renderProductSubMenu()')}
- 
+
  <main class="container" style="display: flex; flex-direction: column; align-items: center; padding-top: 60px;">
  <div class="screen-mini-title">
  <div class="mini-icon">
@@ -15209,7 +16187,7 @@ function openProductCreate() {
  </div>
  <span>CADASTRAR</span>
  </div>
- 
+
  <div style="margin-top: 40px; text-align: center; color: var(--muted);">
  <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 16px;">construction</span>
  <p style="font-size: 1.1rem; font-weight: 600;">MAdulo em desenvolvimento</p>
@@ -15376,12 +16354,12 @@ function renderEditProductForm(p) {
 function handleBackgroundImageUpload(event, deviceType) {
  const file = event.target.files[0];
  if (!file) return;
- 
+
  if (!file.type.startsWith('image/')) {
  showToast('Operacao concluida.', 'info');
  return;
  }
- 
+
  const reader = new FileReader();
  reader.onload = function(e) {
  const base64 = e.target.result;
@@ -15399,19 +16377,19 @@ function handleBackgroundImageUpload(event, deviceType) {
 function handleFontUpload(event) {
  const file = event.target.files[0];
  if (!file) return;
- 
+
  const validExtensions = ['.ttf', '.otf', '.woff', '.woff2'];
  const ext = '.' + file.name.split('.').pop().toLowerCase();
  if (!validExtensions.includes(ext)) {
  showToast('Operacao concluida.', 'info');
  return;
  }
- 
+
  const reader = new FileReader();
  reader.onload = function(e) {
  const fontData = e.target.result;
  const fontName = 'CustomFont_' + Date.now();
- 
+
  const fontFace = new FontFace(fontName, `url(${fontData})`);
  fontFace.load().then(function(loadedFace) {
  document.fonts.add(loadedFace);
@@ -15451,7 +16429,7 @@ function updateLoginColor(type, value) {
 function handleLoginBgImage(event) {
  const file = event.target.files[0];
  if (!file) return;
- 
+
  const reader = new FileReader();
  reader.onload = function(e) {
  const img = new Image();
@@ -15461,18 +16439,18 @@ function handleLoginBgImage(event) {
  const maxHeight = 1080;
  let width = img.width;
  let height = img.height;
- 
+
  if (width > maxWidth || height > maxHeight) {
  const ratio = Math.min(maxWidth / width, maxHeight / height);
  width = Math.round(width * ratio);
  height = Math.round(height * ratio);
  }
- 
+
  canvas.width = width;
  canvas.height = height;
  const ctx = canvas.getContext('2d');
  ctx.drawImage(img, 0, 0, width, height);
- 
+
  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
  saveToIndexedDB('loginBgImage', dataUrl);
  };
@@ -15484,9 +16462,9 @@ function handleLoginBgImage(event) {
 function saveToIndexedDB(key, data) {
  const dbName = 'DYAUTO_DB';
  const storeName = 'files';
- 
+
  const request = indexedDB.open(dbName, 1);
- 
+
  request.onerror = function() {
  try {
  localStorage.setItem(key, data);
@@ -15496,14 +16474,14 @@ function saveToIndexedDB(key, data) {
  }
  renderConfigSubMenu();
  };
- 
+
  request.onupgradeneeded = function(e) {
  const db = e.target.result;
  if (!db.objectStoreNames.contains(storeName)) {
  db.createObjectStore(storeName);
  }
  };
- 
+
  request.onsuccess = function(e) {
  const db = e.target.result;
  try {
@@ -15513,7 +16491,7 @@ function saveToIndexedDB(key, data) {
  renderConfigSubMenu();
  return;
  }
- 
+
  const tx = db.transaction(storeName, 'readwrite');
  const store = tx.objectStore(storeName);
  store.put(data, key);
@@ -15545,23 +16523,23 @@ function saveToIndexedDB(key, data) {
 function loadFromIndexedDB(key, callback) {
  const dbName = 'DYAUTO_DB';
  const storeName = 'files';
- 
+
  const defaultData = null;
  const fallbackData = localStorage.getItem(key);
- 
+
  const request = indexedDB.open(dbName);
- 
+
  request.onerror = function() {
  callback(fallbackData);
  };
- 
+
  request.onupgradeneeded = function(e) {
  const db = e.target.result;
  if (!db.objectStoreNames.contains(storeName)) {
  db.createObjectStore(storeName);
  }
  };
- 
+
  request.onsuccess = function(e) {
  try {
  const db = e.target.result;
@@ -15569,11 +16547,11 @@ function loadFromIndexedDB(key, callback) {
  callback(fallbackData);
  return;
  }
- 
+
  const tx = db.transaction(storeName, 'readonly');
  const store = tx.objectStore(storeName);
  const getRequest = store.get(key);
- 
+
  getRequest.onsuccess = function() {
  const data = getRequest.result;
  callback(data || fallbackData);
@@ -15601,7 +16579,7 @@ function resetLoginVisual() {
  localStorage.removeItem('loginBackgroundDesktop');
  localStorage.removeItem('loginBackgroundMobile');
  window.loginCustomBgImage = null;
- 
+
  const request = indexedDB.deleteDatabase('DYAUTO_DB');
  request.onsuccess = function() {
  showToast('Operacao concluida.', 'info');
@@ -15617,7 +16595,7 @@ function applyLoginStyles() {
  const bgColor = localStorage.getItem('loginBgColor');
  const textColor = localStorage.getItem('loginTextColor');
  const cardColor = localStorage.getItem('loginCardColor');
- 
+
  if (bgColor) document.documentElement.style.setProperty('--login-bg-color', bgColor);
  if (textColor) document.documentElement.style.setProperty('--login-text-color', textColor);
  if (cardColor) document.documentElement.style.setProperty('--login-card-color', cardColor);
@@ -18258,7 +19236,7 @@ function renderPickProductFeedbackToast(type = 'add', item = null, quantity = 1)
   const color = item ? (getPickItemColor(item) || '—') : '—';
   const idInterno = (item ? getPickingProductId(item) : '') || '—';
   const image = item ? getPickProductImage(item) : '';
-  const currentQty = isAdd 
+  const currentQty = isAdd
     ? (Number(item?.qty || item?.qtd_separada || quantity || 1) || 1)
     : (Number(quantity || 1) || 1);
 
@@ -18596,15 +19574,15 @@ async function startPickingSession(channelId, channelLabel, channelColor, select
  pickRemovalModeActive = false;
  lastPickScanAction = 'add';
  clearPickSearchSuggestions();
- 
+
  console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
  console.log(`[PICKING DEBUG] abriu nova bipagem sem retomar rascunho automaticamente`);
  // O codigo oficial sera reservado atomicamente somente no primeiro bip valido.
- 
+
  // Define contexto temporario sem gravar uma separacao vazia.
  currentPickingContext = {
- channelId, 
- channelLabel, 
+ channelId,
+ channelLabel,
  channelColor,
  sessionId: '',
  executionId: generateExecutionId(),
@@ -18614,7 +19592,7 @@ async function startPickingSession(channelId, channelLabel, channelColor, select
  total_pacotes_montados: 0,
  totalPacotesMontados: 0
  };
- 
+
  currentSessionItems = [];
  activePickKitId = '';
  activePickKitScanCount = 0;
@@ -19121,7 +20099,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
  const operatorInitials = getPickOperatorInitials(currentUser);
  const isFlexChannel = normalizeOperationalLabel(channelLabel) === 'FLEX';
- 
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal no-top-bar picking-screen pick-workflow-screen${isFlexChannel ? ' pick-flex-screen' : ''}"
  data-session-id="${escapeKitAttribute(sessionId)}"
@@ -19149,7 +20127,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  <div class="pick-scan-row">
  <div class="pick-scan-field">
  <span class="material-symbols-rounded">search</span>
- <input type="text" id="pick-ean-input" class="product-search-input" 
+ <input type="text" id="pick-ean-input" class="product-search-input"
  placeholder="Bipe ou digite: nome, ID, EAN, SKU ou c\u00f3digo interno"
  onfocus="preparePickScannerInput({ focus: false })"
  oninput="handlePickSearchInput(event)"
@@ -19258,18 +20236,18 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
 function showInputFeedback(inputId, type) {
  const input = document.getElementById(inputId);
  if (!input) return;
- 
+
  const color = type === 'success' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';
  const borderColor = type === 'success' ? '#22C55E' : '#EF4444';
- 
+
  // Remove inline styles previously set if any
  input.style.transition = 'none';
  input.style.boxShadow = `0 0 0 4px ${color}`;
  input.style.borderColor = borderColor;
- 
+
  // Force reflow
  void input.offsetWidth;
- 
+
  input.style.transition = 'all 0.3s ease';
  input.style.boxShadow = '';
  input.style.borderColor = '';
@@ -20108,7 +21086,7 @@ async function addPickItem(scannedEan = null) {
  currentPickingContext?.channelLabel
  );
  let draft;
- 
+
  if (!scopedDraft) {
  console.log(`[PICKING DEBUG] primeiro item bipado, criando rascunho`);
  const now = new Date();
@@ -20326,7 +21304,7 @@ function updatePickItemsList() {
  });
  const filteredItems = getPickResumeFilteredItems();
  if (!container) return;
- 
+
  if (currentSessionItems.length === 0) {
  container.innerHTML = `
  <div class="pick-empty-state">
@@ -21597,9 +22575,9 @@ async function renderPackSessionDetails(sessionId) {
 
  const activeSessions = getActivePickSessions();
  const requestedId = String(sessionId || '');
- 
+
  // Texto validado em UTF-8.
- const separacaoSession = (appData.separacao || []).find(s => 
+ const separacaoSession = (appData.separacao || []).find(s =>
  String(getPackSeparationUniqueId(s)) === requestedId || String(getPackSeparationSessionId(s)) === requestedId
  );
  const packSessionId = getPackSeparationSessionId(separacaoSession) || requestedId;
@@ -21655,7 +22633,7 @@ async function renderPackSessionDetails(sessionId) {
    }
   } catch (error) { console.warn('[CONFERENCIA] Falha ao carregar andamento remoto; usando cache local.', error); }
  }
- 
+
   // Texto validado em UTF-8.
  const channelName = separacaoSession ? (separacaoSession.canal_nome || separacaoSession.col_d || '') : '';
  const channelConfig = getChannelConfig(channelName);
@@ -21680,7 +22658,7 @@ async function renderPackSessionDetails(sessionId) {
   row._sync_qtd_conferida = remoteConferenceQuantities.get(String(row.id_interno)) || 0;
  });
  if (getConferenceProgressQuantity(currentPackSession) > 0) persistPackSessionCache();
- 
+
  // Texto validado em UTF-8.
  renderPackSessionFrame(packSessionId, currentUser, channelColorClass, channelName);
 
@@ -21704,7 +22682,7 @@ async function renderPackSessionDetails(sessionId) {
  if (expectedItems.length === 0 && session && Array.isArray(session.items) && session.items.length > 0) {
  expectedItems = session.items;
  }
- 
+
  // Texto validado em UTF-8.
  const groupedExpected = expectedItems.reduce((acc, item) => {
  const key = getPickingProductId(item);
@@ -21794,7 +22772,7 @@ async function renderPackSessionDetails(sessionId) {
  // Texto validado em UTF-8.
  const packList = document.getElementById('pack-items-list');
  if (packList) packList.innerHTML = renderPackItemsListHTML();
- 
+
  } catch (err) {
  console.log('[INFO] Operacao registrada.');
  showToast("Erro ao carregar dados da planilha.", "error");
@@ -21903,7 +22881,7 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </main>
  </div>
  `;
- 
+
  const eanInput = document.getElementById('pack-ean-input');
  if (eanInput) eanInput.focus();
 }
@@ -22121,7 +23099,7 @@ function createConferencePackage() {
 
 function renderPackItemsListHTML() {
  if (!currentPackSession || !currentPackSession.conferenceRows) return '';
- 
+
  // Texto validado em UTF-8.
  const btnFinish = document.getElementById('btn-finish-pack');
  if (btnFinish) {
@@ -22212,7 +23190,7 @@ function adjustConferenceRowDirect(index, delta) {
  const row = currentPackSession.conferenceRows[index];
  row.qtd_conferida = Math.max(0, row.qtd_conferida + delta);
  row.scanned_in_conference = row.qtd_conferida > 0;
- 
+
  if (row.qtd_conferida === row.qtd_separada) {
  row.divergencia = 'OK';
  } else if (row.qtd_conferida > row.qtd_separada) {
@@ -22220,7 +23198,7 @@ function adjustConferenceRowDirect(index, delta) {
  } else {
  row.divergencia = 'FALTA';
  }
- 
+
  document.getElementById('pack-items-list').innerHTML = renderPackItemsListHTML();
  persistPackSessionCache();
 }
@@ -22367,7 +23345,7 @@ async function openManualAddProductToSession(sessionId, type = 'PACK') {
  }
  updatePickItemsList();
  showToast(`Item adicionado: ${product.descricao_base}`);
- 
+
  if (currentPickSession && currentPickSession.id === sessionId) {
  currentPickSession.items = currentSessionItems;
  renderPickResult(sessionId, currentPickSession.channelId, currentPickSession.channelLabel, currentPickSession.channelColor);
@@ -22550,9 +23528,9 @@ function renderConferenceCorrection() {
  const currentUser = localStorage.getItem('currentUser');
  const hasDivergence = currentPackSession.conferenceRows.some(r => r.divergencia !== 'OK');
  const isStarted = currentPackSession.conferenceRows.some(r => r.qtd_conferida > 0);
- 
+
  // [BLOQUEIO DE DIVERG?NCIA] - Somente permitimos finalizar se hasDivergence for false
- 
+
  let conferenceStatus = 'EM CONFERENCIA';
  if (hasDivergence && isStarted) conferenceStatus = 'COM DIVERG?NCIA';
  if (!hasDivergence) conferenceStatus = 'CONFERIDO';
@@ -22604,7 +23582,7 @@ function renderConferenceCorrection() {
  if (row.divergencia === 'SOBRA') statusColor = '#f59e0b';
 
  return `
- <div class="fade-in ${row.divergencia !== 'OK' ? 'conference-item-error' : ''}" 
+ <div class="fade-in ${row.divergencia !== 'OK' ? 'conference-item-error' : ''}"
  id="conf-res-item-${index}"
  style="background: var(--surface); padding: 16px; border-radius: 16px; border: 1px solid ${row.divergencia !== 'OK' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255,255,255,0.05)'}; transition: all 0.3s ease;">
  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
@@ -22619,12 +23597,12 @@ function renderConferenceCorrection() {
  ${row.divergencia}
  </div>
  </div>
- 
+
  <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px;">
  <div style="font-size: 0.7rem; color: var(--muted);">
  Esperado: <span style="color: white; font-weight: 700;">${row.qtd_separada}</span>
  </div>
- 
+
  <div style="display: flex; align-items: center; gap: 15px;">
  <button onclick="adjustConferenceRow(${index}, -1)" style="width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; display: flex; align-items: center; justify-content: center;">
  <span class="material-symbols-rounded" style="font-size: 18px;">remove</span>
@@ -22640,7 +23618,7 @@ function renderConferenceCorrection() {
  </div>
  `;
  }).join('')}
- 
+
  ${hasDivergence ? `
  <div style="margin: 20px 0; padding: 16px; background: rgba(234, 179, 8, 0.1); border-radius: 12px; border: 1px solid rgba(234, 179, 8, 0.3); text-align: center;">
  <p style="color: #facc15; font-weight: 600; margin-bottom: 16px;">Deseja corrigir as divergAAncias?</p>
@@ -22650,7 +23628,7 @@ function renderConferenceCorrection() {
  </button>
  </div>
  ` : ''}
- 
+
  <!-- BotAo Adicionar Produto Extra -->
  <button onclick="openManualAddProductToSession('${currentPackSession.id}', 'PACK')" class="btn-action" style="width: 100%; border: 1px dashed var(--primary); background: transparent; margin-bottom: 20px;">
  <span class="material-symbols-rounded">add_circle</span>
@@ -22662,7 +23640,7 @@ function renderConferenceCorrection() {
  <span class="material-symbols-rounded">barcode_scanner</span>
  VOLTAR PARA BIPAGEM
  </button>
- 
+
   <button class="btn-action" id="btn-finish-atomic"
   style="width: 100%; justify-content: center; background: #22c55e;" onclick="finishConferenceSession()">
  <span class="material-symbols-rounded">check_circle</span>
@@ -22934,7 +23912,7 @@ function openConferenceCorrectionModal() {
  const overlay = document.createElement('div');
  overlay.id = 'conference-correction-modal';
  overlay.className = 'app-confirm-overlay app-standard-modal modal-warning open';
- 
+
  const itemsHTML = divergentItems.length > 0 ? divergentItems.map(({ row, index, expected, checked, status }) => {
   const title = escapeKitAttribute(getPickItemTitle(row) || row.descricao || 'Produto');
   const id = escapeKitAttribute(getPickingProductId(row) || row.id_interno || '-');
@@ -23036,7 +24014,7 @@ function openConferenceAddProductModal() {
    </button>
    <h3 id="conference-add-product-title" style="margin: 0 0 4px 0; font-size: 1.05rem; font-weight: 800; color: #0f172a;">INCLUIR PRODUTO NA CONFERÊNCIA</h3>
    <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Busque por nome, ID interno ou código de barras (EAN):</p>
-   
+
    <div class="conference-add-product-search-box">
     <span class="material-symbols-rounded" style="color: #64748b; font-size: 20px;">search</span>
     <input type="text" id="conference-add-product-input" placeholder="Digite para buscar..." oninput="filterConferenceAddProductList(this.value)" autocomplete="off" />
@@ -23871,10 +24849,10 @@ function handleMenuClick(label) {
 function toggleQuickActions() {
  const menu = document.getElementById('quick-actions-menu');
  const overlay = document.getElementById('quick-actions-overlay');
- 
+
  if (menu) {
  const isHidden = menu.classList.contains('hidden');
- 
+
  if (isHidden) {
  menu.classList.remove('hidden');
  if (overlay) overlay.classList.remove('hidden');
@@ -27517,7 +28495,7 @@ async function ensureKitLampadaLoaded(force = false) {
  console.log('[INFO] Operacao registrada.');
  return [];
  }
- 
+
  try {
  const { data, error } = await client
  .from('kit_lampada')
@@ -27537,7 +28515,7 @@ async function ensureKitLampadaLoaded(force = false) {
  if (rows.length === 0) {
  console.warn('[KIT] Nenhum dado retornado. Verifique RLS/policy da tabela kit_lampada.');
  }
- 
+
  const normalizedRows = rows.map(item => ({
  ...item,
  _search: safeText([
@@ -27556,7 +28534,7 @@ async function ensureKitLampadaLoaded(force = false) {
 
  window.kitLampadaCache = normalizedRows;
  appData.kit_lampada = normalizedRows;
- 
+
  console.log('[KIT] cache criado:', window.kitLampadaCache.length);
  console.log('[KIT] exemplos:', window.kitLampadaCache.slice(0, 5));
  console.log('[KIT] teste civic:', window.kitLampadaCache.filter(x => x._search.includes('civic')));
@@ -27723,13 +28701,13 @@ function searchKitLampada(term, montadora = 'todos') {
  if (searchYear) {
  const anoInicio = item.ano_inicio ? Number(item.ano_inicio) : null;
  const anoFim = item.ano_fim ? Number(item.ano_fim) : null;
- 
+
  let yearOk = false;
  if (!anoInicio && !anoFim) yearOk = true;
  else if (anoInicio && !anoFim) yearOk = searchYear >= anoInicio;
  else if (!anoInicio && anoFim) yearOk = searchYear <= anoFim;
  else if (anoInicio && anoFim) yearOk = searchYear >= anoInicio && searchYear <= anoFim;
- 
+
  if (!yearOk) return false;
  }
 
@@ -27769,11 +28747,11 @@ function searchKitLampada(term, montadora = 'todos') {
 async function renderGuiaLampada(push = true) {
  const currentUser = localStorage.getItem('currentUser');
  if (!currentUser) return renderLogin();
- 
+
  currentScreen = 'kit_lampada';
  if (push) pushNav('kit_lampada');
  window.kitLampadaUiState = { term: '', montadora: 'todos' };
- 
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal module-screen product-search-screen kit-lampada-screen kit-v2-screen">
  ${getModuleSidebarHTML('kit_lampada')}
@@ -27793,7 +28771,7 @@ async function renderGuiaLampada(push = true) {
  try {
  // 2. Garantir carregamento dos dados
  const data = await ensureKitLampadaLoaded();
- 
+
  // 3. Renderizar interface de busca
  const contentArea = document.getElementById('kit-content-area');
  if (!contentArea) return;
@@ -27878,7 +28856,7 @@ async function renderGuiaLampada(push = true) {
  <div id="kit-results" class="kit-premium-results-grid"></div>
  </section>
  `;
- 
+
  const kitSearchInput = document.getElementById('kit-search-input');
  if (kitSearchInput) {
  kitSearchInput.addEventListener('input', (e) => {
@@ -27891,7 +28869,7 @@ async function renderGuiaLampada(push = true) {
  } catch (err) {
  const contentArea = document.getElementById('kit-content-area');
  if (!contentArea) return;
- 
+
  contentArea.innerHTML = `
  <div class="kit-premium-state kit-premium-state-error">
  <span class="material-symbols-rounded">error</span>
@@ -28052,7 +29030,7 @@ window.openKitImageViewer = function(url) {
  const overlay = document.createElement('div');
  overlay.className = 'modal-overlay fade-in kit-image-viewer-overlay';
  overlay.onclick = () => overlay.remove();
- 
+
  overlay.innerHTML = `
  <div class="kit-image-viewer-frame" onclick="event.stopPropagation()">
  <button class="kit-image-viewer-close" onclick="this.closest('.kit-image-viewer-overlay').remove()">
@@ -28061,7 +29039,7 @@ window.openKitImageViewer = function(url) {
  <img src="${escapeKitAttribute(url)}" class="kit-image-viewer-img">
  </div>
  `;
- 
+
  document.body.appendChild(overlay);
 };
 
@@ -28069,7 +29047,7 @@ window.renderKitDetailsCard = function(item) {
  const modal = document.createElement('div');
  modal.className = 'modal-overlay fade-in';
  const kitImgUrl = getKitImageUrl(item);
- 
+
  modal.innerHTML = `
  <div class="kit-detail-modal kit-image-only-modal" id="kit-modal-content">
  <button class="modal-close-btn" onclick="this.closest('.modal-overlay').remove()">
@@ -28077,8 +29055,8 @@ window.renderKitDetailsCard = function(item) {
  </button>
 
  <div class="kit-modal-image-area kit-modal-image-only" onclick="openKitImageViewer('${escapeKitAttribute(kitImgUrl)}')">
- ${kitImgUrl ? 
- `<img src="${escapeKitAttribute(kitImgUrl)}" alt="${escapeKitAttribute(item.modelo || 'Kit lampadas')}" onerror="this.outerHTML='<div class=&quot;kit-image-only-empty&quot;><span class=&quot;material-symbols-rounded&quot;>image_not_supported</span><p>Imagem do kit nao cadastrada.</p></div>'">` : 
+ ${kitImgUrl ?
+ `<img src="${escapeKitAttribute(kitImgUrl)}" alt="${escapeKitAttribute(item.modelo || 'Kit lampadas')}" onerror="this.outerHTML='<div class=&quot;kit-image-only-empty&quot;><span class=&quot;material-symbols-rounded&quot;>image_not_supported</span><p>Imagem do kit nao cadastrada.</p></div>'">` :
  `<div class="kit-image-only-empty"><span class="material-symbols-rounded">image_not_supported</span><p>Imagem do kit nao cadastrada.</p></div>`
  }
  </div>
@@ -28086,7 +29064,7 @@ window.renderKitDetailsCard = function(item) {
  `;
 
  document.body.appendChild(modal);
- 
+
  // Texto validado em UTF-8.
  setTimeout(() => {
  const innerModal = modal.querySelector('.kit-detail-modal');
@@ -28793,11 +29771,11 @@ function renderConfigSubMenu() {
  <div class="dashboard-screen internal fade-in config-screen module-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('configuracoes')}
- 
+
  <main class="container" style="padding-top: 100px;">
  <div style="padding: 0 20px;">
 
- 
+
  <div style="display: flex; flex-direction: column; gap: 16px;">
  <!-- OPCAO 1 -->
  <div style="background: var(--bg-card-soft); padding: 20px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-soft);">
@@ -29519,7 +30497,7 @@ async function renderGarantiaEnvioForm() {
  console.log(`[GARANTIA BUSCA DEBUG] termo digitado: "${rawValue}"`);
 
  const term = normalizeProductSearchTerm(rawValue);
- 
+
  if (term.length < 2) {
  dropdown.style.display = 'none';
  return;
@@ -29721,7 +30699,7 @@ function renderNFSubMenu() {
  { id: 'nf_abertas', label: 'NFs ABERTAS', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Acompanhar notas fiscais recebidas e ainda nao finalizadas.' },
  { id: 'nf_historico', label: 'HISTORICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas e movimentacoes geradas.' }
  ];
- 
+
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -32634,11 +33612,11 @@ async function renderNFAbertasList(backAction = 'renderNFSubMenu()') {
  currentScreen = 'internal';
  document.body.classList.remove('menu-active');
  const hasLocalDraft = hasEntradaNFXMLDraft();
- 
+
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
  ${getTopBarHTML(currentUser, backAction)}
- 
+
  <main class="container">
  ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
  <div id="nf-list-container" style="padding: 12px 20px 40px 20px;">
@@ -33294,7 +34272,7 @@ async function renderDetalheEntradaNF(entradaId) {
 async function renderNFDetail(id) {
  const currentUser = localStorage.getItem('currentUser');
  const nf = await DataClient.getEntradaNFById(id);
- 
+
  if (!nf) {
  showToast('Operacao concluida.', 'info');
  renderNFAbertasList();
@@ -33312,7 +34290,7 @@ async function renderNFDetail(id) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen">
  ${getTopBarHTML(currentUser, 'renderNFAbertasList()')}
- 
+
  <main class="container">
  <div style="padding: 12px 20px 40px 20px;">
  <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
@@ -33387,7 +34365,7 @@ function renderNFPlaceholder(title) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-placeholder-screen entrada-nf-screen no-top-bar">
  ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
- 
+
  <main class="container">
  ${getStandardScreenTitleHTML(normalizedTitle, iconHTML)}
  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 45vh;">
@@ -33409,27 +34387,27 @@ function renderNFPlaceholder(title) {
  function updateCardTransform(e) {
  const card = e.target.closest('.menu-card, .channel-card');
  if (!card) return;
- 
+
  const rect = card.getBoundingClientRect();
- 
+
  // Texto validado em UTF-8.
  const clientX = e.clientX || (e.touches && e.touches[0].clientX);
  const clientY = e.clientY || (e.touches && e.touches[0].clientY);
- 
+
  const x = clientX - rect.left;
  const y = clientY - rect.top;
- 
+
  // Texto validado em UTF-8.
  card.style.setProperty('--mouse-x', `${x}px`);
  card.style.setProperty('--mouse-y', `${y}px`);
- 
+
  // Texto validado em UTF-8.
  if (window.innerWidth > 768) {
  const centerX = rect.width / 2;
  const centerY = rect.height / 2;
  const rotateX = ((y - centerY) / centerY) * -6; // Max 6 graus
  const rotateY = ((x - centerX) / centerX) * 6; // Max 6 graus
- 
+
  card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
  } else {
  // No mobile apenas um leve feedback de escala ao tocar
@@ -33440,7 +34418,7 @@ function renderNFPlaceholder(title) {
  function resetCardTransform(e) {
  const card = e.target.closest('.menu-card, .channel-card');
  if (!card) return;
- 
+
  // Texto validado em UTF-8.
  if (e.type === 'mouseout' || e.type === 'mouseleave') {
  if (e.relatedTarget && card.contains(e.relatedTarget)) return;
