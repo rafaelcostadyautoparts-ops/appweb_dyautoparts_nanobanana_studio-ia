@@ -2830,12 +2830,349 @@ const DataClient = (function () {
         return data;
     }
 
+    // =========================================================================
+    // Módulo ANÚNCIOS & GRUPOS DE EQUIVALÊNCIA / MAPPING (PRODUÇÃO)
+    // =========================================================================
+    async function listGruposEquivalencia(apenasAtivos = true) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        let query = client.from('grupos_equivalencia').select('*, grupo_equivalencia_skus(*, produtos(*))');
+        if (apenasAtivos) {
+            query = query.eq('ativo', true);
+        }
+        const { data, error } = await query.order('nome', { ascending: true });
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function getGrupoEquivalenciaById(grupoId) {
+        if (!grupoId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .select('*, grupo_equivalencia_skus(*, produtos(*))')
+            .eq('id', grupoId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async function getGrupoEquivalenciaByProdutoId(produtoId) {
+        if (!produtoId) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .select('*, grupos_equivalencia(*)')
+            .eq('produto_id', produtoId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async function getSkusGrupoEquivalencia(grupoId) {
+        if (!grupoId) return [];
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .select('*, produtos(*)')
+            .eq('grupo_id', grupoId);
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function createGrupoEquivalencia(payload) {
+        if (!payload || !payload.codigo_grupo || !payload.nome) {
+            throw new Error('codigo_grupo e nome sao obrigatorios para criar grupo de equivalencia.');
+        }
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .insert([{
+                codigo_grupo: payload.codigo_grupo,
+                nome: payload.nome,
+                descricao: payload.descricao || null,
+                ativo: payload.ativo !== undefined ? payload.ativo : true,
+                criado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function updateGrupoEquivalencia(grupoId, payload) {
+        if (!grupoId) throw new Error('ID do grupo e obrigatorio.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const updateData = { ...payload, atualizado_em: new Date().toISOString() };
+        const { data, error } = await client
+            .from('grupos_equivalencia')
+            .update(updateData)
+            .eq('id', grupoId)
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function addSkuAoGrupoEquivalencia(grupoId, produtoId) {
+        if (!grupoId || !produtoId) throw new Error('grupoId e produtoId sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const { data: existente, error: errExist } = await client
+            .from('grupo_equivalencia_skus')
+            .select('grupo_id')
+            .eq('produto_id', produtoId)
+            .maybeSingle();
+        if (errExist) throw errExist;
+
+        if (existente) {
+            if (String(existente.grupo_id) === String(grupoId)) {
+                throw new Error('Produto ja pertence a este grupo de equivalencia.');
+            } else {
+                throw new Error('Produto ja pertence a outro grupo de equivalencia ativo. Cada SKU pode pertencer a no maximo um grupo.');
+            }
+        }
+
+        const { data, error } = await client
+            .from('grupo_equivalencia_skus')
+            .insert([{
+                grupo_id: grupoId,
+                produto_id: produtoId,
+                criado_em: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return data;
+    }
+
+    async function removeSkuDoGrupoEquivalencia(grupoId, produtoId) {
+        if (!grupoId || !produtoId) throw new Error('grupoId e produtoId sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { error } = await client
+            .from('grupo_equivalencia_skus')
+            .delete()
+            .eq('grupo_id', grupoId)
+            .eq('produto_id', produtoId);
+        if (error) throw error;
+        invalidateCache('grupos_equivalencia');
+        return true;
+    }
+
+    async function getEquivalenciaResolvidaByProdutoId(produtoId) {
+        if (!produtoId) return { possui_grupo: false, grupo: null, skus: [] };
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const assoc = await getGrupoEquivalenciaByProdutoId(produtoId);
+        if (assoc && assoc.grupos_equivalencia && assoc.grupos_equivalencia.ativo) {
+            const grupo = assoc.grupos_equivalencia;
+            const skusAssoc = await getSkusGrupoEquivalencia(grupo.id);
+            const skus = skusAssoc.map(item => item.produtos).filter(Boolean);
+            return {
+                possui_grupo: true,
+                grupo: grupo,
+                skus: skus
+            };
+        }
+
+        const { data: prod, error } = await client
+            .from('produtos')
+            .select('*')
+            .eq('id', produtoId)
+            .maybeSingle();
+        if (error) throw error;
+
+        return {
+            possui_grupo: false,
+            grupo: null,
+            skus: prod ? [prod] : []
+        };
+    }
+
+    async function listMercadoLivreItemMappings(accountId) {
+        const accIdNum = Number(accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            throw new Error('accountId e obrigatorio e deve ser um ID valido.');
+        }
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const { data, error } = await client
+            .from('mercadolivre_item_mappings')
+            .select(`
+                *,
+                mercadolivre_item_mapping_versions!mercadolivre_item_mappings_current_version_fkey(
+                    *,
+                    mercadolivre_item_mapping_componentes(
+                        *,
+                        produtos:produto_id(*),
+                        grupos_equivalencia:grupo_equivalencia_id(*, grupo_equivalencia_skus(*, produtos(*))),
+                        produto_referencia:produto_referencia_id(*)
+                    )
+                )
+            `)
+            .eq('mercadolivre_account_id', accIdNum)
+            .eq('ativo', true);
+        if (error) throw error;
+        return data || [];
+    }
+
+    async function getMercadoLivreItemMapping(itemId, variationId = null, accountId = null) {
+        if (!itemId) return null;
+        const accIdNum = Number(accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            throw new Error('accountId e obrigatorio e deve ser um ID valido.');
+        }
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+
+        const { data, error } = await client
+            .from('mercadolivre_item_mappings')
+            .select(`
+                *,
+                mercadolivre_item_mapping_versions!mercadolivre_item_mappings_current_version_fkey(
+                    *,
+                    mercadolivre_item_mapping_componentes(
+                        *,
+                        produtos:produto_id(*),
+                        grupos_equivalencia:grupo_equivalencia_id(*, grupo_equivalencia_skus(*, produtos(*))),
+                        produto_referencia:produto_referencia_id(*)
+                    )
+                )
+            `)
+            .eq('mercadolivre_account_id', accIdNum)
+            .eq('item_id', itemId)
+            .eq('variation_key', varKey)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    }
+
+    async function saveMercadoLivreItemMappingTransacional({ itemId, variationId = null, tipoIdentificacao = 'produto', observacao = '', componentes = [], criadoPor = 'usuario', accountId }) {
+        if (!itemId) throw new Error('item_id e obrigatorio.');
+        const accIdNum = Number(accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            throw new Error('accountId e obrigatorio e deve ser um ID valido (inteiro positivo).');
+        }
+        if (!componentes || !componentes.length) throw new Error('Pelo menos um componente deve ser informado.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+
+        const { data: mappingExistente, error: errMap } = await client
+            .from('mercadolivre_item_mappings')
+            .select('id, current_version_id')
+            .eq('mercadolivre_account_id', accIdNum)
+            .eq('item_id', itemId)
+            .eq('variation_key', varKey)
+            .maybeSingle();
+        if (errMap) throw errMap;
+
+        let mappingId = mappingExistente?.id;
+        let proximaVersao = 1;
+
+        if (mappingId) {
+            const { data: ultVersao, error: errVers } = await client
+                .from('mercadolivre_item_mapping_versions')
+                .select('versao')
+                .eq('mapping_id', mappingId)
+                .order('versao', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            if (errVers) throw errVers;
+            if (ultVersao) proximaVersao = (ultVersao.versao || 0) + 1;
+        } else {
+            const { data: novoMapping, error: errInsMap } = await client
+                .from('mercadolivre_item_mappings')
+                .insert([{
+                    mercadolivre_account_id: accIdNum,
+                    item_id: itemId,
+                    variation_key: varKey,
+                    ativo: true,
+                    criado_em: new Date().toISOString(),
+                    atualizado_em: new Date().toISOString()
+                }])
+                .select()
+                .single();
+            if (errInsMap) throw errInsMap;
+            mappingId = novoMapping.id;
+        }
+
+        const { data: novaVersao, error: errInsVers } = await client
+            .from('mercadolivre_item_mapping_versions')
+            .insert([{
+                mapping_id: mappingId,
+                versao: proximaVersao,
+                tipo_identificacao: tipoIdentificacao,
+                observacao: observacao || null,
+                criado_por: criadoPor || 'usuario',
+                criado_em: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        if (errInsVers) throw errInsVers;
+
+        const versaoId = novaVersao.id;
+
+        const compInserts = componentes.map(c => ({
+            version_id: versaoId,
+            produto_id: c.tipo === 'grupo_equivalencia' ? null : (c.produto_id || null),
+            grupo_equivalencia_id: c.tipo === 'grupo_equivalencia' ? (c.grupo_equivalencia_id || null) : null,
+            produto_referencia_id: c.produto_referencia_id || c.produto_id || null,
+            quantidade: c.quantidade || 1,
+            criado_em: new Date().toISOString()
+        }));
+
+        const { error: errInsComp } = await client
+            .from('mercadolivre_item_mapping_componentes')
+            .insert(compInserts);
+        if (errInsComp) throw errInsComp;
+
+        const { error: errUpdHead } = await client
+            .from('mercadolivre_item_mappings')
+            .update({
+                current_version_id: versaoId,
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', mappingId);
+        if (errUpdHead) throw errUpdHead;
+
+        invalidateCache('mercadolivre_item_mappings');
+        return getMercadoLivreItemMapping(itemId, variationId, accIdNum);
+    }
+
     return {
         loadModule,
         loadModules,
         query,
         save,
         saveBatch,
+        listGruposEquivalencia,
+        getGrupoEquivalenciaById,
+        getGrupoEquivalenciaByProdutoId,
+        getSkusGrupoEquivalencia,
+        createGrupoEquivalencia,
+        updateGrupoEquivalencia,
+        addSkuAoGrupoEquivalencia,
+        removeSkuDoGrupoEquivalencia,
+        getEquivalenciaResolvidaByProdutoId,
+        listMercadoLivreItemMappings,
+        getMercadoLivreItemMapping,
+        saveMercadoLivreItemMappingTransacional,
         reservePickingSessionSupabase,
         savePickingDraftSupabase,
         savePickingDraftItemsBatchSupabase,
