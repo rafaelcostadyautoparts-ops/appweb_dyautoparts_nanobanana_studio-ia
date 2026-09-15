@@ -3071,85 +3071,30 @@ const DataClient = (function () {
         const client = window.supabaseClient;
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
 
-        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+        const cleanVarId = (variationId && String(variationId).trim()) ? String(variationId).trim() : null;
 
-        const { data: mappingExistente, error: errMap } = await client
-            .from('mercadolivre_item_mappings')
-            .select('id, current_version_id')
-            .eq('mercadolivre_account_id', accIdNum)
-            .eq('item_id', itemId)
-            .eq('variation_key', varKey)
-            .maybeSingle();
-        if (errMap) throw errMap;
+        const compPayload = componentes.map(c => {
+            const isGrupo = (c.tipo === 'grupo_equivalencia');
+            return {
+                produto_id: isGrupo ? null : (c.produto_id || null),
+                grupo_equivalencia_id: isGrupo ? (c.grupo_equivalencia_id || null) : null,
+                produto_referencia_id: c.produto_referencia_id || (isGrupo ? null : c.produto_id) || null,
+                quantidade: Number(c.quantidade) || 1
+            };
+        });
 
-        let mappingId = mappingExistente?.id;
-        let proximaVersao = 1;
+        const rpcPayload = {
+            p_account_id: accIdNum,
+            p_item_id: String(itemId).trim(),
+            p_variation_id: cleanVarId,
+            p_tipo_identificacao: tipoIdentificacao || 'produto',
+            p_componentes: compPayload,
+            p_observacao: observacao || null,
+            p_usuario: criadoPor || 'usuario'
+        };
 
-        if (mappingId) {
-            const { data: ultVersao, error: errVers } = await client
-                .from('mercadolivre_item_mapping_versions')
-                .select('versao')
-                .eq('mapping_id', mappingId)
-                .order('versao', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            if (errVers) throw errVers;
-            if (ultVersao) proximaVersao = (ultVersao.versao || 0) + 1;
-        } else {
-            const { data: novoMapping, error: errInsMap } = await client
-                .from('mercadolivre_item_mappings')
-                .insert([{
-                    mercadolivre_account_id: accIdNum,
-                    item_id: itemId,
-                    variation_key: varKey,
-                    ativo: true,
-                    criado_em: new Date().toISOString(),
-                    atualizado_em: new Date().toISOString()
-                }])
-                .select()
-                .single();
-            if (errInsMap) throw errInsMap;
-            mappingId = novoMapping.id;
-        }
-
-        const { data: novaVersao, error: errInsVers } = await client
-            .from('mercadolivre_item_mapping_versions')
-            .insert([{
-                mapping_id: mappingId,
-                versao: proximaVersao,
-                tipo_identificacao: tipoIdentificacao,
-                observacao: observacao || null,
-                criado_por: criadoPor || 'usuario',
-                criado_em: new Date().toISOString()
-            }])
-            .select()
-            .single();
-        if (errInsVers) throw errInsVers;
-
-        const versaoId = novaVersao.id;
-
-        const compInserts = componentes.map(c => ({
-            version_id: versaoId,
-            produto_id: c.tipo === 'grupo_equivalencia' ? null : (c.produto_id || null),
-            grupo_equivalencia_id: c.tipo === 'grupo_equivalencia' ? (c.grupo_equivalencia_id || null) : null,
-            produto_referencia_id: c.produto_referencia_id || c.produto_id || null,
-            quantidade: c.quantidade || 1,
-            criado_em: new Date().toISOString()
-        }));
-
-        const { error: errInsComp } = await client
-            .from('mercadolivre_item_mapping_componentes')
-            .insert(compInserts);
-        if (errInsComp) throw errInsComp;
-
-        const { error: errUpdHead } = await client
-            .from('mercadolivre_item_mappings')
-            .update({
-                current_version_id: versaoId,
-                atualizado_em: new Date().toISOString()
-            })
-            .eq('id', mappingId);
-        if (errUpdHead) throw errUpdHead;
+        const { data, error } = await client.rpc('salvar_mercadolivre_item_mapping_atomico', rpcPayload);
+        if (error) throw error;
 
         invalidateCache('mercadolivre_item_mappings');
         return getMercadoLivreItemMapping(itemId, variationId, accIdNum);
