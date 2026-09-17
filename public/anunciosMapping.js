@@ -114,7 +114,7 @@
         }).join('');
     }
 
-    // Carregamento das Contas Sincronizadas do Supabase
+    // Carregamento das Contas Sincronizadas do Supabase (Apenas Contas com Anúncios)
     async function carregarContasCatalogo() {
         if (AnunciosState.contasCache && AnunciosState.contasCache.length > 0) {
             return AnunciosState.contasCache;
@@ -122,15 +122,24 @@
         const client = window.supabaseClient;
         if (!client) return [];
         try {
-            const { data, error } = await client
+            const { data: accountsData, error } = await client
                 .from('mercadolivre_accounts')
                 .select('id, platform, source_account_id, nickname, nome_operacional')
                 .not('platform', 'is', null)
                 .not('source_account_id', 'is', null)
+                .neq('id', 1)
                 .order('nome_operacional', { ascending: true });
-            if (!error && Array.isArray(data)) {
-                AnunciosState.contasCache = data;
-                return data;
+
+            const { data: catAccounts } = await client
+                .from('marketplace_anuncios_catalogo')
+                .select('account_id')
+                .eq('ausente_na_origem', false)
+                .not('account_id', 'is', null);
+
+            if (!error && Array.isArray(accountsData)) {
+                const activeAccountIds = new Set((catAccounts || []).map(r => Number(r.account_id)));
+                AnunciosState.contasCache = accountsData.filter(c => activeAccountIds.has(Number(c.id)));
+                return AnunciosState.contasCache;
             }
         } catch (err) {
             console.warn('[ANUNCIOS_MAPPING] Falha ao carregar contas do catálogo:', err);
@@ -138,7 +147,7 @@
         return [];
     }
 
-    // Contadores Globais dos Cards de Resumo (Lightweight Head Requests)
+    // Contadores Globais dos Cards de Resumo (Nível de Anúncio Pai: Todos, Não Mapeados, Mapeados, Parciais)
     async function carregarContadoresResumoGlobais() {
         const client = window.supabaseClient;
         if (!client) return;
@@ -148,21 +157,60 @@
                 .select('*', { count: 'exact', head: true })
                 .eq('ausente_na_origem', false);
 
-            const { count: totalMap } = await client
+            const { data: activeMappings } = await client
                 .from('mercadolivre_item_mappings')
-                .select('*', { count: 'exact', head: true })
+                .select('id, item_id, variation_id, variation_key')
                 .eq('ativo', true);
 
             const total = typeof totalCat === 'number' ? totalCat : 20000;
-            const mapped = typeof totalMap === 'number' ? totalMap : 0;
-            const unmapped = Math.max(0, total - mapped);
-            const review = 0;
+            const mappingsList = Array.isArray(activeMappings) ? activeMappings : [];
+            const mappedItemIds = Array.from(new Set(mappingsList.map(m => m.item_id)));
+
+            let mappedCount = 0;
+            let parciaisCount = 0;
+
+            if (mappedItemIds.length > 0) {
+                const { data: mappedAds } = await client
+                    .from('marketplace_anuncios_catalogo')
+                    .select('id, item_id, has_variations, variations_data')
+                    .in('item_id', mappedItemIds)
+                    .eq('ausente_na_origem', false);
+
+                if (Array.isArray(mappedAds)) {
+                    for (const ad of mappedAds) {
+                        if (!ad.has_variations) {
+                            mappedCount++;
+                        } else {
+                            const vars = Array.isArray(ad.variations_data) ? ad.variations_data : [];
+                            const totalVars = vars.length;
+                            const adMaps = mappingsList.filter(m => m.item_id === ad.item_id);
+                            let mappedVarsCount = 0;
+                            for (const v of vars) {
+                                const vId = v.variation_id ? String(v.variation_id) : null;
+                                const vKey = v.variation_key ? String(v.variation_key) : null;
+                                const hasM = adMaps.some(m =>
+                                    (vId && String(m.variation_id) === vId) ||
+                                    (vKey && String(m.variation_key) === vKey)
+                                );
+                                if (hasM) mappedVarsCount++;
+                            }
+                            if (mappedVarsCount >= totalVars && totalVars > 0) {
+                                mappedCount++;
+                            } else if (mappedVarsCount > 0) {
+                                parciaisCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const unmappedCount = Math.max(0, total - mappedCount - parciaisCount);
 
             AnunciosState.summaryCounts = {
                 total,
-                unmapped,
-                mapped,
-                review
+                unmapped: unmappedCount,
+                mapped: mappedCount,
+                review: parciaisCount
             };
 
             atualizarContadoresResumo();
@@ -667,8 +715,8 @@
                 return an.situacao_mapeamento !== 'MAPEADO';
             } else if (AnunciosState.filter === 'mapeados') {
                 return an.situacao_mapeamento === 'MAPEADO';
-            } else if (AnunciosState.filter === 'revisar') {
-                return an.situacao_mapeamento === 'REVISAR';
+            } else if (AnunciosState.filter === 'revisar' || AnunciosState.filter === 'parciais') {
+                return an.situacao_mapeamento === 'PARCIAL' || an.situacao_mapeamento === 'REVISAR';
             }
             return true;
         });
@@ -914,7 +962,7 @@
                             <span class="an-status-dot ${externalStatus === 'ACTIVE' ? 'active' : 'paused'}">
                                 ${externalStatus === 'ACTIVE' ? 'Anúncio Ativo' : (externalStatus === 'UNDER_REVIEW' ? 'Sob Revisão' : 'Anúncio Pausado')}
                             </span>
-                            ${hasValue(an.ultima_sincronizacao) ? `<span>•</span><span>Sincronizado: ${escapeHtml(an.ultima_sincronizacao)}</span>` : ''}
+                            ${hasValue(an.ultima_sincronizacao) ? `<span>•</span><span>Atualizado na origem: ${escapeHtml(an.ultima_sincronizacao)}</span>` : ''}
                         </div>
                     </div>
 
@@ -991,10 +1039,10 @@
                             <strong>${mappedCount.toLocaleString('pt-BR')}</strong>
                             <small>Mapeados</small>
                         </button>
-                        <button type="button" class="tab-revisar ${AnunciosState.filter === 'revisar' ? 'active' : ''}" onclick="anSetFilter('revisar')">
-                            <span class="material-symbols-rounded">warning</span>
+                        <button type="button" class="tab-revisar ${AnunciosState.filter === 'revisar' || AnunciosState.filter === 'parciais' ? 'active' : ''}" onclick="anSetFilter('revisar')">
+                            <span class="material-symbols-rounded">tune</span>
                             <strong>${reviewCount.toLocaleString('pt-BR')}</strong>
-                            <small>Para revisar</small>
+                            <small>Parciais</small>
                         </button>
                     </section>
 
@@ -1067,6 +1115,7 @@
 
     // Event Handlers de Filtros, Busca e Paginação
     window.anSetFilter = function (filterKey) {
+        anClearMassSelection();
         AnunciosState.filter = filterKey;
         const listContainer = document.getElementById('an-list-container');
         if (listContainer) {
@@ -1079,6 +1128,7 @@
     };
 
     window.anOnSearchInput = function (term) {
+        anClearMassSelection();
         AnunciosState.search = term;
         if (AnunciosState.searchDebounceTimer) {
             clearTimeout(AnunciosState.searchDebounceTimer);
@@ -1089,6 +1139,7 @@
     };
 
     window.anOnMarketplaceChange = function (mp) {
+        anClearMassSelection();
         AnunciosState.marketplaceFilter = mp;
         AnunciosState.accountFilter = 'todas';
         const accSelect = document.getElementById('an-account-select-el');
@@ -1099,17 +1150,20 @@
     };
 
     window.anOnAccountChange = function (acc) {
+        anClearMassSelection();
         AnunciosState.accountFilter = acc;
         carregarCatalogoAnuncios(1);
     };
 
     window.anOnStatusChange = function (st) {
+        anClearMassSelection();
         AnunciosState.statusFilter = st;
         carregarCatalogoAnuncios(1);
     };
 
     window.anGoToPage = function (page) {
         if (page < 1 || page > AnunciosState.totalPages || page === AnunciosState.page) return;
+        anClearMassSelection();
         carregarCatalogoAnuncios(page);
     };
 
@@ -1151,14 +1205,6 @@
         if (!context) return false;
 
         const marketplace = context.marketplace || 'MERCADO_LIVRE';
-
-        // Regra 4: Shopee não habilitado nesta fase
-        if (marketplace === 'SHOPEE') {
-            if (typeof showToast === 'function') {
-                showToast('A identificação de itens Shopee está bloqueada nesta fase.', 'warning');
-            }
-            return false;
-        }
 
         // Regra 5: Conta não resolvida para Mercado Livre (Identificação só abre se houver account_id local resolvido > 0)
         if (marketplace === 'MERCADO_LIVRE') {
