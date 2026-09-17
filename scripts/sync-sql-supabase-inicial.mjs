@@ -52,6 +52,7 @@ function querySql(sqlQuery) {
         '-P', SQL_SERVER_PASSWORD,
         '-d', SQL_SERVER_DATABASE,
         '-C',
+        '-f', '65001',
         '-y', '0',
         '-Q', fullQuery
     ];
