@@ -36613,24 +36613,48 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
 }
 
 let finalizedGroupingCorrectionState = null;
+let finalizedGroupingCorrectionRequest = 0;
+let finalizedGroupingCorrectionObserver = null;
+let finalizedGroupingCorrectionSource = null;
+let finalizedGroupingCorrectionFocus = null;
+let finalizedGroupingCorrectionPreviousInert = null;
 
-function buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems = [], packages = []) {
+function isFinalizedGroupingCorrectionActive(request) {
+ return request === finalizedGroupingCorrectionRequest && !!finalizedGroupingCorrectionSource?.isConnected
+  && app.firstElementChild === finalizedGroupingCorrectionSource;
+}
+
+function buildFinalizedGroupingCorrectionUnitsFromItems(items = [], packages = []) {
  const units = [];
- (sessionItems || []).forEach(item => {
+ (items || []).forEach(item => {
   const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
   const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? item.quantidade ?? 0) || 0);
-  for (let index = 0; index < quantity; index++) units.push({ key: `${productId}:${index + 1}`, id_interno: productId, descricao: getPickItemTitle(item) || item.descricao || productId, ean: item.ean || '', ordinal: index + 1, pacote_id: null, selected: false });
+  if (!productId || quantity <= 0) return;
+  for (let index = 0; index < quantity; index++) {
+   units.push({
+    key: `${productId}:${index + 1}`,
+    id_interno: productId,
+    descricao: getPickItemTitle(item) || item.descricao || productId,
+    ean: item.ean || '',
+    ordinal: index + 1,
+    pacote_id: null,
+    selected: false
+   });
+  }
  });
- (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO').forEach(pkg => {
-  (pkg.itens || []).forEach(pkgItem => {
-   let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
-   units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
-    if (remaining <= 0) return;
-    if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
-    remaining--;
+ const activePackages = (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO');
+ if (activePackages.length > 0) {
+  activePackages.forEach(pkg => {
+   (pkg.itens || []).forEach(pkgItem => {
+    let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
+    units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
+     if (remaining <= 0) return;
+     if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
+     remaining--;
+    });
    });
   });
- });
+ }
  return units;
 }
 
@@ -36640,14 +36664,37 @@ function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
 }
 
 async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today') {
- if (!navigator.onLine) return showToast('A correcao de agrupamento exige conexao com o Supabase.', 'warning');
- const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 digitos para ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
- if (!pin) return;
- if (!/^\d{4}$/.test(String(pin))) return showToast('O PIN deve ter exatamente 4 digitos.', 'warning');
+ closeFinalizedGroupingCorrection();
+ if (!navigator.onLine) return showAppModal({ type: 'warning', title: 'Conexão necessária', message: 'A correção de agrupamento exige conexão com o servidor.' });
+ const request = finalizedGroupingCorrectionRequest;
+ finalizedGroupingCorrectionSource = app.firstElementChild;
+ finalizedGroupingCorrectionFocus = document.activeElement;
+ finalizedGroupingCorrectionObserver = new MutationObserver(() => {
+  if (!isFinalizedGroupingCorrectionActive(request)) closeFinalizedGroupingCorrection();
+ });
+ finalizedGroupingCorrectionObserver.observe(app, { childList: true });
+ const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para autorizar a edição do agrupamento de ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
+ if (!isFinalizedGroupingCorrectionActive(request)) return;
+ if (!pin) return closeFinalizedGroupingCorrection();
+ if (!/^\d{4}$/.test(String(pin))) {
+  closeFinalizedGroupingCorrection();
+  return showAppModal({ type: 'error', title: 'PIN inválido', message: 'O PIN mestre deve conter exatamente 4 dígitos numéricos.' });
+ }
  try {
   const deviceId = getOrCreateDeviceId();
   const auth = await DataClient.autorizarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId, pin, operador: localStorage.getItem('currentUser') || 'N/A', deviceId });
-  if (!auth?.ok) return showToast(auth?.motivo === 'TENTATIVAS_EXCEDIDAS' ? 'Muitas tentativas. Aguarde 15 minutos.' : 'PIN incorreto.', 'error');
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  if (!auth?.ok) {
+   closeFinalizedGroupingCorrection();
+   if (auth?.motivo === 'PIN_INVALIDO') {
+    return showAppModal({ type: 'error', title: 'PIN mestre incorreto', message: 'PIN mestre incorreto.' });
+   }
+   if (auth?.motivo === 'TENTATIVAS_EXCEDIDAS') {
+    return showAppModal({ type: 'warning', title: 'Tentativas excedidas', message: 'Dispositivo temporariamente bloqueado por excesso de tentativas. Tente novamente após o período de bloqueio.' });
+   }
+   return showAppModal({ type: 'error', title: 'Não elegível / Recusado', message: auth?.motivo || 'Não foi possível autorizar a correção de agrupamento.' });
+  }
+  if (!auth.token) throw new Error('Autorização de correção não recebida.');
 
   let sessionItems = [];
   try {
@@ -36662,24 +36709,45 @@ async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today')
    }
   }
   if (!sessionItems || !sessionItems.length) {
-   throw new Error('Nenhum item valido encontrado para esta separacao.');
+   throw new Error('Nenhum item válido encontrado para esta separação.');
   }
 
   let packages = [];
   try {
    packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
   } catch (error) {
-   console.warn('[CORR AGRUP] Pacotes nao carregados:', error);
+   console.warn('[CORR AGRUP] Pacotes não carregados:', error);
   }
 
-  finalizedGroupingCorrectionState = { sessionId, returnScope, token: auth.token, deviceId, expiraEm: auth.expira_em, units: buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems, packages) };
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  finalizedGroupingCorrectionState = {
+   request,
+   sessionId,
+   returnScope,
+   token: auth.token,
+   deviceId,
+   expiraEm: auth.expira_em,
+   units: buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems, packages)
+  };
   renderFinalizedGroupingCorrectionModal();
- } catch (error) { showToast(error.message || 'Nao foi possivel autorizar a correcao.', 'error'); }
+ } catch (error) {
+  if (!isFinalizedGroupingCorrectionActive(request)) return;
+  closeFinalizedGroupingCorrection();
+  showAppModal({ type: 'error', title: 'Erro de comunicação técnica', message: error.message || 'Não foi possível autorizar a correção de agrupamento.' });
+ }
 }
 
 function closeFinalizedGroupingCorrection() {
+ finalizedGroupingCorrectionRequest++;
+ finalizedGroupingCorrectionObserver?.disconnect();
+ finalizedGroupingCorrectionObserver = null;
+ finalizedGroupingCorrectionSource = null;
  finalizedGroupingCorrectionState = null;
  document.getElementById('finalized-grouping-correction-modal')?.remove();
+ if (finalizedGroupingCorrectionPreviousInert !== null) app.inert = finalizedGroupingCorrectionPreviousInert;
+ finalizedGroupingCorrectionPreviousInert = null;
+ if (finalizedGroupingCorrectionFocus?.isConnected) finalizedGroupingCorrectionFocus.focus();
+ finalizedGroupingCorrectionFocus = null;
 }
 
 function toggleFinalizedGroupingUnit(key) {
@@ -36715,7 +36783,9 @@ function buildFinalizedGroupingCorrectionPayload() {
 
 function renderFinalizedGroupingCorrectionModal() {
  const state = finalizedGroupingCorrectionState;
- if (!state) return;
+ if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return closeFinalizedGroupingCorrection();
+ const oldModal = document.getElementById('finalized-grouping-correction-modal');
+ const focusIndex = oldModal ? [...oldModal.querySelectorAll('button')].indexOf(document.activeElement) : 0;
  document.getElementById('finalized-grouping-correction-modal')?.remove();
  const groupedIds = [...new Set(state.units.map(unit => unit.pacote_id).filter(Boolean))];
  const modal = document.createElement('div');
@@ -36723,23 +36793,44 @@ function renderFinalizedGroupingCorrectionModal() {
  modal.className = 'finalized-grouping-correction-modal';
  modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title"><header><div><small>CORREÇÃO PÓS-FINALIZAÇÃO</small><h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2><p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p></div><button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="finalized-grouping-lock"><span class="material-symbols-rounded">lock</span><span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span></div><div class="finalized-grouping-units">${state.units.map(unit=>`<button type="button" class="${unit.selected?'is-selected':''}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})"><span class="material-symbols-rounded">${unit.selected?'check_box':'check_box_outline_blank'}</span><div><strong>${escapeKitAttribute(unit.descricao)}</strong><small>ID ${escapeKitAttribute(unit.id_interno)} · unidade ${unit.ordinal}</small></div><em>${unit.pacote_id?'AGRUPADO':'AVULSO'}</em></button>`).join('')}</div><div class="finalized-grouping-actions"><button type="button" onclick="groupSelectedFinalizedUnits()"><span class="material-symbols-rounded">inventory_2</span>AGRUPAR SELECIONADAS</button></div>${groupedIds.length?`<div class="finalized-grouping-current"><h3>AGRUPAMENTOS ATUAIS</h3>${groupedIds.map((id,index)=>{const members=state.units.filter(unit=>unit.pacote_id===id);return `<article><div><strong>Pacote agrupado ${index+1}</strong><small>${members.length} unidade(s) · ${[...new Set(members.map(unit=>unit.descricao))].map(escapeKitAttribute).join(', ')}</small></div><button type="button" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">DESFAZER</button></article>`;}).join('')}</div>`:''}<footer><button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button><button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button></footer></section>`;
  document.body.appendChild(modal);
+ if (finalizedGroupingCorrectionPreviousInert === null) finalizedGroupingCorrectionPreviousInert = app.inert;
+ app.inert = true;
+ const buttons = [...modal.querySelectorAll('button')];
+ (buttons[Math.max(0, focusIndex)] || buttons[0])?.focus({ preventScroll: true });
+ modal.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { event.preventDefault(); closeFinalizedGroupingCorrection(); }
+  if (event.key === 'Tab') {
+   const first = buttons[0], last = buttons[buttons.length - 1];
+   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+ });
 }
 
 async function saveFinalizedGroupingCorrection() {
  const state = finalizedGroupingCorrectionState;
- if (!state) return;
+ if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return;
  const packages = buildFinalizedGroupingCorrectionPayload();
  const confirmed = await showAppConfirm({ title: 'Salvar novo agrupamento?', message: `${packages.length} pacote(s) serão registrados.`, detail: 'Produtos, quantidades, estoque e movimentos permanecerão inalterados.', confirmLabel: 'Salvar correção', cancelLabel: 'Voltar' });
- if (!confirmed) return;
+ if (!confirmed || !isFinalizedGroupingCorrectionActive(state.request)) return;
+ const source = finalizedGroupingCorrectionSource;
+ let closedRequest = null;
  try {
   await DataClient.salvarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId: state.sessionId, token: state.token, pacotes: packages, operador: localStorage.getItem('currentUser') || 'N/A', deviceId: state.deviceId });
+  if (!isFinalizedGroupingCorrectionActive(state.request)) return;
   const sessionId = state.sessionId, returnScope = state.returnScope;
   closeFinalizedGroupingCorrection();
+  closedRequest = finalizedGroupingCorrectionRequest;
   const fresh = await DataClient.loadModule('separacao', true);
+  if (closedRequest !== finalizedGroupingCorrectionRequest || !source.isConnected || app.firstElementChild !== source) return;
   if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; }
   showToast('Agrupamento corrigido e autorização encerrada.', 'success');
   await renderFinalizedSeparationDetails(sessionId, returnScope);
- } catch (error) { showToast(error.message || 'Não foi possível salvar a correção.', 'error'); }
+ } catch (error) {
+  if (isFinalizedGroupingCorrectionActive(state.request) || (closedRequest === finalizedGroupingCorrectionRequest && source.isConnected && app.firstElementChild === source)) {
+   showToast(error.message || 'Não foi possível salvar a correção.', 'error');
+  }
+ }
 }
 
 /* Rel. Vendas / Devolucoes: contas multiplas e disponibilidade financeira real. */
