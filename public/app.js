@@ -36189,19 +36189,22 @@ function sdPeriodCount(period){return {mes:1,bimestre:2,trimestre:3,'6meses':6,'
 function setSaidaDevolucaoPeriod(period){saidaDevolucaoReportState.periodo=period;const count=sdPeriodCount(period);if(count)saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,count).sort();refreshSaidaDevolucaoReport();}
 function addSaidaDevolucaoMonth(month){if(!month)return;saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=[...new Set([...saidaDevolucaoReportState.meses,month])].sort();refreshSaidaDevolucaoReport();}
 function removeSaidaDevolucaoMonth(month){saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=saidaDevolucaoReportState.meses.filter(item=>item!==month);refreshSaidaDevolucaoReport();}
+function sdFormatQty(value){const num=parseFloat(String(value??0).replace(',','.'));if(!Number.isFinite(num))return '0';return num.toLocaleString('pt-BR',{maximumFractionDigits:2});}
+function isSaidaDevolucaoDemoAllowed(){return typeof isHomologationEnvironment==='function'&&isHomologationEnvironment();}
 function getSaidaDevolucaoDemoMonths(){const now=new Date();return Array.from({length:12},(_,index)=>{const date=new Date(now.getFullYear(),now.getMonth()-index,1);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;});}
-function buildSaidaDevolucaoDemoRows(){const months=saidaDevolucaoReportState.meses||[],allMonths=[...(saidaDevolucaoReportState.demoMonths||[])].sort(),products=(saidaDevolucaoReportState.products||[]).filter(product=>String(product.id_interno||product.col_A||product.col_a||'').trim()).slice(0,12),patterns=['up','down','stable','wave','zeros'];return products.map((product,index)=>{const id=String(product.id_interno||product.col_A||product.col_a).trim(),pattern=patterns[index%patterns.length],base=16+(index*7)%34,fullSales=allMonths.map((month,monthIndex)=>{let value=base;if(pattern==='up')value=base+monthIndex*4;if(pattern==='down')value=base+(11-monthIndex)*4;if(pattern==='stable')value=base+[0,1,-1,0,2,-1,1,0,-2,1,0,1][monthIndex];if(pattern==='wave')value=base+[2,15,-5,12,-2,18,-7,9,1,16,-4,11][monthIndex];if(pattern==='zeros')value=monthIndex%4===1?0:base+[3,-2,6,0,-4,8,1,-1,5,0,7,-3][monthIndex];return Math.max(0,Math.round(value));}),fullReturns=fullSales.map((sales,monthIndex)=>sales?Math.max(0,Math.round(sales*(0.015+((index+monthIndex)%5)*0.009))):0),sales=months.map(month=>fullSales[allMonths.indexOf(month)]||0),returns=months.map(month=>fullReturns[allMonths.indexOf(month)]||0),totalSales=sales.reduce((sum,value)=>sum+value,0),totalReturns=returns.reduce((sum,value)=>sum+value,0);return {id_interno:id,descricao:product.descricao_completa||product.descricao_base||product.descricao||product.nome||product.col_B||`Produto ${id}`,marca:product.marca||product.fabricante||'',sku:product.sku_fornecedor||product.sku||'',cor:product.cor||'',categoria:product.categoria||'Sem categoria',sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
-function toggleSaidaDevolucaoDemo(enabled){saidaDevolucaoReportState.demo=Boolean(enabled);saidaDevolucaoReportState.periodo='trimestre';saidaDevolucaoReportState.mesesDisponiveis=enabled?saidaDevolucaoReportState.demoMonths:saidaDevolucaoReportState.realMonths;saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,3).sort();saidaDevolucaoReportState.categoria='todas';refreshSaidaDevolucaoReport();const toggle=document.querySelector('.sd-demo-toggle input');if(toggle)toggle.checked=Boolean(enabled);const categoryLabel=[...document.querySelectorAll('.sd-report-filters label')].find(label=>label.querySelector('small')?.textContent==='Categoria');if(categoryLabel?.querySelector('select'))categoryLabel.querySelector('select').value='todas';document.querySelector('.sd-report-screen')?.classList.toggle('is-demo',Boolean(enabled));}
-function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=saidaDevolucaoReportState.demo?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=(saidaDevolucaoReportState.demo?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
-function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">x</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></section>`;}
-function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
-function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
-function renderSdSparkline(values,label){const w=184,h=34,p=5,max=Math.max(...values,1),min=Math.min(...values,0),range=max-min||1,x=i=>p+i*(w-p*2)/Math.max(values.length-1,1),y=v=>h-p-(v-min)/range*(h-p*2),first=Number(values[0]||0),last=Number(values[values.length-1]||0),average=values.length?values.reduce((sum,value)=>sum+Number(value||0),0)/values.length:0,tolerance=Math.max(1,average*.08),delta=last-first,trend=Math.abs(delta)<=tolerance?'stable':delta>0?'up':'down',title=saidaDevolucaoReportState.meses.map((m,i)=>`${sdMonthLabel(m)}: ${formatStockNumber(values[i]||0)}`).join(' - ');return `<svg class="sd-sparkline trend-${trend}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(title)}</title><polyline points="${values.map((v,i)=>`${x(i)},${y(v)}`).join(' ')}"/>${values.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="2"><title>${escapeKitAttribute(sdMonthLabel(saidaDevolucaoReportState.meses[i],true))}: ${formatStockNumber(v)}</title></circle>`).join('')}</svg>`;}
-function renderSdProductCell(row){return `<td class="sd-product-cell"><strong><b>${escapeKitAttribute(row.id_interno)}</b><i>-</i>${escapeKitAttribute(row.descricao)}</strong><small>${escapeKitAttribute(row.categoria||'Sem categoria')}</small></td>`;}
-function renderSdComparativeTable(rows){const months=saidaDevolucaoReportState.meses||[];return `<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Vendas, devolucoes e taxa por produto em uma unica linha</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table"><thead><tr><th rowspan="2">Produto</th>${months.map(month=>`<th colspan="3" class="sd-comparative-month"><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th rowspan="2">Total<br>Vendas</th><th rowspan="2">Total<br>Devolvido</th><th rowspan="2">Taxa<br>Geral</th><th rowspan="2">Tendencia</th></tr><tr>${months.map(()=>'<th>Vendas</th><th>Dev.</th><th>Taxa</th>').join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${months.map((month,index)=>{const sales=row.sales[index]||0,returns=row.returns[index]||0,rate=sales?returns/sales*100:null;return `<td>${formatStockNumber(sales)}</td><td>${formatStockNumber(returns)}</td><td><span class="sd-month-rate">${rate===null?'-':rate.toFixed(1).replace('.',',')+'%'}</span></td>`;}).join('')}<td><strong>${formatStockNumber(row.totalSales)}</strong></td><td><strong>${formatStockNumber(row.totalReturns)}</strong></td><td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td><td>${renderSdSparkline(row.sales,`Tendencia de vendas de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
-function renderSdComparisonTable(rows,type){const months=saidaDevolucaoReportState.meses,isSales=type==='sales',title=isSales?'Vendas / Saidas':'Devolucoes',key=isSales?'sales':'returns',total=isSales?'totalSales':'totalReturns',average=isSales?'averageSales':'averageReturns',extra=isSales?'':'<th>Taxa</th>';return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">${isSales?'trending_up':'assignment_return'}</span><div><h2>${title}</h2><small>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'} - valores por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>${months.map(month=>`<th><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th>Total</th><th>Media</th>${extra}<th>Tendencia</th></tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${row[key].map(value=>`<td>${formatStockNumber(value)}</td>`).join('')}<td><strong>${formatStockNumber(row[total])}</strong></td><td>${formatStockNumber(row[average])}</td>${isSales?'':`<td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td>`}<td>${renderSdSparkline(row[key],`Tendencia de ${title.toLowerCase()} de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length+(isSales?4:5)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
-function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses,totalSales=rows.reduce((s,r)=>s+r.totalSales,0),totalReturns=rows.reduce((s,r)=>s+r.totalReturns,0),averageSales=months.length?totalSales/months.length:0,averageReturns=months.length?totalReturns/months.length:0,pct=totalSales?totalReturns/totalSales*100:0,tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTable(rows,'returns');return `${renderSaidaDevolucaoPeriodControls()}<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>${formatStockNumber(totalSales)}</strong><span>Media mensal: ${formatStockNumber(averageSales)}</span></article><article><small>Total devolvido</small><strong>${formatStockNumber(totalReturns)}</strong><span>Media mensal: ${formatStockNumber(averageReturns)}</span></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Taxa de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong><span>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</span></article></section><section class="sd-report-history-note ready"><strong>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</strong><span>Media mensal: ${formatStockNumber(averageSales)} - Total vendido: ${formatStockNumber(totalSales)} - Total devolvido: ${formatStockNumber(totalReturns)}</span></section>${tables}`;}
-async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML='<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>';try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes,sep]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase(),DataClient.loadModule('separacao',true)]),products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[],available=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse(),channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();Object.assign(saidaDevolucaoReportState,{periodo:saidaDevolucaoReportState.periodo||'trimestre',mesesDisponiveis:available,movements,products,sessions,devolucoes});if(!['venda_desc','venda_asc','devolucao_desc','percentual_desc','crescimento_desc','queda_desc'].includes(saidaDevolucaoReportState.ordenacao))saidaDevolucaoReportState.ordenacao='venda_desc';if(!Array.isArray(saidaDevolucaoReportState.meses)||!saidaDevolucaoReportState.meses.length)saidaDevolucaoReportState.meses=available.slice(0,3).sort();saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. VENDAS / DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;refreshSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos dos meses visiveis. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
+function buildSaidaDevolucaoDemoRows(){const months=saidaDevolucaoReportState.meses||[],allMonths=[...(saidaDevolucaoReportState.demoMonths||[])].sort(),products=(saidaDevolucaoReportState.products||[]).filter(product=>String(product.id_interno||product.col_A||product.col_a||'').trim()).slice(0,12),patterns=['up','down','stable','wave','zeros'];return products.map((product,index)=>{const id=String(product.id_interno||product.col_A||product.col_a).trim(),pattern=patterns[index%patterns.length],base=16+(index*7)%34,fullSales=allMonths.map((month,monthIndex)=>{let value=base;if(pattern==='up')value=base+monthIndex*4;if(pattern==='down')value=base+(11-monthIndex)*4;if(pattern==='stable')value=base+[0,1,-1,0,2,-1,1,0,-2,1,0,1][monthIndex];if(pattern==='wave')value=base+[2,15,-5,12,-2,18,-7,9,1,16,-4,11][monthIndex];if(pattern==='zeros')value=monthIndex%4===1?0:base+[3,-2,6,0,-4,8,1,-1,5,0,7,-3][monthIndex];return Math.max(0,Math.round(value));}),fullReturns=fullSales.map((sales,monthIndex)=>sales?Math.max(0,Math.round(sales*(0.015+((index+monthIndex)%5)*0.009))):0),sales=months.map(month=>fullSales[allMonths.indexOf(month)]||0),returns=months.map(month=>fullReturns[allMonths.indexOf(month)]||0),totalSales=sales.reduce((sum,value)=>sum+value,0),totalReturns=returns.reduce((sum,value)=>sum+value,0),unitCost=28.5+((index*7.5)%85),returnCosts=returns.map(qty=>qty*unitCost),missingCosts=returns.map(()=>0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=0;return {id_interno:id,descricao:product.descricao_completa||product.descricao_base||product.descricao||product.nome||product.col_B||`Produto ${id}`,marca:product.marca||product.fabricante||'',sku:product.sku_fornecedor||product.sku||'',ean:product.ean||'',cor:product.cor||'',categoria:product.categoria||'Sem categoria',url_imagem:getProductImageUrl(product)||product.url_imagem||product.image_path||'',rawProduct:product,sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function toggleSaidaDevolucaoDemo(enabled){if(!isSaidaDevolucaoDemoAllowed()){saidaDevolucaoReportState.demo=false;return;}saidaDevolucaoReportState.demo=Boolean(enabled);saidaDevolucaoReportState.periodo='trimestre';saidaDevolucaoReportState.mesesDisponiveis=enabled?saidaDevolucaoReportState.demoMonths:saidaDevolucaoReportState.realMonths;saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,3).sort();saidaDevolucaoReportState.categoria='todas';refreshSaidaDevolucaoReport();const toggle=document.querySelector('.sd-demo-toggle input');if(toggle)toggle.checked=Boolean(enabled);const categoryLabel=[...document.querySelectorAll('.sd-report-filters label')].find(label=>label.querySelector('small')?.textContent==='Categoria');if(categoryLabel?.querySelector('select'))categoryLabel.querySelector('select').value='todas';document.querySelector('.sd-report-screen')?.classList.toggle('is-demo',Boolean(enabled));}
+function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=(saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=((saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela de homologacao. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
+function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-left"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div></div><div class="sd-period-right"><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">×</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></div></section>`;}
+function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),custo_desc:(a,b)=>(b.totalReturnCost||0)-(a.totalReturnCost||0),custo_asc:(a,b)=>(a.totalReturnCost||0)-(b.totalReturnCost||0),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
+function renderSdSparkline(values,label,type='sales',width=150,height=32,isMini=false){const w=width,h=height,p=isMini?4:6,nums=values.map(v=>Number(v||0)),len=nums.length;if(!len)return '<span class="sd-sparkline-empty">-</span>';if(len===1){const v=nums[0],fmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<svg class="sd-sparkline sd-trend-neutral ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}: ${fmt}</title><line x1="${p}" y1="${h/2}" x2="${w-p}" y2="${h/2}" class="sd-sparkline-baseline"/><circle cx="${w/2}" cy="${h/2}" r="${isMini?2.5:3.5}"/></svg>`;}const max=Math.max(...nums,0.0001),min=Math.min(...nums,0),range=(max-min)||1,x=i=>p+i*(w-p*2)/(len-1),y=v=>h-p-((v-min)/range)*(h-p*2),first=nums[0],last=nums[len-1],avg=nums.reduce((a,b)=>a+b,0)/len,tol=Math.max(0.01,Math.abs(avg)*0.05),delta=last-first;let trend='neutral';if(type==='returns'){trend=delta<-tol?'positive':delta>tol?'negative':'neutral';}else{trend=delta>tol?'positive':delta<-tol?'negative':'neutral';}const points=nums.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');const months=saidaDevolucaoReportState.meses||[];const dotR=isMini?2.5:3;const dots=nums.map((v,i)=>{const mLabel=months[i]?sdMonthLabel(months[i],true):`Mês ${i+1}`;const valFmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${dotR}"><title>${escapeKitAttribute(mLabel)}: ${valFmt}</title></circle>`;}).join('');return `<svg class="sd-sparkline sd-trend-${trend} ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}</title><polyline class="sd-sparkline-line" points="${points}"/>${dots}</svg>`;}
+function renderSdComparativeTrend(row,months){const returnRates=months.map((m,i)=>(row.sales||[])[i]?((row.returns||[])[i]/(row.sales||[])[i]*100):((row.returns||[])[i]?100:0));return `<div class="sd-comparative-trends"><div class="sd-trend-row"><span class="sd-trend-lbl">Vendas</span>${renderSdSparkline(row.sales||[],`Tendência de vendas de ${row.descricao}`,'sales',118,18,true)}</div><div class="sd-trend-row"><span class="sd-trend-lbl">Dev.</span>${renderSdSparkline(returnRates,`Tendência da taxa de devolução de ${row.descricao}`,'returns',118,18,true)}</div></div>`;}
+function renderSdProductCell(row){const rawP=row.rawProduct||{},imgUrl=row.url_imagem||getProductImageUrl(rawP)||'',idInterno=escapeKitAttribute(row.id_interno||''),desc=escapeKitAttribute(row.descricao||'Produto sem descricao'),sku=row.sku?escapeKitAttribute(row.sku):'',ean=row.ean?escapeKitAttribute(row.ean):'',marca=row.marca?escapeKitAttribute(row.marca):'',cor=row.cor?escapeKitAttribute(row.cor):'',categoria=(row.categoria&&row.categoria!=='Sem categoria')?escapeKitAttribute(row.categoria):'';const meta1=[];if(sku)meta1.push(`<span class="sd-meta-item"><span class="sd-meta-label">SKU:</span> <span class="sd-meta-val">${sku}</span></span>`);if(ean)meta1.push(`<span class="sd-meta-item"><span class="sd-meta-label">EAN:</span> <span class="sd-meta-val">${ean}</span></span>`);const meta2=[];if(marca)meta2.push(`<span>${marca}</span>`);if(cor)meta2.push(`<span>${cor}</span>`);if(categoria)meta2.push(`<span>${categoria}</span>`);const imgHtml=imgUrl?`<img src="${imgUrl}" alt="${idInterno}" class="sd-product-thumb-img" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling)this.nextElementSibling.style.display='flex';"><span class="material-symbols-rounded sd-product-no-img" style="display:none;">inventory_2</span>`:`<span class="material-symbols-rounded sd-product-no-img">inventory_2</span>`;return `<td class="sd-product-cell"><div class="sd-product-card-inline"><div class="sd-product-thumb">${imgHtml}</div><div class="sd-product-info"><div class="sd-product-header-line"><span class="sd-product-id-badge">${idInterno}</span><span class="sd-product-name" title="${desc}">${desc}</span></div>${meta1.length?`<div class="sd-product-meta-row">${meta1.join('<span class="sd-meta-bullet">•</span>')}</div>`:''}${meta2.length?`<div class="sd-product-submeta-row">${meta2.join('<span class="sd-meta-bullet">•</span>')}</div>`:''}</div></div></td>`;}
+function renderSdComparativeTable(rows){const months=saidaDevolucaoReportState.meses||[],taxaTooltip="Percentual das unidades vendidas que foram devolvidas.\nCálculo: devoluções ÷ vendas × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas.\nCálculo: total devolvido ÷ total vendido × 100.",colgroupHtml=`<colgroup><col class="sd-col-prod" style="width: 380px; min-width: 380px;">${months.map(()=>'<col class="sd-col-vendas" style="width: 70px; min-width: 70px;"><col class="sd-col-dev" style="width: 60px; min-width: 60px;"><col class="sd-col-taxa sd-col-month-end" style="width: 80px; min-width: 80px;">').join('')}<col class="sd-col-tot-sales" style="width: 78px; min-width: 78px;"><col class="sd-col-tot-dev" style="width: 78px; min-width: 78px;"><col class="sd-col-taxa-geral" style="width: 84px; min-width: 84px;"><col class="sd-col-trend" style="width: 185px; min-width: 185px;"></colgroup>`;return `<section class="sd-report-table-card sd-comparative-card"><header class="sd-comparative-header"><div class="sd-header-title"><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Vendas, devoluções e taxa por produto</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table">${colgroupHtml}<thead><tr><th rowspan="2" class="sd-th-product">Produto</th>${months.map(month=>`<th colspan="3" class="sd-comparative-month"><span>${sdMonthLabel(month)}</span></th>`).join('')}<th rowspan="2" class="sd-th-total-sales">Total<br>Vendas</th><th rowspan="2" class="sd-th-total-returns">Total<br>Devolvido</th><th rowspan="2" class="sd-th-general-rate"><span class="sd-th-with-help"><span>Taxa<br>Geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th><th rowspan="2" class="sd-th-trend">Tendência</th></tr><tr class="sd-subheaders">${months.map(()=>`<th class="sd-sub-vendas">Vendas</th><th class="sd-sub-dev">Dev.</th><th class="sd-col-month-end sd-sub-taxa"><span class="sd-th-with-help"><span>Taxa</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaTooltip)}">ⓘ</span></span></th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${months.map((month,index)=>{const sales=row.sales[index]||0,returns=row.returns[index]||0,rate=sales?returns/sales*100:(returns?100:null);return `<td class="sd-cell-vendas">${sdFormatQty(sales)}</td><td class="sd-cell-dev">${sdFormatQty(returns)}</td><td class="sd-col-month-end sd-cell-taxa"><span class="sd-month-rate">${rate===null?'-':rate.toFixed(1).replace('.',',')+'%'}</span></td>`;}).join('')}<td class="sd-cell-total-sales"><strong>${sdFormatQty(row.totalSales)}</strong></td><td class="sd-cell-total-returns"><strong>${sdFormatQty(row.totalReturns)}</strong></td><td class="sd-cell-general-rate"><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td><td class="sd-td-trend">${renderSdComparativeTrend(row,months)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSdComparisonTable(rows,type){const months=saidaDevolucaoReportState.meses,isSales=type==='sales',title=isSales?'Vendas / Saidas':'Devolucoes',key=isSales?'sales':'returns',total=isSales?'totalSales':'totalReturns',average=isSales?'averageSales':'averageReturns',extra=isSales?'':'<th>Taxa</th>';return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">${isSales?'trending_up':'assignment_return'}</span><div><h2>${title}</h2><small>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'} - valores por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>${months.map((month,i)=>`<th class="${i===months.length-1?'sd-col-month-end':''}"><span>${sdMonthLabel(month)}</span></th>`).join('')}<th>Total</th><th>Media</th>${extra}<th class="sd-th-trend">Tendencia</th></tr></thead><tbody>${rows.map(row=>{const returnRates=months.map((m,i)=>(row.sales||[])[i]?((row.returns||[])[i]/(row.sales||[])[i]*100):((row.returns||[])[i]?100:0));const sparklineHtml=isSales?renderSdSparkline(row.sales,`Tendencia de vendas de ${row.descricao}`,'sales',150,30):renderSdSparkline(returnRates,`Tendencia da taxa de devolucoes de ${row.descricao}`,'returns',150,30);return `<tr>${renderSdProductCell(row)}${row[key].map((value,i)=>`<td class="${i===row[key].length-1?'sd-col-month-end':''}">${sdFormatQty(value)}</td>`).join('')}<td><strong>${sdFormatQty(row[total])}</strong></td><td>${sdFormatQty(row[average])}</td>${isSales?'':`<td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td>`}<td class="sd-td-trend">${sparklineHtml}</td></tr>`;}).join('')||`<tr><td colspan="${months.length+(isSales?4:5)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses,totalSales=rows.reduce((s,r)=>s+r.totalSales,0),totalReturns=rows.reduce((s,r)=>s+r.totalReturns,0),averageSales=months.length?totalSales/months.length:0,averageReturns=months.length?totalReturns/months.length:0,pct=totalSales?totalReturns/totalSales*100:0,tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTable(rows,'returns');return `${renderSaidaDevolucaoPeriodControls()}<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">shopping_cart</span></div><div class="sd-card-body"><small>Total vendido</small><strong>${sdFormatQty(totalSales)}</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">assignment_return</span></div><div class="sd-card-body"><small>Total devolvido</small><strong>${sdFormatQty(totalReturns)}</strong></div></article><article class="sd-card sd-card-rate ${pct>5?'danger':pct>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong></div></article></section>${tables}`;}
+async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML='<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>';try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes,sep]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase(),DataClient.loadModule('separacao',true)]),products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[],available=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse(),channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();Object.assign(saidaDevolucaoReportState,{periodo:saidaDevolucaoReportState.periodo||'trimestre',mesesDisponiveis:available,movements,products,sessions,devolucoes});if(!['venda_desc','venda_asc','devolucao_desc','percentual_desc','custo_desc','custo_asc','crescimento_desc','queda_desc'].includes(saidaDevolucaoReportState.ordenacao))saidaDevolucaoReportState.ordenacao='venda_desc';if(!Array.isArray(saidaDevolucaoReportState.meses)||!saidaDevolucaoReportState.meses.length)saidaDevolucaoReportState.meses=available.slice(0,3).sort();saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. VENDAS / DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;refreshSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos dos meses visiveis. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
 function getSaidaDevolucaoScrollContainer(){const shell=document.querySelector('.sd-report-shell');if(shell&&shell.scrollHeight>shell.clientHeight+8)return shell;return window;}
 function initializeSaidaDevolucaoReportControls(){
  const filters=document.querySelector('.sd-report-filters');
@@ -36222,13 +36225,18 @@ function initializeSaidaDevolucaoReportControls(){
  };
  const categories=[...new Set(saidaDevolucaoReportState.rows.map(row=>String(row.categoria||'Sem categoria').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
  if(saidaDevolucaoReportState.categoria!=='todas'&&!categories.some(category=>normalizeOperationalLabel(category)===normalizeOperationalLabel(saidaDevolucaoReportState.categoria)))saidaDevolucaoReportState.categoria='todas';
- const demoLabel=document.createElement('label');demoLabel.className='sd-demo-toggle';demoLabel.dataset.sdExtraFilter='true';demoLabel.innerHTML='<small>Visualizacao</small><span><input type="checkbox" onchange="toggleSaidaDevolucaoDemo(this.checked)"><i></i><b>Dados de demonstracao</b></span>';
- filters.append(
-  createFilter('Modo',saidaDevolucaoReportState.viewMode,[{value:'separate',label:'Separado'},{value:'comparative',label:'Comparativo'}],value=>{saidaDevolucaoReportState.viewMode=value;}),
-  demoLabel,
+ const extraFilters=[
+  createFilter('Modo',saidaDevolucaoReportState.viewMode,[{value:'separate',label:'Separado'},{value:'comparative',label:'Comparativo'}],value=>{saidaDevolucaoReportState.viewMode=value;})
+ ];
+ if(isSaidaDevolucaoDemoAllowed()){
+  const demoLabel=document.createElement('label');demoLabel.className='sd-demo-toggle';demoLabel.dataset.sdExtraFilter='true';demoLabel.innerHTML='<small>Visualizacao <span class="sd-demo-env-badge">HOMOLOGACAO</span></small><span><input type="checkbox" onchange="toggleSaidaDevolucaoDemo(this.checked)"><i></i><b>Dados de demonstracao</b></span>';
+  extraFilters.push(demoLabel);
+ }
+ extraFilters.push(
   createFilter('Categoria',saidaDevolucaoReportState.categoria,[{value:'todas',label:'Todas as categorias'},...categories.map(category=>({value:category,label:category}))],value=>{saidaDevolucaoReportState.categoria=value;}),
-  createFilter('Ordenar por',saidaDevolucaoReportState.ordenacao,[{value:'venda_desc',label:'Maior venda'},{value:'venda_asc',label:'Menor venda'},{value:'devolucao_desc',label:'Maior devolucao'},{value:'percentual_desc',label:'Maior percentual de devolucao'},{value:'crescimento_desc',label:'Maior crescimento'},{value:'queda_desc',label:'Maior queda'}],value=>{saidaDevolucaoReportState.ordenacao=value;})
+  createFilter('Ordenar por',saidaDevolucaoReportState.ordenacao,[{value:'venda_desc',label:'Maior venda'},{value:'venda_asc',label:'Menor venda'},{value:'devolucao_desc',label:'Maior devolucao'},{value:'percentual_desc',label:'Maior taxa de devolucao'},{value:'custo_desc',label:'Custo devolvido — maior → menor'},{value:'custo_asc',label:'Custo devolvido — menor → maior'},{value:'crescimento_desc',label:'Maior crescimento'},{value:'queda_desc',label:'Maior queda'}],value=>{saidaDevolucaoReportState.ordenacao=value;})
  );
+ filters.append(...extraFilters);
 }
 function initializeSaidaDevolucaoScrollTop(){initializeSaidaDevolucaoReportControls();const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
 function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
@@ -36318,521 +36326,6 @@ function exportSaidaDevolucaoXLSX() {
  XLSX.writeFile(workbook, getSaidaDevolucaoExportFilename('xlsx'), { compression: true });
 }
 
-// ========================================================
-function closeQuickActionSeparationMenu() {
- const panel = document.getElementById('quick-separation-submenu');
- if (panel) panel.remove();
- const romaneioPanel = document.getElementById('quick-romaneio-submenu');
- if (romaneioPanel) romaneioPanel.remove();
- const conferencePanel = document.getElementById('quick-conference-submenu');
- if (conferencePanel) conferencePanel.remove();
- document.getElementById('quick-actions-menu')?.classList.remove('has-separation-submenu');
-}
-
-function openQuickActionSeparationMenu(event) {
- event?.stopPropagation?.();
- closeQuickActionSeparationMenu();
- const menu = document.getElementById('quick-actions-menu');
- if (!menu) return;
- menu.classList.add('has-separation-submenu');
- const pendingDrafts = getDraftPickSessionsWithLocalDraft().length;
- const panel = document.createElement('section');
- panel.id = 'quick-separation-submenu';
- panel.className = 'quick-separation-submenu';
- panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>SEPARAÇÕES DE HOJE</strong><small>Finalizadas e criadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
- menu.appendChild(panel);
-}
-
-function openQuickActionConferenceMenu(event) {
- event?.stopPropagation?.();
- closeQuickActionSeparationMenu();
- const menu = document.getElementById('quick-actions-menu');
- if (!menu) return;
- menu.classList.add('has-separation-submenu');
- let pending = 0;
- try {
-  pending = new Set((appData.separacao || []).filter(isSeparationPendingConferenceSession).map(getPackSeparationSessionId).filter(Boolean)).size;
- } catch (error) {}
- const panel = document.createElement('section');
- panel.id = 'quick-conference-submenu';
- panel.className = 'quick-separation-submenu quick-conference-submenu';
- panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderPackPendingChannels()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar conferencias abertas</small></span><b>${pending}</b></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>CONFERENCIAS DE HOJE</strong><small>Finalizadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('history')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO COMPLETO</strong><small>Pesquisar conferencias anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
- menu.appendChild(panel);
-}
-
-function openQuickActionRomaneioMenu(event) {
- event?.stopPropagation?.();
- closeQuickActionSeparationMenu();
- const menu = document.getElementById('quick-actions-menu');
- if (!menu) return;
- menu.classList.add('has-separation-submenu');
- const panel = document.createElement('section');
- panel.id = 'quick-romaneio-submenu';
- panel.className = 'quick-separation-submenu quick-romaneio-submenu';
- panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__novo__')"><img src="/assets/icons/quick-romaneio-new.svg" alt="" aria-hidden="true"><span><strong>NOVO ROMANEIO</strong><small>Iniciar retirada Flex ou Correios</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__realizados__')"><img src="/assets/icons/quick-romaneio-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO</strong><small>Consultar romaneios realizados</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
- menu.appendChild(panel);
-}
-
-function getSeparationConference(sessionId) {
- return (appData.conferencia || []).filter(row => String(row.separacao_id || '') === String(sessionId || '')).sort((a,b) => String(b.conferido_em || b.atualizado_em || '').localeCompare(String(a.conferido_em || a.atualizado_em || '')))[0] || null;
-}
-
-function isFinalizedSeparationForHistory(session = {}) {
- const sessionId = getPackSeparationSessionId(session);
- const conference = getSeparationConference(sessionId);
- return ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(session.status || '').toLowerCase()) || ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(conference?.status || '').toLowerCase());
-}
-
-function getSeparationFinishedAt(session = {}) {
- const conference = getSeparationConference(getPackSeparationSessionId(session));
- return conference?.conferido_em || conference?.atualizado_em || session.finalizado_em || session.atualizado_em || session.criado_em || '';
-}
-
-function getSeparationCreatedAt(session = {}) {
- const directDate = session.criado_em || session.data_separacao || session.col_b || '';
- if (directDate) return directDate;
- const sessionId = getPackSeparationSessionId(session);
- const match = String(sessionId || '').toUpperCase().match(/^SEP-[A-Z0-9]+-(\d{2})(\d{2})-\d+$/);
- if (!match) return '';
- const referenceDate = session.finalizado_em || session.atualizado_em || new Date();
- const referenceYear = new Date(referenceDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).slice(0, 4);
- return `${referenceYear}-${match[2]}-${match[1]}`;
-}
-
-function isDateTodayBR(value) {
- if (!value) return false;
- try { return new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
- catch (error) { return String(value).slice(0,10) === new Date().toISOString().slice(0,10); }
-}
-
-function getFinalizedSeparationViewModel(session) {
- const sessionId = getPackSeparationSessionId(session);
- const conference = getSeparationConference(sessionId);
- const channel = getPickDraftChannelInfo(session);
- const finishedAt = getSeparationFinishedAt(session);
- const createdAt = getSeparationCreatedAt(session);
- const mode = isPickingFastModeSource(session) ? 'Rápido' : 'Normal';
- return { session, sessionId, conference, channel, createdAt, finishedAt, mode, products: getSeparationProductTotal(session), items: getSeparationItemTotal(session), packages: getPickPackageCountFrom(session), operator: session.criado_por || '-', conferenceOperator: conference?.conferido_por || '', searchText: normalizeOperationalLabel([sessionId, channel.label, session.criado_por, mode].join(' ')) };
-}
-
-function applyFinalizedSeparationFilters() {
- const search = normalizeOperationalLabel(document.getElementById('finalized-separation-search')?.value || '');
- const channel = normalizeOperationalLabel(document.getElementById('finalized-separation-channel')?.value || '');
- let visible = 0;
- document.querySelectorAll('[data-finalized-separation]').forEach(card => {
-  const matchesSearch = !search || String(card.dataset.search || '').includes(search);
-  const matchesChannel = !channel || String(card.dataset.channel || '') === channel;
-  card.hidden = !(matchesSearch && matchesChannel);
-  if (!card.hidden) visible++;
- });
- const counter = document.getElementById('finalized-separation-visible');
- if (counter) counter.textContent = `${visible} separação(ões)`;
-}
-
-async function renderFinalizedSeparationsScreen(scope = 'today') {
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
- const currentUser = localStorage.getItem('currentUser');
- document.body.classList.remove('menu-active');
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}<main class="container"><div class="finalized-separation-loading">Carregando separações...</div></main></div>`;
- try {
-  const [separationData, conferenceData] = await Promise.all([DataClient.loadModule('separacao', true), DataClient.loadModule('conferencia', true)]);
-  if (separationData) { appData.separacao = separationData.separacao || []; appData.separacao_itens = separationData.separacao_itens || []; }
-  if (conferenceData) { appData.conferencia = conferenceData.conferencia || []; appData.conferencia_itens = conferenceData.conferencia_itens || []; }
- } catch (error) { console.warn('[SEP HIST] Falha ao atualizar:', error); }
- const rows = (appData.separacao || []).filter(isFinalizedSeparationForHistory).map(getFinalizedSeparationViewModel).filter(row => scope !== 'today' || isDateTodayBR(row.createdAt)).sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')));
- const channels = [...new Set(rows.map(row => row.channel.label).filter(Boolean))].sort();
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separations-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container finalized-separations-shell"><header class="finalized-separations-header"><div><span class="material-symbols-rounded">${scope==='today'?'task_alt':'history'}</span><div><h1>${scope==='today'?'FINALIZADAS · CRIADAS HOJE':'HISTÓRICO DE SEPARAÇÕES'}</h1><p>Consulta rápida dos produtos, pacotes e responsáveis.</p></div></div><aside class="finalized-header-actions"><button class="cancel-item-global" type="button" onclick="openGlobalFinalizedItemCancellation(${quotePackInlineArg(scope)})">CANCELAR ITEM</button><button type="button" onclick="renderMenu()">VOLTAR</button></aside></header><section class="finalized-separations-controls"><label><span class="material-symbols-rounded">search</span><input id="finalized-separation-search" placeholder="Buscar ID, canal ou operador" oninput="applyFinalizedSeparationFilters()"></label><select id="finalized-separation-channel" onchange="applyFinalizedSeparationFilters()"><option value="">Todos os canais</option>${channels.map(name=>`<option value="${escapeKitAttribute(name)}">${escapeKitAttribute(name)}</option>`).join('')}</select><strong id="finalized-separation-visible">${rows.length} separação(ões)</strong></section>${rows.length?`<section class="finalized-separations-list">${rows.map(row=>`<article data-finalized-separation data-search="${escapeKitAttribute(row.searchText)}" data-channel="${escapeKitAttribute(normalizeOperationalLabel(row.channel.label))}"><header><span class="finalized-channel tone-${row.channel.tone}">${escapeKitAttribute(row.channel.label)}</span><mark>FINALIZADA</mark></header><div class="finalized-separation-main"><div><strong>${escapeKitAttribute(row.sessionId)}</strong><small>Criada ${escapeKitAttribute(formatPackSeparationDate(row.createdAt))} · Finalizada ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))} · Modo ${row.mode}</small><em>Separado por ${escapeKitAttribute(row.operator)}${row.conferenceOperator?` · Conferido por ${escapeKitAttribute(row.conferenceOperator)}`:''}</em></div><dl><div><dt>Produtos</dt><dd>${row.products}</dd></div><div><dt>Unidades</dt><dd>${row.items}</dd></div><div><dt>Pacotes</dt><dd>${row.packages}</dd></div></dl></div><button type="button" onclick="renderFinalizedSeparationDetails(${quotePackInlineArg(row.sessionId)},${quotePackInlineArg(scope)})">VER PRODUTOS <span class="material-symbols-rounded">arrow_forward</span></button></article>`).join('')}</section>`:'<section class="finalized-separations-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma separação finalizada neste período.</strong></section>'}</main></div>`;
-}
-
-function closeCancelSeparationModal() {
- document.getElementById('cancel-separation-modal')?.remove();
-}
-
-let finalizedCancellationLookup = { scope: 'today', code: '', candidates: [], selected: null };
-
-function openGlobalFinalizedItemCancellation(scope = 'today') {
- closeCancelSeparationModal();
- const safeScope = scope === 'all' ? 'all' : (scope === 'quick' ? 'quick' : 'today');
- finalizedCancellationLookup = { scope: safeScope, code: '', candidates: [], selected: null };
- const modal = document.createElement('div');
- modal.id = 'cancel-separation-modal'; modal.className = 'cancel-separation-modal global-item-cancel-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>${safeScope === 'quick' ? 'CANCELAMENTO RÁPIDO' : 'LOCALIZAR ITEM FINALIZADO'}</h2><p>Leia o produto e escolha o canal correto · somente separações criadas hoje</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><div class="global-cancel-search"><label><span>EAN ou ID interno</span><input id="global-cancel-code" inputmode="none" autocomplete="off" placeholder="Bipe ou digite o produto"></label><button type="button" onclick="searchFinalizedItemCancellation()">LOCALIZAR</button></div><div id="global-cancel-results" class="global-cancel-results"><p>Bipe um produto para consultar as separações finalizadas.</p></div><div id="global-cancel-confirm" class="global-cancel-confirm hidden"><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmGlobalFinalizedItemCancellation()">CANCELAR 1 UNIDADE</button></div></section>`;
- document.body.appendChild(modal);
- const input=document.getElementById('global-cancel-code'); input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchFinalizedItemCancellation();}}); setTimeout(()=>input?.focus(),50);
-}
-
-async function searchFinalizedItemCancellation() {
- const code=String(document.getElementById('global-cancel-code')?.value||'').trim(); if(!code){showToast('Bipe o produto.','warning');return;}
- const box=document.getElementById('global-cancel-results'); if(box) box.innerHTML='<p>Consultando canais e separações...</p>';
- const candidates=[];
- const eligibleSessions = (appData.separacao || []).filter(isFinalizedSeparationForHistory).filter(session => {
-  if (finalizedCancellationLookup.scope === 'all') return true;
-  return isDateTodayBR(getFinalizedSeparationViewModel(session).createdAt);
- });
- for(const session of eligibleSessions){
-  const sessionId=getPackSeparationSessionId(session); const item=getSeparationItemsForSession(session).find(row=>String(row.ean||'')===code||String(row.id_interno||'')===code); if(!item)continue;
-  const productId=getPickingProductId(item)||item.id_interno||''; const original=Number(item.qtd_separada??item.qtd_solicitada??0)||0;
-  const cancelResponse=await window.supabaseClient.from('separacao_item_cancelamentos').select('quantidade').eq('separacao_id',sessionId).eq('id_interno',productId); if(cancelResponse.error)throw cancelResponse.error;
-  const cancelled=(cancelResponse.data||[]).reduce((sum,row)=>sum+Number(row.quantidade||1),0); const remaining=Math.max(original-cancelled,0); if(!remaining)continue;
-  const packages=await DataClient.listarPacotesSeparacaoSupabase(sessionId); const links=packages.filter(pkg=>String(pkg.status).toUpperCase()!=='CANCELADO'&&(pkg.itens||[]).some(pi=>String(pi.id_interno)===String(productId)));
-  const chosen=links.sort((a,b)=>(String(a.tipo)==='AVULSO'?-1:1)-(String(b.tipo)==='AVULSO'?-1:1))[0]; const view=getFinalizedSeparationViewModel(session);
-  candidates.push({sessionId,productId,code,channel:view.channel.label,finishedAt:view.finishedAt,remaining,packageId:chosen?.pacote_id||'-',packageType:chosen?.tipo||'SEM PACOTE'});
- }
- finalizedCancellationLookup={...finalizedCancellationLookup,code,candidates,selected:null}; renderFinalizedCancellationCandidates();
-}
-
-function renderFinalizedCancellationCandidates(){
- const box=document.getElementById('global-cancel-results'); const rows=finalizedCancellationLookup.candidates||[]; if(!box)return;
- box.innerHTML=rows.length?rows.map((row,index)=>`<button type="button" data-cancel-candidate="${index}" onclick="selectFinalizedCancellationCandidate(${index})"><strong>${escapeKitAttribute(row.channel)}</strong><span>${escapeKitAttribute(row.sessionId)} · ${escapeKitAttribute(formatPackSeparationDate(row.finishedAt))}</span><small>${escapeKitAttribute(row.packageType==='AGRUPADO'?'Agrupado':'Avulso')} · ${escapeKitAttribute(row.packageId)} · ${row.remaining} un. disponível(is)</small></button>`).join(''):'<p class="is-empty">Nenhuma separação criada hoje e já finalizada possui unidade disponível deste produto.</p>';
- document.getElementById('global-cancel-confirm')?.classList.add('hidden');
-}
-function selectFinalizedCancellationCandidate(index){finalizedCancellationLookup.selected=finalizedCancellationLookup.candidates[index]||null;document.querySelectorAll('[data-cancel-candidate]').forEach((el,i)=>el.classList.toggle('is-selected',i===index));document.getElementById('global-cancel-confirm')?.classList.remove('hidden');document.getElementById('cancel-separation-submit')?.focus();}
-async function confirmGlobalFinalizedItemCancellation(){
- const selected=finalizedCancellationLookup.selected;
- if(!selected){showToast('Selecione o canal e a separação.','warning');return;}
- const button=document.getElementById('cancel-separation-submit');
- if(button)button.disabled=true;
- try{
-  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({sessionId:selected.sessionId,codigo:selected.code});
-  const fresh = await DataClient.loadModule('conferencia', true);
-  if (fresh) {
-   appData.separacao = fresh.separacao || appData.separacao;
-   appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens;
-   appData.conferencia = fresh.conferencia || appData.conferencia;
-  }
-  showToast(`1 unidade cancelada em ${selected.channel}. Restam ${result?.restante ?? 0}.`,'success');
-  if (finalizedCancellationLookup.scope === 'quick') {
-   finalizedCancellationLookup={scope:'quick',code:'',candidates:[],selected:null};
-   const input=document.getElementById('global-cancel-code');
-   if(input)input.value='';
-   const box=document.getElementById('global-cancel-results');
-   if(box)box.innerHTML='<p class="is-success">Cancelamento registrado. Bipe o próximo produto ou feche esta tela.</p>';
-   document.getElementById('global-cancel-confirm')?.classList.add('hidden');
-   setTimeout(()=>input?.focus(),60);
-   return;
-  }
-  const returnScope=finalizedCancellationLookup.scope;
-  closeCancelSeparationModal();
-  await renderFinalizedSeparationsScreen(returnScope);
- }catch(error){
-  showToast(error.message||'Não foi possível cancelar o item.','error');
-  if(button)button.disabled=false;
- }
-}
-function openCancelItemSeparationModal(sessionId, returnScope = 'today') {
- closeCancelSeparationModal();
- const modal = document.createElement('div');
- modal.id = 'cancel-separation-modal';
- modal.className = 'cancel-separation-modal cancel-item-separation-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true"><header><span class="material-symbols-rounded">barcode_scanner</span><div><h2>CANCELAR ITEM POR BIP</h2><p>${escapeKitAttribute(sessionId)} · 1 unidade por leitura</p></div><button type="button" onclick="closeCancelSeparationModal()"><span class="material-symbols-rounded">close</span></button></header><p class="cancel-separation-warning">O produto continuara no historico, marcado em vermelho. Cada confirmacao devolve somente 1 unidade ao estoque.</p><label><span>Bipe ou digite EAN / ID interno</span><input id="cancel-item-code" autocomplete="off" inputmode="none" placeholder="Aguardando produto"></label><footer><button type="button" onclick="closeCancelSeparationModal()">VOLTAR</button><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmCancelSeparationItem(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR 1 UNIDADE</button></footer></section>`;
- document.body.appendChild(modal);
- const input = document.getElementById('cancel-item-code');
- input?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); confirmCancelSeparationItem(sessionId, returnScope); } });
- setTimeout(() => input?.focus(), 50);
-}
-
-async function confirmCancelSeparationItem(sessionId, returnScope = 'today') {
- const codigo = String(document.getElementById('cancel-item-code')?.value || '').trim();
- if (!codigo) { showToast('Bipe o produto que deseja cancelar.', 'warning'); return; }
- const button = document.getElementById('cancel-separation-submit');
- if (button) { button.disabled = true; button.textContent = 'CANCELANDO...'; }
- try {
-  const result = await DataClient.cancelarItemSeparacaoFinalizadaSupabase({ sessionId, codigo });
-  closeCancelSeparationModal();
-  showToast(`1 unidade cancelada. Restam ${result?.restante ?? 0}.`, 'success');
-  const fresh = await DataClient.loadModule('conferencia', true);
-  if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; appData.conferencia = fresh.conferencia || appData.conferencia; }
-  await renderFinalizedSeparationDetails(sessionId, returnScope);
- } catch (error) {
-  showToast(error.message || 'Nao foi possivel cancelar o item.', 'error');
-  if (button) { button.disabled = false; button.textContent = 'CANCELAR 1 UNIDADE'; }
-  document.getElementById('cancel-item-code')?.focus();
- }
-}
-function openCancelSeparationModal(sessionId, returnScope = 'today') {
- closeCancelSeparationModal();
- const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
- if (!session || !isFinalizedSeparationForHistory(session)) {
-  showToast('Esta separacao nao esta disponivel para cancelamento.', 'warning');
-  return;
- }
- const view = getFinalizedSeparationViewModel(session);
- const modal = document.createElement('div');
- modal.id = 'cancel-separation-modal';
- modal.className = 'cancel-separation-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="cancel-separation-title"><header><span class="material-symbols-rounded">warning</span><div><h2 id="cancel-separation-title">CANCELAR ANTES DO DESPACHO</h2><p>${escapeKitAttribute(view.sessionId)} · ${escapeKitAttribute(view.channel.label)}</p></div><button type="button" onclick="closeCancelSeparationModal()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="cancel-separation-summary"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article><small>Pacotes retirados</small><strong>${view.packages}</strong></article></div><p class="cancel-separation-warning"><strong>Use somente antes do despacho.</strong> A separacao sairá da contagem do dia, os pacotes serao cancelados e, se ja houve baixa, o estoque sera estornado.</p><label><span>Motivo obrigatório</span><textarea id="cancel-separation-reason" rows="3" maxlength="300" placeholder="Ex.: pedido cancelado pelo cliente"></textarea></label><label><span>Digite CANCELAR para confirmar</span><input id="cancel-separation-confirmation" autocomplete="off" placeholder="CANCELAR"></label><footer><button type="button" onclick="closeCancelSeparationModal()">VOLTAR</button><button id="cancel-separation-submit" class="danger" type="button" onclick="confirmCancelSeparation(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">CANCELAR SEPARACAO</button></footer></section>`;
- document.body.appendChild(modal);
- setTimeout(() => document.getElementById('cancel-separation-reason')?.focus(), 50);
-}
-
-async function confirmCancelSeparation(sessionId, returnScope = 'today') {
- const reason = String(document.getElementById('cancel-separation-reason')?.value || '').trim();
- const confirmation = normalizeOperationalLabel(document.getElementById('cancel-separation-confirmation')?.value || '');
- if (reason.length < 5) { showToast('Informe o motivo do cancelamento.', 'warning'); return; }
- if (confirmation !== 'CANCELAR') { showToast('Digite CANCELAR para confirmar.', 'warning'); return; }
- const button = document.getElementById('cancel-separation-submit');
- if (button) { button.disabled = true; button.textContent = 'CANCELANDO...'; }
- try {
-  const result = await DataClient.cancelarSeparacaoAntesDespachoSupabase({ sessionId, motivo: reason });
-  const row = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === String(sessionId));
-  if (row) { row.status = 'cancelada'; row.total_pacotes_montados = 0; row.cancelado_em = getDataHoraBrasil(); row.motivo_cancelamento = reason; }
-  appData.conferencia = (appData.conferencia || []).map(item => String(item.separacao_id || '') === String(sessionId) ? { ...item, status: 'cancelada' } : item);
-  closeCancelSeparationModal();
-  const detail = result?.estoque_estornado
-   ? `${result.estornos || 0} movimento(s) de estoque estornado(s). ${result.pacotes_cancelados || 0} pacote(s) cancelado(s).`
-   : `${result?.pacotes_cancelados || 0} pacote(s) cancelado(s). Nao havia baixa de estoque para estornar.`;
-  await showAppModal({ type: 'success', title: 'Separacao cancelada', message: `${sessionId} foi retirada da contagem do dia.`, detail, confirmText: 'OK' });
-  await renderFinalizedSeparationsScreen(returnScope);
- } catch (error) {
-  console.error('[CANCELAR SEPARACAO]', error);
-  showToast(error.message || 'Nao foi possivel cancelar a separacao.', 'error');
-  if (button) { button.disabled = false; button.textContent = 'CANCELAR SEPARACAO'; }
- }
-}
-async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today') {
- const currentUser = localStorage.getItem('currentUser');
- let session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
- if (!session) { await renderFinalizedSeparationsScreen(returnScope); return; }
- const view = getFinalizedSeparationViewModel(session);
- let packages = [];
- try { packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId); } catch (error) { console.warn('[SEP HIST] Pacotes não carregados:', error); }
- const items = getSeparationItemsForSession(session).filter(
-  it => (Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) || 0) > 0
- );
- let itemCancellations = [];
- try { const response = await window.supabaseClient.from('separacao_item_cancelamentos').select('*').eq('separacao_id', sessionId).order('cancelado_em', { ascending: true }); if (response.error) throw response.error; itemCancellations = response.data || []; } catch (error) { console.warn('[SEP HIST] Cancelamentos nao carregados:', error); }
- const cancelledByProduct = new Map();
- itemCancellations.forEach(row => cancelledByProduct.set(String(row.id_interno || ''), (cancelledByProduct.get(String(row.id_interno || '')) || 0) + Number(row.quantidade || 1)));
- const packageByProduct = new Map();
- packages.forEach(pacote => (pacote.itens || []).forEach(item => { const key=String(item.id_interno||''); if(!packageByProduct.has(key))packageByProduct.set(key,[]); packageByProduct.get(key).push({id:pacote.pacote_id,type:pacote.tipo,qty:Number(item.quantidade||0)}); }));
- const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO' && String(row.status).toUpperCase()!=='CANCELADO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO' && String(row.status).toUpperCase()!=='CANCELADO').length;
- const cancelledProducts = cancelledByProduct.size;
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header tone-${view.channel.tone}"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')" aria-label="Voltar para separações finalizadas"><span class="material-symbols-rounded">arrow_back</span></button><div class="finalized-detail-title"><h1>SEPARAÇÃO <i>•</i> ${escapeKitAttribute(view.channel.label)}</h1><p>${escapeKitAttribute(view.sessionId)} <i>•</i> ${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} <i>•</i> Modo ${view.mode}</p></div><div class="finalized-detail-state"><span class="material-symbols-rounded">task_alt</span><strong>FINALIZADA</strong><small>Somente leitura</small></div></header><section class="finalized-detail-summary" aria-label="Resumo da separação"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span class="material-symbols-rounded">person</span><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span class="finalized-detail-conference">Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><div><small>HISTÓRICO DA OPERAÇÃO</small><h2>PRODUTOS SEPARADOS</h2></div><span><span class="material-symbols-rounded">visibility</span> CONSULTA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><span class="finalized-product-check material-symbols-rounded">check_circle</span><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
- document.querySelector('.finalized-detail-state')?.insertAdjacentHTML('beforebegin', `<button class="finalized-grouping-edit" type="button" onclick="openFinalizedGroupingCorrection(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})"><span class="material-symbols-rounded">inventory_2</span>EDITAR AGRUPAMENTO</button>`);
-}
-
-let finalizedGroupingCorrectionState = null;
-let finalizedGroupingCorrectionRequest = 0;
-let finalizedGroupingCorrectionObserver = null;
-let finalizedGroupingCorrectionSource = null;
-let finalizedGroupingCorrectionFocus = null;
-let finalizedGroupingCorrectionPreviousInert = null;
-
-function isFinalizedGroupingCorrectionActive(request) {
- return request === finalizedGroupingCorrectionRequest && !!finalizedGroupingCorrectionSource?.isConnected
-  && app.firstElementChild === finalizedGroupingCorrectionSource;
-}
-
-function buildFinalizedGroupingCorrectionUnitsFromItems(items = [], packages = []) {
- const units = [];
- (items || []).forEach(item => {
-  const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
-  const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? item.quantidade ?? 0) || 0);
-  if (!productId || quantity <= 0) return;
-  for (let index = 0; index < quantity; index++) {
-   units.push({
-    key: `${productId}:${index + 1}`,
-    id_interno: productId,
-    descricao: getPickItemTitle(item) || item.descricao || productId,
-    ean: item.ean || '',
-    ordinal: index + 1,
-    pacote_id: null,
-    selected: false
-   });
-  }
- });
- const activePackages = (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO');
- if (activePackages.length > 0) {
-  activePackages.forEach(pkg => {
-   (pkg.itens || []).forEach(pkgItem => {
-    let remaining = Math.max(0, Number(pkgItem.quantidade || 0));
-    units.filter(unit => unit.id_interno === String(pkgItem.id_interno || '') && unit.pacote_id === null).forEach(unit => {
-     if (remaining <= 0) return;
-     if (String(pkg.tipo || '').toUpperCase() === 'AGRUPADO') unit.pacote_id = String(pkg.pacote_id);
-     remaining--;
-    });
-   });
-  });
- }
- return units;
-}
-
-function buildFinalizedGroupingCorrectionUnits(session, packages = []) {
- const items = getSeparationItemsForSession(session);
- return buildFinalizedGroupingCorrectionUnitsFromItems(items, packages);
-}
-
-async function openFinalizedGroupingCorrection(sessionId, returnScope = 'today') {
- closeFinalizedGroupingCorrection();
- if (!navigator.onLine) return showAppModal({ type: 'warning', title: 'Conexão necessária', message: 'A correção de agrupamento exige conexão com o servidor.' });
- const request = finalizedGroupingCorrectionRequest;
- finalizedGroupingCorrectionSource = app.firstElementChild;
- finalizedGroupingCorrectionFocus = document.activeElement;
- finalizedGroupingCorrectionObserver = new MutationObserver(() => {
-  if (!isFinalizedGroupingCorrectionActive(request)) closeFinalizedGroupingCorrection();
- });
- finalizedGroupingCorrectionObserver.observe(app, { childList: true });
- const pin = await showAppPrompt({ title: 'Editar agrupamento', message: `Informe o PIN mestre de 4 dígitos para autorizar a edição do agrupamento de ${sessionId}.`, label: 'PIN', inputType: 'password', confirmLabel: 'Autorizar', cancelLabel: 'Cancelar' });
- if (!isFinalizedGroupingCorrectionActive(request)) return;
- if (!pin) return closeFinalizedGroupingCorrection();
- if (!/^\d{4}$/.test(String(pin))) {
-  closeFinalizedGroupingCorrection();
-  return showAppModal({ type: 'error', title: 'PIN inválido', message: 'O PIN mestre deve conter exatamente 4 dígitos numéricos.' });
- }
- try {
-  const deviceId = getOrCreateDeviceId();
-  const auth = await DataClient.autorizarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId, pin, operador: localStorage.getItem('currentUser') || 'N/A', deviceId });
-  if (!isFinalizedGroupingCorrectionActive(request)) return;
-  if (!auth?.ok) {
-   closeFinalizedGroupingCorrection();
-   if (auth?.motivo === 'PIN_INVALIDO') {
-    return showAppModal({ type: 'error', title: 'PIN mestre incorreto', message: 'PIN mestre incorreto.' });
-   }
-   if (auth?.motivo === 'TENTATIVAS_EXCEDIDAS') {
-    return showAppModal({ type: 'warning', title: 'Tentativas excedidas', message: 'Dispositivo temporariamente bloqueado por excesso de tentativas. Tente novamente após o período de bloqueio.' });
-   }
-   return showAppModal({ type: 'error', title: 'Não elegível / Recusado', message: auth?.motivo || 'Não foi possível autorizar a correção de agrupamento.' });
-  }
-  if (!auth.token) throw new Error('Autorização de correção não recebida.');
-
-  let sessionItems = [];
-  try {
-   sessionItems = await DataClient.listarItensSeparacaoSupabase(sessionId);
-  } catch (err) {
-   console.warn('[CORR AGRUP] Falha ao consultar separacao_itens no Supabase:', err);
-  }
-  if (!sessionItems || !sessionItems.length) {
-   const session = (appData.separacao || []).find(row => String(getPackSeparationSessionId(row)) === String(sessionId));
-   if (session) {
-    sessionItems = getSeparationItemsForSession(session).filter(it => Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) > 0);
-   }
-  }
-  if (!sessionItems || !sessionItems.length) {
-   throw new Error('Nenhum item válido encontrado para esta separação.');
-  }
-
-  let packages = [];
-  try {
-   packages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
-  } catch (error) {
-   console.warn('[CORR AGRUP] Pacotes não carregados:', error);
-  }
-
-  if (!isFinalizedGroupingCorrectionActive(request)) return;
-  finalizedGroupingCorrectionState = {
-   request,
-   sessionId,
-   returnScope,
-   token: auth.token,
-   deviceId,
-   expiraEm: auth.expira_em,
-   units: buildFinalizedGroupingCorrectionUnitsFromItems(sessionItems, packages)
-  };
-  renderFinalizedGroupingCorrectionModal();
- } catch (error) {
-  if (!isFinalizedGroupingCorrectionActive(request)) return;
-  closeFinalizedGroupingCorrection();
-  showAppModal({ type: 'error', title: 'Erro de comunicação técnica', message: error.message || 'Não foi possível autorizar a correção de agrupamento.' });
- }
-}
-
-function closeFinalizedGroupingCorrection() {
- finalizedGroupingCorrectionRequest++;
- finalizedGroupingCorrectionObserver?.disconnect();
- finalizedGroupingCorrectionObserver = null;
- finalizedGroupingCorrectionSource = null;
- finalizedGroupingCorrectionState = null;
- document.getElementById('finalized-grouping-correction-modal')?.remove();
- if (finalizedGroupingCorrectionPreviousInert !== null) app.inert = finalizedGroupingCorrectionPreviousInert;
- finalizedGroupingCorrectionPreviousInert = null;
- if (finalizedGroupingCorrectionFocus?.isConnected) finalizedGroupingCorrectionFocus.focus();
- finalizedGroupingCorrectionFocus = null;
-}
-
-function toggleFinalizedGroupingUnit(key) {
- const unit = finalizedGroupingCorrectionState?.units.find(row => row.key === key);
- if (unit) unit.selected = !unit.selected;
- renderFinalizedGroupingCorrectionModal();
-}
-
-function groupSelectedFinalizedUnits() {
- const selected = (finalizedGroupingCorrectionState?.units || []).filter(unit => unit.selected);
- if (selected.length < 2) return showToast('Selecione pelo menos 2 unidades para agrupar.', 'warning');
- const packageId = `CORR-PKG-${crypto?.randomUUID ? crypto.randomUUID() : Date.now()}`;
- selected.forEach(unit => { unit.pacote_id = packageId; unit.selected = false; });
- renderFinalizedGroupingCorrectionModal();
-}
-
-function ungroupFinalizedPackage(packageId) {
- (finalizedGroupingCorrectionState?.units || []).forEach(unit => { if (unit.pacote_id === packageId) unit.pacote_id = null; });
- renderFinalizedGroupingCorrectionModal();
-}
-
-function buildFinalizedGroupingCorrectionPayload() {
- const state = finalizedGroupingCorrectionState;
- const packages = new Map();
- (state?.units || []).forEach((unit, index) => {
-  const packageId = unit.pacote_id || `CORR-AVL-${String(index + 1).padStart(4, '0')}-${String(state.token).slice(0, 8)}`;
-  if (!packages.has(packageId)) packages.set(packageId, { pacote_id: packageId, tipo: unit.pacote_id ? 'AGRUPADO' : 'AVULSO', itens: new Map() });
-  const row = packages.get(packageId);
-  row.itens.set(unit.id_interno, (row.itens.get(unit.id_interno) || 0) + 1);
- });
- return [...packages.values()].map(row => ({ pacote_id: row.pacote_id, tipo: row.tipo, itens: [...row.itens].map(([id_interno, quantidade]) => ({ id_interno, quantidade })) }));
-}
-
-function renderFinalizedGroupingCorrectionModal() {
- const state = finalizedGroupingCorrectionState;
- if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return closeFinalizedGroupingCorrection();
- const oldModal = document.getElementById('finalized-grouping-correction-modal');
- const focusIndex = oldModal ? [...oldModal.querySelectorAll('button')].indexOf(document.activeElement) : 0;
- document.getElementById('finalized-grouping-correction-modal')?.remove();
- const groupedIds = [...new Set(state.units.map(unit => unit.pacote_id).filter(Boolean))];
- const modal = document.createElement('div');
- modal.id = 'finalized-grouping-correction-modal';
- modal.className = 'finalized-grouping-correction-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title"><header><div><small>CORREÇÃO PÓS-FINALIZAÇÃO</small><h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2><p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p></div><button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="finalized-grouping-lock"><span class="material-symbols-rounded">lock</span><span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span></div><div class="finalized-grouping-units">${state.units.map(unit=>`<button type="button" class="${unit.selected?'is-selected':''}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})"><span class="material-symbols-rounded">${unit.selected?'check_box':'check_box_outline_blank'}</span><div><strong>${escapeKitAttribute(unit.descricao)}</strong><small>ID ${escapeKitAttribute(unit.id_interno)} · unidade ${unit.ordinal}</small></div><em>${unit.pacote_id?'AGRUPADO':'AVULSO'}</em></button>`).join('')}</div><div class="finalized-grouping-actions"><button type="button" onclick="groupSelectedFinalizedUnits()"><span class="material-symbols-rounded">inventory_2</span>AGRUPAR SELECIONADAS</button></div>${groupedIds.length?`<div class="finalized-grouping-current"><h3>AGRUPAMENTOS ATUAIS</h3>${groupedIds.map((id,index)=>{const members=state.units.filter(unit=>unit.pacote_id===id);return `<article><div><strong>Pacote agrupado ${index+1}</strong><small>${members.length} unidade(s) · ${[...new Set(members.map(unit=>unit.descricao))].map(escapeKitAttribute).join(', ')}</small></div><button type="button" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">DESFAZER</button></article>`;}).join('')}</div>`:''}<footer><button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button><button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button></footer></section>`;
- document.body.appendChild(modal);
- if (finalizedGroupingCorrectionPreviousInert === null) finalizedGroupingCorrectionPreviousInert = app.inert;
- app.inert = true;
- const buttons = [...modal.querySelectorAll('button')];
- (buttons[Math.max(0, focusIndex)] || buttons[0])?.focus({ preventScroll: true });
- modal.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { event.preventDefault(); closeFinalizedGroupingCorrection(); }
-  if (event.key === 'Tab') {
-   const first = buttons[0], last = buttons[buttons.length - 1];
-   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-  }
- });
-}
-
-async function saveFinalizedGroupingCorrection() {
- const state = finalizedGroupingCorrectionState;
- if (!state?.token || !isFinalizedGroupingCorrectionActive(state.request)) return;
- const packages = buildFinalizedGroupingCorrectionPayload();
- const confirmed = await showAppConfirm({ title: 'Salvar novo agrupamento?', message: `${packages.length} pacote(s) serão registrados.`, detail: 'Produtos, quantidades, estoque e movimentos permanecerão inalterados.', confirmLabel: 'Salvar correção', cancelLabel: 'Voltar' });
- if (!confirmed || !isFinalizedGroupingCorrectionActive(state.request)) return;
- const source = finalizedGroupingCorrectionSource;
- let closedRequest = null;
- try {
-  await DataClient.salvarCorrecaoAgrupamentoFinalizadoSupabase({ sessionId: state.sessionId, token: state.token, pacotes: packages, operador: localStorage.getItem('currentUser') || 'N/A', deviceId: state.deviceId });
-  if (!isFinalizedGroupingCorrectionActive(state.request)) return;
-  const sessionId = state.sessionId, returnScope = state.returnScope;
-  closeFinalizedGroupingCorrection();
-  closedRequest = finalizedGroupingCorrectionRequest;
-  const fresh = await DataClient.loadModule('separacao', true);
-  if (closedRequest !== finalizedGroupingCorrectionRequest || !source.isConnected || app.firstElementChild !== source) return;
-  if (fresh) { appData.separacao = fresh.separacao || appData.separacao; appData.separacao_itens = fresh.separacao_itens || appData.separacao_itens; }
-  showToast('Agrupamento corrigido e autorização encerrada.', 'success');
-  await renderFinalizedSeparationDetails(sessionId, returnScope);
- } catch (error) {
-  if (isFinalizedGroupingCorrectionActive(state.request) || (closedRequest === finalizedGroupingCorrectionRequest && source.isConnected && app.firstElementChild === source)) {
-   showToast(error.message || 'Não foi possível salvar a correção.', 'error');
-  }
- }
-}
-
 /* Rel. Vendas / Devolucoes: contas multiplas e disponibilidade financeira real. */
 function sdGetAvailableAccounts(){return [...new Set([...(saidaDevolucaoReportState.sessions||[]).map(s=>s.canal_nome||s.canal||s.col_c),...(saidaDevolucaoReportState.devolucoes||[]).map(d=>d.conta||d.canal)].map(value=>String(value||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
 function buildSaidaDevolucaoRowsWithAccounts(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],selected=saidaDevolucaoReportState.contasSelecionadas,selectedKeys=Array.isArray(selected)?selected.map(normalizeOperationalLabel):null,productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(selectedKeys)&&(!selectedKeys.length||!selectedKeys.includes(normalizeOperationalLabel(account))))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,accounts:[...row.accounts],sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
@@ -36850,16 +36343,17 @@ initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReport
 /* Rel. Vendas / Devolucoes: custo historico de cada devolucao. */
 function sdMoney(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function sdMovementCost(m,id,rows){const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i),dev=match&&(rows||[]).find(r=>String(r.id)===match[1]);if(!dev)return null;const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);return qty?Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty:null}
-function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
-function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(2).replace('.',',')+'%';return mode==='percent'?pct:mode==='cost'?sdMoney(cost):'<span class="sd-cost-metric"><strong>'+pct+'</strong><small>'+sdMoney(cost)+(missing?' · parcial':'')+'</small></span>'}
+function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
+function sdDevolutionMonthCell(returnsQty,salesQty,cost,missing,mode){const rate=salesQty?(returnsQty/salesQty*100):(returnsQty?100:null),rateStr=rate===null?'-':rate.toFixed(1).replace('.',',')+'%',costStr=sdMoney(cost||0)+(missing?' · parcial':'');if(mode==='cost')return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-cost">${costStr}</span></div>`;if(mode==='combined')return `<div class="sd-cell-stat sd-cell-combined"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-rate">${rateStr}</span><span class="sd-cell-cost">${costStr}</span></div>`;return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-rate">${rateStr}</span></div>`}
+function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(1).replace('.',',')+'%';if(mode==='percent')return pct;if(mode==='cost')return sdMoney(cost)+(missing?' · parcial':'');return `<div class="sd-comparative-metric"><strong class="sd-pct">${pct}</strong><small class="sd-cost">${sdMoney(cost)+(missing?' · p':'')}</small></div>`}
 function renderSdFinanceModeFilterCost(){const mode=saidaDevolucaoReportState.financeMode||'percent';return '<div class="sd-finance-filter" data-sd-extra-filter><small>Devolucoes</small><div role="group" aria-label="Visualizacao financeira">'+[['percent','%'],['cost','Valor'],['combined','% + Valor']].map(([v,l])=>'<button type="button" class="'+(mode===v?'active':'')+'" onclick="sdSetFinanceMode(\''+v+'\')">'+l+'</button>').join('')+'</div><em>Valor = custo do produto devolvido</em></div>'}
 function sdSetFinanceMode(mode){saidaDevolucaoReportState.financeMode=mode;const filter=document.querySelector('.sd-finance-filter');if(filter)filter.outerHTML=renderSdFinanceModeFilter();const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody()}
-function renderSdBodyCost(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',sold=rows.reduce((s,r)=>s+r.totalSales,0),returned=rows.reduce((s,r)=>s+r.totalReturns,0),cost=rows.reduce((s,r)=>s+(r.totalReturnCost||0),0),missing=rows.reduce((s,r)=>s+(r.missingCostQty||0),0),rate=sold?returned/sold*100:0;const displayRows=rows;const tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(displayRows):renderSdComparisonTable(displayRows,'sales')+renderSdComparisonTable(displayRows,'returns');return renderSaidaDevolucaoPeriodControls()+'<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>'+formatStockNumber(sold)+'</strong></article><article><small>Total devolvido</small><strong>'+formatStockNumber(returned)+'</strong></article>'+(mode!=='cost'?'<article><small>Taxa de devolucao</small><strong>'+rate.toFixed(2).replace('.',',')+'%</strong></article>':'')+(mode!=='percent'?'<article><small>Custo devolvido</small><strong>'+sdMoney(cost)+'</strong><span>'+(missing?'Total parcial':'Custo historico registrado')+'</span></article>':'')+'</section>'+(missing?'<aside class="sd-financial-warning"><strong>'+formatStockNumber(missing)+' unidade(s) sem custo registrado</strong><small> Entram na quantidade e taxa, mas nao no Custo devolvido.</small></aside>':'')+'<section class="sd-report-history-note ready"><strong>'+months.length+' meses selecionados</strong><span>Total vendido: '+formatStockNumber(sold)+' - Total devolvido: '+formatStockNumber(returned)+'</span></section>'+tables}
+function renderSdBodyCost(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',sold=rows.reduce((s,r)=>s+r.totalSales,0),returned=rows.reduce((s,r)=>s+r.totalReturns,0),cost=rows.reduce((s,r)=>s+(r.totalReturnCost||0),0),missing=rows.reduce((s,r)=>s+(r.missingCostQty||0),0),rate=sold?(returned/sold*100):0;let cardsHTML=`<article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">shopping_cart</span></div><div class="sd-card-body"><small>Total vendido</small><strong>${sdFormatQty(sold)}</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">assignment_return</span></div><div class="sd-card-body"><small>Total devolvido</small><strong>${sdFormatQty(returned)}</strong></div></article>`;if(mode==='combined'){cardsHTML+=`<article class="sd-card sd-card-rate ${rate>5?'danger':rate>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${rate.toFixed(2).replace('.',',')}%</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">monetization_on</span></div><div class="sd-card-body"><small>Custo das devolucoes</small><strong>${sdMoney(cost)}</strong><span class="sd-card-subtext">${missing?'Total parcial':'Custo historico registrado'}</span></div></article>`;}else if(mode==='cost'){cardsHTML+=`<article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">monetization_on</span></div><div class="sd-card-body"><small>Custo devolvido</small><strong>${sdMoney(cost)}</strong><span class="sd-card-subtext">${missing?'Total parcial':'Custo historico registrado'}</span></div></article>`;}else{cardsHTML+=`<article class="sd-card sd-card-rate ${rate>5?'danger':rate>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${rate.toFixed(2).replace('.',',')}%</strong></div></article>`;}const tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTableFinancial(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTableFinancial(rows,'returns');return renderSaidaDevolucaoPeriodControls()+`<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential">${cardsHTML}</section>`+(missing?`<aside class="sd-financial-warning"><strong class="material-symbols-rounded">warning</strong><div><strong>${sdFormatQty(missing)} unidade(s) sem custo registrado</strong><small> Entram na quantidade e taxa, mas nao no Custo devolvido.</small></div></aside>`:'')+tables}
 buildSaidaDevolucaoRows=buildSdRowsCost;renderSdFinanceModeFilter=renderSdFinanceModeFilterCost;renderSaidaDevolucaoReportBody=renderSdBodyCost;
 initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReportControlsBase();const filters=document.querySelector('.sd-report-filters');if(!filters||filters.querySelector('.sd-account-filter'))return;if(!['percent','cost','combined'].includes(saidaDevolucaoReportState.financeMode))saidaDevolucaoReportState.financeMode='percent';saidaDevolucaoReportState.contasDisponiveis=sdGetAvailableAccounts();if(saidaDevolucaoReportState.contasSelecionadas===undefined)saidaDevolucaoReportState.contasSelecionadas=null;[...filters.querySelectorAll('label')].find(l=>l.querySelector('small')?.textContent==='Canal')?.remove();filters.insertAdjacentHTML('afterbegin',renderSdAccountsFilter());filters.insertAdjacentHTML('beforeend',renderSdFinanceModeFilter())};
 
-const renderSdComparisonTableQuantity=renderSdComparisonTable;
-function renderSdComparisonTableFinancial(rows,type){if(type==='sales'||saidaDevolucaoReportState.financeMode==='percent')return renderSdComparisonTableQuantity(rows,type);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined';return '<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">assignment_return</span><div><h2>Devolucoes</h2><small>Custo historico registrado em cada devolucao</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(sdMonthLabel).map(x=>'<th>'+x+'</th>').join('')+'<th>Custo devolvido</th><th>'+(combined?'Taxa / Custo':'Custo')+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td><strong>'+sdMoney(r.totalReturnCost)+'</strong></td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
-const renderSdComparativeTableQuantity=renderSdComparativeTable;
-function renderSdComparativeTableFinancial(rows){if(saidaDevolucaoReportState.financeMode==='percent')return renderSdComparativeTableQuantity(rows);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined',label=combined?'Taxa / Custo':'Custo devolvido';return '<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Quantidade e impacto em custo por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(m=>'<th colspan="3">'+sdMonthLabel(m)+'</th>').join('')+'<th>Total vendido</th><th>Total devolvido</th><th>'+label+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+formatStockNumber(r.sales[i])+'</td><td>'+formatStockNumber(r.returns[i])+'</td><td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td>'+formatStockNumber(r.totalSales)+'</td><td>'+formatStockNumber(r.totalReturns)+'</td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
+const renderSdComparisonTableBase=renderSdComparisonTable;
+function renderSdComparisonTableFinancial(rows,type){if(type==='sales')return renderSdComparisonTableBase(rows,type);const months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',taxaTooltip="Percentual das unidades vendidas que foram devolvidas no período. Cálculo: (Devoluções ÷ Vendas) × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas no período total. Cálculo: (Total devolvido ÷ Total vendido) × 100.";let extraTh='';if(mode==='combined')extraTh=`<th>Total dev.</th><th><span class="sd-th-with-help"><span>Taxa geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th><th>Custo devolvido</th><th class="sd-th-trend">Tendencia</th>`;else if(mode==='cost')extraTh='<th>Total dev.</th><th>Media</th><th>Custo devolvido</th><th class="sd-th-trend">Tendencia</th>';else extraTh=`<th>Total dev.</th><th>Media</th><th><span class="sd-th-with-help"><span>Taxa</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaTooltip)}">ⓘ</span></span></th><th class="sd-th-trend">Tendencia</th>`;return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">assignment_return</span><div><h2>Devolucoes</h2><small>${mode==='combined'?'Frequencia (quantidade, taxa) e impacto em custo por produto':mode==='cost'?'Quantidade e custo historico registrado em cada devolucao':'Quantidade e taxa de devolucao por produto'}</small></div></div></header><div class="sd-report-table"><table><thead><tr><th class="sd-th-product">Produto</th>${months.map((m,i)=>`<th class="${i===months.length-1?'sd-col-month-end':''}"><span>${sdMonthLabel(m)}</span></th>`).join('')}${extraTh}</tr></thead><tbody>${rows.map(r=>{const cells=months.map((m,i)=>`<td class="${i===months.length-1?'sd-col-month-end':''}">${sdDevolutionMonthCell((r.returns||[])[i]||0,(r.sales||[])[i]||0,(r.returnCosts||[])[i]||0,(r.missingCosts||[])[i]||0,mode)}</td>`).join('');const rateBadge=`<span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'-':r.percentual.toFixed(2).replace('.',',')+'%'}</span>`;const costVal=`<strong>${sdMoney(r.totalReturnCost||0)}</strong>${r.missingCostQty?' <small class="sd-warn-txt">(parcial)</small>':''}`;const returnRates=months.map((m,i)=>(r.sales||[])[i]?((r.returns||[])[i]/(r.sales||[])[i]*100):((r.returns||[])[i]?100:0));const sparklineHtml=renderSdSparkline(returnRates,`Tendencia da taxa de devolucoes de ${r.descricao}`,'returns',150,30);let totalCols='';if(mode==='combined'){totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${rateBadge}</td><td>${costVal}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}else if(mode==='cost'){totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${sdFormatQty(r.averageReturns)}</td><td>${costVal}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}else{totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${sdFormatQty(r.averageReturns)}</td><td>${rateBadge}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}return `<tr>${renderSdProductCell(r)}${cells}${totalCols}</tr>`;}).join('')||`<tr><td colspan="${months.length+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`}
+
+function renderSdComparativeTableFinancial(rows){const months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',metricLabel=mode==='cost'?'Custo':mode==='combined'?'Taxa / Custo':'Taxa',taxaTooltip="Percentual das unidades vendidas que foram devolvidas.\nCálculo: devoluções ÷ vendas × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas.\nCálculo: total devolvido ÷ total vendido × 100.",colgroupHtml=`<colgroup><col class="sd-col-prod" style="width: 380px; min-width: 380px;">${months.map(()=>'<col class="sd-col-vendas" style="width: 70px; min-width: 70px;"><col class="sd-col-dev" style="width: 60px; min-width: 60px;"><col class="sd-col-taxa sd-col-month-end" style="width: 80px; min-width: 80px;">').join('')}<col class="sd-col-tot-sales" style="width: 78px; min-width: 78px;"><col class="sd-col-tot-dev" style="width: 78px; min-width: 78px;"><col class="sd-col-taxa-geral" style="width: 84px; min-width: 84px;">${mode!=='percent'?'<col class="sd-col-tot-cost" style="width: 104px; min-width: 104px;">':''}<col class="sd-col-trend" style="width: 185px; min-width: 185px;"></colgroup>`;return `<section class="sd-report-table-card sd-comparative-card"><header class="sd-comparative-header"><div class="sd-header-title"><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>${mode==='combined'?'Vendas, devoluções, taxa e impacto em custo por produto':mode==='cost'?'Vendas, devoluções e impacto financeiro por produto':'Vendas, devoluções e taxa por produto'}</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table">${colgroupHtml}<thead><tr><th rowspan="2" class="sd-th-product">Produto</th>${months.map(m=>`<th colspan="3" class="sd-comparative-month"><span>${sdMonthLabel(m)}</span></th>`).join('')}<th rowspan="2" class="sd-th-total-sales">Total<br>Vendas</th><th rowspan="2" class="sd-th-total-returns">Total<br>Devolvido</th><th rowspan="2" class="sd-th-general-rate"><span class="sd-th-with-help"><span>Taxa<br>Geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th>${mode!=='percent'?'<th rowspan="2" class="sd-th-total-cost">Custo<br>Devolvido</th>':''}<th rowspan="2" class="sd-th-trend">Tendência</th></tr><tr class="sd-subheaders">${months.map(()=>`<th class="sd-sub-vendas">Vendas</th><th class="sd-sub-dev">Dev.</th><th class="sd-col-month-end sd-sub-taxa"><span class="sd-th-with-help"><span>${metricLabel}</span><span class="sd-help-icon" title="${escapeKitAttribute(mode==='cost'?'Custo histórico registrado das unidades devolvidas no mês.':taxaTooltip)}">ⓘ</span></span></th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${renderSdProductCell(r)}${months.map((m,i)=>{const sales=(r.sales||[])[i]||0,returns=(r.returns||[])[i]||0,rate=sales?returns/sales*100:(returns?100:null);return `<td class="sd-cell-vendas">${sdFormatQty(sales)}</td><td class="sd-cell-dev">${sdFormatQty(returns)}</td><td class="sd-col-month-end sd-cell-taxa">${sdMetric(rate,(r.returnCosts||[])[i]||0,(r.missingCosts||[])[i]||0)}</td>`}).join('')}<td class="sd-cell-total-sales"><strong>${sdFormatQty(r.totalSales)}</strong></td><td class="sd-cell-total-returns"><strong>${sdFormatQty(r.totalReturns)}</strong></td><td class="sd-cell-general-rate"><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'-':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td>${mode!=='percent'?`<td class="sd-cell-total-cost"><strong>${sdMoney(r.totalReturnCost||0)}</strong>${r.missingCostQty?' <small class="sd-warn-txt">(parcial)</small>':''}</td>`:''}<td class="sd-td-trend">${renderSdComparativeTrend(r,months)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+(mode!=='percent'?7:6)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`}
 renderSdComparisonTable=renderSdComparisonTableFinancial;renderSdComparativeTable=renderSdComparativeTableFinancial;
