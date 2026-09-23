@@ -36357,3 +36357,59 @@ function renderSdComparisonTableFinancial(rows,type){if(type==='sales')return re
 
 function renderSdComparativeTableFinancial(rows){const months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',metricLabel=mode==='cost'?'Custo':mode==='combined'?'Taxa / Custo':'Taxa',taxaTooltip="Percentual das unidades vendidas que foram devolvidas.\nCálculo: devoluções ÷ vendas × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas.\nCálculo: total devolvido ÷ total vendido × 100.",colgroupHtml=`<colgroup><col class="sd-col-prod" style="width: 380px; min-width: 380px;">${months.map(()=>'<col class="sd-col-vendas" style="width: 70px; min-width: 70px;"><col class="sd-col-dev" style="width: 60px; min-width: 60px;"><col class="sd-col-taxa sd-col-month-end" style="width: 80px; min-width: 80px;">').join('')}<col class="sd-col-tot-sales" style="width: 78px; min-width: 78px;"><col class="sd-col-tot-dev" style="width: 78px; min-width: 78px;"><col class="sd-col-taxa-geral" style="width: 84px; min-width: 84px;">${mode!=='percent'?'<col class="sd-col-tot-cost" style="width: 104px; min-width: 104px;">':''}<col class="sd-col-trend" style="width: 185px; min-width: 185px;"></colgroup>`;return `<section class="sd-report-table-card sd-comparative-card"><header class="sd-comparative-header"><div class="sd-header-title"><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>${mode==='combined'?'Vendas, devoluções, taxa e impacto em custo por produto':mode==='cost'?'Vendas, devoluções e impacto financeiro por produto':'Vendas, devoluções e taxa por produto'}</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table">${colgroupHtml}<thead><tr><th rowspan="2" class="sd-th-product">Produto</th>${months.map(m=>`<th colspan="3" class="sd-comparative-month"><span>${sdMonthLabel(m)}</span></th>`).join('')}<th rowspan="2" class="sd-th-total-sales">Total<br>Vendas</th><th rowspan="2" class="sd-th-total-returns">Total<br>Devolvido</th><th rowspan="2" class="sd-th-general-rate"><span class="sd-th-with-help"><span>Taxa<br>Geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th>${mode!=='percent'?'<th rowspan="2" class="sd-th-total-cost">Custo<br>Devolvido</th>':''}<th rowspan="2" class="sd-th-trend">Tendência</th></tr><tr class="sd-subheaders">${months.map(()=>`<th class="sd-sub-vendas">Vendas</th><th class="sd-sub-dev">Dev.</th><th class="sd-col-month-end sd-sub-taxa"><span class="sd-th-with-help"><span>${metricLabel}</span><span class="sd-help-icon" title="${escapeKitAttribute(mode==='cost'?'Custo histórico registrado das unidades devolvidas no mês.':taxaTooltip)}">ⓘ</span></span></th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${renderSdProductCell(r)}${months.map((m,i)=>{const sales=(r.sales||[])[i]||0,returns=(r.returns||[])[i]||0,rate=sales?returns/sales*100:(returns?100:null);return `<td class="sd-cell-vendas">${sdFormatQty(sales)}</td><td class="sd-cell-dev">${sdFormatQty(returns)}</td><td class="sd-col-month-end sd-cell-taxa">${sdMetric(rate,(r.returnCosts||[])[i]||0,(r.missingCosts||[])[i]||0)}</td>`}).join('')}<td class="sd-cell-total-sales"><strong>${sdFormatQty(r.totalSales)}</strong></td><td class="sd-cell-total-returns"><strong>${sdFormatQty(r.totalReturns)}</strong></td><td class="sd-cell-general-rate"><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'-':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td>${mode!=='percent'?`<td class="sd-cell-total-cost"><strong>${sdMoney(r.totalReturnCost||0)}</strong>${r.missingCostQty?' <small class="sd-warn-txt">(parcial)</small>':''}</td>`:''}<td class="sd-td-trend">${renderSdComparativeTrend(r,months)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+(mode!=='percent'?7:6)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`}
 renderSdComparisonTable=renderSdComparisonTableFinancial;renderSdComparativeTable=renderSdComparativeTableFinancial;
+
+
+// ========================================================
+function closeQuickActionSeparationMenu() {
+	const panel = document.getElementById('quick-separation-submenu');
+	if (panel) panel.remove();
+	const romaneioPanel = document.getElementById('quick-romaneio-submenu');
+	if (romaneioPanel) romaneioPanel.remove();
+	const conferencePanel = document.getElementById('quick-conference-submenu');
+	if (conferencePanel) conferencePanel.remove();
+	document.getElementById('quick-actions-menu')?.classList.remove('has-separation-submenu');
+}
+
+function openQuickActionSeparationMenu(event) {
+	event?.stopPropagation?.();
+	closeQuickActionSeparationMenu();
+	const menu = document.getElementById('quick-actions-menu');
+	if (!menu) return;
+	menu.classList.add('has-separation-submenu');
+	const pendingDrafts = getDraftPickSessionsWithLocalDraft().length;
+	const panel = document.createElement('section');
+	panel.id = 'quick-separation-submenu';
+	panel.className = 'quick-separation-submenu';
+	panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderSeparacoesAndamentoScreen()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar separações abertas</small></span><b>${pendingDrafts}</b></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>SEPARAÇÕES DE HOJE</strong><small>Finalizadas e criadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderFinalizedSeparationsScreen('all')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTÓRICO COMPLETO</strong><small>Pesquisar separações anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+	menu.appendChild(panel);
+}
+
+function openQuickActionConferenceMenu(event) {
+	event?.stopPropagation?.();
+	closeQuickActionSeparationMenu();
+	const menu = document.getElementById('quick-actions-menu');
+	if (!menu) return;
+	menu.classList.add('has-separation-submenu');
+	let pending = 0;
+	try {
+		pending = new Set((appData.conferencia || []).filter(isSeparationPendingConferenceSession).map(getPackSeparationSessionId).filter(Boolean)).size;
+	} catch (error) {}
+	const panel = document.createElement('section');
+	panel.id = 'quick-conference-submenu';
+	panel.className = 'quick-separation-submenu quick-conference-submenu';
+	panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderPackPendingChannels()"><img src="/assets/icons/quick-separation-progress.svg" alt="" aria-hidden="true"><span><strong>EM ANDAMENTO</strong><small>Continuar conferencias abertas</small></span><b>${pending}</b></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('today')"><img src="/assets/icons/quick-separation-completed.svg" alt="" aria-hidden="true"><span><strong>CONFERENCIAS DE HOJE</strong><small>Finalizadas no dia</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderPackConferenceRecords('history')"><img src="/assets/icons/quick-separation-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO COMPLETO</strong><small>Pesquisar conferencias anteriores</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+	menu.appendChild(panel);
+}
+
+function openQuickActionRomaneioMenu(event) {
+	event?.stopPropagation?.();
+	closeQuickActionSeparationMenu();
+	const menu = document.getElementById('quick-actions-menu');
+	if (!menu) return;
+	menu.classList.add('has-separation-submenu');
+	const panel = document.createElement('section');
+	panel.id = 'quick-romaneio-submenu';
+	panel.className = 'quick-separation-submenu quick-romaneio-submenu';
+	panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__novo__')"><img src="/assets/icons/quick-romaneio-new.svg" alt="" aria-hidden="true"><span><strong>NOVO ROMANEIO</strong><small>Iniciar retirada Flex ou Correios</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__realizados__')"><img src="/assets/icons/quick-romaneio-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO</strong><small>Consultar romaneios realizados</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
+	menu.appendChild(panel);
+}
