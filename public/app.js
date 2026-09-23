@@ -3893,21 +3893,36 @@ async function renderAlerts() {
  </div>
  `;
 
+ let loadSuccess = false;
  try {
- const [separationData, conferenceData] = await Promise.all([
- DataClient.loadModule('separacao', true),
- DataClient.loadModule('conferencia', true)
- ]);
- if (separationData) {
- appData.separacao = separationData.separacao || [];
- appData.separacao_itens = separationData.separacao_itens || [];
- }
- if (conferenceData) {
- appData.conferencia = conferenceData.conferencia || [];
- appData.conferencia_itens = conferenceData.conferencia_itens || [];
+ const fetchPromise = DataClient.fetchDashboardOperationalData();
+ const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dashboard (8s)')), 8000));
+ const data = await Promise.race([fetchPromise, timeoutPromise]);
+ if (data) {
+ appData.separacao = data.separacao || [];
+ appData.conferencia = data.conferencia || [];
+ loadSuccess = true;
  }
  } catch (error) {
  console.warn('[DASHBOARD] Falha ao atualizar pacotes:', error);
+ }
+
+ if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
+ app.innerHTML = `
+ <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+ ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+ ${getModuleSidebarHTML('dashboard')}
+ <main class="container operations-dashboard-shell">
+ <div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+   <span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span>
+   <h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">N&#227;o foi poss&#237;vel atualizar os dados do Dashboard neste momento.</h2>
+   <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conex&#227;o de rede ou tente novamente.</p>
+   <button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderAlerts()"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button>
+ </div>
+ </main>
+ </div>
+ `;
+ return;
  }
 
  const normalizeDashboardChannel = (rawLabel) => {
@@ -36117,7 +36132,7 @@ function renderRomaneioUiModal(canais) {
 }
 renderRomaneioScreen = async function(selectedType='', selectedId='') {
  const currentUser=localStorage.getItem('currentUser'); document.body.classList.remove('menu-active');
- try { const [data,movements]=await Promise.all([DataClient.loadModule('separacao',true),DataClient.fetchMovimentosSupabase()]); if(data){appData.separacao=data.separacao||appData.separacao||[];appData.separacao_itens=data.separacao_itens||appData.separacao_itens||[];} appData.movimentacoes=Array.isArray(movements)?movements:[]; } catch(error){console.warn('[ROMANEIO] Falha ao atualizar dados:',error);}
+ try { const data = await DataClient.fetchRomaneioOperationalData(); if (data) { appData.separacao = data.separacao || appData.separacao || []; appData.movimentacoes = data.movimentacoes || appData.movimentacoes || []; } } catch (error) { console.warn('[ROMANEIO] Falha ao atualizar dados:', error); }
  const canais=getRomaneioAvailableChannels(), selectedChannels=parseRomaneioSelectedChannels(selectedType); if(selectedChannels.length)romaneioUi.canais=selectedChannels;
  const records=getRomaneios().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)), selected=selectedId?records.find(item=>item.id===selectedId):null, metrics=selectedChannels.length?getRomaneioTodayMetrics(selectedChannels,selectedChannels):null;
  app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen romaneio-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container romaneio-shell romaneio-ui-shell"><section class="romaneio-ui-toolbar"><div class="romaneio-ui-title"><strong>Gerar romaneio</strong><small>Controle de retirada e assinaturas</small></div><button class="romaneio-ui-channel-button" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">inventory_2</span><span id="romaneio-ui-channel-count">${romaneioUi.canais.length?romaneioUi.canais.length+' selecionado(s)':'Selecione os canais'}</span><span class="material-symbols-rounded">expand_more</span></button><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUiFiltro('mes',this.value)"></label><label><small>Status</small><select onchange="romaneioUiFiltro('status',this.value)"><option value="todos">Todos</option><option value="concluido" ${romaneioUi.status==='concluido'?'selected':''}>Concluido</option><option value="andamento" ${romaneioUi.status==='andamento'?'selected':''}>Em andamento</option><option value="erro" ${romaneioUi.status==='erro'?'selected':''}>Erro / cancelado</option></select></label><button class="romaneio-ui-generate" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">description</span>Gerar romaneio</button></section>${metrics?renderRomaneioForm(metrics):''}${selected?renderRomaneioDetail(selected):''}${renderRomaneioUiHistory(records)}</main>${renderRomaneioUiModal(canais)}</div>`;

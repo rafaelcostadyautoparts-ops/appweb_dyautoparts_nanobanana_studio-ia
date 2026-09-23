@@ -1122,6 +1122,110 @@ const DataClient = (function () {
         return data || [];
     }
 
+    /**
+     * Carrega dados operacionais otimizados exclusivamente para o Dashboard.
+     * Retorna apenas separacoes recentes/abertas, conferencias recentes e canais.
+     * Nao carrega separacao_itens nem conferencia_itens.
+     */
+    async function fetchDashboardOperationalData() {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const todayIso = typeof getDataBrasilISO === 'function' ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+
+        try {
+            const [sepRes, confRes, channelRes] = await Promise.all([
+                client
+                    .from('separacao')
+                    .select('*')
+                    .or(`criado_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                    .order('criado_em', { ascending: false }),
+                client
+                    .from('conferencia')
+                    .select('*')
+                    .or(`conferido_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                    .order('conferido_em', { ascending: false }),
+                client
+                    .from('canais_envio')
+                    .select('*')
+            ]);
+
+            if (sepRes.error) throw sepRes.error;
+            if (confRes.error) throw confRes.error;
+
+            return {
+                separacao: sepRes.data || [],
+                conferencia: confRes.data || [],
+                channels: channelRes.data || []
+            };
+        } catch (error) {
+            console.error('[DataClient] Erro ao carregar dados operacionais do Dashboard:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Carrega dados operacionais otimizados exclusivamente para o Romaneio.
+     * Retorna separacoes recentes/abertas e movimentos a partir da menor data de criacao das separacoes ativas.
+     */
+    async function fetchRomaneioOperationalData() {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const todayIso = typeof getDataBrasilISO === 'function' ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+
+        try {
+            // 1. Buscar separacoes de hoje ou abertas
+            const sepRes = await client
+                .from('separacao')
+                .select('*')
+                .or(`criado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                .order('criado_em', { ascending: false });
+
+            if (sepRes.error) throw sepRes.error;
+
+            const separacoes = sepRes.data || [];
+            if (!separacoes.length) {
+                return { separacao: [], movimentacoes: [] };
+            }
+
+            // 2. Calcular a menor data de criacao entre as separacoes ativas
+            let minTimestamp = Infinity;
+            separacoes.forEach(item => {
+                const rawDate = item.criado_em || item.atualizado_em;
+                if (rawDate) {
+                    const ts = new Date(rawDate).getTime();
+                    if (!isNaN(ts) && ts < minTimestamp) minTimestamp = ts;
+                }
+            });
+
+            let minDateIso = todayIso;
+            if (minTimestamp !== Infinity) {
+                const minDateObj = new Date(minTimestamp);
+                minDateIso = typeof getDataBrasilISO === 'function'
+                    ? getDataBrasilISO(minDateObj)
+                    : minDateObj.toISOString().split('T')[0];
+            }
+
+            // 3. Buscar movimentos desde o inicio do dia da separacao mais antiga
+            const movRes = await client
+                .from('movimentos')
+                .select('*')
+                .gte('data_hora', `${minDateIso}T00:00:00`)
+                .order('data_hora', { ascending: false });
+
+            if (movRes.error) throw movRes.error;
+
+            return {
+                separacao: separacoes,
+                movimentacoes: movRes.data || []
+            };
+        } catch (error) {
+            console.error('[DataClient] Erro ao carregar dados operacionais do Romaneio:', error);
+            throw error;
+        }
+    }
+
     async function fetchSeparacoesAbertasPorCanalSupabase(channelName) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -3149,6 +3253,8 @@ const DataClient = (function () {
         fetchEstoqueItemLocalSupabase,
         fetchMovimentosSupabase,
         fetchMovimentosProdutoSupabase,
+        fetchDashboardOperationalData,
+        fetchRomaneioOperationalData,
         fetchUsuariosSupabase,
         fetchCanaisEnvioSupabase,
         fetchSeparacoesAbertasPorCanalSupabase,
