@@ -3874,6 +3874,27 @@ function getDashboardCompletedConference(session = {}) {
  if (!sessionId) return null;
  return (appData.conferencia || []).find(record => String(record.separacao_id || '') === sessionId && isPackSessionFinished(record)) || null;
 }
+function getSeparationConference(sessionId) {
+ return (appData.conferencia || []).filter(row => String(row.separacao_id || '') === String(sessionId || '')).sort((a,b) => String(b.conferido_em || b.atualizado_em || '').localeCompare(String(a.conferido_em || a.atualizado_em || '')))[0] || null;
+}
+
+function isFinalizedSeparationForHistory(session = {}) {
+ const sessionId = getPackSeparationSessionId(session);
+ const conference = getSeparationConference(sessionId);
+ return ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(session.status || '').toLowerCase()) || ['finalizada','finalizado','concluida','concluido','conferido'].includes(String(conference?.status || '').toLowerCase());
+}
+
+function getSeparationFinishedAt(session = {}) {
+ const conference = getSeparationConference(getPackSeparationSessionId(session));
+ return conference?.conferido_em || conference?.atualizado_em || session.finalizado_em || session.atualizado_em || session.criado_em || '';
+}
+
+if (typeof window !== 'undefined') {
+ window.getSeparationConference = getSeparationConference;
+ window.getSeparationFinishedAt = getSeparationFinishedAt;
+ window.isFinalizedSeparationForHistory = isFinalizedSeparationForHistory;
+}
+
 function isDashboardPackageSessionFinalized(session = {}) {
  const status = normalizeOperationalLabel(session.status || session.situacao || '');
  if (isPickingFastModeSource(session)) return status.includes('FINALIZ') || status.includes('CONCLUID');
@@ -25127,8 +25148,12 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  } catch (error) {
  console.warn('[ROMANEIO] Falha ao atualizar separações e movimentos:', error);
  }
- await SharedWork.refresh(true);
- if(selectedId && selectedId !== '__realizados__') await SharedWork.detail('romaneio',selectedId);
+ if (window.SharedWork?.refresh) {
+  Promise.resolve().then(() => window.SharedWork.refresh(true)).catch(err => console.warn('[ROMANEIO] SharedWork.refresh:', err));
+ }
+ if (selectedId && selectedId !== '__realizados__' && window.SharedWork?.detail) {
+  Promise.resolve().then(() => window.SharedWork.detail('romaneio', selectedId)).catch(err => console.warn('[ROMANEIO] SharedWork.detail:', err));
+ }
 
  const availableChannels = getRomaneioAvailableChannels();
  const selectedChannels = parseRomaneioSelectedChannels(selectedType);
@@ -36203,14 +36228,6 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
   return;
  }
 
- try {
-  const syncPromise = window.SharedWork?.refresh ? window.SharedWork.refresh(true) : Promise.resolve();
-  const syncTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de sincronizacao')), 4000));
-  await Promise.race([syncPromise, syncTimeout]);
- } catch (error) {
-  console.warn('[ROMANEIO] Sincronizacao em segundo plano nao respondeu a tempo:', error);
- }
-
  if (selectedId && !completedListRequested && !newRomaneioRequested) {
   try {
    const detailPromise = window.SharedWork?.detail ? window.SharedWork.detail('romaneio', selectedId) : Promise.resolve();
@@ -36240,6 +36257,11 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
    romaneioPackagePhotoState = { dataUrl: '' };
    romaneioReturnPhotoState = { dataUrl: '' };
    setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+  }
+  if (window.SharedWork?.refresh) {
+   Promise.resolve().then(() => window.SharedWork.refresh(true)).catch(error => {
+    console.warn('[ROMANEIO] Sincronizacao em segundo plano (SharedWork.refresh):', error);
+   });
   }
  } catch (error) {
   console.error('[ROMANEIO] Erro ao renderizar tela de Romaneio:', error);
