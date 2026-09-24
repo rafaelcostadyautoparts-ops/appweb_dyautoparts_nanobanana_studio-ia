@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-sync-prod-20260902-02';
+const CACHE_NAME = 'dy-sync-prod-20260924-01';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
@@ -113,14 +113,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first para arquivos principais da aplicacao
+  // Network-first para arquivos principais da aplicacao (sem ignoreSearch para respeitar versao ?v=)
   if (url.includes('/app.js') || url.includes('/dataClient.js') || url.includes('/purchasePlanning.js') || url.includes('/supabaseClient.js') || url.includes('/timeUtils.js') || url.includes('/pedidosPreviewData.js') || url.includes('/anunciosMapping.js') || url.includes('/anunciosMapping.css') || url.includes('/index.css') || url.includes('/purchasePlanning.css') || url.includes('/version.json') || url.includes('index.html')) {
     event.respondWith(
       fetch(event.request).then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
-      }).catch(() => caches.match(event.request, { ignoreSearch: true }))
+      }).catch(() => caches.match(event.request))
     );
     return;
   }

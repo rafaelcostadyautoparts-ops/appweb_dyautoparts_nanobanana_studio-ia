@@ -1143,7 +1143,7 @@ const DataClient = (function () {
                 client
                     .from('conferencia')
                     .select('*')
-                    .or(`conferido_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                    .or(`conferido_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.em_conferencia`)
                     .order('conferido_em', { ascending: false }),
                 client
                     .from('canais_envio')
@@ -1207,18 +1207,28 @@ const DataClient = (function () {
                     : minDateObj.toISOString().split('T')[0];
             }
 
-            // 3. Buscar movimentos desde o inicio do dia da separacao mais antiga
-            const movRes = await client
-                .from('movimentos')
-                .select('*')
-                .gte('data_hora', `${minDateIso}T00:00:00`)
-                .order('data_hora', { ascending: false });
+            // 3. Buscar movimentos desde o inicio do dia da separacao mais antiga (paginado para evitar truncamento em 1000)
+            let allMovements = [];
+            let from = 0;
+            const pageSize = 1000;
+            while (true) {
+                const movRes = await client
+                    .from('movimentos')
+                    .select('*')
+                    .gte('data_hora', `${minDateIso}T00:00:00`)
+                    .order('data_hora', { ascending: false })
+                    .range(from, from + pageSize - 1);
 
-            if (movRes.error) throw movRes.error;
+                if (movRes.error) throw movRes.error;
+                const rows = movRes.data || [];
+                allMovements = allMovements.concat(rows);
+                if (rows.length < pageSize) break;
+                from += pageSize;
+            }
 
             return {
                 separacao: separacoes,
-                movimentacoes: movRes.data || []
+                movimentacoes: allMovements
             };
         } catch (error) {
             console.error('[DataClient] Erro ao carregar dados operacionais do Romaneio:', error);
