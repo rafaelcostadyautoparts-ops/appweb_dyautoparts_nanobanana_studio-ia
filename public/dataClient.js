@@ -2895,6 +2895,127 @@ const DataClient = (function () {
         return data;
     }
 
+    async function analisarConsistenciaPedidoSeparacaoConferencia(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) throw new Error('separacaoId e obrigatorio');
+
+        const { data, error } = await client.rpc('analisar_consistencia_pedido_separacao_conferencia', {
+            p_separacao_id: sessionId
+        });
+
+        if (error) throw new Error(error.message || 'Erro ao analisar consistencia da conferencia.');
+        return data;
+    }
+
+    async function obterItensEsperadosConferencia(separacaoId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const sessionId = String(separacaoId || '').trim();
+        if (!sessionId) throw new Error('separacaoId e obrigatorio');
+
+        const { data, error } = await client.rpc('obter_itens_esperados_conferencia', {
+            p_separacao_id: sessionId
+        });
+
+        if (error) throw new Error(error.message || 'Erro ao obter itens esperados da conferencia.');
+        return data || [];
+    }
+
+
+    async function biparItemSeparacaoEquivalente(separacaoItemId, codigoOuEan, usuario = 'Sistema', localOrigem = 'TERREO') {
+        if (!separacaoItemId || !codigoOuEan) throw new Error('Item de separacao e codigo sao obrigatorios.');
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const cleanCode = String(codigoOuEan).trim().toUpperCase();
+        const finalLocalOrigem = localOrigem ? String(localOrigem).trim().toUpperCase() : 'TERREO';
+
+        const { data: prodData, error: errProd } = await client
+            .from('produtos')
+            .select('id, id_interno, ean, descricao_base, marca')
+            .or(`id_interno.ilike.${cleanCode},ean.eq.${cleanCode}`)
+            .limit(1);
+
+        if (errProd || !prodData || !prodData.length) {
+            throw new Error(`Produto com código/EAN "${cleanCode}" não foi encontrado no cadastro.`);
+        }
+        const prodFisico = prodData[0];
+
+        const { data: itemData, error: errItem } = await client
+            .from('separacao_itens')
+            .select('*')
+            .eq('id', separacaoItemId)
+            .single();
+
+        if (errItem || !itemData) throw new Error('Item de separacao nao encontrado.');
+
+        const rawDet = itemData.detalhes_operacionais;
+        const detalhesObj = Array.isArray(rawDet) ? (rawDet[0] || {}) : (rawDet || {});
+        const skusAceitos = detalhesObj.skus_aceitos || [];
+
+        const isPermitido = skusAceitos.some(s =>
+            String(s.produto_id || s.id || '') === String(prodFisico.id) ||
+            String(s.id_interno || s.sku || '').toUpperCase() === prodFisico.id_interno.toUpperCase()
+        );
+
+        if (!isPermitido) {
+            throw new Error(`REJEITADO: O produto "${prodFisico.id_interno}" (${prodFisico.marca || 'Sem Marca'}) não pertence aos SKUs equivalentes autorizados no snapshot deste pedido!`);
+        }
+
+        const novaQtd = (Number(itemData.qtd_separada) || 0) + 1;
+        const bipagensFisicas = Array.isArray(detalhesObj.bipagens_fisicas) ? detalhesObj.bipagens_fisicas : [];
+        bipagensFisicas.push({
+            produto_id: prodFisico.id,
+            id_interno: prodFisico.id_interno,
+            ean: prodFisico.ean,
+            local_origem: finalLocalOrigem,
+            bipado_em: new Date().toISOString()
+        });
+
+        detalhesObj.bipagens_fisicas = bipagensFisicas;
+
+        const { error: errUpdate } = await client
+            .from('separacao_itens')
+            .update({
+                qtd_separada: novaQtd,
+                detalhes_operacionais: [detalhesObj],
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', separacaoItemId);
+
+        if (errUpdate) throw errUpdate;
+
+        const { error: errBipagemRel } = await client.from('separacao_item_bipagens').insert([{
+            separacao_id: itemData.separacao_id,
+            separacao_item_id: separacaoItemId,
+            produto_id: prodFisico.id,
+            id_interno: prodFisico.id_interno,
+            ean: prodFisico.ean,
+            quantidade: 1,
+            local_origem: finalLocalOrigem,
+            bipado_por: usuario,
+            bipado_em: new Date().toISOString()
+        }]);
+
+        if (errBipagemRel) console.warn('[SEPARACAO] Erro ao gravar separacao_item_bipagens relacional:', errBipagemRel);
+
+        invalidateCache('separacao');
+        return {
+            success: true,
+            nova_qtd_separada: novaQtd,
+            produto_fisico: prodFisico,
+            local_origem: finalLocalOrigem
+        };
+    }
+
+    /**
+     * Consulta produto na base do Produto Mestre por id_interno exato (somente leitura)
+     * @param {string} idInterno - Identificador exato do produto (ex: 'DY-000.001')
+     * @returns {Promise<Object|null>} - Objeto do Produto Mestre ou null
+     */
+
     async function transferirEstoqueSupabase(payload) {
         const client = window.supabaseClient;
         if (!client) {
@@ -3288,6 +3409,9 @@ const DataClient = (function () {
 
         // CONFERENCIA
         finalizarConferenciaSupabase,
+        analisarConsistenciaPedidoSeparacaoConferencia,
+        obterItensEsperadosConferencia,
+        biparItemSeparacaoEquivalente,
         buscarConferenciaAndamentoSupabase,
         salvarConferenciaAndamentoSupabase,
         removerConferenciaAndamentoSupabase,

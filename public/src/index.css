@@ -77092,3 +77092,242 @@ tr.sd-subheaders th {
   }
 }
 
+
+
+/* Conferencia - mesma estrutura operacional da Separacao rapida */
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-workflow-shell {
+  width: 96% !important;
+  max-width: 1500px !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: max(10px, env(safe-area-inset-top, 0px)) !important;
+  padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-workflow-header {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+  padding: 8px 12px !important;
+}
+html.app-environment-homologation body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen :where(.pick-scan-panel, .pick-work-area) {
+  align-self: center !important;
+  width: 93.75% !important;
+  box-sizing: border-box !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen[data-channel-color="conference"] {
+  --pick-channel-header-start: #0f766e;
+  --pick-channel-header-main: #0d9488;
+  --pick-channel-header-end: #115e59;
+  --pick-channel-header-shadow: rgba(13,148,136,.24);
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-title-icon { display:none !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-inline-back {
+  position:static !important;
+  grid-column:1 !important;
+  width:44px !important;
+  height:44px !important;
+  min-width:44px !important;
+  min-height:44px !important;
+  margin:0 !important;
+  border:1px solid rgba(255,255,255,.35) !important;
+  border-radius:10px !important;
+  background:#0f766e !important;
+  color:#fff !important;
+  box-shadow:none !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-title { min-width:0; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-title h1 { margin:0; color:#fff !important; font-size:1.18rem !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-title h1 span { color:#ccfbf1 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-scan-panel { margin:0 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-scan-row { width:100% !important; max-width:none !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-scan-field { width:100% !important; max-width:none !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-divergence-alert { display:none !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-work-area { display:grid !important; grid-template-columns:minmax(0,1fr) !important; gap:10px !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-list-panel { width:100% !important; min-height:0 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-table-head { grid-template-columns:minmax(0,1fr) 120px 150px 54px !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-row.pick-product-row { display:grid !important; grid-template-columns:minmax(0,1fr) 120px 150px 54px !important; align-items:center !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-row .pick-item-select { grid-column:3 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-row .pick-product-delete { grid-column:4 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-panel.pick-summary-single-line {
+  display: block !important;
+  box-sizing: border-box !important;
+  left: 50% !important;
+  right: auto !important;
+  width: 96% !important;
+  max-width: 1500px !important;
+  transform: translateX(-50%) !important;
+  padding: 8px 12px !important;
+  overflow: hidden !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics.pick-summary-line {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2.333fr) minmax(0, 1fr) repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > * {
+  min-width: 0 !important;
+  width: 100% !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > button {
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 54px !important;
+  margin: 0 !important;
+  padding: 7px 8px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-radius: 10px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > button > span:last-child {
+  display: block !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  color: inherit !important;
+  font-size: clamp(.7rem, .9vw, .86rem) !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+/* Conferência: cards dos contadores contínuos e sem fundos internos */
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field,
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field * {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field {
+  box-sizing: border-box !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  min-height: 54px !important;
+  padding: 7px 10px !important;
+  border: 1px solid #5eead4 !important;
+  border-radius: 11px !important;
+  background: #ccfbf1 !important;
+  color: #0f766e !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field.pick-channel-package-total {
+  background: #f3e8ff !important;
+  border: 1px solid #d8b4fe !important;
+  color: #6b21a8 !important;
+  gap: 5px !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > .material-symbols-rounded {
+  flex: 0 0 auto !important;
+  font-size: 17px !important;
+  color: inherit !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > span:not(.material-symbols-rounded) {
+  display: block !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+  font-size: clamp(.7rem, .9vw, .86rem) !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  background: transparent !important;
+  margin: 0 !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field.pick-channel-package-total > span:not(.material-symbols-rounded) {
+  font-size: clamp(.55rem, .75vw, .78rem) !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field.pick-channel-package-total > strong {
+  padding-left: 3px !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > strong {
+  display: inline !important;
+  white-space: nowrap !important;
+  font-size: clamp(1.25rem, 1.6vw, 1.55rem) !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  margin: 0 !important;
+  background: transparent !important;
+  text-align: right !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .material-symbols-rounded {
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  grid-row: auto !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 17px !important;
+}
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-finish-btn { background:#0d9488 !important; border-color:#0f766e !important; color:#ffffff !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-remove-btn { background:#ef4444 !important; color:#fff !important; border-color:#ef4444 !important; opacity:1 !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-remove-btn .material-symbols-rounded { background:transparent !important; color:#fff !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-remove-btn.is-active { background:#b91c1c !important; color:#fff !important; border-color:#b91c1c !important; box-shadow:0 0 0 3px rgba(239,68,68,.2) !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen.is-removal-mode .pack-blind-scan-field { border-color:#ef4444 !important; box-shadow:0 0 0 3px rgba(239,68,68,.14) !important; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-list-filters { margin-left:auto; }
+html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-state.is-standalone { display:inline-flex; align-items:center; border:1px solid #cbd5e1; border-radius:999px; padding:3px 8px; color:#64748b; background:#f8fafc; }
+@media(max-width:768px){
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-panel.pick-summary-single-line { width: calc(100% - 8px) !important; padding: 6px !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics.pick-summary-line { grid-template-columns: minmax(0, 2.333fr) minmax(0, 1fr) repeat(4, minmax(0, 1fr)) !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics .pick-package-count-field,
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > button { min-height: 48px !important; height: 48px !important; padding: 5px 3px !important; gap: 2px !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > button .material-symbols-rounded { display: none !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > span:not(.material-symbols-rounded),
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-summary-metrics > button > span:last-child { font-size: clamp(.45rem, 1.7vw, .62rem) !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pick-package-count-field > strong { font-size: clamp(.82rem, 3vw, 1.15rem) !important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-table-head { display:none!important; }
+  html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen .pack-blind-row.pick-product-row { grid-template-columns:minmax(0,1fr) auto auto!important; }
+  .conference-workflow-screen .pack-blind-row .pick-item-select { grid-column:2!important; }
+  .conference-workflow-screen .pack-blind-row .pick-product-delete { grid-column:3!important; }
+  .conference-workflow-screen .pack-blind-title h1 span { display:block; }
+  .conference-workflow-screen .pick-list-header { align-items:flex-start!important; gap:8px; }
+  .conference-workflow-screen .pick-list-filters { width:100%; margin-left:0; overflow-x:auto; }
+}
+
+/* Modal de Divergência da Conferência - Reformulação Comparativa (Separação x Conferência) */
+.conference-divergence-compact-dialog {
+  max-width: 920px !important;
+  width: min(920px, calc(100vw - 32px)) !important;
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 24px 24px 20px 24px !important;
+  text-align: left !important;
+  box-sizing: border-box !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden !important;
+}
+
+.conference-divergence-compact-dialog .app-modal-x {
+  color: #64748b !important;
+}
+.conference-divergence-compact-dialog .app-modal-x:hover {
+ 
