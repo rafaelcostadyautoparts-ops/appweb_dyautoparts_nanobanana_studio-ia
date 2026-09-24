@@ -23804,6 +23804,23 @@ function ungroupConferencePackage(packageId) {
  if (list) list.innerHTML = renderPackItemsListHTML();
 }
 
+function getPackageVisualNumber(pkg = {}, packagesArray = []) {
+ if (pkg.numero_pacote && Number(pkg.numero_pacote) > 0) {
+  return Number(pkg.numero_pacote);
+ }
+ const groupedPackages = (packagesArray || []).filter(item =>
+  String(item?.tipo || '').toUpperCase() === 'AGRUPADO'
+  || (Array.isArray(item?.itens) && item.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1)
+ );
+ const targetId = String(pkg.pacote_id || '');
+ const index = groupedPackages.findIndex(item => String(item.pacote_id || '') === targetId);
+ return index >= 0 ? index + 1 : 1;
+}
+
+if (typeof window !== 'undefined') {
+ window.getPackageVisualNumber = getPackageVisualNumber;
+}
+
 function detectConferenceGroupingDivergence(expectedPackages = [], currentConferenceRows = []) {
  const expectedGrouped = (expectedPackages || []).filter(pkg =>
   String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
@@ -23840,7 +23857,7 @@ function detectConferenceGroupingDivergence(expectedPackages = [], currentConfer
     return `${it.quantidade}x ${name}`;
    }).join(', ');
    details.push({
-    expectedPackageNum: pkg.numero_pacote || idx + 1,
+    expectedPackageNum: getPackageVisualNumber(pkg, expectedPackages),
     expectedDesc: itemsDesc,
     tipo: 'AGRUPADO'
    });
@@ -24174,6 +24191,7 @@ function openConferenceResultModal(groupingCheck = null) {
   const status = checked === expected ? 'ok' : checked < expected ? 'missing' : 'extra';
   return { row, index, expected, checked, status };
  });
+
  const divergentRows = resultRows.filter(item => item.status !== 'ok');
  const hasItemDivergence = divergentRows.length > 0;
  const hasGroupingDivergence = Boolean(groupCheck?.hasDivergence);
@@ -24187,78 +24205,201 @@ function openConferenceResultModal(groupingCheck = null) {
   return;
  }
 
- const missingProductsCount = resultRows.filter(item => item.checked === 0 && item.expected > 0).length;
- const extraProductsCount = resultRows.filter(item => item.expected === 0 && item.checked > 0).length;
  const fewerUnitsTotal = resultRows.filter(item => item.checked < item.expected).reduce((sum, item) => sum + (item.expected - item.checked), 0);
  const extraUnitsTotal = resultRows.filter(item => item.checked > item.expected).reduce((sum, item) => sum + (item.checked - item.expected), 0);
+ const okRowsCount = resultRows.filter(item => item.status === 'ok').length;
 
- const motives = [];
+ // 1. Processamento detalhado dos cards e cálculo seguro das unidades a agrupar
+ let totalUnitsPendingGroup = 0;
+
+ const processedCards = (divergentRows.length > 0 ? divergentRows : resultRows).filter(item => {
+  if (divergentRows.length > 0) return item.status !== 'ok';
+  return true;
+ }).map(({ row, expected, checked, status }) => {
+  const title = getPickItemTitle(row) || row.descricao || 'Produto';
+  const id = getPickingProductId(row) || row.id_interno || row.col_a || '';
+  const sku = getPickItemSku(row);
+  const ean = getPickItemEan(row);
+  const marca = getPickItemBrand(row);
+  const cor = getPickItemColor(row);
+  const imgUrl = getPickProductImage(row);
+
+  // Informações de agrupamento esperado no produto a partir de expectedPackages
+  let expectedPkgNum = null;
+  let expectedPkgLabel = 'AVULSO';
+  let expectedPkgQty = 0;
+
+  (expectedPackages || []).forEach((pkg) => {
+   const matchItem = (pkg.itens || []).find(it => String(it.id_interno) === String(id));
+   const isAgrupado = String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
+    || (Array.isArray(pkg.itens) && pkg.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1);
+
+   if (matchItem && isAgrupado) {
+    expectedPkgNum = getPackageVisualNumber(pkg, expectedPackages);
+    expectedPkgLabel = `PACOTE ${expectedPkgNum}`;
+    expectedPkgQty = Number(matchItem.quantidade || 0);
+   }
+  });
+
+  // Informações do agrupamento realizado na conferência
+  const assignments = normalizeConferencePackageAssignments(row);
+  const activeAssignments = assignments.filter(Boolean);
+  const groupedCount = activeAssignments.length;
+
+  const pendingGroupQty = expectedPkgQty > 0 ? Math.max(0, expectedPkgQty - groupedCount) : 0;
+  if (pendingGroupQty > 0) totalUnitsPendingGroup += pendingGroupQty;
+
+  // Diagnósticos específicos e independentes em linguagem operacional
+  const diagnoses = [];
+  if (status === 'missing') {
+   const diff = expected - checked;
+   diagnoses.push(`FALTA CONFERIR ${diff} UNIDADE${diff > 1 ? 'S' : ''}`);
+  } else if (status === 'extra') {
+   if (expected > 0) {
+    const diff = checked - expected;
+    diagnoses.push(`${diff} UNIDADE${diff > 1 ? 'S' : ''} A MAIS`);
+   } else {
+    diagnoses.push(`PRODUTO CONFERIDO NÃO ESPERADO (${checked} un.)`);
+   }
+  }
+
+  if (hasGroupingDivergence && expectedPkgQty > 0 && pendingGroupQty > 0) {
+   diagnoses.push(`FALTA AGRUPAR ${pendingGroupQty} UNIDADE${pendingGroupQty > 1 ? 'S' : ''} — ${expectedPkgLabel}`);
+  }
+
+  const diagnosesHTML = diagnoses.map(d => `
+   <div class="conference-diagnosis-item">
+    <span class="material-symbols-rounded">warning</span>
+    <span>${escapeKitAttribute(d)}</span>
+   </div>
+  `).join('');
+
+  // Bloco de Agrupamento na Coluna Separação
+  const separacaoGroupHTML = expectedPkgQty > 0 ? `
+   <div class="conference-sub-info">
+    <span>Agrupamento esperado:</span>
+    <strong>${escapeKitAttribute(expectedPkgLabel)} (${expectedPkgQty} ${expectedPkgQty === 1 ? 'UNIDADE' : 'UNIDADES'})</strong>
+   </div>
+  ` : '';
+
+  // Bloco de Agrupamento na Coluna Conferência
+  let conferenciaGroupHTML = '';
+  if (expectedPkgQty > 0) {
+   if (pendingGroupQty === 0 && groupedCount >= expectedPkgQty) {
+    conferenciaGroupHTML = `
+     <div class="conference-sub-info">
+      <span>Agrupamento:</span>
+      <strong class="text-success">${groupedCount} DE ${expectedPkgQty} AGRUPADAS &bull; CONCLUÍDO</strong>
+     </div>
+    `;
+   } else {
+    conferenciaGroupHTML = `
+     <div class="conference-sub-info">
+      <span>Agrupamento:</span>
+      <strong class="text-warning">${groupedCount} DE ${expectedPkgQty} AGRUPADAS (${pendingGroupQty} PENDENTE${pendingGroupQty > 1 ? 'S' : ''})</strong>
+     </div>
+    `;
+   }
+  }
+
+  return {
+   html: `
+    <div class="conference-product-card">
+     <div class="conference-product-header">
+      <div class="conference-product-thumb">
+       ${imgUrl ? `<img src="${escapeKitAttribute(imgUrl)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>';" />` : `<span class="material-symbols-rounded">inventory_2</span>`}
+      </div>
+      <div class="conference-product-info">
+       <h4 class="conference-product-title">${escapeKitAttribute(title)}</h4>
+       <div class="conference-product-badges">
+        ${id ? `<span class="badge-id-interno">ID ${escapeKitAttribute(id)}</span>` : ''}
+        ${sku && sku !== '—' ? `<span class="badge-meta">SKU: ${escapeKitAttribute(sku)}</span>` : ''}
+        ${ean && ean !== '—' ? `<span class="badge-meta">EAN: ${escapeKitAttribute(ean)}</span>` : ''}
+        ${marca && marca !== 'SEM MARCA' ? `<span class="badge-meta">MARCA: ${escapeKitAttribute(marca)}</span>` : ''}
+        ${cor && cor !== '—' ? `<span class="badge-meta">COR: ${escapeKitAttribute(cor)}</span>` : ''}
+       </div>
+      </div>
+     </div>
+
+     <div class="conference-comparison-grid">
+      <div class="conference-col col-separacao">
+       <div class="conference-col-title">
+        <span class="material-symbols-rounded">inventory</span>
+        <span>SEPARAÇÃO</span>
+       </div>
+       <div class="conference-qty-box">
+        <span class="conference-qty-label">QUANTIDADE</span>
+        <span class="conference-qty-value">${expected}</span>
+       </div>
+       ${separacaoGroupHTML}
+      </div>
+
+      <div class="conference-col col-conferencia">
+       <div class="conference-col-title">
+        <span class="material-symbols-rounded">fact_check</span>
+        <span>CONFERÊNCIA</span>
+       </div>
+       <div class="conference-qty-box">
+        <span class="conference-qty-label">QUANTIDADE</span>
+        <span class="conference-qty-value ${status === 'missing' ? 'is-missing' : status === 'extra' ? 'is-extra' : ''}">${checked}</span>
+       </div>
+       ${conferenciaGroupHTML}
+      </div>
+     </div>
+
+     ${diagnosesHTML ? `
+      <div class="conference-card-diagnoses">
+       <div class="conference-diagnosis-title">DIVERGÊNCIA ENCONTRADA</div>
+       ${diagnosesHTML}
+      </div>
+     ` : ''}
+    </div>
+   `
+  };
+ });
+
+ const cardsHTML = processedCards.map(c => c.html).join('');
+
+ // 2. Resumo Superior Operacional
+ const summaryTokens = [];
+ const divergentProdsCount = divergentRows.length;
+ summaryTokens.push(`${divergentProdsCount || 1} ${divergentProdsCount === 1 ? 'PRODUTO' : 'PRODUTOS'}`);
+
+ if (fewerUnitsTotal > 0 && extraUnitsTotal === 0) {
+  summaryTokens.push(`FALTA ${fewerUnitsTotal} ${fewerUnitsTotal === 1 ? 'UNIDADE' : 'UNIDADES'}`);
+ } else if (extraUnitsTotal > 0 && fewerUnitsTotal === 0) {
+  summaryTokens.push(`${extraUnitsTotal} ${extraUnitsTotal === 1 ? 'UNIDADE' : 'UNIDADES'} A MAIS`);
+ } else if (fewerUnitsTotal > 0 && extraUnitsTotal > 0) {
+  summaryTokens.push(`FALTA ${fewerUnitsTotal} / ${extraUnitsTotal} A MAIS`);
+ }
 
  if (hasGroupingDivergence) {
-  motives.push({
-   type: 'warning',
-   icon: 'warning',
-   text: 'Agrupamento não realizado'
-  });
- }
-
- if (!hasItemDivergence && hasGroupingDivergence) {
-  motives.push({
-   type: 'success',
-   icon: 'check_circle',
-   text: 'Produtos e quantidades corretos.'
-  });
- }
-
- if (hasItemDivergence) {
-  if (fewerUnitsTotal > 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `Quantidade divergente — ${fewerUnitsTotal} unidade${fewerUnitsTotal > 1 ? 's' : ''} a menos`
-   });
-  }
-  if (extraUnitsTotal > 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `Quantidade divergente — ${extraUnitsTotal} unidade${extraUnitsTotal > 1 ? 's' : ''} a mais`
-   });
-  }
-  if (missingProductsCount > 0 && fewerUnitsTotal === 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `${missingProductsCount} produto${missingProductsCount > 1 ? 's' : ''} faltante${missingProductsCount > 1 ? 's' : ''}`
-   });
-  }
-  if (extraProductsCount > 0 && extraUnitsTotal === 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `${extraProductsCount} produto${extraProductsCount > 1 ? 's' : ''} não esperado${extraProductsCount > 1 ? 's' : ''}`
-   });
+  if (totalUnitsPendingGroup > 0) {
+   summaryTokens.push(`${totalUnitsPendingGroup} ${totalUnitsPendingGroup === 1 ? 'UNIDADE PARA AGRUPAR' : 'UNIDADES PARA AGRUPAR'}`);
+  } else {
+   const pCount = groupCheck.expectedGroupCount || 1;
+   summaryTokens.push(`${pCount} ${pCount === 1 ? 'AGRUPAMENTO PENDENTE' : 'AGRUPAMENTOS PENDENTES'}`);
   }
  }
 
+ const summarySubtitleHTML = summaryTokens.join(' &bull; ');
+
+ const okSummaryHTML = okRowsCount > 0 ? `
+  <div class="conference-ok-summary-bar">
+   <span class="material-symbols-rounded">check_circle</span>
+   <span><b>${okRowsCount}</b> ${okRowsCount === 1 ? 'produto conferido corretamente' : 'produtos conferidos corretamente'}</span>
+  </div>
+ ` : '';
+
+ // 3. Botões de Ação Condicionais (AGRUPAR AGORA somente se houver divergência de agrupamento)
  let actionsHTML = '';
- if (hasGroupingDivergence && !hasItemDivergence) {
-  // Scenario B: Only Grouping Divergence
+ if (hasGroupingDivergence) {
   actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions">
+   <div class="conference-divergence-actions">
     <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
      <span class="material-symbols-rounded">hub</span>
      AGRUPAR AGORA
     </button>
-    <button type="button" class="btn-finalizar-mesmo" onclick="authorizeConferenceDivergence()">
-     FINALIZAR ASSIM MESMO
-    </button>
-   </div>
-  `;
- } else if (!hasGroupingDivergence && hasItemDivergence) {
-  // Scenario C: Only Product/Quantity Divergence
-  actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions">
     <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
      <span class="material-symbols-rounded">edit</span>
      CORRIGIR DIVERGÊNCIA
@@ -24269,13 +24410,8 @@ function openConferenceResultModal(groupingCheck = null) {
    </div>
   `;
  } else {
-  // Scenario D: Both Grouping and Product/Quantity Divergences (3 buttons)
   actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions has-3-buttons">
-    <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
-     <span class="material-symbols-rounded">hub</span>
-     AGRUPAR AGORA
-    </button>
+   <div class="conference-divergence-actions">
     <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
      <span class="material-symbols-rounded">edit</span>
      CORRIGIR DIVERGÊNCIA
@@ -24287,39 +24423,6 @@ function openConferenceResultModal(groupingCheck = null) {
   `;
  }
 
- const detailsHTML = `
-  <div id="conference-divergence-details-box" class="conference-divergence-details hidden">
-   ${hasItemDivergence ? `
-    <div class="conference-divergence-details-section">
-     <strong>PRODUTOS DIVERGENTES:</strong>
-     ${divergentRows.map(({ row, expected, checked, status }) => {
-      const title = escapeKitAttribute(getPickItemTitle(row));
-      const isMissing = status === 'missing';
-      const diffQty = isMissing ? (expected - checked) : (checked - expected);
-      return `
-       <div class="conference-divergence-detail-row ${isMissing ? 'is-missing' : 'is-extra'}">
-        <span>${title}</span>
-        <small>Esperado: ${expected} | Conferido: ${checked} (${isMissing ? `-${diffQty}` : `+${diffQty}`})</small>
-       </div>
-      `;
-     }).join('')}
-    </div>
-   ` : ''}
-
-   ${hasGroupingDivergence && groupCheck.details && groupCheck.details.length > 0 ? `
-    <div class="conference-divergence-details-section">
-     <strong>AGRUPAMENTOS ESPERADOS:</strong>
-     ${groupCheck.details.map(d => `
-      <div class="conference-divergence-detail-row is-missing">
-       <span>Pacote ${escapeKitAttribute(d.expectedPackageNum)}</span>
-       <small>${escapeKitAttribute(d.expectedDesc)}</small>
-      </div>
-     `).join('')}
-    </div>
-   ` : ''}
-  </div>
- `;
-
  const overlay = document.createElement('div');
  overlay.id = 'conference-result-modal';
  overlay.className = 'app-confirm-overlay app-standard-modal modal-warning open';
@@ -24329,36 +24432,25 @@ function openConferenceResultModal(groupingCheck = null) {
     <span class="material-symbols-rounded">close</span>
    </button>
 
-   <div class="app-confirm-icon warning">
-    <div class="app-confirm-halo-inner">
-     <span class="material-symbols-rounded">warning</span>
+   <div class="conference-divergence-head">
+    <div class="conference-divergence-title-row">
+     <span class="material-symbols-rounded icon-warning">warning</span>
+     <h3 id="conference-divergence-title">ATENÇÃO — DIVERGÊNCIA</h3>
     </div>
+    ${summarySubtitleHTML ? `<div class="conference-divergence-subtitle-bar">${summarySubtitleHTML}</div>` : ''}
    </div>
 
-   <h3 id="conference-divergence-title">ATENÇÃO — DIVERGÊNCIA</h3>
-
-   <div class="conference-divergence-motives-list">
-    ${motives.map(m => `
-     <div class="conference-motive-item is-${m.type}">
-      <span class="material-symbols-rounded">${m.icon}</span>
-      <span>${escapeKitAttribute(m.text)}</span>
-     </div>
-    `).join('')}
+   <div class="conference-divergence-body">
+    ${cardsHTML}
+    ${okSummaryHTML}
    </div>
 
-   <div class="conference-divergence-details-toggle-wrapper">
-    <button id="conference-divergence-details-toggle" type="button" class="conference-divergence-details-toggle" onclick="toggleConferenceDivergenceDetails()">
-     Ver detalhes <span class="material-symbols-rounded">expand_more</span>
-    </button>
-   </div>
-
-   ${detailsHTML}
-
-   ${actionsHTML}
-
-   <div class="app-modal-note-box">
-    <span class="material-symbols-rounded">info</span>
-    <span>Ao finalizar assim mesmo, os itens com divergência serão registrados no histórico.</span>
+   <div class="conference-divergence-footer">
+    ${actionsHTML}
+    <div class="app-modal-note-box">
+     <span class="material-symbols-rounded">info</span>
+     <span>Ao finalizar assim mesmo, os itens com divergência serão registrados no histórico.</span>
+    </div>
    </div>
   </div>
  `;
@@ -36189,7 +36281,7 @@ renderRomaneioScreen = async function(selectedType='', selectedId='') {
 /* Fluxo final de Romaneios: escolha exclusiva entre Flex e Correios. */
 renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  const currentUser = localStorage.getItem('currentUser');
- renderQuickDestinationLoading(selectedId === '__realizados__' ? 'Histórico de romaneios' : 'Romaneios', 'romaneio-screen');
+ document.body.classList.remove('menu-active');
  const requestedChannel = parseRomaneioSelectedChannels(selectedType)
  .find(channel => ['FLEX', 'CORREIOS'].includes(normalizeOperationalLabel(channel))) || '';
  const selectedChannels = requestedChannel ? [requestedChannel] : [];
