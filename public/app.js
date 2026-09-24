@@ -3885,96 +3885,103 @@ function getDashboardPackageFinishedAt(session = {}) {
  return conference?.conferido_em || conference?.atualizado_em || '';
 }
 
+function isDateTodayBR(value) {
+    if (!value) return false;
+    try {
+        const getIso = typeof getDataBrasilISO === 'function' ? getDataBrasilISO : (typeof window !== 'undefined' && window.getDataBrasilISO ? window.getDataBrasilISO : null);
+        const todayIso = getIso ? getIso() : new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        const dateIso = getIso ? getIso(value) : new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        return dateIso === todayIso;
+    } catch (error) {
+        return false;
+    }
+}
+if (typeof window !== 'undefined') window.isDateTodayBR = isDateTodayBR;
+
 async function renderAlerts() {
- const currentUser = localStorage.getItem('currentUser');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- ${getModuleSidebarHTML('dashboard')}
- <main class="container operations-dashboard-shell">
- <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  app.innerHTML = `
+  <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+  ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+  ${getModuleSidebarHTML('dashboard')}
+  <main class="container operations-dashboard-shell">
+  <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
+  </main>
+  </div>
+  `;
 
- let loadSuccess = false;
- try {
- const fetchPromise = DataClient.fetchDashboardOperationalData();
- const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dashboard (8s)')), 8000));
- const data = await Promise.race([fetchPromise, timeoutPromise]);
- if (data) {
- appData.separacao = data.separacao || [];
- appData.conferencia = data.conferencia || [];
- loadSuccess = true;
- }
- } catch (error) {
- console.warn('[DASHBOARD] Falha ao atualizar pacotes:', error);
- }
+  try {
+    const fetchPromise = DataClient.fetchDashboardOperationalData();
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dashboard (8s)')), 8000));
+    const data = await Promise.race([fetchPromise, timeoutPromise]);
+    if (data) {
+      appData.separacao = data.separacao || [];
+      appData.conferencia = data.conferencia || [];
+    }
 
- if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- ${getModuleSidebarHTML('dashboard')}
- <main class="container operations-dashboard-shell">
- <div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-   <span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span>
-   <h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">N&#227;o foi poss&#237;vel atualizar os dados do Dashboard neste momento.</h2>
-   <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conex&#227;o de rede ou tente novamente.</p>
-   <button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderAlerts()"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button>
- </div>
- </main>
- </div>
- `;
- return;
- }
+    const normalizeDashboardChannel = (rawLabel) => {
+      const original = String(rawLabel || 'Outros').trim() || 'Outros';
+      const normalized = normalizeOperationalLabel(original);
+      if (normalized.includes('ML AGENCIA') || normalized.includes('MERCADO LIVRE AGENCIA')) return { key: 'ml-agencia', label: 'ML Agência', icon: 'storefront', tone: 'ml-agencia' };
+      if (normalized.includes('ML COLETA') || normalized.includes('MERCADO LIVRE COLETA') || normalized === 'ML' || normalized === 'MERCADO LIVRE') return { key: 'ml-coleta', label: 'ML Coleta', icon: 'local_shipping', tone: 'ml-coleta' };
+      if (normalized.includes('MAGALU')) return { key: 'magalu', label: 'Magalu', icon: 'inventory_2', tone: 'magalu' };
+      if (normalized.includes('SHOPEE')) return { key: 'shopee', label: 'Shopee', icon: 'shopping_bag', tone: 'shopee' };
+      if (normalized.includes('FLEX')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'flex' };
+      if (normalized.includes('CORREIOS')) return { key: 'correios', label: 'Correios', icon: 'mail', tone: 'correios' };
+      if (normalized.includes('AMAZON')) return { key: 'amazon', label: 'Amazon', icon: 'shopping_cart', tone: 'amazon' };
+      if (normalized.includes('ULTRA') || normalized.includes('TURBO')) return { key: 'ultra', label: 'Ultra rápido', icon: 'speed', tone: 'ultra' };
+      if (normalized.includes('PDV') || normalized.includes('BALCAO')) return { key: 'pdv', label: 'PDV / Balcão', icon: 'store', tone: 'pdv' };
+      return { key: normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'outros', label: original, icon: 'storefront', tone: 'outros' };
+    };
 
- const normalizeDashboardChannel = (rawLabel) => {
- const original = String(rawLabel || 'Outros').trim() || 'Outros';
- const normalized = normalizeOperationalLabel(original);
- if (normalized.includes('ML AGENCIA') || normalized.includes('MERCADO LIVRE AGENCIA')) return { key: 'ml-agencia', label: 'ML Agência', icon: 'storefront', tone: 'ml-agencia' };
- if (normalized.includes('ML COLETA') || normalized.includes('MERCADO LIVRE COLETA') || normalized === 'ML' || normalized === 'MERCADO LIVRE') return { key: 'ml-coleta', label: 'ML Coleta', icon: 'local_shipping', tone: 'ml-coleta' };
- if (normalized.includes('MAGALU')) return { key: 'magalu', label: 'Magalu', icon: 'inventory_2', tone: 'magalu' };
- if (normalized.includes('SHOPEE')) return { key: 'shopee', label: 'Shopee', icon: 'shopping_bag', tone: 'shopee' };
- if (normalized.includes('FLEX')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'flex' };
- if (normalized.includes('CORREIOS')) return { key: 'correios', label: 'Correios', icon: 'mail', tone: 'correios' };
- if (normalized.includes('AMAZON')) return { key: 'amazon', label: 'Amazon', icon: 'shopping_cart', tone: 'amazon' };
- if (normalized.includes('ULTRA') || normalized.includes('TURBO')) return { key: 'ultra', label: 'Ultra rápido', icon: 'speed', tone: 'ultra' };
- if (normalized.includes('PDV') || normalized.includes('BALCAO')) return { key: 'pdv', label: 'PDV / Balcão', icon: 'store', tone: 'pdv' };
- return { key: normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'outros', label: original, icon: 'storefront', tone: 'outros' };
- };
+    const channelTotals = new Map();
+    (appData.separacao || [])
+      .filter(isDashboardPackageSessionFinalized)
+      .filter(session => isDateTodayBR(getDashboardPackageFinishedAt(session)))
+      .forEach(session => {
+        const packageCount = getPickPackageCountFrom(session);
+        if (packageCount <= 0) return;
+        const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
+        const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
+        current.packages += packageCount;
+        channelTotals.set(channel.key, current);
+      });
 
- const channelTotals = new Map();
- (appData.separacao || [])
- .filter(isDashboardPackageSessionFinalized)
- .filter(session => isDateTodayBR(getDashboardPackageFinishedAt(session)))
- .forEach(session => {
- const packageCount = getPickPackageCountFrom(session);
- if (packageCount <= 0) return;
- const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
- const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
- current.packages += packageCount;
- channelTotals.set(channel.key, current);
- });
-
- const channels = [...channelTotals.values()].filter(item => item.packages > 0).sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
- const totalPackages = channels.reduce((total, channel) => total + Number(channel.packages || 0), 0);
- const dashboardTotalHTML = `<div class="dashboard-top-total" aria-label="Total de pacotes"><span>TOTAL</span><strong>${totalPackages}</strong></div>`;
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- ${getModuleSidebarHTML('dashboard', '', dashboardTotalHTML)}
- <main class="container operations-dashboard-shell">
- ${channels.length ? `<section class="dashboard-channel-grid">${channels.map(channel => `
- <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
- <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
- <strong class="dashboard-channel-quantity">${channel.packages}</strong>
- <h3>${escapeKitAttribute(channel.label)}</h3>
- <span class="dashboard-channel-percentage">${totalPackages > 0 ? Math.round((channel.packages / totalPackages) * 100) : 0}%</span>
- </article>`).join('')}</section>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma operação finalizada hoje</strong><p>Os canais aparecerão aqui após a primeira finalização.</p></div>`}
- </main>
- </div>
- `;
+    const channels = [...channelTotals.values()].filter(item => item.packages > 0).sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
+    const totalPackages = channels.reduce((total, channel) => total + Number(channel.packages || 0), 0);
+    const dashboardTotalHTML = `<div class="dashboard-top-total" aria-label="Total de pacotes"><span>TOTAL</span><strong>${totalPackages}</strong></div>`;
+    app.innerHTML = `
+    <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+    ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+    ${getModuleSidebarHTML('dashboard', '', dashboardTotalHTML)}
+    <main class="container operations-dashboard-shell">
+    ${channels.length ? `<section class="dashboard-channel-grid">${channels.map(channel => `
+    <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
+    <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
+    <strong class="dashboard-channel-quantity">${channel.packages}</strong>
+    <h3>${escapeKitAttribute(channel.label)}</h3>
+    <span class="dashboard-channel-percentage">${totalPackages > 0 ? Math.round((channel.packages / totalPackages) * 100) : 0}%</span>
+    </article>`).join('')}</section>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma operação finalizada hoje</strong><p>Os canais aparecerão aqui após a primeira finalização.</p></div>`}
+    </main>
+    </div>
+    `;
+  } catch (error) {
+    console.error('[DASHBOARD] Falha ao atualizar dados:', error);
+    app.innerHTML = `
+    <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
+    ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+    ${getModuleSidebarHTML('dashboard')}
+    <main class="container operations-dashboard-shell">
+    <div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+      <span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span>
+      <h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível atualizar os dados do Dashboard neste momento.</h2>
+      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p>
+      <button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderAlerts()"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button>
+    </div>
+    </main>
+    </div>
+    `;
+  }
 }
 
 // ========================================================
@@ -36162,7 +36169,7 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-choice-screen">${getTopBarHTML(currentUser, 'renderRomaneioScreen()')}${getModuleSidebarHTML('romaneios', 'NOVO ROMANEIO')}<main class="container romaneio-shell romaneio-choice-shell">${channelSelector}</main></div>`;
  return;
  }
- let loadSuccess = false;
+
  try {
  const fetchPromise = DataClient.fetchRomaneioOperationalData();
  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar romaneio (8s)')), 8000));
@@ -36170,22 +36177,28 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  if (data) {
  appData.separacao = data.separacao || appData.separacao || [];
  appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
- loadSuccess = true;
  }
  } catch (error) {
- console.warn('[ROMANEIO] Falha ao atualizar dados:', error);
+ console.warn('[ROMANEIO] Falha ao atualizar dados operacionais:', error);
  }
- if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
- const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
- const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
- const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
- app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
- return;
+
+ try {
+ const syncPromise = SharedWork.refresh(true);
+ const syncTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de sincronizacao')), 4000));
+ await Promise.race([syncPromise, syncTimeout]);
+ } catch (error) {
+ console.warn('[ROMANEIO] Sincronizacao em segundo plano nao respondeu a tempo:', error);
  }
- await SharedWork.refresh(true);
+
  if (selectedId && !completedListRequested && !newRomaneioRequested) {
-  try { await SharedWork.detail('romaneio', selectedId); } catch (error) { showToast(error.message, 'warning'); }
+  try {
+   const detailPromise = SharedWork.detail('romaneio', selectedId);
+   const detailTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detalhe')), 4000));
+   await Promise.race([detailPromise, detailTimeout]);
+  } catch (error) { showToast(error.message, 'warning'); }
  }
+
+ try {
  const allRecords = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
  const records = allRecords.filter(item => {
  const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
@@ -36202,6 +36215,13 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  romaneioPackagePhotoState = { dataUrl: '' };
  romaneioReturnPhotoState = { dataUrl: '' };
  setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+ }
+ } catch (error) {
+ console.error('[ROMANEIO] Erro ao renderizar tela de Romaneio:', error);
+ const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
+ const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
+ const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+ app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
  }
 };
 
