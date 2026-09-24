@@ -25044,6 +25044,17 @@ function getRomaneioMovementStats(session = {}) {
  movimentos: movements.length
  };
 }
+function getSeparationCreatedAt(session = {}) {
+ const directDate = session.criado_em || session.data_separacao || session.col_b || '';
+ if (directDate) return directDate;
+ const sessionId = getPackSeparationSessionId(session);
+ const match = String(sessionId || '').toUpperCase().match(/^SEP-[A-Z0-9]+-(\d{2})(\d{2})-\d+$/);
+ if (!match) return '';
+ const referenceDate = session.finalizado_em || session.atualizado_em || new Date();
+ const referenceYear = new Date(referenceDate).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).slice(0, 4);
+ return `${referenceYear}-${match[2]}-${match[1]}`;
+}
+
 function getRomaneioTodayMetrics(channelNames, withdrawalType = channelNames) {
  const todayIso = getDataBrasilISO();
  const todayBr = formatDateBR(todayIso);
@@ -36170,58 +36181,72 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  return;
  }
 
+ let fetchOk = false;
  try {
- const fetchPromise = DataClient.fetchRomaneioOperationalData();
- const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar romaneio (8s)')), 8000));
- const data = await Promise.race([fetchPromise, timeoutPromise]);
- if (data) {
- appData.separacao = data.separacao || appData.separacao || [];
- appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
- }
+  const fetchPromise = DataClient.fetchRomaneioOperationalData();
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar romaneio (8s)')), 8000));
+  const data = await Promise.race([fetchPromise, timeoutPromise]);
+  if (data) {
+   appData.separacao = data.separacao || appData.separacao || [];
+   appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
+   fetchOk = true;
+  }
  } catch (error) {
- console.warn('[ROMANEIO] Falha ao atualizar dados operacionais:', error);
+  console.warn('[ROMANEIO] Falha ao atualizar dados operacionais:', error);
+ }
+
+ if (!fetchOk && (!appData.separacao || !appData.separacao.length)) {
+  const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
+  const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
+  const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
+  return;
  }
 
  try {
- const syncPromise = SharedWork.refresh(true);
- const syncTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de sincronizacao')), 4000));
- await Promise.race([syncPromise, syncTimeout]);
+  const syncPromise = window.SharedWork?.refresh ? window.SharedWork.refresh(true) : Promise.resolve();
+  const syncTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de sincronizacao')), 4000));
+  await Promise.race([syncPromise, syncTimeout]);
  } catch (error) {
- console.warn('[ROMANEIO] Sincronizacao em segundo plano nao respondeu a tempo:', error);
+  console.warn('[ROMANEIO] Sincronizacao em segundo plano nao respondeu a tempo:', error);
  }
 
  if (selectedId && !completedListRequested && !newRomaneioRequested) {
   try {
-   const detailPromise = SharedWork.detail('romaneio', selectedId);
+   const detailPromise = window.SharedWork?.detail ? window.SharedWork.detail('romaneio', selectedId) : Promise.resolve();
    const detailTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detalhe')), 4000));
    await Promise.race([detailPromise, detailTimeout]);
-  } catch (error) { showToast(error.message, 'warning'); }
+  } catch (error) {
+   console.warn('[ROMANEIO] Falha ao sincronizar detalhe:', error);
+   if (typeof showToast === 'function') showToast(error.message, 'warning');
+  }
  }
 
  try {
- const allRecords = getRomaneios().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
- const records = allRecords.filter(item => {
- const type = normalizeOperationalLabel(item.tipo_retirada || item.canal);
- return type.includes('FLEX') || type.includes('CORREIOS');
- });
- const selected = selectedId && !completedListRequested && !newRomaneioRequested ? records.find(item => item.id === selectedId) : null;
- const metrics = selectedChannels.length ? getRomaneioTodayMetrics(selectedChannels, selectedChannels) : null;
- const showingCompleted = completedListRequested || Boolean(selected);
- const headerKey = selectedKey === 'FLEX' ? 'romaneio_flex' : selectedKey === 'CORREIOS' ? 'romaneio_correios' : 'romaneios';
- const headerLabel = showingCompleted ? 'ROMANEIOS REALIZADOS' : selectedKey === 'FLEX' ? 'ROMANEIO - FLEX' : selectedKey === 'CORREIOS' ? 'ROMANEIO - CORREIOS' : 'ROMANEIOS';
- const backAction = selected ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
- app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, backAction)}${getModuleSidebarHTML(headerKey, headerLabel)}<main class="container romaneio-shell romaneio-ui-shell">${metrics ? renderRomaneioForm(metrics) : ''}${completedListRequested ? renderRomaneiosCompletedList(records) : ''}${selected ? renderRomaneioDetail(selected) : ''}</main></div>`;
- if (metrics) {
- romaneioPackagePhotoState = { dataUrl: '' };
- romaneioReturnPhotoState = { dataUrl: '' };
- setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
- }
+  const allRecords = (getRomaneios() || []).sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0));
+  const records = allRecords.filter(item => {
+   if (!item) return false;
+   const type = normalizeOperationalLabel(item.tipo_retirada || item.canal || '');
+   return type.includes('FLEX') || type.includes('CORREIOS');
+  });
+  const selected = selectedId && !completedListRequested && !newRomaneioRequested ? records.find(item => item && item.id === selectedId) : null;
+  const metrics = selectedChannels.length ? getRomaneioTodayMetrics(selectedChannels, selectedChannels) : null;
+  const showingCompleted = completedListRequested || Boolean(selected);
+  const headerKey = selectedKey === 'FLEX' ? 'romaneio_flex' : selectedKey === 'CORREIOS' ? 'romaneio_correios' : 'romaneios';
+  const headerLabel = showingCompleted ? 'ROMANEIOS REALIZADOS' : selectedKey === 'FLEX' ? 'ROMANEIO - FLEX' : selectedKey === 'CORREIOS' ? 'ROMANEIO - CORREIOS' : 'ROMANEIOS';
+  const backAction = selected ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, backAction)}${getModuleSidebarHTML(headerKey, headerLabel)}<main class="container romaneio-shell romaneio-ui-shell">${metrics ? renderRomaneioForm(metrics) : ''}${completedListRequested ? renderRomaneiosCompletedList(records) : ''}${selected ? renderRomaneioDetail(selected) : ''}</main></div>`;
+  if (metrics) {
+   romaneioPackagePhotoState = { dataUrl: '' };
+   romaneioReturnPhotoState = { dataUrl: '' };
+   setTimeout(() => { initRomaneioSignaturePad(); initRomaneioDeliverySignaturePad(); document.getElementById('romaneio-tracking-input')?.focus(); }, 80);
+  }
  } catch (error) {
- console.error('[ROMANEIO] Erro ao renderizar tela de Romaneio:', error);
- const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
- const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
- const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
- app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
+  console.error('[ROMANEIO] Erro ao renderizar tela de Romaneio:', error);
+  const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
+  const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
+  const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
  }
 };
 
