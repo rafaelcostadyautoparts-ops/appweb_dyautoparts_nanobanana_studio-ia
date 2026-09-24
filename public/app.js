@@ -2063,7 +2063,11 @@ async function initApp() {
  await loadOperationalCatalog();
 
  const [deviceStatus] = await Promise.all([
+ withTimeout(
  ensureCurrentDeviceRegistered({ silent: true, source: 'bootstrap', logUpdate: true }),
+ BOOT_CONFIG.TIMEOUT_MS,
+ 'ensureCurrentDeviceRegistered'
+ ).catch(err => ({ allowed: true, deviceId: null, degraded: true, error: err })),
  loadUsersWithFallback()
  ]);
  if (deviceStatus.allowed === false) {
@@ -36158,15 +36162,25 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-choice-screen">${getTopBarHTML(currentUser, 'renderRomaneioScreen()')}${getModuleSidebarHTML('romaneios', 'NOVO ROMANEIO')}<main class="container romaneio-shell romaneio-choice-shell">${channelSelector}</main></div>`;
  return;
  }
+ let loadSuccess = false;
  try {
- const [data, movements] = await Promise.all([DataClient.loadModule('separacao', true), DataClient.fetchMovimentosSupabase()]);
+ const fetchPromise = DataClient.fetchRomaneioOperationalData();
+ const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar romaneio (8s)')), 8000));
+ const data = await Promise.race([fetchPromise, timeoutPromise]);
  if (data) {
  appData.separacao = data.separacao || appData.separacao || [];
- appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+ appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
+ loadSuccess = true;
  }
- appData.movimentacoes = Array.isArray(movements) ? movements : [];
  } catch (error) {
  console.warn('[ROMANEIO] Falha ao atualizar dados:', error);
+ }
+ if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
+ const errHeaderKey = selectedId ? 'pick' : requestedChannel ? 'romaneios' : 'romaneios';
+ const errHeaderLabel = selectedId ? 'VISUALIZAR ROMANEIO' : requestedChannel ? `${selectedKey} - GERAR ROMANEIO` : 'ROMANEIOS';
+ const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+ app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
+ return;
  }
  await SharedWork.refresh(true);
  if (selectedId && !completedListRequested && !newRomaneioRequested) {
