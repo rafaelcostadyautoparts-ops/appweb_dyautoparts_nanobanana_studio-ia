@@ -14,6 +14,7 @@
     },
     "dependencies": {
         "@sentry/browser": "^10.70.0",
+        "@supabase/supabase-js": "^2.117.1",
         "mssql": "^12.7.2",
         "tedious": "^20.0.0"
     },

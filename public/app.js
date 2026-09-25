@@ -155,7 +155,7 @@ const MATERIAL_ICON_FALLBACKS = {
  warning: '<svg viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg>'
 };
 
-const DEFAULT_MATERIAL_ICON_FALLBACK = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>';
+const DEFAULT_MATERIAL_ICON_FALLBACK = '';
 
 function normalizeMaterialIconName(name) {
  return String(name || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -168,10 +168,21 @@ function ensureMaterialIconFallbacks(root = document) {
  icons?.forEach(icon => {
  const rawName = String(icon.dataset.iconName || icon.getAttribute('data-icon-name') || icon.textContent || '').trim();
  const name = normalizeMaterialIconName(rawName);
- const svg = MATERIAL_ICON_FALLBACKS[name] || DEFAULT_MATERIAL_ICON_FALLBACK;
+ if (!name) return;
+
+ let svg = (typeof window.dyIcon === 'function') ? window.dyIcon(name, 'action') : '';
+ if (!svg && MATERIAL_ICON_FALLBACKS[name]) {
+ svg = MATERIAL_ICON_FALLBACKS[name];
+ }
+
+ if (!svg) {
+ if (icon.querySelector('svg')) return;
+ return;
+ }
+
  icon.classList.add('notranslate');
  icon.setAttribute('translate', 'no');
- if (!name || (icon.querySelector('svg') && icon.dataset.iconName === name)) return;
+ if (icon.querySelector('svg') && icon.dataset.iconName === name) return;
  icon.dataset.iconName = name;
  icon.innerHTML = svg;
  icon.classList.add('icon-fallback-ready');
@@ -2097,6 +2108,7 @@ function withTimeout(promise, ms, label) {
 }
 
 async function initApp() {
+ console.log('[BOOT 01] initApp entrou');
  applyAppFont();
  window.loginCustomBgImage = null;
  
@@ -2110,42 +2122,36 @@ async function initApp() {
  console.log('[INIT] Error loading custom bg, using default');
  }
  
- // Texto validado em UTF-8.
  if (bootstrapState.running) {
- console.log('[INFO] Operacao registrada.');
+ console.log('[BOOT WARN] initApp reentrada bloqueada');
  addSyncTrace('initApp', 'BLOCK', 'reentrada');
  return;
  }
  if (bootstrapState.completed) {
- console.log('[INFO] Operacao registrada.');
+ console.log('[BOOT WARN] initApp ja completado bloqueada');
  addSyncTrace('initApp', 'BLOCK', 'ja completado');
  return;
  }
 
- // 2. INICIAR BOOTSTRAP
  bootstrapState.running = true;
  bootstrapState.startTime = Date.now();
  bootstrapState.abortController = new AbortController();
 
  console.log('[BOOT] ==========================================');
- console.log('[INFO] Operacao registrada.');
- console.log('[BOOT] ==========================================');
 
- // 3. TIMEOUT TOTAL DO BOOTSTRAP
  const totalTimeout = setTimeout(() => {
  if (bootstrapState.running && !bootstrapState.completed) {
- console.error('[BOOT] TIMEOUT TOTAL DE INICIALIZACAO');
+ console.error('[BOOT ERROR] TIMEOUT TOTAL DE INICIALIZACAO (30s)');
  bootstrapState.abortController.abort();
  showBootstrapError('Timeout de inicializacao');
  }
  }, BOOT_CONFIG.BOOT_TIMEOUT_MS);
 
  try {
- // 4. ESCONDER SPLASH IMEDIATAMENTE
  hideSplash();
+ console.log('[BOOT 02] hideSplash executado');
 
- // Texto validado em UTF-8.
- console.log('[BOOT] Verificando Supabase...');
+ console.log('[BOOT 03] aguardando supabaseClientReady...');
  try {
  if (window.supabaseClientReady) {
  await withTimeout(
@@ -2153,9 +2159,12 @@ async function initApp() {
  BOOT_CONFIG.TIMEOUT_MS,
  'supabaseClientReady'
  );
+ console.log('[BOOT 04] supabaseClientReady concluído');
+ } else {
+ console.warn('[BOOT 04 WARN] window.supabaseClientReady nao existe');
  }
  } catch (readyError) {
- console.warn('[BOOT] Supabase client ainda indisponivel:', readyError.message);
+ console.error('[BOOT 04 ERROR] Supabase client ainda indisponivel:', readyError.message);
  }
 
  try {
@@ -2163,17 +2172,42 @@ async function initApp() {
  testeSupabase();
  }
  } catch (se) {
- console.log('[INFO] Operacao registrada.');
+ console.log('[BOOT LOG] testeSupabase erro ignora:', se.message);
  }
 
  atualizarStatusConexao();
- await loadOperationalCatalog();
+ console.log('[BOOT 05] iniciando loadOperationalCatalog...');
+ try {
+ const catRes = await loadOperationalCatalog();
+ console.log('[BOOT 06] loadOperationalCatalog concluído, resultado:', catRes);
+ } catch (catErr) {
+ console.error('[BOOT 06 ERROR] loadOperationalCatalog falhou:', catErr);
+ }
 
- const [deviceStatus] = await Promise.all([
+ console.log('[BOOT 07] iniciando device/users (Promise.all)...');
+ const [deviceStatus, usersLoaded] = await Promise.all([
+ withTimeout(
  ensureCurrentDeviceRegistered({ silent: true, source: 'bootstrap', logUpdate: true }),
- loadUsersWithFallback()
+ BOOT_CONFIG.TIMEOUT_MS,
+ 'ensureCurrentDeviceRegistered'
+ ).then(res => {
+ console.log('[BOOT 08] ensureCurrentDeviceRegistered concluído:', res);
+ return res;
+ }).catch(err => {
+ console.error('[BOOT 08 ERROR] ensureCurrentDeviceRegistered falhou:', err.message);
+ return { allowed: true, deviceId: null, degraded: true, error: err };
+ }),
+ loadUsersWithFallback().then(res => {
+ console.log('[BOOT 09] loadUsersWithFallback concluído, resultado:', res);
+ return res;
+ }).catch(err => {
+ console.error('[BOOT 09 ERROR] loadUsersWithFallback falhou:', err.message);
+ return false;
+ })
  ]);
+
  if (deviceStatus.allowed === false) {
+ console.warn('[BOOT STOP] dispositivo nao permitido');
  clearTimeout(totalTimeout);
  bootstrapState.completed = true;
  bootstrapState.running = false;
@@ -2181,38 +2215,40 @@ async function initApp() {
  }
  startSecurityDeviceWatch();
 
- // A interface fica disponível assim que segurança e usuários terminam.
- // Sincronização ampla e atualização não bloqueiam mais o primeiro uso.
- console.log('[BOOT] Renderizando tela de login...');
+ console.log('[BOOT 10] renderLogin iniciado...');
+ try {
  renderLogin();
+ console.log('[BOOT 11] renderLogin concluído com sucesso!');
+ } catch (rlErr) {
+ console.error('[BOOT 11 ERROR] renderLogin falhou:', rlErr);
+ throw rlErr;
+ }
+
  setTimeout(() => {
  loadAllData(true, 'startup_background').catch(error => console.warn('[BOOT] Sincronização em segundo plano falhou:', error));
  if (navigator.onLine) ensureProdutosLoaded(false).catch(error => console.warn('[OFFLINE] Preparacao do catalogo falhou:', error));
  runStartupUpdateCheck().catch(error => console.warn('[BOOT] Verificação de atualização em segundo plano falhou:', error));
  }, 0);
  
- // 10. CONCLUIR BOOTSTRAP
  clearTimeout(totalTimeout);
  bootstrapState.completed = true;
  bootstrapState.running = false;
  
  const elapsed = Date.now() - bootstrapState.startTime;
- console.log('[BOOT] ==========================================');
- console.log('[INFO] Operacao registrada.');
- console.log('[BOOT] ==========================================');
+ console.log('[BOOT COMPLETE] sucesso em ' + elapsed + 'ms');
  addSyncTrace('initApp', 'COMPLETE', `sucesso em ${elapsed}ms`);
 
  } catch (err) {
  clearTimeout(totalTimeout);
- console.log('[INFO] Operacao registrada.');
+ console.error('[BOOT FATAL ERROR] initApp catch global:', err);
  addSyncTrace('initApp', 'ERROR', err.message);
  
- // SEMPRE renderizar login em caso de erro
  hideSplash();
  try {
  renderLogin();
+ console.log('[BOOT RECOVERY] renderLogin executado apos erro fatal');
  } catch (e2) {
- console.log('[INFO] Operacao registrada.');
+ console.error('[BOOT RECOVERY ERROR] renderLogin falhou no catch global:', e2);
  }
  
  bootstrapState.completed = true;
@@ -3035,6 +3071,7 @@ const MODULE_SIDEBAR_CONFIG = {
  pack: { label: 'CONFER\u00caNCIA', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
  compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#E11D48', colorTo: '#BE123C', shadow: '225,29,72' },
  financeiro: { label: 'FINANCEIRO', icon: 'payments', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
+ emissao_nf: { label: 'EMISS\u00c3O NF', icon: 'receipt_long', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
  configuracoes: { label: 'CONFIGURA\u00c7\u00d5ES', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
 
@@ -3080,16 +3117,85 @@ function getMaterialScreenIconHTML(icon, color = '#3B82F6') {
  `;
 }
 
+/**
+ * Helper reutilizável para o Cabeçalho Padrão do Sistema (renderModuleHeader)
+ * @param {Object} config
+ * @param {string} config.moduleKey - Chave oficial em MODULE_SIDEBAR_CONFIG ('nf', 'financeiro', etc)
+ * @param {string} config.title - Título oficial da tela (ex: 'HISTÓRICO DE ENTRADAS')
+ * @param {string} [config.subtitle] - Subtítulo descritivo opcional
+ * @param {string} [config.icon] - Nome do ícone da tela no catálogo dyIcons (ex: 'historico')
+ * @param {string} [config.backAction] - Expressão JS de clique para o botão voltar (ex: 'renderNFSubMenu()')
+ * @param {string} [config.rightHTML] - HTML de ações adicionais no lado direito (opcional)
+ * @param {Array}  [config.breadcrumbs] - Lista [{ label, onclick }] para navegação (opcional)
+ * @returns {string} String HTML do cabeçalho unificado de 84px
+ */
+function renderModuleHeader({
+  moduleKey = 'nf',
+  title = '',
+  subtitle = '',
+  icon = null,
+  backAction = null,
+  rightHTML = '',
+  breadcrumbs = []
+}) {
+  const cfg = MODULE_SIDEBAR_CONFIG[moduleKey] || MODULE_SIDEBAR_CONFIG.nf;
+  const moduleTitle = title || cfg.label;
+  const topBarBg = `linear-gradient(90deg, ${cfg.colorFrom} 0%, ${cfg.colorTo} 100%)`;
+  const headerColor = cfg.colorFrom || '#8B5CF6';
+
+  const backButtonIcon = (window.dyIcon && window.dyIcon('back', 'navigation')) || getBackButtonStandardIconHTML(headerColor);
+  const backButtonHTML = backAction ? `
+    <button type="button" class="module-header-standard__back" onclick="${backAction}" aria-label="Voltar" style="color:${headerColor}!important;">
+      ${backButtonIcon}
+    </button>
+  ` : '';
+
+  // Identidade da Tela (ícone específico se fornecido, senão fallback do módulo)
+  let iconHTML = '';
+  if (icon) {
+    if (window.dyIcon) {
+      iconHTML = window.dyIcon(icon, 'module');
+    } else if (typeof menu3DIcons !== 'undefined' && menu3DIcons[icon]) {
+      iconHTML = menu3DIcons[icon];
+    }
+  }
+  if (!iconHTML) {
+    iconHTML = `<span class="material-symbols-rounded module-header-standard__icon-symbol">${cfg.icon}</span>`;
+  }
+
+  return `
+    <header class="module-header-standard mod-topbar-${moduleKey}" style="background:${topBarBg}!important;box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
+      <div class="module-header-standard__container">
+        <div class="module-header-standard__left">
+          ${backButtonHTML}
+          <div class="module-header-standard__icon">
+            ${iconHTML}
+          </div>
+        </div>
+        <div class="module-header-standard__center">
+          <h1 class="module-header-standard__title">${escapeKitAttribute(moduleTitle)}</h1>
+          ${subtitle ? `<span class="module-header-standard__subtitle">${escapeKitAttribute(subtitle)}</span>` : ''}
+        </div>
+        <div class="module-header-standard__right">
+          ${rightHTML || ''}
+        </div>
+      </div>
+    </header>
+  `;
+}
+
 function getStandardModuleCardsHTML(items = []) {
  return `
  <div class="standard-module-card-grid">
  ${items.map(item => `
  <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)} ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
- <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
+ <span class="standard-module-card-icon">${(window.dyIcon && window.dyIcon(item.icon, 'module')) || menu3DIcons[item.icon] || ''}</span>
+ <span class="standard-module-card-divider"></span>
  <span class="standard-module-card-copy">
  <strong>${item.label}</strong>
  ${item.description ? `<small>${item.description}</small>` : ''}
  </span>
+ <span class="material-symbols-rounded standard-module-card-chevron">chevron_right</span>
  </button>
  `).join('')}
  </div>
@@ -4020,80 +4126,206 @@ function getDashboardPackageFinishedAt(session = {}) {
 }
 
 async function renderAlerts() {
- const currentUser = localStorage.getItem('currentUser');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- ${getModuleSidebarHTML('dashboard')}
- <main class="container operations-dashboard-shell">
- <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  app.innerHTML = `
+    <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen dashboard-v1-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+      ${getModuleSidebarHTML('dashboard')}
+      <main class="container operations-dashboard-shell app-page-container">
+        <section class="operations-dashboard-loading"><span class="material-symbols-rounded">monitoring</span><strong>Atualizando dashboard...</strong></section>
+      </main>
+    </div>
+  `;
 
- try {
- const [separationData, conferenceData] = await Promise.all([
- DataClient.loadModule('separacao', true),
- DataClient.loadModule('conferencia', true)
- ]);
- if (separationData) {
- appData.separacao = separationData.separacao || [];
- appData.separacao_itens = separationData.separacao_itens || [];
- }
- if (conferenceData) {
- appData.conferencia = conferenceData.conferencia || [];
- appData.conferencia_itens = conferenceData.conferencia_itens || [];
- }
- } catch (error) {
- console.warn('[DASHBOARD] Falha ao atualizar pacotes:', error);
- }
+  let loadSuccess = false;
+  try {
+    const fetchPromise = DataClient.fetchDashboardOperationalData();
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dashboard (8s)')), 8000));
+    const data = await Promise.race([fetchPromise, timeoutPromise]);
+    if (data) {
+      appData.separacao = data.separacao || [];
+      appData.conferencia = data.conferencia || [];
+      loadSuccess = true;
+    }
+  } catch (error) {
+    console.warn('[DASHBOARD] Falha ao atualizar pacotes:', error);
+  }
 
- const normalizeDashboardChannel = (rawLabel) => {
- const original = String(rawLabel || 'Outros').trim() || 'Outros';
- const normalized = normalizeOperationalLabel(original);
- if (normalized.includes('ML AGENCIA') || normalized.includes('MERCADO LIVRE AGENCIA')) return { key: 'ml-agencia', label: 'ML Agência', icon: 'storefront', tone: 'ml-agencia' };
- if (normalized.includes('ML COLETA') || normalized.includes('MERCADO LIVRE COLETA') || normalized === 'ML' || normalized === 'MERCADO LIVRE') return { key: 'ml-coleta', label: 'ML Coleta', icon: 'local_shipping', tone: 'ml-coleta' };
- if (normalized.includes('MAGALU')) return { key: 'magalu', label: 'Magalu', icon: 'inventory_2', tone: 'magalu' };
- if (normalized.includes('SHOPEE')) return { key: 'shopee', label: 'Shopee', icon: 'shopping_bag', tone: 'shopee' };
- if (normalized.includes('FLEX')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'flex' };
- if (normalized.includes('CORREIOS')) return { key: 'correios', label: 'Correios', icon: 'mail', tone: 'correios' };
- if (normalized.includes('AMAZON')) return { key: 'amazon', label: 'Amazon', icon: 'shopping_cart', tone: 'amazon' };
- if (normalized.includes('ULTRA') || normalized.includes('TURBO')) return { key: 'ultra', label: 'Ultra rápido', icon: 'speed', tone: 'ultra' };
- if (normalized.includes('PDV') || normalized.includes('BALCAO')) return { key: 'pdv', label: 'PDV / Balcão', icon: 'store', tone: 'pdv' };
- return { key: normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'outros', label: original, icon: 'storefront', tone: 'outros' };
- };
+  if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
+    app.innerHTML = `
+      <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen dashboard-v1-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+        ${getModuleSidebarHTML('dashboard')}
+        <main class="container operations-dashboard-shell app-page-container">
+          <div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span>
+            <h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível atualizar os dados do Dashboard neste momento.</h2>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p>
+            <button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderAlerts()"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button>
+          </div>
+        </main>
+      </div>
+    `;
+    return;
+  }
 
- const channelTotals = new Map();
- (appData.separacao || [])
- .filter(isDashboardPackageSessionFinalized)
- .filter(session => isDateTodayBR(getDashboardPackageFinishedAt(session)))
- .forEach(session => {
- const packageCount = getPickPackageCountFrom(session);
- if (packageCount <= 0) return;
- const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
- const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
- current.packages += packageCount;
- channelTotals.set(channel.key, current);
- });
+  try {
+    // 1. KPI: EM SEPARAÇÃO
+    const countEmSeparacao = (appData.separacao || []).filter(session => {
+      if (!session || typeof session !== 'object') return false;
+      const status = String(session.status || session.situacao || '').toLowerCase().trim();
+      if (status === 'cancelada' || status === 'finalizada' || status === 'concluida' || status === 'pronta_conferencia') return false;
+      if (isPickingFastModeSource(session)) return false;
+      return status === 'aberta' || status === 'em_separacao' || status === 'pendente';
+    }).length;
 
- const channels = [...channelTotals.values()].filter(item => item.packages > 0).sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
- const totalPackages = channels.reduce((total, channel) => total + Number(channel.packages || 0), 0);
- const dashboardTotalHTML = `<div class="dashboard-top-total" aria-label="Total de pacotes"><span>TOTAL</span><strong>${totalPackages}</strong></div>`;
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
- ${getModuleSidebarHTML('dashboard', '', dashboardTotalHTML)}
- <main class="container operations-dashboard-shell">
- ${channels.length ? `<section class="dashboard-channel-grid">${channels.map(channel => `
- <article class="dashboard-channel-card tone-${escapeKitAttribute(channel.tone)}">
- <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
- <strong class="dashboard-channel-quantity">${channel.packages}</strong>
- <h3>${escapeKitAttribute(channel.label)}</h3>
- <span class="dashboard-channel-percentage">${totalPackages > 0 ? Math.round((channel.packages / totalPackages) * 100) : 0}%</span>
- </article>`).join('')}</section>` : `<div class="dashboard-packages-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhuma operação finalizada hoje</strong><p>Os canais aparecerão aqui após a primeira finalização.</p></div>`}
- </main>
- </div>
- `;
+    // 2. KPI: AGUARDANDO CONFERÊNCIA
+    const countAguardandoConferencia = new Set(
+      (appData.separacao || [])
+        .filter(session => isSessionPendingConferenceForUser(session, currentUser))
+        .map(getPackSeparationSessionId)
+        .filter(Boolean)
+    ).size;
+
+    // 3. KPI: PACOTES FINALIZADOS HOJE + CANAIS
+    const normalizeDashboardChannel = (rawLabel) => {
+      const original = String(rawLabel || 'Outros').trim() || 'Outros';
+      const normalized = normalizeOperationalLabel(original);
+      if (normalized.includes('ML AGENCIA') || normalized.includes('MERCADO LIVRE AGENCIA')) return { key: 'ml-agencia', label: 'ML Agência', icon: 'storefront', tone: 'ml-agencia' };
+      if (normalized.includes('ML COLETA') || normalized.includes('MERCADO LIVRE COLETA') || normalized === 'ML' || normalized === 'MERCADO LIVRE') return { key: 'ml-coleta', label: 'ML Coleta', icon: 'local_shipping', tone: 'ml-coleta' };
+      if (normalized.includes('MAGALU')) return { key: 'magalu', label: 'Magalu', icon: 'inventory_2', tone: 'magalu' };
+      if (normalized.includes('SHOPEE')) return { key: 'shopee', label: 'Shopee', icon: 'shopping_bag', tone: 'shopee' };
+      if (normalized.includes('FLEX')) return { key: 'flex', label: 'Flex', icon: 'bolt', tone: 'flex' };
+      if (normalized.includes('CORREIOS')) return { key: 'correios', label: 'Correios', icon: 'mail', tone: 'correios' };
+      if (normalized.includes('AMAZON')) return { key: 'amazon', label: 'Amazon', icon: 'shopping_cart', tone: 'amazon' };
+      if (normalized.includes('ULTRA') || normalized.includes('TURBO')) return { key: 'ultra', label: 'Ultra rápido', icon: 'speed', tone: 'ultra' };
+      if (normalized.includes('PDV') || normalized.includes('BALCAO')) return { key: 'pdv', label: 'PDV / Balcão', icon: 'store', tone: 'pdv' };
+      return { key: normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'outros', label: original, icon: 'storefront', tone: 'outros' };
+    };
+
+    const channelTotals = new Map();
+    (appData.separacao || [])
+      .filter(isDashboardPackageSessionFinalized)
+      .filter(session => isDateTodayBR(getDashboardPackageFinishedAt(session)))
+      .forEach(session => {
+        const packageCount = getPickPackageCountFrom(session);
+        if (packageCount <= 0) return;
+        const channel = normalizeDashboardChannel(session.canal_nome || session.canal || session.col_c || 'Outros');
+        const current = channelTotals.get(channel.key) || { ...channel, packages: 0 };
+        current.packages += packageCount;
+        channelTotals.set(channel.key, current);
+      });
+
+    const channels = [...channelTotals.values()]
+      .filter(item => item.packages > 0)
+      .sort((a, b) => b.packages - a.packages || a.label.localeCompare(b.label, 'pt-BR'));
+
+    const totalPackagesHoje = channels.reduce((total, channel) => total + Number(channel.packages || 0), 0);
+
+    app.innerHTML = `
+      <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen dashboard-v1-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+        ${getModuleSidebarHTML('dashboard')}
+        <main class="container operations-dashboard-shell app-page-container">
+          <div class="app-breadcrumb">
+            <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+            <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            <span class="app-breadcrumb-current">Dashboard</span>
+          </div>
+
+          <!-- SEÇÃO 1: OPERAÇÃO DE HOJE -->
+          <section class="dashboard-section" aria-label="Operação de hoje">
+            <div class="dashboard-section-header">
+              <h2 class="dashboard-section-title">OPERAÇÃO DE HOJE</h2>
+            </div>
+            <div class="dashboard-kpi-grid">
+              <!-- KPI 1: EM SEPARAÇÃO -->
+              <article class="dashboard-kpi-card kpi-separacao">
+                <div class="dashboard-kpi-icon-wrapper">
+                  <span class="dashboard-kpi-icon">${(window.dyIcon && window.dyIcon('pick', 'module')) || '<span class="material-symbols-rounded">inventory_2</span>'}</span>
+                </div>
+                <div class="dashboard-kpi-content">
+                  <span class="dashboard-kpi-label">EM SEPARAÇÃO</span>
+                  <strong class="dashboard-kpi-value">${countEmSeparacao}</strong>
+                </div>
+              </article>
+
+              <!-- KPI 2: AGUARDANDO CONFERÊNCIA -->
+              <article class="dashboard-kpi-card kpi-conferencia">
+                <div class="dashboard-kpi-icon-wrapper">
+                  <span class="dashboard-kpi-icon">${(window.dyIcon && window.dyIcon('pack', 'module')) || '<span class="material-symbols-rounded">fact_check</span>'}</span>
+                </div>
+                <div class="dashboard-kpi-content">
+                  <span class="dashboard-kpi-label">AGUARDANDO CONFERÊNCIA</span>
+                  <strong class="dashboard-kpi-value">${countAguardandoConferencia}</strong>
+                </div>
+              </article>
+
+              <!-- KPI 3: PACOTES FINALIZADOS HOJE -->
+              <article class="dashboard-kpi-card kpi-pacotes">
+                <div class="dashboard-kpi-icon-wrapper">
+                  <span class="dashboard-kpi-icon">${(window.dyIcon && window.dyIcon('check_circle', 'status')) || '<span class="material-symbols-rounded">task_alt</span>'}</span>
+                </div>
+                <div class="dashboard-kpi-content">
+                  <span class="dashboard-kpi-label">PACOTES FINALIZADOS HOJE</span>
+                  <strong class="dashboard-kpi-value">${totalPackagesHoje}</strong>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- SEÇÃO 2: PACOTES FINALIZADOS HOJE POR CANAL -->
+          <section class="dashboard-section" aria-label="Pacotes finalizados hoje por canal">
+            <div class="dashboard-section-header">
+              <h2 class="dashboard-section-title">PACOTES FINALIZADOS HOJE POR CANAL</h2>
+            </div>
+            ${channels.length ? `
+              <div class="dashboard-channel-list">
+                ${channels.map(channel => {
+                  const percentage = totalPackagesHoje > 0 ? Math.round((channel.packages / totalPackagesHoje) * 100) : 0;
+                  return `
+                    <article class="dashboard-channel-row tone-${escapeKitAttribute(channel.tone)}">
+                      <div class="dashboard-channel-row-main">
+                        <span class="dashboard-channel-icon">${getChannelConfig(channel.label).svgIcon || `<span class="material-symbols-rounded">${escapeKitAttribute(channel.icon)}</span>`}</span>
+                        <h3 class="dashboard-channel-name">${escapeKitAttribute(channel.label)}</h3>
+                      </div>
+                      <div class="dashboard-channel-row-metrics">
+                        <strong class="dashboard-channel-count">${channel.packages} ${channel.packages === 1 ? 'pacote' : 'pacotes'}</strong>
+                        <span class="dashboard-channel-bar-bg"><span class="dashboard-channel-bar-fill" style="width: ${percentage}%"></span></span>
+                        <span class="dashboard-channel-percent">${percentage}%</span>
+                      </div>
+                    </article>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div class="dashboard-packages-empty">
+                <span class="material-symbols-rounded">inventory_2</span>
+                <strong>Nenhuma operação finalizada hoje</strong>
+                <p>Os canais aparecerão aqui após a primeira finalização do dia.</p>
+              </div>
+            `}
+          </section>
+        </main>
+      </div>
+    `;
+  } catch (error) {
+    console.error('[DASHBOARD] Erro ao renderizar dashboard:', error);
+    app.innerHTML = `
+      <div class="dashboard-screen fade-in internal module-screen standard-card-menu-screen operations-dashboard-screen dashboard-v1-screen app-page-shell">
+        ${getTopBarHTML(currentUser, 'renderMenu()', 'internal', 'dashboard-back-button')}
+        ${getModuleSidebarHTML('dashboard')}
+        <main class="container operations-dashboard-shell app-page-container">
+          <div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span>
+            <h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">Não foi possível atualizar os dados do Dashboard neste momento.</h2>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conexão de rede ou tente novamente.</p>
+            <button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderAlerts()"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button>
+          </div>
+        </main>
+      </div>
+    `;
+  }
 }
 
 // ========================================================
@@ -4140,14 +4372,28 @@ const menu3DIcons = {
  cadastrar: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M18 25 32 18l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="M18 25v16l14 7 8-4M32 32v16" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><path d="m39 38 8-8 3 3-8 8-4 1 1-4Z" fill="#10B981" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>',
  transferencia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M22 28 L30 20 L38 28 M30 20 V44" stroke="#fff" stroke-width="3" fill="none"/><path d="M42 36 L34 44 L26 36" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/></svg>',
  ajuste: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M22 22 L42 42 M22 42 L42 22" stroke="#fff" stroke-width="3"/></svg>',
- historico: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#64748B"/><circle cx="32" cy="32" r="12" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M32 24 V32 L38 36" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>',
- devolucoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M43 24H24a8 8 0 0 0 0 16h18" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M25 16 17 24l8 8" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 46h20" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.75"/></svg>',
- fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="20" y="20" width="24" height="24" rx="2" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 26 H38 M26 32 H38 M26 38 H32" stroke="#fff" stroke-width="2" opacity="0.8"/></svg>',
- pedido_compra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 24 H44 L40 40 H24 Z" stroke="#fff" stroke-width="3" fill="none"/><circle cx="26" cy="46" r="2.5" fill="#fff"/><circle cx="38" cy="46" r="2.5" fill="#fff"/></svg>',
- transporte: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="26" width="20" height="14" rx="1" fill="#fff" opacity="0.9"/><rect x="38" y="30" width="8" height="10" rx="1" fill="#fff" opacity="0.7"/></svg>',
- abertas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><circle cx="32" cy="32" r="10" stroke="#fff" stroke-width="3" fill="none" opacity="0.5"/><path d="M32 26 V32 L36 36" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
- garantia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 20 L32 36" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="43" r="2.5" fill="#fff"/></svg>',
- xml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M22 22 H42 V42 H22 Z" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 28 L32 34 L38 28" stroke="#fff" stroke-width="3" fill="none"/></svg>',
+  historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
+  devolucoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M43 24H24a8 8 0 0 0 0 16h18" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M25 16 17 24l8 8" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 46h20" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0.75"/></svg>',
+  fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="20" y="20" width="24" height="24" rx="2" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 26 H38 M26 32 H38 M26 38 H32" stroke="#fff" stroke-width="2" opacity="0.8"/></svg>',
+  pedido_compra: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 24 H44 L40 40 H24 Z" stroke="#fff" stroke-width="3" fill="none"/><circle cx="26" cy="46" r="2.5" fill="#fff"/><circle cx="38" cy="46" r="2.5" fill="#fff"/></svg>',
+  transporte: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="26" width="20" height="14" rx="1" fill="#fff" opacity="0.9"/><rect x="38" y="30" width="8" height="10" rx="1" fill="#fff" opacity="0.7"/></svg>',
+  abertas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><circle cx="32" cy="32" r="10" stroke="#fff" stroke-width="3" fill="none" opacity="0.5"/><path d="M32 26 V32 L36 36" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+  garantia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 20 L32 36" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="43" r="2.5" fill="#fff"/></svg>',
+  xml: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg>',
+  nf_recebimento: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 12 17 16 17 18 14 20 14"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M4 14V9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/><path d="M12 3v9"/><path d="m9 9 3 3 3-3"/></svg>',
+  nf_pendencias: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  compras_necessidade: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 7.2 4.15v8.7L12 20.5l-7.2-4.15v-8.7L12 3.5z"/><path d="m4.8 7.65 7.2 4.15 7.2-4.15"/><path d="M12 11.8v8.7"/></svg>',
+  compras_pedido: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>',
+  compras_cotacao: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>',
+  compras_fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>',
+  compras_transporte: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-5.6a1 1 0 0 0-.29-.71l-3.4-3.4A1 1 0 0 0 17.6 7H14v11h1"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+  compras_historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
+  fin_contas_a_pagar: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 12h8"/><path d="M8 17h4"/></svg>',
+  fin_pagamentos: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg>',
+  emissao_nova: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>',
+  emissao_emitidas: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>',
+  emissao_inutilizacao: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg>',
+  emissao_historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
  manual: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M22 22 L42 42 M42 22 L22 42" stroke="#fff" stroke-width="3"/></svg>',
  inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
  inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
@@ -4204,6 +4450,8 @@ const menuRoutes = {
  movimentacoes: 'renderMovimentacoesSubMenu()',
  inventario: 'renderInventarioSubMenu()',
  nf: 'renderNFSubMenu()',
+ emissao_nf: 'renderEmissaoNFSubMenu()',
+ emissao: 'renderEmissaoNFSubMenu()',
  financeiro: 'renderFinanceiroSubMenu()',
  configuracoes: 'renderConfigSubMenu()',
  pedidos: 'renderPedidosPlaceholder()',
@@ -4580,20 +4828,47 @@ async function resolverAccountIdLocalParaPedido(sourceAccountId) {
   return null;
 }
 
+let pedidosRenderToken = 0;
+
 async function hidratarPedidosPreviewMappings(todosPreview) {
   if (!Array.isArray(todosPreview) || !window.DataClient?.listMercadoLivreItemMappings) return;
 
   const mappingsPorConta = new Map();
 
+  // 1. Extrai IDs de contas únicas do Mercado Livre para resolver em lote
+  const mlPedidos = todosPreview.filter(p => p.platform === 'MERCADOLIBRE');
+  const uniqueSourceAccountIds = Array.from(new Set(mlPedidos.map(p => String(p.source_account_id || '').trim()).filter(Boolean)));
+
+  // Resolve todas as contas em paralelo
+  await Promise.all(uniqueSourceAccountIds.map(srcId => resolverAccountIdLocalParaPedido(srcId)));
+
+  // 2. Extrai IDs locais únicos para carregar mappings em paralelo
+  const uniqueLocalAccountIds = Array.from(new Set(
+    uniqueSourceAccountIds.map(srcId => contasResolvedMapCache.get(srcId)).filter(Boolean)
+  ));
+
+  await Promise.all(uniqueLocalAccountIds.map(async (accId) => {
+    if (!mappingsPorConta.has(accId)) {
+      try {
+        const list = await window.DataClient.listMercadoLivreItemMappings(accId);
+        mappingsPorConta.set(accId, list || []);
+      } catch (err) {
+        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accId, err);
+        mappingsPorConta.set(accId, []);
+      }
+    }
+  }));
+
+  // 3. Aplica os mappings aos itens em memória
   for (const ped of todosPreview) {
-    // Isolamento estrito: Shopee não consulta mapping do Mercado Livre
     if (ped.platform !== 'MERCADOLIBRE') {
       ped.status_identificacao_preview = 'pendente_identificacao';
       ped.conta_resolvida = false;
       continue;
     }
 
-    let accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    const strSrcId = String(ped.source_account_id || '').trim();
+    const accountIdLocal = contasResolvedMapCache.get(strSrcId);
     ped.accountIdLocal = accountIdLocal;
 
     if (!accountIdLocal) {
@@ -4603,17 +4878,6 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
     }
 
     ped.conta_resolvida = true;
-
-    if (!mappingsPorConta.has(accountIdLocal)) {
-      try {
-        const list = await window.DataClient.listMercadoLivreItemMappings(accountIdLocal);
-        mappingsPorConta.set(accountIdLocal, list || []);
-      } catch (err) {
-        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accountIdLocal, err);
-        mappingsPorConta.set(accountIdLocal, []);
-      }
-    }
-
     const accountMappings = mappingsPorConta.get(accountIdLocal) || [];
     let todosItensIdentificados = (ped.itens || []).length > 0;
 
@@ -4651,10 +4915,12 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
 }
 
 async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
+  const t0 = performance.now();
   const currentUser = localStorage.getItem('currentUser');
   if (!currentUser) return renderLogin();
 
   currentScreen = 'pedidos';
+  const thisRenderToken = ++pedidosRenderToken;
 
   // Verifica se está no modo preview de pedidos reais
   const isPreviewMode = Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA) && window.PEDIDOS_PREVIEW_AMOSTRA.length > 0;
@@ -4663,202 +4929,208 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
     const state = window.PedidosPreviewState;
 
-    // Hidrata os mappings da preview via DataClient/Supabase em memória
-    try {
-      await hidratarPedidosPreviewMappings(todosPreview);
-    } catch (errHidratar) {
-      console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings:', errHidratar);
-    }
-
-    // Se parâmetros foram passados diretamente pela chamada legada, sincroniza com o state
     if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
 
-    // Contadores Operacionais Principais (dinâmicos baseados no mapping real)
-    const countTodos = todosPreview.length; // 30
-    const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
-    const countPendentes = countTodos - countProntos;
-    const countEmSeparacao = 0;
-    const countSeparados = 0;
-    const countDivergencias = 0;
+    const renderDOM = () => {
+      const countTodos = todosPreview.length;
+      const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
+      const countPendentes = countTodos - countProntos;
+      const countEmSeparacao = 0;
+      const countSeparados = 0;
+      const countDivergencias = 0;
 
-    // Contadores por Canal para os botões de filtro
-    const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
-    const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+      const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
+      const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+      const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
 
-    // Lista de contas distintas da amostra
-    const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
+      let listaExibicao = todosPreview;
+      if (state.operacional === 'prontos') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
+      } else if (state.operacional === 'pendentes') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
+      } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+        listaExibicao = [];
+      } else {
+        listaExibicao = todosPreview;
+      }
 
-    // Aplicação determinística dos filtros:
-    let listaExibicao = todosPreview;
+      if (state.marketplace === 'mercadolibre') {
+        listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
+      } else if (state.marketplace === 'shopee') {
+        listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
+      }
 
-    // 1. Filtro Operacional
-    if (state.operacional === 'prontos') {
-      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
-    } else if (state.operacional === 'pendentes') {
-      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
-    } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
-      listaExibicao = [];
-    } else {
-      // 'todos'
-      listaExibicao = todosPreview;
-    }
+      if (state.conta && state.conta !== 'todas') {
+        listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
+      }
 
-    // 2. Filtro Secundário: Marketplace
-    if (state.marketplace === 'mercadolibre') {
-      listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
-    } else if (state.marketplace === 'shopee') {
-      listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
-    }
+      const termoBusca = String(state.busca || '').trim().toLowerCase();
+      if (termoBusca) {
+        listaExibicao = listaExibicao.filter(p => {
+          const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
+          const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
+          const itemsMatch = (p.itens || []).some(it =>
+            String(it.titulo || '').toLowerCase().includes(termoBusca) ||
+            String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
+            String(it.item_id || '').toLowerCase().includes(termoBusca) ||
+            String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
+          );
+          return orderMatch || accountMatch || itemsMatch;
+        });
+      }
 
-    // 3. Filtro Secundário: Conta
-    if (state.conta && state.conta !== 'todas') {
-      listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
-    }
+      app.innerHTML = `
+        <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+          ${getTopBarHTML(currentUser, 'renderMenu()')}
+          ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+          <main class="container ped-shell app-page-container">
+            <div class="app-breadcrumb">
+              <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+              <span class="material-symbols-rounded">chevron_right</span>
+              <span class="app-breadcrumb-current">Gestão de Pedidos</span>
+            </div>
 
-    // 4. Busca Textual (pedido, título, SKU, variação, conta)
-    const termoBusca = String(state.busca || '').trim().toLowerCase();
-    if (termoBusca) {
-      listaExibicao = listaExibicao.filter(p => {
-        const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
-        const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
-        const itemsMatch = (p.itens || []).some(it =>
-          String(it.titulo || '').toLowerCase().includes(termoBusca) ||
-          String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
-          String(it.item_id || '').toLowerCase().includes(termoBusca) ||
-          String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
-        );
-        return orderMatch || accountMatch || itemsMatch;
-      });
-    }
-
-    app.innerHTML = `
-      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
-        ${getTopBarHTML(currentUser, 'renderMenu()')}
-        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
-        <main class="container ped-shell app-page-container">
-          <div class="app-breadcrumb">
-            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-            <span class="material-symbols-rounded">chevron_right</span>
-            <span class="app-breadcrumb-current">Gestão de Pedidos</span>
-          </div>
-
-          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
-            <div>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
-                <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
-                  <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
-                </span>
+            <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+              <div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
+                  <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
+                    <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
+                  </span>
+                </div>
+                <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
+                  Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
+                </p>
               </div>
-              <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
-                Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
-              </p>
-            </div>
-          </header>
+            </header>
 
-          <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
-          <div class="pedidos-counters-grid">
-            <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
-              <div class="pedidos-counter-label">
-                <span>Todos</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+            <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
+            <div class="pedidos-counters-grid">
+              <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
+                <div class="pedidos-counter-label">
+                  <span>Todos</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+                </div>
+                <div class="pedidos-counter-val">${countTodos}</div>
+                <span class="pedidos-counter-sub">Total consolidado</span>
               </div>
-              <div class="pedidos-counter-val">${countTodos}</div>
-              <span class="pedidos-counter-sub">Total consolidado</span>
-            </div>
 
-            <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
-              <div class="pedidos-counter-label" style="color:#b45309;">
-                <span>Pendentes</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+              <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
+                <div class="pedidos-counter-label" style="color:#b45309;">
+                  <span>Pendentes</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
+                <span class="pedidos-counter-sub">Aguardam mapping</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
-              <span class="pedidos-counter-sub">Aguardam mapping</span>
-            </div>
 
-            <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
-              <div class="pedidos-counter-label" style="color:#15803d;">
-                <span>Prontos p/ Separação</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+              <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
+                <div class="pedidos-counter-label" style="color:#15803d;">
+                  <span>Prontos p/ Separação</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
+                <span class="pedidos-counter-sub">Prontos p/ envio</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
-              <span class="pedidos-counter-sub">Prontos p/ envio</span>
-            </div>
 
-            <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
-              <div class="pedidos-counter-label" style="color:#1d4ed8;">
-                <span>Em Separação</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+              <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
+                <div class="pedidos-counter-label" style="color:#1d4ed8;">
+                  <span>Em Separação</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
+                <span class="pedidos-counter-sub">Picking em curso</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
-              <span class="pedidos-counter-sub">Picking em curso</span>
-            </div>
 
-            <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
-              <div class="pedidos-counter-label" style="color:#7e22ce;">
-                <span>Separados</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+              <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
+                <div class="pedidos-counter-label" style="color:#7e22ce;">
+                  <span>Separados</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
+                <span class="pedidos-counter-sub">Aguardam conferência</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
-              <span class="pedidos-counter-sub">Aguardam conferência</span>
-            </div>
 
-            <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
-              <div class="pedidos-counter-label" style="color:#dc2626;">
-                <span>Divergências</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+              <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
+                <div class="pedidos-counter-label" style="color:#dc2626;">
+                  <span>Divergências</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
+                <span class="pedidos-counter-sub">Revisão necessária</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
-              <span class="pedidos-counter-sub">Revisão necessária</span>
-            </div>
-          </div>
-
-          <!-- BARRA DE FILTROS SECUNDÁRIOS -->
-          <div class="pedidos-filters-bar">
-            <div class="pedidos-search-wrap">
-              <span class="material-symbols-rounded pedidos-search-icon">search</span>
-              <input type="text"
-                     class="pedidos-search-input"
-                     placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
-                     value="${escapeKitAttribute(state.busca)}"
-                     oninput="setPedidosBusca(this.value)">
             </div>
 
-            <div class="pedidos-pills-wrap">
-              <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
-                Todos Canais (${todosPreview.length})
-              </button>
-              <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
-                Mercado Livre (${countML})
-              </button>
-              <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
-                Shopee (${countShopee})
-              </button>
-            </div>
-
-            <div style="min-width:200px;">
-              <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
-                <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
-                ${contasDisponiveis.map(c => `
-                  <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
-                `).join('')}
-              </select>
-            </div>
-          </div>
-
-          <!-- LISTA DE CARDS DE PEDIDOS -->
-          <div style="display:grid;gap:16px;">
-            ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
-              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
-                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
-                <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
-                <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
+            <!-- BARRA DE FILTROS SECUNDÁRIOS -->
+            <div class="pedidos-filters-bar">
+              <div class="pedidos-search-wrap">
+                <span class="material-symbols-rounded pedidos-search-icon">search</span>
+                <input type="text"
+                       class="pedidos-search-input"
+                       placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
+                       value="${escapeKitAttribute(state.busca)}"
+                       oninput="setPedidosBusca(this.value)">
               </div>
-            `}
-          </div>
-        </main>
-      </div>
-    `;
+
+              <div class="pedidos-pills-wrap">
+                <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
+                  Todos Canais (${todosPreview.length})
+                </button>
+                <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
+                  Mercado Livre (${countML})
+                </button>
+                <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
+                  Shopee (${countShopee})
+                </button>
+              </div>
+
+              <div style="min-width:200px;">
+                <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
+                  <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
+                  ${contasDisponiveis.map(c => `
+                    <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
+                  `).join('')}
+                </select>
+              </div>
+            </div>
+
+            <!-- LISTA DE CARDS DE PEDIDOS -->
+            <div id="pedidos-cards-container" style="display:grid;gap:16px;">
+              ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
+                <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
+                  <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
+                  <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
+                  <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
+                </div>
+              `}
+            </div>
+          </main>
+        </div>
+      `;
+    };
+
+    // 1. RENDERIZA O SHELL E DADOS INICIAIS IMEDIATAMENTE NO DOM
+    renderDOM();
+    const t2 = performance.now();
+    console.info(`[PERF PEDIDOS] Primeiro DOM visível em ${(t2 - t0).toFixed(1)}ms`);
+
+    // 2. DISPARA HIDRATAÇÃO ASSÍNCRONA DE MAPPINGS EM SEGUNDO PLANO
+    (async () => {
+      const t3 = performance.now();
+      try {
+        await hidratarPedidosPreviewMappings(todosPreview);
+        const t4 = performance.now();
+        // Se ainda estiver na tela de pedidos e nesta execução, atualiza o DOM suavemente
+        if (currentScreen === 'pedidos' && pedidosRenderToken === thisRenderToken) {
+          renderDOM();
+          const t6 = performance.now();
+          console.info(`[PERF PEDIDOS] Hidratação e dados finais concluídos em ${(t6 - t0).toFixed(1)}ms (consultas levaram ${(t4 - t3).toFixed(1)}ms)`);
+        }
+      } catch (errHidratar) {
+        console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings em background:', errHidratar);
+      }
+    })();
+
     return;
   }
 
@@ -5655,60 +5927,51 @@ function getPlaceholderForm(fields) {
 
 function renderComprasSubMenu() {
   const currentUser = localStorage.getItem('currentUser');
-  const primaryCards = [
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const subItems = [
     {
-      label: 'PEDIDO DE COMPRA',
-      description: 'Crie e gerencie pedidos de compra para seus fornecedores.',
-      icon: 'compras',
-      onclick: 'renderPedidoCompraScreen()'
+      id: 'compras_necessidade',
+      label: 'NECESSIDADE DE COMPRA',
+      description: 'Analise estoque, demanda e sugestões de reposição.',
+      icon: 'compras_necessidade',
+      onclick: 'renderNecessidadeCompraScreen()'
     },
     {
-      label: 'COTACAO',
-      description: 'Compare precos e condicoes entre fornecedores antes de comprar.',
-      icon: 'pedido_compra',
+      id: 'compras_cotacao',
+      label: 'COTAÇÃO / COMPRA',
+      description: 'Compare fornecedores, preços e condições e gere pedidos.',
+      icon: 'compras_cotacao',
       onclick: 'renderCotacaoComprasScreen()'
     },
     {
+      id: 'compras_pedido_compra',
+      label: 'PEDIDOS DE COMPRA',
+      description: 'Acompanhe pedidos, recebimentos e pendências.',
+      icon: 'compras_pedido',
+      onclick: 'renderPedidoCompraScreen()'
+    },
+    {
+      id: 'compras_fornecedores',
       label: 'FORNECEDORES',
-      description: 'Cadastre e gerencie fornecedores e informacoes comerciais.',
-      icon: 'fornecedores',
+      description: 'Gerencie fornecedores, produtos, preços e condições comerciais.',
+      icon: 'compras_fornecedores',
       onclick: 'renderFornecedoresScreen()'
-    },
-    {
-      label: 'PEDIDOS EM TRANSPORTE',
-      description: 'Acompanhe pedidos que ja foram despachados pelos fornecedores.',
-      icon: 'transporte',
-      onclick: 'renderPedidosTransporteScreen()'
-    },
-    {
-      label: 'HISTORICO DE COMPRAS',
-      description: 'Consulte historico de compras, precos e entradas de mercadorias.',
-      icon: 'historico',
-      onclick: 'renderHistoricoComprasScreen()'
     }
   ];
 
   app.innerHTML = `
-    <div class="dashboard-screen fade-in internal compras-screen module-screen standard-card-menu-screen compras-standard-screen app-page-shell">
+    <div class="dashboard-screen internal fade-in compras-submenu-screen compras-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('compras')}
       <main class="container app-page-container">
         <div class="app-breadcrumb">
-          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
           <span class="app-breadcrumb-current">Compras</span>
         </div>
-        <div class="standard-module-card-grid compras-standard-grid">
-          ${primaryCards.map(card => `
-            <button type="button" class="standard-module-card" onclick="${card.onclick}">
-              <span class="standard-module-card-icon">${menu3DIcons[card.icon] || ''}</span>
-              <span class="standard-module-card-copy">
-                <strong>${card.label}</strong>
-                <small>${card.description}</small>
-              </span>
-            </button>
-          `).join('')}
-        </div>
+        ${getStandardModuleCardsHTML(subItems)}
       </main>
     </div>
   `;
@@ -5892,19 +6155,31 @@ function renderPedidoCompraScreen() {
  `);
 }
 
-function renderCotacaoComprasScreen() {
- renderComprasShell('COTACAO', 'Comparacao de fornecedores preparada para fase futura.', `
- <section class="compras-panel">
- <div class="compras-empty-state">
- <span class="material-symbols-rounded">request_quote</span>
- <strong>Cotacoes em preparacao</strong>
- <p>Este espaco ficara reservado para comparar fornecedores, precos, prazos e condicoes.</p>
- </div>
- </section>
- `);
+function renderNecessidadeCompraScreen() {
+  renderComprasShell('NECESSIDADE DE COMPRA', 'Analise estoque, demanda e sugestões de reposição.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">inventory_2</span>
+        <strong>Necessidade de Compra em preparação</strong>
+        <p>Este espaço analisará estoque atual, demanda de vendas e sugestões automáticas de reposição.</p>
+      </div>
+    </section>
+  `);
 }
 
-let orcamentoClienteState = { numero: '', emissao: '', validade: '', itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
+function renderCotacaoComprasScreen() {
+  renderComprasShell('COTAÇÃO / COMPRA', 'Compare fornecedores, preços e condições e gere pedidos.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">request_quote</span>
+        <strong>Cotações e Compras em preparação</strong>
+        <p>Este espaço ficará reservado para comparar fornecedores, preços, prazos e condições comerciais.</p>
+      </div>
+    </section>
+  `);
+}
+
+let orcamentoClienteState = { id: null, numero: '', status: 'rascunho', versao_atual: 0, emissao: '', validade: '', itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
 const ORCAMENTO_CLIENTE_DRAFT_KEY = 'dyOrcamentoClienteRascunhoV1';
 const ORCAMENTO_CLIENTE_SEQUENCE_KEY = 'dyOrcamentoClienteSequenciaV1';
 
@@ -5918,18 +6193,15 @@ function addOrcamentoDays(dateISO, days = 7) {
  return date.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 }
 
-function createOrcamentoNumber(dateISO = getOrcamentoTodayISO()) {
- const date = String(dateISO || getOrcamentoTodayISO()).replaceAll('-', '');
- let saved = {};
- try { saved = JSON.parse(localStorage.getItem(ORCAMENTO_CLIENTE_SEQUENCE_KEY) || '{}'); } catch (_) { saved = {}; }
- const next = saved.date === date ? Math.max(1, Number(saved.sequence || 0) + 1) : 1;
- return `ORC-${date}-${String(next).padStart(4, '0')}`;
-}
-
-function commitOrcamentoNumber(number) {
- const match = String(number || '').match(/^ORC-(\d{8})-(\d{4})$/);
- if (!match) return;
- localStorage.setItem(ORCAMENTO_CLIENTE_SEQUENCE_KEY, JSON.stringify({ date: match[1], sequence: Number(match[2]) }));
+function updateOrcamentoNumberLabel() {
+ const numberLabel = document.getElementById('orcamento-number-label');
+ if (!numberLabel) return;
+ if (orcamentoClienteState.numero) {
+  const verTag = orcamentoClienteState.versao_atual ? ` / V${orcamentoClienteState.versao_atual}` : '';
+  numberLabel.textContent = `${orcamentoClienteState.numero}${verTag}`;
+ } else {
+  numberLabel.textContent = 'NOVO ORÇAMENTO (RASCUNHO)';
+ }
 }
 
 function getOrcamentoProductId(product = {}) {
@@ -5941,7 +6213,15 @@ function getOrcamentoProductName(product = {}) {
 }
 
 function getOrcamentoProductPrice(product = {}) {
- const candidates = [product.preco_venda, product.valor_venda, product.preco, product.valor, product.preco_site, product.preco_marketplace];
+ const candidates = [
+  product.preco_varejo,
+  product.preco_venda,
+  product.valor_venda,
+  product.preco,
+  product.valor,
+  product.preco_site,
+  product.preco_marketplace
+ ];
  const value = candidates.map(item => parseDecimal(item)).find(item => Number(item) > 0);
  return Number(value || 0);
 }
@@ -5955,7 +6235,7 @@ function getOrcamentoCatalogSearch(query = '') {
  const normalized = normalizeOperationalLabel(query);
  if (!normalized) return [];
  return (appData.products || []).filter(product => normalizeOperationalLabel([
- getOrcamentoProductId(product), product.ean, product.sku_fornecedor, product.sku, getOrcamentoProductName(product)
+  getOrcamentoProductId(product), product.ean, product.sku_fornecedor, product.sku, getOrcamentoProductName(product)
  ].join(' ')).includes(normalized)).slice(0, 7);
 }
 
@@ -5964,9 +6244,13 @@ function renderOrcamentoProductSuggestions(value = '') {
  if (!box) return;
  const results = getOrcamentoCatalogSearch(value);
  box.innerHTML = results.map(product => {
- const id = getOrcamentoProductId(product);
- return `<button type="button" onclick="addOrcamentoProductById(${quotePackInlineArg(id)})"><span>${escapeKitAttribute(id || 'SEM ID')}</span><strong>${escapeKitAttribute(getOrcamentoProductName(product))}</strong><small>${formatCurrency(getOrcamentoProductPrice(product))}</small></button>`;
- }).join('') || (String(value || '').trim().length >= 2 ? '<p>Nenhum produto encontrado.</p>' : '');
+  const id = getOrcamentoProductId(product);
+  return `<button type="button" class="orcamento-suggestion-item" onclick="addOrcamentoProductById(${quotePackInlineArg(id)})">
+   <span class="orcamento-suggestion-chip">${escapeKitAttribute(id || 'SEM ID')}</span>
+   <strong class="orcamento-suggestion-name">${escapeKitAttribute(getOrcamentoProductName(product))}</strong>
+   <small class="orcamento-suggestion-price">${formatCurrency(getOrcamentoProductPrice(product))}</small>
+  </button>`;
+ }).join('') || (String(value || '').trim().length >= 2 ? '<p class="orcamento-suggestions-empty">Nenhum produto encontrado.</p>' : '');
  box.hidden = !box.innerHTML;
 }
 
@@ -5982,7 +6266,7 @@ function addOrcamentoProductById(productId) {
  if (!product) return showToast('Produto nao encontrado no cadastro.', 'warning');
  const existing = orcamentoClienteState.itens.find(item => item.id_interno === String(productId));
  if (existing) existing.quantidade += 1;
- else orcamentoClienteState.itens.push({ localId: `ORCI-${Date.now()}`, id_interno: String(productId), descricao: getOrcamentoProductName(product), imagem: getOrcamentoProductImage(product), quantidade: 1, valor_unitario: getOrcamentoProductPrice(product) });
+ else orcamentoClienteState.itens.push({ localId: `ORCI-${Date.now()}-${Math.random()}`, id_interno: String(productId), descricao: getOrcamentoProductName(product), imagem: getOrcamentoProductImage(product), quantidade: 1, valor_unitario: getOrcamentoProductPrice(product) });
  const input = document.getElementById('orcamento-product-search');
  if (input) input.value = '';
  const suggestions = document.getElementById('orcamento-product-suggestions');
@@ -6057,22 +6341,81 @@ function updateOrcamentoEmission(value) {
  const emission = value || getOrcamentoTodayISO();
  orcamentoClienteState.emissao = emission;
  orcamentoClienteState.validade = addOrcamentoDays(emission, 7);
- orcamentoClienteState.numero = createOrcamentoNumber(emission);
  const validityInput = document.querySelector('#orcamento-cliente-form [name="data_validade"]');
- const numberLabel = document.getElementById('orcamento-number-label');
  if (validityInput) validityInput.value = orcamentoClienteState.validade;
- if (numberLabel) numberLabel.textContent = orcamentoClienteState.numero;
  updateOrcamentoValidity(orcamentoClienteState.validade);
 }
 
-function saveOrcamentoClienteDraft() {
+let isSavingOrcamentoDraft = false;
+
+async function saveOrcamentoClienteDraft() {
+ if (isSavingOrcamentoDraft) return;
  const form = document.getElementById('orcamento-cliente-form');
  if (!form) return;
  if (!orcamentoClienteState.itens.length) return showToast('Adicione pelo menos um produto.', 'warning');
- const data = Object.fromEntries(new FormData(form).entries());
- const draft = { ...orcamentoClienteState, cliente: data, totais: getOrcamentoTotals(), salvo_em: new Date().toISOString() };
- localStorage.setItem(ORCAMENTO_CLIENTE_DRAFT_KEY, JSON.stringify(draft));
- showToast('Rascunho do orcamento salvo neste aparelho.');
+
+ isSavingOrcamentoDraft = true;
+ const btnSubmit = form.querySelector('button[type="submit"]');
+ if (btnSubmit) btnSubmit.disabled = true;
+
+ const formObj = Object.fromEntries(new FormData(form).entries());
+ const currentUser = localStorage.getItem('currentUser') || 'Sistema';
+
+ const clienteData = {
+  empresa: formObj.empresa || '',
+  documento: formObj.documento || '',
+  responsavel: formObj.responsavel || '',
+  email: formObj.email || '',
+  telefone: formObj.telefone || '',
+  endereco: formObj.endereco || '',
+  forma_pagamento: formObj.forma_pagamento || 'Pix',
+  condicao_negociada: formObj.condicao_negociada || '',
+  observacoes: formObj.observacoes || ''
+ };
+
+ const totals = getOrcamentoTotals();
+ const condicoesData = {
+  emissao: orcamentoClienteState.emissao,
+  validade: orcamentoClienteState.validade,
+  desconto: orcamentoClienteState.desconto,
+  desconto_opcao: formObj.desconto_opcao || '0',
+  desconto_percentual: orcamentoClienteState.desconto,
+  frete_responsavel: orcamentoClienteState.freteResponsavel,
+  frete_valor: orcamentoClienteState.freteValor,
+  forma_pagamento: formObj.forma_pagamento || 'Pix',
+  condicao_negociada: formObj.condicao_negociada || '',
+  observacoes: formObj.observacoes || '',
+  subtotal: totals.subtotal,
+  desconto_valor: totals.descontoValor,
+  frete_cobrado: totals.freteCobrado,
+  total: totals.total,
+  totais: totals
+ };
+
+ try {
+  const result = await DataClient.salvarRascunhoOrcamentoSupabase({
+   id: orcamentoClienteState.id,
+   cliente: clienteData,
+   itens: orcamentoClienteState.itens,
+   condicoes: condicoesData,
+   usuario: currentUser
+  });
+
+  if (result && result.id) {
+   orcamentoClienteState.id = result.id;
+   orcamentoClienteState.numero = result.numero_orcamento || '';
+   orcamentoClienteState.status = result.status || 'rascunho';
+   orcamentoClienteState.versao_atual = result.versao_atual || 0;
+   updateOrcamentoNumberLabel();
+   showToast('Rascunho do orçamento salvo no Supabase.');
+  }
+ } catch (err) {
+  console.error('[ORCAMENTOS] Falha ao salvar rascunho:', err);
+  showToast('Erro ao salvar rascunho: ' + err.message, 'error');
+ } finally {
+  isSavingOrcamentoDraft = false;
+  if (btnSubmit) btnSubmit.disabled = false;
+ }
 }
 
 function getOrcamentoClienteDocument() {
@@ -6086,23 +6429,23 @@ function getOrcamentoClienteDocument() {
 
 async function registerOrcamentoPDFFonts(doc) {
  try {
- const loadFont = async (url, fileName, style) => {
- const response = await fetch(url);
- if (!response.ok) throw new Error(`Fonte indisponivel: ${url}`);
- const bytes = new Uint8Array(await response.arrayBuffer());
- let binary = '';
- for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
- doc.addFileToVFS(fileName, btoa(binary));
- doc.addFont(fileName, 'PTSansNarrow', style);
- };
- await Promise.all([
- loadFont('/assets/fontes/PTSansNarrow-Regular.ttf', 'PTSansNarrow-Regular.ttf', 'normal'),
- loadFont('/assets/fontes/PTSansNarrow-Bold.ttf', 'PTSansNarrow-Bold.ttf', 'bold')
- ]);
- return 'PTSansNarrow';
+  const loadFont = async (url, fileName, style) => {
+   const response = await fetch(url);
+   if (!response.ok) throw new Error(`Fonte indisponivel: ${url}`);
+   const bytes = new Uint8Array(await response.arrayBuffer());
+   let binary = '';
+   for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+   doc.addFileToVFS(fileName, btoa(binary));
+   doc.addFont(fileName, 'PTSansNarrow', style);
+  };
+  await Promise.all([
+   loadFont('/assets/fontes/PTSansNarrow-Regular.ttf', 'PTSansNarrow-Regular.ttf', 'normal'),
+   loadFont('/assets/fontes/PTSansNarrow-Bold.ttf', 'PTSansNarrow-Bold.ttf', 'bold')
+  ]);
+  return 'PTSansNarrow';
  } catch (error) {
- console.warn('[ORCAMENTO] Fonte local nao carregada no PDF:', error);
- return 'helvetica';
+  console.warn('[ORCAMENTO] Fonte local nao carregada no PDF:', error);
+  return 'helvetica';
  }
 }
 
@@ -6111,135 +6454,660 @@ async function loadOrcamentoPDFThumbnail(source) {
  const dataUrl = await loadRomaneioPDFImage(source);
  if (!dataUrl) return '';
  return new Promise(resolve => {
- const image = new Image();
- image.onload = () => {
- const canvas = document.createElement('canvas');
- const size = 180; const ratio = Math.min(size / image.width, size / image.height, 1);
- canvas.width = size; canvas.height = size;
- const context = canvas.getContext('2d');
- context.fillStyle = '#ffffff'; context.fillRect(0, 0, size, size);
- const width = image.width * ratio; const height = image.height * ratio;
- context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
- resolve(canvas.toDataURL('image/jpeg', .72));
- };
- image.onerror = () => resolve('');
- image.src = dataUrl;
+  const image = new Image();
+  image.onload = () => {
+   const canvas = document.createElement('canvas');
+   const size = 180; const ratio = Math.min(size / image.width, size / image.height, 1);
+   canvas.width = size; canvas.height = size;
+   const context = canvas.getContext('2d');
+   context.fillStyle = '#ffffff'; context.fillRect(0, 0, size, size);
+   const width = image.width * ratio; const height = image.height * ratio;
+   context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+   resolve(canvas.toDataURL('image/jpeg', .72));
+  };
+  image.onerror = () => resolve('');
+  image.src = dataUrl;
  });
 }
 
-async function generateOrcamentoClientePDF() {
- const item = getOrcamentoClienteDocument();
- if (!item) return;
+async function generateOrcamentoPDFFromSnapshot(snapshot) {
  const { jsPDF } = window.jspdf || {};
  if (!jsPDF) return showToast('Gerador de PDF nao carregado.', 'error');
  try {
- const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
- const pageWidth = doc.internal.pageSize.getWidth();
- const pageHeight = doc.internal.pageSize.getHeight();
- const margin = 14;
- const contentWidth = pageWidth - margin * 2;
- const pdfFont = await registerOrcamentoPDFFonts(doc);
- const logo = await loadRomaneioPDFImage(LOGO_LIGHT_BG);
- const productImages = await Promise.all(item.itens.map(row => loadOrcamentoPDFThumbnail(row.imagem)));
- const fmtDate = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
- const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
- const safe = value => String(value || '').trim() || '-';
- const drawPageHeader = () => {
- doc.setFillColor(230, 0, 18); doc.rect(margin, 10, contentWidth, 1.4, 'F');
- doc.setFillColor(248, 250, 252); doc.roundedRect(margin, 12, contentWidth, 30, 2, 2, 'F');
- if (logo) addRomaneioPDFImage(doc, logo, margin + 5, 17, 34, 16);
- doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(13); doc.text('DY PARTS AUTO PECAS LTDA', margin + 44, 20);
- doc.setFont(pdfFont, 'normal'); doc.setTextColor(85, 99, 118); doc.setFontSize(8.2);
- doc.text('CNPJ 31.869.538/0001-60', margin + 44, 25);
- doc.text('Alameda dos Guatas, 477 - Vila da Saude - Sao Paulo/SP - CEP 04053-041', margin + 44, 29.5);
- doc.text('Rafael Costa - (11) 99008-5977 - contato@dyautoparts.com.br', margin + 44, 34);
- doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(15); doc.text('ORCAMENTO', pageWidth - margin - 5, 20, { align: 'right' });
- doc.setFontSize(8); doc.setTextColor(77, 91, 111); doc.text(item.numero, pageWidth - margin - 5, 26, { align: 'right' });
- doc.setFont(pdfFont, 'normal'); doc.text(`Emissao: ${fmtDate(item.emissao)}`, pageWidth - margin - 5, 31, { align: 'right' });
- doc.text(`Validade: ${fmtDate(item.validade)}`, pageWidth - margin - 5, 35.5, { align: 'right' });
- };
- const drawFooter = () => {
- const pages = doc.getNumberOfPages();
- for (let page = 1; page <= pages; page += 1) {
- doc.setPage(page); doc.setDrawColor(224, 229, 236); doc.line(margin, pageHeight - 13, pageWidth - margin, pageHeight - 13);
- doc.setFont(pdfFont, 'normal'); doc.setFontSize(7.5); doc.setTextColor(112, 124, 142);
- doc.text(`DY Auto Parts - ${item.numero}`, margin, pageHeight - 8);
- doc.text(`Pagina ${page} de ${pages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
- }
- };
- drawPageHeader();
- let y = 49;
- doc.setFont(pdfFont, 'bold'); doc.setFontSize(11); doc.setTextColor(24, 35, 53); doc.text('DADOS DO CLIENTE', margin, y); y += 4;
- const clientRows = [
- ['Empresa / Razao social', safe(item.cliente.empresa), 'CPF / CNPJ', safe(item.cliente.documento)],
- ['Responsavel', safe(item.cliente.responsavel), 'Telefone', safe(item.cliente.telefone)],
- ['E-mail do cliente', safe(item.cliente.email), 'Endereco', safe(item.cliente.endereco)]
- ];
- doc.autoTable({ startY: y, body: clientRows, margin: { left: margin, right: margin }, theme: 'grid',
- styles: { font: pdfFont, fontSize: 9, cellPadding: 2.4, textColor: [35, 47, 66], lineColor: [224, 229, 236], lineWidth: .2 },
- columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 28 }, 1: { cellWidth: 58 }, 2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 24 }, 3: { cellWidth: 72 } } });
- y = doc.lastAutoTable.finalY + 9;
- doc.setFont(pdfFont, 'bold'); doc.setFontSize(11); doc.text('PRODUTOS', margin, y); y += 3;
- doc.autoTable({ startY: y, head: [['Foto', 'Codigo', 'Descricao', 'Qtd.', 'Valor unit.', 'Total']],
- body: item.itens.map(row => ['', row.id_interno, row.descricao, String(row.quantidade), money(row.valor_unitario), money(Number(row.quantidade) * Number(row.valor_unitario))]),
- margin: { top: 48, left: margin, right: margin, bottom: 40 }, theme: 'striped',
- headStyles: { fillColor: [36, 48, 67], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
- styles: { font: pdfFont, fontSize: 9, cellPadding: 2.7, textColor: [35, 47, 66], lineColor: [226, 231, 238], lineWidth: .15 },
- alternateRowStyles: { fillColor: [247, 249, 252] },
- columnStyles: { 0: { cellWidth: 18, minCellHeight: 17 }, 1: { cellWidth: 23, fontStyle: 'bold' }, 2: { cellWidth: 68 }, 3: { cellWidth: 13, halign: 'center' }, 4: { cellWidth: 27, halign: 'right' }, 5: { cellWidth: 29, halign: 'right', fontStyle: 'bold' } },
- didDrawCell: data => { if (data.section === 'body' && data.column.index === 0) { const thumbnail = productImages[data.row.index]; if (thumbnail) addRomaneioPDFImage(doc, thumbnail, data.cell.x + 1.5, data.cell.y + 1.2, data.cell.width - 3, data.cell.height - 2.4); } },
- didDrawPage: data => { if (data.pageNumber > 1) drawPageHeader(); } });
- y = doc.lastAutoTable.finalY + 8;
- if (y > pageHeight - 78) { doc.addPage(); drawPageHeader(); y = 50; }
- const infoWidth = 112; const totalsX = margin + infoWidth + 7; const totalsWidth = contentWidth - infoWidth - 7;
- doc.setFillColor(248, 250, 252); doc.roundedRect(margin, y, infoWidth, 48, 2, 2, 'F');
- doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('CONDICOES COMERCIAIS', margin + 4, y + 6);
- doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66);
- const commercial = [`Pagamento: ${safe(item.cliente.forma_pagamento)}`, `Frete: ${item.freteResponsavel === 'cliente' ? 'por conta do cliente' : item.freteResponsavel === 'dy' ? 'por conta da DY Auto Parts' : 'retirada / sem frete'}`, `Chave Pix: contato@dyautoparts.com.br`, `Condicao: ${safe(item.cliente.condicao_negociada)}`];
- commercial.forEach((line, index) => doc.text(doc.splitTextToSize(line, infoWidth - 8).slice(0, 2), margin + 4, y + 13 + index * 7));
- const summary = [['Subtotal', money(item.totais.subtotal)], [`Desconto (${Number(item.desconto || 0).toLocaleString('pt-BR')}%)`, `- ${money(item.totais.descontoValor)}`], ['Frete', money(item.totais.freteCobrado)], ['TOTAL', money(item.totais.total)]];
- summary.forEach(([label, value], index) => { const rowY = y + index * 12; doc.setFillColor(index === 3 ? 230 : 250, index === 3 ? 0 : 251, index === 3 ? 18 : 253); doc.rect(totalsX, rowY, totalsWidth, 11, 'F'); doc.setFont(pdfFont, index === 3 ? 'bold' : 'normal'); doc.setFontSize(index === 3 ? 11 : 9); doc.setTextColor(index === 3 ? 255 : 31, index === 3 ? 255 : 42, index === 3 ? 255 : 59); doc.text(label, totalsX + 4, rowY + 7); doc.text(value, totalsX + totalsWidth - 4, rowY + 7, { align: 'right' }); });
- y += 57;
- const observations = safe(item.cliente.observacoes);
- doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('OBSERVACOES', margin, y);
- doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66); doc.text(doc.splitTextToSize(observations, contentWidth), margin, y + 5);
- doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.text(`Orcamento valido ate ${fmtDate(item.validade)}. Valores e disponibilidade sujeitos a confirmacao.`, margin, Math.min(pageHeight - 23, y + 19));
- doc.setFont(pdfFont, 'normal'); doc.setFontSize(8); doc.setTextColor(92, 104, 122); doc.text(`Para aprovar, responda ao e-mail contato@dyautoparts.com.br informando o numero ${item.numero}.`, margin, Math.min(pageHeight - 18, y + 25));
- drawFooter();
- localStorage.setItem(ORCAMENTO_CLIENTE_DRAFT_KEY, JSON.stringify(item));
- commitOrcamentoNumber(item.numero);
- doc.save(`${item.numero}.pdf`);
- showToast(`Orcamento ${item.numero} gerado em PDF.`);
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const pdfFont = await registerOrcamentoPDFFonts(doc);
+  const logo = await loadRomaneioPDFImage(LOGO_LIGHT_BG);
+  const itensList = snapshot.itens || snapshot.items || [];
+  const productImages = await Promise.all(itensList.map(row => loadOrcamentoPDFThumbnail(row.imagem)));
+  const fmtDate = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
+  const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const safe = value => String(value || '').trim() || '-';
+  const formatPDFDocumento = val => {
+   const raw = String(val || '').trim();
+   const digits = raw.replace(/\D/g, '');
+   if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+   if (digits.length === 14) return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+   return raw || '-';
+  };
+  const formatPDFTelefone = val => {
+   const raw = String(val || '').trim();
+   const digits = raw.replace(/\D/g, '');
+   if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+   if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+   return raw || '-';
+  };
+  const cliente = snapshot.cliente || {};
+  const totais = snapshot.totais || { subtotal: 0, descontoValor: 0, freteCobrado: 0, total: 0 };
+  const numDisplay = snapshot.numero ? `${snapshot.numero}${snapshot.versao ? ' / V' + snapshot.versao : ''}` : 'ORCAMENTO';
+
+  const drawPageHeader = () => {
+   doc.setFillColor(230, 0, 18); doc.rect(margin, 10, contentWidth, 1.4, 'F');
+   doc.setFillColor(248, 250, 252); doc.roundedRect(margin, 12, contentWidth, 30, 2, 2, 'F');
+   if (logo) addRomaneioPDFImage(doc, logo, margin + 5, 17, 34, 16);
+   doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(13); doc.text('DY PARTS AUTO PECAS LTDA', margin + 44, 20);
+   doc.setFont(pdfFont, 'normal'); doc.setTextColor(85, 99, 118); doc.setFontSize(8.2);
+   doc.text('CNPJ 31.869.538/0001-60', margin + 44, 25);
+   doc.text('Alameda dos Guatas, 477 - Vila da Saude - Sao Paulo/SP - CEP 04053-041', margin + 44, 29.5);
+   doc.text('Rafael Costa - (11) 99008-5977 - contato@dyautoparts.com.br', margin + 44, 34);
+   doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(15); doc.text('ORCAMENTO', pageWidth - margin - 5, 20, { align: 'right' });
+   doc.setFontSize(8); doc.setTextColor(77, 91, 111); doc.text(numDisplay, pageWidth - margin - 5, 26, { align: 'right' });
+   doc.setFont(pdfFont, 'normal'); doc.text(`Emissao: ${fmtDate(snapshot.emissao)}`, pageWidth - margin - 5, 31, { align: 'right' });
+   doc.text(`Validade: ${fmtDate(snapshot.validade)}`, pageWidth - margin - 5, 35.5, { align: 'right' });
+  };
+  const drawFooter = () => {
+   const pages = doc.getNumberOfPages();
+   for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page); doc.setDrawColor(224, 229, 236); doc.line(margin, pageHeight - 13, pageWidth - margin, pageHeight - 13);
+    doc.setFont(pdfFont, 'normal'); doc.setFontSize(7.5); doc.setTextColor(112, 124, 142);
+    doc.text(`DY Auto Parts - ${numDisplay}`, margin, pageHeight - 8);
+    doc.text(`Pagina ${page} de ${pages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+   }
+  };
+  drawPageHeader();
+  let y = 44;
+
+  const drawDottedLine = (lineY) => {
+   doc.setDrawColor(203, 213, 225);
+   doc.setLineWidth(0.3);
+   if (typeof doc.setLineDashPattern === 'function') {
+    doc.setLineDashPattern([1.2, 1.2], 0);
+   } else if (typeof doc.setLineDash === 'function') {
+    doc.setLineDash([1.2, 1.2], 0);
+   }
+   doc.line(margin, lineY, margin + contentWidth, lineY);
+   if (typeof doc.setLineDashPattern === 'function') {
+    doc.setLineDashPattern([], 0);
+   } else if (typeof doc.setLineDash === 'function') {
+    doc.setLineDash([], 0);
+   }
+  };
+
+  drawDottedLine(y);
+  y += 5;
+
+  doc.setFont(pdfFont, 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(24, 35, 53);
+  doc.text('DADOS DO CLIENTE', margin, y);
+  y += 5;
+
+  const respText = cliente.empresa
+   ? (cliente.responsavel && cliente.responsavel !== cliente.empresa ? `${cliente.empresa} (${cliente.responsavel})` : cliente.empresa)
+   : safe(cliente.responsavel);
+
+  const drawCellText = (cellX, cellY, label, lines) => {
+   doc.setFont(pdfFont, 'bold');
+   doc.setFontSize(7);
+   doc.setTextColor(100, 116, 139);
+   doc.text(label, cellX, cellY);
+
+   doc.setFont(pdfFont, 'bold');
+   doc.setFontSize(9.5);
+   doc.setTextColor(15, 23, 42);
+   let lineY = cellY;
+   lines.forEach(line => {
+    lineY += 4.2;
+    doc.text(line, cellX, lineY);
+   });
+  };
+
+  const l1_col1_w = 58;
+  const l1_col2_w = 64;
+  const l1_col3_w = contentWidth - l1_col1_w - l1_col2_w;
+
+  const l1_c1_lines = doc.splitTextToSize(formatPDFDocumento(cliente.documento), l1_col1_w - 6);
+  const l1_c2_lines = doc.splitTextToSize(respText, l1_col2_w - 6);
+  const l1_c3_lines = doc.splitTextToSize(formatPDFTelefone(cliente.telefone), l1_col3_w - 6);
+
+  const l1_maxLines = Math.max(l1_c1_lines.length, l1_c2_lines.length, l1_c3_lines.length, 1);
+  const row1Height = Math.max(11, 4 + l1_maxLines * 4.2);
+
+  drawCellText(margin + 2, y, 'CPF / CNPJ', l1_c1_lines);
+  drawCellText(margin + l1_col1_w + 4, y, 'RESPONSAVEL', l1_c2_lines);
+  drawCellText(margin + l1_col1_w + l1_col2_w + 4, y, 'TELEFONE', l1_c3_lines);
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.15);
+  doc.line(margin + l1_col1_w, y - 1, margin + l1_col1_w, y + row1Height - 2);
+  doc.line(margin + l1_col1_w + l1_col2_w, y - 1, margin + l1_col1_w + l1_col2_w, y + row1Height - 2);
+
+  y += row1Height;
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.15);
+  doc.line(margin, y - 1, margin + contentWidth, y - 1);
+
+  y += 3;
+
+  const l2_col1_w = 85;
+  const l2_col2_w = contentWidth - l2_col1_w;
+
+  const l2_c1_lines = doc.splitTextToSize(safe(cliente.email), l2_col1_w - 6);
+  const l2_c2_lines = doc.splitTextToSize(safe(cliente.endereco), l2_col2_w - 6);
+
+  const l2_maxLines = Math.max(l2_c1_lines.length, l2_c2_lines.length, 1);
+  const row2Height = Math.max(11, 4 + l2_maxLines * 4.2);
+
+  drawCellText(margin + 2, y, 'E-MAIL', l2_c1_lines);
+  drawCellText(margin + l2_col1_w + 4, y, 'ENDERECO', l2_c2_lines);
+
+  doc.line(margin + l2_col1_w, y - 1, margin + l2_col1_w, y + row2Height - 2);
+
+  y += row2Height + 3;
+
+  drawDottedLine(y);
+  y += 6;
+
+  doc.setFont(pdfFont, 'bold'); doc.setFontSize(11); doc.setTextColor(24, 35, 53); doc.text('PRODUTOS', margin, y); y += 3;
+  doc.autoTable({ startY: y, head: [['Foto', 'Codigo', 'Descricao', 'Qtd.', 'Valor unit.', 'Total']],
+   body: itensList.map(row => ['', row.id_interno, row.descricao, String(row.quantidade), money(row.valor_unitario), money(Number(row.quantidade) * Number(row.valor_unitario))]),
+   margin: { top: 48, left: margin, right: margin, bottom: 40 }, theme: 'striped',
+   headStyles: { fillColor: [36, 48, 67], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+   styles: { font: pdfFont, fontSize: 9, cellPadding: 2.7, textColor: [35, 47, 66], lineColor: [226, 231, 238], lineWidth: .15 },
+   alternateRowStyles: { fillColor: [247, 249, 252] },
+   columnStyles: { 0: { cellWidth: 18, minCellHeight: 17 }, 1: { cellWidth: 23, fontStyle: 'bold' }, 2: { cellWidth: 68 }, 3: { cellWidth: 13, halign: 'center' }, 4: { cellWidth: 27, halign: 'right' }, 5: { cellWidth: 29, halign: 'right', fontStyle: 'bold' } },
+   didDrawCell: data => { if (data.section === 'body' && data.column.index === 0) { const thumbnail = productImages[data.row.index]; if (thumbnail) addRomaneioPDFImage(doc, thumbnail, data.cell.x + 1.5, data.cell.y + 1.2, data.cell.width - 3, data.cell.height - 2.4); } },
+   didDrawPage: data => { if (data.pageNumber > 1) drawPageHeader(); } });
+  y = doc.lastAutoTable.finalY + 6;
+
+  drawDottedLine(y);
+  y += 6;
+
+  if (y > pageHeight - 78) { doc.addPage(); drawPageHeader(); y = 50; }
+  const infoWidth = 112; const totalsX = margin + infoWidth + 7; const totalsWidth = contentWidth - infoWidth - 7;
+  doc.setFillColor(248, 250, 252); doc.roundedRect(margin, y, infoWidth, 48, 2, 2, 'F');
+  doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('CONDICOES DE PAGAMENTO', margin + 4, y + 6);
+  doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66);
+  const freteResp = snapshot.freteResponsavel || 'cliente';
+  const commercial = [`Pagamento: ${safe(cliente.forma_pagamento)}`, `Frete: ${freteResp === 'cliente' ? 'por conta do cliente' : freteResp === 'dy' ? 'por conta da DY Auto Parts' : 'retirada / sem frete'}`, `Chave Pix: contato@dyautoparts.com.br`, `Condicao: ${safe(cliente.condicao_negociada)}`];
+  commercial.forEach((line, index) => doc.text(doc.splitTextToSize(line, infoWidth - 8).slice(0, 2), margin + 4, y + 13 + index * 7));
+  const summary = [['Subtotal', money(totais.subtotal)], [`Desconto (${Number(snapshot.desconto || 0).toLocaleString('pt-BR')}%)`, `- ${money(totais.descontoValor)}`], ['Frete', money(totais.freteCobrado)], ['TOTAL', money(totais.total)]];
+  summary.forEach(([label, value], index) => { const rowY = y + index * 12; doc.setFillColor(index === 3 ? 230 : 250, index === 3 ? 0 : 251, index === 3 ? 18 : 253); doc.rect(totalsX, rowY, totalsWidth, 11, 'F'); doc.setFont(pdfFont, index === 3 ? 'bold' : 'normal'); doc.setFontSize(index === 3 ? 11 : 9); doc.setTextColor(index === 3 ? 255 : 31, index === 3 ? 255 : 42, index === 3 ? 255 : 59); doc.text(label, totalsX + 4, rowY + 7); doc.text(value, totalsX + totalsWidth - 4, rowY + 7, { align: 'right' }); });
+  y += 53;
+
+  drawDottedLine(y);
+  y += 6;
+  const observations = safe(cliente.observacoes);
+  doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('OBSERVACOES', margin, y);
+  doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66); doc.text(doc.splitTextToSize(observations, contentWidth), margin, y + 5);
+  doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.text(`Orcamento valido ate ${fmtDate(snapshot.validade)}. Valores e disponibilidade sujeitos a confirmacao.`, margin, Math.min(pageHeight - 23, y + 19));
+  doc.setFont(pdfFont, 'normal'); doc.setFontSize(8); doc.setTextColor(92, 104, 122); doc.text(`Para aprovar, responda ao e-mail contato@dyautoparts.com.br informando o numero ${snapshot.numero || 'deste orcamento'}.`, margin, Math.min(pageHeight - 18, y + 25));
+  drawFooter();
+  const filename = `${snapshot.numero || 'orcamento'}${snapshot.versao ? '_V' + snapshot.versao : ''}.pdf`;
+  doc.save(filename);
+  showToast(`Orcamento ${numDisplay} gerado em PDF.`);
  } catch (error) {
- console.error('[ORCAMENTO] Falha ao gerar PDF:', error);
- showToast('Nao foi possivel gerar o PDF do orcamento.', 'error');
+  console.error('[ORCAMENTO] Falha ao gerar PDF:', error);
+  showToast('Nao foi possivel gerar o PDF do orcamento.', 'error');
+ }
+}
+
+async function generateOrcamentoClientePDF() {
+ const form = document.getElementById('orcamento-cliente-form');
+ if (!form) return;
+ if (!form.reportValidity()) return;
+ if (!orcamentoClienteState.itens.length) return showToast('Adicione pelo menos um produto.', 'warning');
+
+ const btn = document.querySelector('.orcamento-actions button.primary');
+ if (btn) btn.disabled = true;
+
+ const formObj = Object.fromEntries(new FormData(form).entries());
+ const currentUser = localStorage.getItem('currentUser') || 'Sistema';
+
+ const clienteData = {
+  empresa: formObj.empresa || '',
+  documento: formObj.documento || '',
+  responsavel: formObj.responsavel || '',
+  email: formObj.email || '',
+  telefone: formObj.telefone || '',
+  endereco: formObj.endereco || '',
+  forma_pagamento: formObj.forma_pagamento || 'Pix',
+  condicao_negociada: formObj.condicao_negociada || '',
+  observacoes: formObj.observacoes || ''
+ };
+
+ const condicoesData = {
+  emissao: orcamentoClienteState.emissao,
+  validade: orcamentoClienteState.validade,
+  desconto: orcamentoClienteState.desconto,
+  frete_responsavel: orcamentoClienteState.freteResponsavel,
+  frete_valor: orcamentoClienteState.freteValor,
+  totais: getOrcamentoTotals()
+ };
+
+ try {
+  const result = await DataClient.gerarVersaoOficialOrcamentoSupabase({
+   id: orcamentoClienteState.id,
+   cliente: clienteData,
+   itens: orcamentoClienteState.itens,
+   condicoes: condicoesData,
+   usuario: currentUser
+  });
+
+  if (result && result.id) {
+   orcamentoClienteState.id = result.id;
+   orcamentoClienteState.numero = result.numero_orcamento;
+   orcamentoClienteState.status = result.status;
+   orcamentoClienteState.versao_atual = result.versao_atual;
+   updateOrcamentoNumberLabel();
+
+   const snapshot = result.snapshot || {
+    numero: result.numero_orcamento,
+    versao: result.versao_atual,
+    emissao: orcamentoClienteState.emissao,
+    validade: orcamentoClienteState.validade,
+    cliente: clienteData,
+    itens: orcamentoClienteState.itens,
+    totais: getOrcamentoTotals(),
+    desconto: orcamentoClienteState.desconto,
+    freteResponsavel: orcamentoClienteState.freteResponsavel,
+    freteValor: orcamentoClienteState.freteValor
+   };
+
+   await generateOrcamentoPDFFromSnapshot(snapshot);
+  }
+ } catch (err) {
+  console.error('[ORCAMENTOS] Falha ao gerar versão oficial:', err);
+  showToast('Erro ao gerar orçamento: ' + err.message, 'error');
+ } finally {
+  if (btn) btn.disabled = false;
+ }
+}
+
+function novoOrcamentoCliente() {
+ const emissao = getOrcamentoTodayISO();
+ orcamentoClienteState = {
+  id: null,
+  numero: '',
+  status: 'rascunho',
+  versao_atual: 0,
+  emissao,
+  validade: addOrcamentoDays(emissao, 7),
+  itens: [],
+  desconto: 0,
+  freteResponsavel: 'cliente',
+  freteValor: 0
+ };
+
+ const form = document.getElementById('orcamento-cliente-form');
+ if (form) {
+  form.reset();
+  if (form.elements['data_emissao']) form.elements['data_emissao'].value = emissao;
+  if (form.elements['data_validade']) form.elements['data_validade'].value = orcamentoClienteState.validade;
+  if (form.elements['frete_valor']) form.elements['frete_valor'].value = '0.00';
+ }
+ updateOrcamentoDiscount(0);
+ updateOrcamentoNumberLabel();
+ renderOrcamentoItems();
+ showToast('Novo orçamento iniciado (Rascunho).');
+}
+
+async function migrarRascunhoLocalSeExistente() {
+ try {
+  const localDraftRaw = localStorage.getItem(ORCAMENTO_CLIENTE_DRAFT_KEY);
+  if (!localDraftRaw) return;
+
+  const localDraft = JSON.parse(localDraftRaw);
+  if (localDraft && Array.isArray(localDraft.itens) && localDraft.itens.length > 0 && localDraft.cliente) {
+   console.log('[ORCAMENTOS] Migrando rascunho local legado para o Supabase...');
+   const currentUser = localStorage.getItem('currentUser') || 'Sistema';
+   const res = await DataClient.salvarRascunhoOrcamentoSupabase({
+    id: localDraft.id || null,
+    cliente: localDraft.cliente,
+    itens: localDraft.itens,
+    condicoes: {
+     emissao: localDraft.emissao || getOrcamentoTodayISO(),
+     validade: localDraft.validade || addOrcamentoDays(getOrcamentoTodayISO(), 7),
+     desconto: localDraft.desconto || 0,
+     frete_responsavel: localDraft.freteResponsavel || 'cliente',
+     frete_valor: localDraft.freteValor || 0,
+     totais: localDraft.totais || {}
+    },
+    usuario: currentUser
+   });
+
+   if (res && res.id) {
+    localStorage.removeItem(ORCAMENTO_CLIENTE_DRAFT_KEY);
+    console.log('[ORCAMENTOS] Rascunho local legado migrado com sucesso para ID Supabase:', res.id);
+   }
+  }
+ } catch (err) {
+  console.warn('[ORCAMENTOS] Aviso ao migrar rascunho local legado:', err);
+ }
+}
+
+async function openOrcamentosHistoryModal() {
+ let existing = document.getElementById('orcamentos-history-modal');
+ if (existing) existing.remove();
+
+ const modalHTML = `
+ <div id="orcamentos-history-modal" class="modal-overlay operational-item-modal-overlay fade-in" onclick="if(event.target===this)closeOrcamentosHistoryModal()">
+  <div class="operational-item-modal" style="max-width: 920px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+   <header style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+    <div>
+     <h3 style="margin:0; font-size: 1.1rem; color: #0f172a;">Histórico e Rascunhos de Orçamentos</h3>
+     <small style="color: #64748b;">Localize rascunhos salvos, orçamentos gerados e suas versões históricas.</small>
+    </div>
+    <button type="button" class="btn-close" onclick="closeOrcamentosHistoryModal()" style="background:none; border:none; font-size: 1.5rem; cursor:pointer;">&times;</button>
+   </header>
+
+   <div style="display: flex; gap: 12px; margin: 14px 0 10px 0; align-items: center; flex-wrap: wrap;">
+    <input type="search" id="orcamento-history-search" placeholder="Buscar por número, empresa, documento ou responsável..." oninput="filtrarHistoricoOrcamentos()" style="flex:1; min-width: 200px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem;">
+    <select id="orcamento-history-status-filter" onchange="filtrarHistoricoOrcamentos()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem;">
+     <option value="">Todos os status</option>
+     <option value="rascunho">Somente Rascunhos</option>
+     <option value="gerado">Somente Gerados</option>
+    </select>
+    <button type="button" class="primary" onclick="novoOrcamentoCliente();closeOrcamentosHistoryModal();" style="padding: 8px 14px; white-space: nowrap;">+ Novo Orçamento</button>
+   </div>
+
+   <div id="orcamento-history-list" style="flex: 1; overflow-y: auto; padding-right: 4px;">
+    <div style="padding: 24px; text-align: center; color: #64748b;">Carregando orçamentos do Supabase...</div>
+   </div>
+
+   <footer style="margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+    <button type="button" onclick="closeOrcamentosHistoryModal()" style="padding: 8px 16px; border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; cursor: pointer;">Fechar</button>
+   </footer>
+  </div>
+ </div>`;
+
+ document.body.insertAdjacentHTML('beforeend', modalHTML);
+ await carregarListaHistoricoOrcamentos();
+}
+
+function closeOrcamentosHistoryModal() {
+ const el = document.getElementById('orcamentos-history-modal');
+ if (el) el.remove();
+}
+
+let historicoOrcamentosCache = [];
+
+async function carregarListaHistoricoOrcamentos() {
+ const container = document.getElementById('orcamento-history-list');
+ if (!container) return;
+ try {
+  historicoOrcamentosCache = await DataClient.listarOrcamentosSupabase({ limit: 100 });
+  renderTabelaHistoricoOrcamentos(historicoOrcamentosCache);
+ } catch (err) {
+  console.error('[ORCAMENTOS] Erro ao carregar histórico:', err);
+  container.innerHTML = `<div style="padding: 24px; text-align: center; color: #ef4444;">Erro ao carregar histórico: ${escapeKitAttribute(err.message)}</div>`;
+ }
+}
+
+function filtrarHistoricoOrcamentos() {
+ const searchVal = (document.getElementById('orcamento-history-search')?.value || '').trim().toLowerCase();
+ const statusVal = document.getElementById('orcamento-history-status-filter')?.value || '';
+
+ const filtered = historicoOrcamentosCache.filter(row => {
+  if (statusVal && row.status !== statusVal) return false;
+  if (!searchVal) return true;
+  const num = String(row.numero_orcamento || '').toLowerCase();
+  const emp = String(row.cliente?.empresa || '').toLowerCase();
+  const doc = String(row.cliente?.documento || '').toLowerCase();
+  const resp = String(row.cliente?.responsavel || '').toLowerCase();
+  return num.includes(searchVal) || emp.includes(searchVal) || doc.includes(searchVal) || resp.includes(searchVal);
+ });
+
+ renderTabelaHistoricoOrcamentos(filtered);
+}
+
+function renderTabelaHistoricoOrcamentos(items = []) {
+ const container = document.getElementById('orcamento-history-list');
+ if (!container) return;
+
+ if (!items.length) {
+  container.innerHTML = `<div style="padding: 32px; text-align: center; color: #64748b;">Nenhum orçamento encontrado.</div>`;
+  return;
+ }
+
+ const fmtMoney = val => Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+ const fmtData = str => str ? new Date(str).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-';
+
+ container.innerHTML = `
+ <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+  <thead>
+   <tr style="background: #f1f5f9; color: #334155; text-align: left;">
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1;">Identificação / Número</th>
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1;">Cliente</th>
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1;">Atualizado em</th>
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1;">Versão</th>
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1; text-align: right;">Total</th>
+    <th style="padding: 8px 10px; border-bottom: 2px solid #cbd5e1; text-align: center;">Ações</th>
+   </tr>
+  </thead>
+  <tbody>
+   ${items.map(row => {
+    const isGerado = row.status === 'gerado';
+    const tagClass = isGerado ? 'background: #dcfce7; color: #166534;' : 'background: #fef3c7; color: #92400e;';
+    const tagText = isGerado ? (row.numero_orcamento || 'Gerado') : 'RASCUNHO';
+    const totalVal = row.totais?.total || 0;
+    const empName = row.cliente?.empresa || row.cliente?.responsavel || 'Sem nome';
+
+    return `
+    <tr style="border-bottom: 1px solid #e2e8f0;">
+     <td style="padding: 10px;">
+      <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; ${tagClass}">${escapeKitAttribute(tagText)}</span>
+     </td>
+     <td style="padding: 10px;">
+      <strong>${escapeKitAttribute(empName)}</strong>
+      ${row.cliente?.documento ? `<br><small style="color:#64748b;">Doc: ${escapeKitAttribute(row.cliente.documento)}</small>` : ''}
+     </td>
+     <td style="padding: 10px; color: #475569;">${fmtData(row.atualizado_em)}</td>
+     <td style="padding: 10px; font-weight: 600; color: #0f172a;">${isGerado ? 'V' + row.versao_atual : '-'}</td>
+     <td style="padding: 10px; text-align: right; font-weight: 600; color: #0f172a;">${fmtMoney(totalVal)}</td>
+     <td style="padding: 10px; text-align: center; white-space: nowrap;">
+      <button type="button" onclick="carregarOrcamentoParaEdicao('${row.id}')" style="padding: 4px 10px; margin-right: 4px; border: 1px solid #3b82f6; background: #eff6ff; color: #1d4ed8; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Abrir / Editar</button>
+      ${isGerado ? `<button type="button" onclick="visualizarVersoesOrcamentoModal('${row.id}')" style="padding: 4px 10px; border: 1px solid #64748b; background: #f8fafc; color: #334155; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Versões</button>` : ''}
+     </td>
+    </tr>`;
+   }).join('')}
+  </tbody>
+ </table>`;
+}
+
+async function carregarOrcamentoParaEdicao(orcamentoId) {
+ try {
+  showToast('Carregando orçamento do Supabase...', 'info');
+  const data = await DataClient.obterOrcamentoPorIdSupabase(orcamentoId);
+  if (!data || !data.orcamento) return showToast('Orçamento não encontrado.', 'error');
+
+  const orc = data.orcamento;
+  const cliente = orc.cliente || {};
+  const condicoes = orc.condicoes || {};
+
+  orcamentoClienteState = {
+   id: orc.id,
+   numero: orc.numero_orcamento || '',
+   status: orc.status || 'rascunho',
+   versao_atual: orc.versao_atual || 0,
+   emissao: condicoes.emissao || getOrcamentoTodayISO(),
+   validade: condicoes.validade || addOrcamentoDays(getOrcamentoTodayISO(), 7),
+   itens: Array.isArray(orc.itens) ? orc.itens.map(i => ({ ...i, localId: i.localId || `ORCI-${Date.now()}-${Math.random()}` })) : [],
+   desconto: Number(condicoes.desconto || 0),
+   freteResponsavel: condicoes.frete_responsavel || 'cliente',
+   freteValor: Number(condicoes.frete_valor || 0)
+  };
+
+  const form = document.getElementById('orcamento-cliente-form');
+  if (form) {
+   if (form.elements['empresa']) form.elements['empresa'].value = cliente.empresa || '';
+   if (form.elements['documento']) form.elements['documento'].value = cliente.documento || '';
+   if (form.elements['responsavel']) form.elements['responsavel'].value = cliente.responsavel || '';
+   if (form.elements['email']) form.elements['email'].value = cliente.email || '';
+   if (form.elements['telefone']) form.elements['telefone'].value = cliente.telefone || '';
+   if (form.elements['endereco']) form.elements['endereco'].value = cliente.endereco || '';
+   if (form.elements['forma_pagamento']) form.elements['forma_pagamento'].value = cliente.forma_pagamento || 'Pix';
+   if (form.elements['condicao_negociada']) form.elements['condicao_negociada'].value = cliente.condicao_negociada || '';
+   if (form.elements['observacoes']) form.elements['observacoes'].value = cliente.observacoes || '';
+   if (form.elements['data_emissao']) form.elements['data_emissao'].value = orcamentoClienteState.emissao;
+   if (form.elements['data_validade']) form.elements['data_validade'].value = orcamentoClienteState.validade;
+   if (form.elements['frete_responsavel']) form.elements['frete_responsavel'].value = orcamentoClienteState.freteResponsavel;
+   if (form.elements['frete_valor']) form.elements['frete_valor'].value = Number(orcamentoClienteState.freteValor).toFixed(2);
+
+   if (form.elements['desconto_opcao']) {
+    const opt = [0, 5, 10].includes(orcamentoClienteState.desconto) ? String(orcamentoClienteState.desconto) : 'personalizado';
+    form.elements['desconto_opcao'].value = opt;
+    updateOrcamentoDiscount(opt);
+    if (opt === 'personalizado') {
+     const customInput = document.getElementById('orcamento-discount-custom');
+     if (customInput) {
+      customInput.hidden = false;
+      const input = customInput.querySelector('input');
+      if (input) input.value = orcamentoClienteState.desconto;
+     }
+    }
+   }
+  }
+
+  updateOrcamentoNumberLabel();
+  renderOrcamentoItems();
+  showToast(`Orçamento ${orc.numero_orcamento || 'Rascunho'} carregado no formulário.`);
+  closeOrcamentosHistoryModal();
+ } catch (err) {
+  console.error('[ORCAMENTOS] Erro ao carregar orçamento:', err);
+  showToast('Erro ao carregar orçamento: ' + err.message, 'error');
+ }
+}
+
+async function visualizarVersoesOrcamentoModal(orcamentoId) {
+ try {
+  const data = await DataClient.obterOrcamentoPorIdSupabase(orcamentoId);
+  if (!data || !data.orcamento) return showToast('Orçamento não encontrado.', 'error');
+
+  const orc = data.orcamento;
+  const versoes = data.versoes || [];
+
+  let existing = document.getElementById('orcamento-versoes-modal');
+  if (existing) existing.remove();
+
+  const fmtData = str => str ? new Date(str).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-';
+
+  const modalHTML = `
+  <div id="orcamento-versoes-modal" class="modal-overlay operational-item-modal-overlay fade-in" onclick="if(event.target===this)this.remove()">
+   <div class="operational-item-modal" style="max-width: 680px; width: 90vw;">
+    <header style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+     <div>
+      <h3 style="margin:0;">Histórico de Versões - ${escapeKitAttribute(orc.numero_orcamento)}</h3>
+      <small style="color: #64748b;">Cliente: ${escapeKitAttribute(orc.cliente?.empresa || 'Sem nome')}</small>
+     </div>
+     <button type="button" onclick="document.getElementById('orcamento-versoes-modal').remove()" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+    </header>
+    <div style="margin-top: 14px; max-height: 60vh; overflow-y: auto;">
+     ${!versoes.length ? '<p style="text-align:center; color:#64748b;">Nenhuma versão oficial encontrada.</p>' : `
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+       <thead>
+        <tr style="background:#f1f5f9; text-align:left;">
+         <th style="padding: 8px;">Versão</th>
+         <th style="padding: 8px;">Criada em</th>
+         <th style="padding: 8px;">Criada por</th>
+         <th style="padding: 8px; text-align: center;">PDF Histórico</th>
+        </tr>
+       </thead>
+       <tbody>
+        ${versoes.map(v => `
+         <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px;"><strong>V${v.versao}</strong></td>
+          <td style="padding: 8px; color:#475569;">${fmtData(v.criado_em)}</td>
+          <td style="padding: 8px; color:#475569;">${escapeKitAttribute(v.criado_por || 'Sistema')}</td>
+          <td style="padding: 8px; text-align: center;">
+           <button type="button" onclick="gerarPDFVersaoHistorica('${orc.id}', ${v.versao})" style="padding: 4px 10px; border: 1px solid #2563eb; background:#3b82f6; color:white; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+            Download PDF V${v.versao}
+           </button>
+          </td>
+         </tr>`).join('')}
+       </tbody>
+      </table>
+     `}
+    </div>
+    <footer style="margin-top: 14px; display: flex; justify-content: flex-end;">
+     <button type="button" onclick="document.getElementById('orcamento-versoes-modal').remove()" style="padding: 6px 14px; border: 1px solid #cbd5e1; border-radius: 4px; cursor:pointer;">Fechar</button>
+    </footer>
+   </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+ } catch (err) {
+  console.error('[ORCAMENTOS] Erro ao visualizar versões:', err);
+  showToast('Erro ao listar versões: ' + err.message, 'error');
+ }
+}
+
+async function gerarPDFVersaoHistorica(orcamentoId, versao) {
+ try {
+  showToast(`Buscando snapshot da V${versao}...`, 'info');
+  const versaoData = await DataClient.obterVersaoOrcamentoSupabase(orcamentoId, versao);
+  if (!versaoData || !versaoData.snapshot) return showToast(`Versão V${versao} não encontrada.`, 'error');
+
+  await generateOrcamentoPDFFromSnapshot(versaoData.snapshot);
+ } catch (err) {
+  console.error('[ORCAMENTOS] Erro ao gerar PDF de versão histórica:', err);
+  showToast('Erro ao gerar PDF da versão: ' + err.message, 'error');
  }
 }
 
 async function renderOrcamentoClienteScreen() {
  const currentUser = localStorage.getItem('currentUser');
  const emissao = getOrcamentoTodayISO();
- orcamentoClienteState = { numero: createOrcamentoNumber(), emissao, validade: addOrcamentoDays(emissao, 7), itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };
+ await migrarRascunhoLocalSeExistente();
+
+ orcamentoClienteState = {
+  id: null,
+  numero: '',
+  status: 'rascunho',
+  versao_atual: 0,
+  emissao,
+  validade: addOrcamentoDays(emissao, 7),
+  itens: [],
+  desconto: 0,
+  freteResponsavel: 'cliente',
+  freteValor: 0
+ };
+
  app.innerHTML = `<div class="dashboard-screen fade-in internal module-screen orcamento-cliente-screen">
  ${getTopBarHTML(currentUser, 'renderMenu()')}${getModuleSidebarHTML('financeiro', 'OR&Ccedil;AMENTO')}
  <main class="container orcamento-cliente-shell"><div class="orcamento-loading">Carregando cadastro de produtos...</div></main></div>`;
  try {
- if (!Array.isArray(appData.products) || !appData.products.length) {
- const data = await DataClient.loadModule('produtos', true);
- appData.products = hydrateProdutosForSearch(data?.products || data?.produtos || []);
- }
+  if (!Array.isArray(appData.products) || !appData.products.length) {
+   const data = await DataClient.loadModule('produtos', true);
+   appData.products = hydrateProdutosForSearch(data?.products || data?.produtos || []);
+  }
  } catch (error) { console.warn('[ORCAMENTO] Falha ao carregar produtos:', error); }
  const shell = document.querySelector('.orcamento-cliente-shell');
  if (!shell) return;
  shell.innerHTML = `<form id="orcamento-cliente-form" class="orcamento-document" onsubmit="event.preventDefault();saveOrcamentoClienteDraft()">
- <header class="orcamento-brand"><div class="orcamento-brand-logo"><img src="${LOGO_LIGHT_BG}" alt="DY Auto Parts"><b id="orcamento-number-label">${escapeKitAttribute(orcamentoClienteState.numero)}</b></div><div class="orcamento-company"><strong>DY PARTS AUTO PE&Ccedil;AS LTDA</strong><span>CNPJ 31.869.538/0001-60</span><span>Alameda dos Guat&aacute;s, 477 &middot; Vila da Sa&uacute;de &middot; S&atilde;o Paulo/SP &middot; CEP 04053-041</span><span>Rafael Costa &middot; (11) 99008-5977 &middot; contato@dyautoparts.com.br</span></div><aside class="orcamento-meta"><div><label>Emiss&atilde;o<input name="data_emissao" type="date" value="${emissao}" onchange="updateOrcamentoEmission(this.value)"></label><label>Validade autom&aacute;tica<input name="data_validade" type="date" value="${orcamentoClienteState.validade}" readonly tabindex="-1"></label></div><small>Prazo padr&atilde;o: 7 dias</small></aside></header>
+ <header class="orcamento-brand"><div class="orcamento-brand-logo"><img src="${LOGO_LIGHT_BG}" alt="DY Auto Parts"><b id="orcamento-number-label">NOVO ORÇAMENTO (RASCUNHO)</b></div><div class="orcamento-company"><strong>DY PARTS AUTO PE&Ccedil;AS LTDA</strong><span>CNPJ 31.869.538/0001-60</span><span>Alameda dos Guat&aacute;s, 477 &middot; Vila da Sa&uacute;de &middot; S&atilde;o Paulo/SP &middot; CEP 04053-041</span><span>Rafael Costa &middot; (11) 99008-5977 &middot; contato@dyautoparts.com.br</span></div><aside class="orcamento-meta"><div><label>Emiss&atilde;o<input name="data_emissao" type="date" value="${emissao}" onchange="updateOrcamentoEmission(this.value)"></label><label>Validade autom&aacute;tica<input name="data_validade" type="date" value="${orcamentoClienteState.validade}" readonly tabindex="-1"></label></div><small>Prazo padr&atilde;o: 7 dias</small></aside></header>
  <section class="orcamento-section"><header><b>1</b><div><strong>Dados do solicitante</strong><small>Contato que receber&aacute; e aprovar&aacute; o or&ccedil;amento.</small></div></header><div class="orcamento-fields orcamento-client-fields"><label class="span-2"><span>Empresa / Raz&atilde;o social *</span><input name="empresa" autocomplete="organization" placeholder="Nome da empresa ou cliente" required></label><label><span>CPF / CNPJ</span><input name="documento" inputmode="numeric" placeholder="Documento do cliente"></label><label><span>Respons&aacute;vel pela solicita&ccedil;&atilde;o *</span><input name="responsavel" autocomplete="name" placeholder="Nome de quem solicitou" required></label><label class="orcamento-email-field"><span>E-mail do cliente *</span><input name="email" type="email" autocomplete="email" placeholder="cliente@empresa.com.br" required></label><label><span>Telefone / WhatsApp</span><input name="telefone" autocomplete="tel" inputmode="tel" placeholder="(00) 00000-0000"></label><label class="full"><span>Endere&ccedil;o</span><input name="endereco" autocomplete="street-address" placeholder="Rua, n&uacute;mero, bairro, cidade e CEP"></label></div></section>
  <section class="orcamento-section"><header><b>2</b><div><strong>Produtos</strong><small>Busca direta no cadastro. O valor pode ser ajustado somente neste or&ccedil;amento.</small></div></header><div class="orcamento-product-search"><div class="orcamento-search-field"><label for="orcamento-product-search">ID interno, EAN ou descri&ccedil;&atilde;o</label><input id="orcamento-product-search" autocomplete="off" oninput="renderOrcamentoProductSuggestions(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();addOrcamentoProductFromSearch()}" placeholder="Digite o c&oacute;digo ou nome do produto"></div><button type="button" onclick="addOrcamentoProductFromSearch()"><span class="material-symbols-rounded" aria-hidden="true">add</span> Adicionar</button><div id="orcamento-product-suggestions" hidden></div></div><div id="orcamento-items-list" class="orcamento-items-list"></div></section>
  <section class="orcamento-section"><header><b>3</b><div><strong>Pagamento e frete</strong><small>Condicoes comerciais aplicadas ao total.</small></div></header><div class="orcamento-fields"><label><span>Forma de pagamento</span><select name="forma_pagamento"><option>Pix</option><option>Dinheiro</option><option>Cartao</option><option>Boleto</option><option>Transferencia</option></select></label><label><span>Desconto</span><select name="desconto_opcao" onchange="updateOrcamentoDiscount(this.value)"><option value="0">Sem desconto</option><option value="5">5%</option><option value="10">10%</option><option value="personalizado">Personalizado</option></select></label><label id="orcamento-discount-custom" hidden><span>Desconto personalizado (%)</span><input type="number" min="0" max="100" step="0.01" value="0" oninput="updateOrcamentoCustomDiscount(this.value)"></label><label><span>Responsavel pelo frete</span><select name="frete_responsavel" onchange="updateOrcamentoFreight('responsavel',this.value)"><option value="cliente">Cliente</option><option value="dy">DY Auto Parts</option><option value="retirada">Retirada / sem frete</option></select></label><label><span>Valor do frete</span><input name="frete_valor" type="number" min="0" step="0.01" value="0.00" oninput="updateOrcamentoFreight('valor',this.value)"></label><label><span>Chave Pix</span><input value="contato@dyautoparts.com.br" readonly></label><label class="full"><span>Condicao negociada</span><input name="condicao_negociada" placeholder="Ex.: pagamento integral na confirmacao"></label></div></section>
  <section class="orcamento-section orcamento-notes"><header><b>4</b><div><strong>Observa&ccedil;&otilde;es</strong><small id="orcamento-validity-note">Este or&ccedil;amento &eacute; v&aacute;lido at&eacute; ${new Date(`${orcamentoClienteState.validade}T12:00:00`).toLocaleDateString('pt-BR')}.</small></div></header><textarea name="observacoes" rows="4" placeholder="Prazo de entrega, garantia, disponibilidade ou outra informa&ccedil;&atilde;o importante."></textarea></section>
  <section class="orcamento-summary"><div><span>Subtotal</span><strong id="orcamento-summary-subtotal">R$ 0,00</strong></div><div><span>Desconto</span><strong id="orcamento-summary-desconto">R$ 0,00</strong></div><div><span>Frete cobrado</span><strong id="orcamento-summary-frete">R$ 0,00</strong></div><div class="total"><span>Total do orcamento</span><strong id="orcamento-summary-total">R$ 0,00</strong></div></section>
- <footer class="orcamento-actions"><span>Os valores s&atilde;o atualizados automaticamente durante o preenchimento.</span><div><button type="button" onclick="renderMenu()">Cancelar</button><button type="submit"><span class="material-symbols-rounded" aria-hidden="true">save</span> Salvar rascunho</button><button class="primary" type="button" onclick="generateOrcamentoClientePDF()"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span> Finalizar e gerar PDF</button></div></footer>
+ <footer class="orcamento-actions"><span>Os valores s&atilde;o atualizados automaticamente durante o preenchimento.</span><div><button type="button" onclick="openOrcamentosHistoryModal()"><span class="material-symbols-rounded" aria-hidden="true">history</span> Hist&oacute;rico</button><button type="button" onclick="renderMenu()">Cancelar</button><button type="submit"><span class="material-symbols-rounded" aria-hidden="true">save</span> Salvar rascunho</button><button class="primary" type="button" onclick="generateOrcamentoClientePDF()"><span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span> Finalizar e gerar PDF</button></div></footer>
  </form></main></div>`;
+ updateOrcamentoNumberLabel();
  renderOrcamentoItems();
 }
 function renderProdutosAbaixoMinimoComprasScreen() {
@@ -11325,7 +12193,7 @@ function renderInventarioSubMenu() {
  }
 
  app.innerHTML = `
- <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen app-page-shell">
+ <div class="dashboard-screen fade-in internal inventory-screen inventario-submenu-screen module-screen standard-card-menu-screen app-page-shell">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('inventario')}
 
@@ -17711,31 +18579,34 @@ function formatFinanceiroDate(value) {
 async function renderFinanceiroSubMenu() {
   await ensureFinanceiroParcelasLoaded();
   const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
   const subItems = [
     {
       id: 'fin_contas_a_pagar',
       label: 'CONTAS A PAGAR',
-      icon: 'contas_a_pagar',
+      icon: 'fin_contas_a_pagar',
       onclick: "renderContasAPagar('todas')",
       description: 'Consulte vencimentos, pendencias e programe pagamentos.'
     },
     {
       id: 'fin_pagamentos',
       label: 'PAGAMENTOS',
-      icon: 'pagamentos',
+      icon: 'fin_pagamentos',
       onclick: "renderPagamentos('mes')",
       description: 'Consulte pagamentos realizados e comprovantes.'
     }
   ];
 
   app.innerHTML = `
-    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+    <div class="dashboard-screen internal fade-in financeiro-submenu-screen financeiro-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('financeiro')}
       <main class="container app-page-container">
         <div class="app-breadcrumb">
-          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
           <span class="app-breadcrumb-current">Financeiro</span>
         </div>
         ${getStandardModuleCardsHTML(subItems)}
@@ -20133,6 +21004,19 @@ function adjustPickPackageCount(delta) {
 let pickPackageCloudSyncTimer = null;
 let pickPackageCloudSyncChain = Promise.resolve();
 
+function getPackageVisualNumber(pkg = {}, packagesArray = []) {
+ if (pkg.numero_pacote && Number(pkg.numero_pacote) > 0) {
+  return Number(pkg.numero_pacote);
+ }
+ const groupedPackages = (packagesArray || []).filter(item =>
+  String(item?.tipo || '').toUpperCase() === 'AGRUPADO'
+  || (Array.isArray(item?.itens) && item.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1)
+ );
+ const targetId = String(pkg.pacote_id || '');
+ const index = groupedPackages.findIndex(item => String(item.pacote_id || '') === targetId);
+ return index >= 0 ? index + 1 : 1;
+}
+
 function buildPickPackagesSyncPayload(items = currentSessionItems) {
  const packages = new Map();
  (items || []).forEach(item => {
@@ -20146,11 +21030,20 @@ function buildPickPackagesSyncPayload(items = currentSessionItems) {
    row.itens.set(productId, (row.itens.get(productId) || 0) + 1);
   });
  });
- return [...packages.values()].map(row => ({
-  pacote_id: row.pacote_id,
-  tipo: row.tipo,
-  itens: [...row.itens.entries()].map(([id_interno, quantidade]) => ({ id_interno, quantidade }))
- }));
+ let groupedCounter = 0;
+ return [...packages.values()].map(row => {
+  const isAgrupado = row.tipo === 'AGRUPADO';
+  if (isAgrupado) groupedCounter++;
+  const result = {
+   pacote_id: row.pacote_id,
+   tipo: row.tipo,
+   itens: [...row.itens.entries()].map(([id_interno, quantidade]) => ({ id_interno, quantidade }))
+  };
+  if (isAgrupado) {
+   result.numero_pacote = groupedCounter;
+  }
+  return result;
+ });
 }
 
 function restorePickPackagesFromCloud(items = currentSessionItems, packages = []) {
@@ -21807,8 +22700,9 @@ function getPickChannelDailyPackageTotal(context = {}) {
 }
 
 function getConferenceDailyPackageTotal(context = {}) {
- const activeSessionId = String(context.sessionId ?? currentPackSession?.id ?? currentPackSession?.pickingData?.separacao_id ?? '').trim();
- const activePackageCount = normalizePickPackageCount(context.packageCount ?? getConferencePackageCount(context.rows ?? currentPackSession?.conferenceRows ?? []));
+ const activeSession = currentPackSession || {};
+ const channelLabel = context.channelLabel || activeSession.channel || activeSession.pickingData?.canal_nome || '';
+ const targetChannel = normalizeOperationalLabel(channelLabel);
 
  const finalizedSessions = new Map();
  const completedConferences = (appData.conferencia || []).filter(record => isPackSessionFinished(record) && isPackRecordFromToday(record));
@@ -21817,7 +22711,11 @@ function getConferenceDailyPackageTotal(context = {}) {
   const sessionId = String(record.separacao_id || record.rom_id || '').trim();
   if (!sessionId) return;
   const session = (appData.separacao || []).find(item => String(getPackSeparationSessionId(item)) === sessionId) || {};
-  const packageCount = getPickPackageCountFrom(session);
+  const recordChannel = normalizeOperationalLabel(record.canal_nome || record.canal || session.canal_nome || session.canal || '');
+
+  if (targetChannel && recordChannel && recordChannel !== targetChannel) return;
+
+  const packageCount = getPickPackageCountFrom(record) || getPickPackageCountFrom(session);
   finalizedSessions.set(sessionId, Math.max(finalizedSessions.get(sessionId) || 0, packageCount));
  });
 
@@ -21825,12 +22723,6 @@ function getConferenceDailyPackageTotal(context = {}) {
  finalizedSessions.forEach(count => {
   total += count;
  });
-
- if (activeSessionId && !finalizedSessions.has(activeSessionId)) {
-  total += activePackageCount;
- } else if (!activeSessionId) {
-  total += activePackageCount;
- }
 
  return total;
 }
@@ -24744,11 +25636,13 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  <div class="pack-blind-summary-metrics pick-summary-line">
  <div class="pick-package-count-field">
  <span class="material-symbols-rounded">inventory_2</span>
- <div class="conference-summary-copy"><span>NESTA SEPARAÇÃO</span><strong id="conference-summary-packages">0</strong></div>
+ <span>NESTA CONFER\u00caNCIA</span>
+ <strong id="conference-summary-packages">0</strong>
  </div>
  <div class="pick-package-count-field pick-channel-package-total">
- <span class="material-symbols-rounded">add_circle</span>
- <div class="conference-summary-copy"><span>TOTAL</span><strong id="conference-summary-channel-packages">0</strong></div>
+ <span class="material-symbols-rounded">summarize</span>
+ <span>TOTAL DO CANAL HOJE</span>
+ <strong id="conference-summary-channel-packages">0</strong>
  </div>
   <button class="pack-blind-group-btn pick-kit-toggle" type="button" onclick="openConferencePackagesOverview()">
  <span class="material-symbols-rounded">account_tree</span><span>AGRUPAMENTOS</span>
@@ -25674,14 +26568,14 @@ function detectConferenceGroupingDivergence(expectedPackages = [], currentConfer
 
  const details = [];
  if (!isMatch) {
-  expectedGrouped.forEach((pkg, idx) => {
+  expectedGrouped.forEach((pkg) => {
    const itemsDesc = (pkg.itens || []).map(it => {
     const prod = (currentPackSession?.conferenceRows || []).find(r => String(getPickingProductId(r)) === String(it.id_interno));
     const name = prod ? getPickItemTitle(prod) : (it.titulo || it.id_interno || 'Produto');
     return `${it.quantidade}x ${name}`;
    }).join(', ');
    details.push({
-    expectedPackageNum: pkg.numero_pacote || idx + 1,
+    expectedPackageNum: getPackageVisualNumber(pkg, expectedPackages),
     expectedDesc: itemsDesc,
     tipo: 'AGRUPADO'
    });
@@ -26015,6 +26909,7 @@ function openConferenceResultModal(groupingCheck = null) {
   const status = checked === expected ? 'ok' : checked < expected ? 'missing' : 'extra';
   return { row, index, expected, checked, status };
  });
+
  const divergentRows = resultRows.filter(item => item.status !== 'ok');
  const hasItemDivergence = divergentRows.length > 0;
  const hasGroupingDivergence = Boolean(groupCheck?.hasDivergence);
@@ -26028,78 +26923,201 @@ function openConferenceResultModal(groupingCheck = null) {
   return;
  }
 
- const missingProductsCount = resultRows.filter(item => item.checked === 0 && item.expected > 0).length;
- const extraProductsCount = resultRows.filter(item => item.expected === 0 && item.checked > 0).length;
  const fewerUnitsTotal = resultRows.filter(item => item.checked < item.expected).reduce((sum, item) => sum + (item.expected - item.checked), 0);
  const extraUnitsTotal = resultRows.filter(item => item.checked > item.expected).reduce((sum, item) => sum + (item.checked - item.expected), 0);
+ const okRowsCount = resultRows.filter(item => item.status === 'ok').length;
 
- const motives = [];
+ // 1. Processamento detalhado dos cards e cálculo seguro das unidades a agrupar
+ let totalUnitsPendingGroup = 0;
+
+ const processedCards = (divergentRows.length > 0 ? divergentRows : resultRows).filter(item => {
+  if (divergentRows.length > 0) return item.status !== 'ok';
+  return true;
+ }).map(({ row, expected, checked, status }) => {
+  const title = getPickItemTitle(row) || row.descricao || 'Produto';
+  const id = getPickingProductId(row) || row.id_interno || row.col_a || '';
+  const sku = getPickItemSku(row);
+  const ean = getPickItemEan(row);
+  const marca = getPickItemBrand(row);
+  const cor = getPickItemColor(row);
+  const imgUrl = getPickProductImage(row);
+
+  // Informações de agrupamento esperado no produto a partir de expectedPackages
+  let expectedPkgNum = null;
+  let expectedPkgLabel = 'AVULSO';
+  let expectedPkgQty = 0;
+
+  (expectedPackages || []).forEach((pkg) => {
+   const matchItem = (pkg.itens || []).find(it => String(it.id_interno) === String(id));
+   const isAgrupado = String(pkg.tipo || '').toUpperCase() === 'AGRUPADO'
+    || (Array.isArray(pkg.itens) && pkg.itens.reduce((sum, it) => sum + Number(it.quantidade || 0), 0) > 1);
+
+   if (matchItem && isAgrupado) {
+    expectedPkgNum = getPackageVisualNumber(pkg, expectedPackages);
+    expectedPkgLabel = `PACOTE ${expectedPkgNum}`;
+    expectedPkgQty = Number(matchItem.quantidade || 0);
+   }
+  });
+
+  // Informações do agrupamento realizado na conferência
+  const assignments = normalizeConferencePackageAssignments(row);
+  const activeAssignments = assignments.filter(Boolean);
+  const groupedCount = activeAssignments.length;
+
+  const pendingGroupQty = expectedPkgQty > 0 ? Math.max(0, expectedPkgQty - groupedCount) : 0;
+  if (pendingGroupQty > 0) totalUnitsPendingGroup += pendingGroupQty;
+
+  // Diagnósticos específicos e independentes em linguagem operacional
+  const diagnoses = [];
+  if (status === 'missing') {
+   const diff = expected - checked;
+   diagnoses.push(`FALTA CONFERIR ${diff} UNIDADE${diff > 1 ? 'S' : ''}`);
+  } else if (status === 'extra') {
+   if (expected > 0) {
+    const diff = checked - expected;
+    diagnoses.push(`${diff} UNIDADE${diff > 1 ? 'S' : ''} A MAIS`);
+   } else {
+    diagnoses.push(`PRODUTO CONFERIDO NÃO ESPERADO (${checked} un.)`);
+   }
+  }
+
+  if (hasGroupingDivergence && expectedPkgQty > 0 && pendingGroupQty > 0) {
+   diagnoses.push(`FALTA AGRUPAR ${pendingGroupQty} UNIDADE${pendingGroupQty > 1 ? 'S' : ''} — ${expectedPkgLabel}`);
+  }
+
+  const diagnosesHTML = diagnoses.map(d => `
+   <div class="conference-diagnosis-item">
+    <span class="material-symbols-rounded">warning</span>
+    <span>${escapeKitAttribute(d)}</span>
+   </div>
+  `).join('');
+
+  // Bloco de Agrupamento na Coluna Separação
+  const separacaoGroupHTML = expectedPkgQty > 0 ? `
+   <div class="conference-sub-info">
+    <span>Agrupamento esperado:</span>
+    <strong>${escapeKitAttribute(expectedPkgLabel)} (${expectedPkgQty} ${expectedPkgQty === 1 ? 'UNIDADE' : 'UNIDADES'})</strong>
+   </div>
+  ` : '';
+
+  // Bloco de Agrupamento na Coluna Conferência
+  let conferenciaGroupHTML = '';
+  if (expectedPkgQty > 0) {
+   if (pendingGroupQty === 0 && groupedCount >= expectedPkgQty) {
+    conferenciaGroupHTML = `
+     <div class="conference-sub-info">
+      <span>Agrupamento:</span>
+      <strong class="text-success">${groupedCount} DE ${expectedPkgQty} AGRUPADAS &bull; CONCLUÍDO</strong>
+     </div>
+    `;
+   } else {
+    conferenciaGroupHTML = `
+     <div class="conference-sub-info">
+      <span>Agrupamento:</span>
+      <strong class="text-warning">${groupedCount} DE ${expectedPkgQty} AGRUPADAS (${pendingGroupQty} PENDENTE${pendingGroupQty > 1 ? 'S' : ''})</strong>
+     </div>
+    `;
+   }
+  }
+
+  return {
+   html: `
+    <div class="conference-product-card">
+     <div class="conference-product-header">
+      <div class="conference-product-thumb">
+       ${imgUrl ? `<img src="${escapeKitAttribute(imgUrl)}" alt="${escapeKitAttribute(title)}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>';" />` : `<span class="material-symbols-rounded">inventory_2</span>`}
+      </div>
+      <div class="conference-product-info">
+       <h4 class="conference-product-title">${escapeKitAttribute(title)}</h4>
+       <div class="conference-product-badges">
+        ${id ? `<span class="badge-id-interno">ID ${escapeKitAttribute(id)}</span>` : ''}
+        ${sku && sku !== '—' ? `<span class="badge-meta">SKU: ${escapeKitAttribute(sku)}</span>` : ''}
+        ${ean && ean !== '—' ? `<span class="badge-meta">EAN: ${escapeKitAttribute(ean)}</span>` : ''}
+        ${marca && marca !== 'SEM MARCA' ? `<span class="badge-meta">MARCA: ${escapeKitAttribute(marca)}</span>` : ''}
+        ${cor && cor !== '—' ? `<span class="badge-meta">COR: ${escapeKitAttribute(cor)}</span>` : ''}
+       </div>
+      </div>
+     </div>
+
+     <div class="conference-comparison-grid">
+      <div class="conference-col col-separacao">
+       <div class="conference-col-title">
+        <span class="material-symbols-rounded">inventory</span>
+        <span>SEPARAÇÃO</span>
+       </div>
+       <div class="conference-qty-box">
+        <span class="conference-qty-label">QUANTIDADE</span>
+        <span class="conference-qty-value">${expected}</span>
+       </div>
+       ${separacaoGroupHTML}
+      </div>
+
+      <div class="conference-col col-conferencia">
+       <div class="conference-col-title">
+        <span class="material-symbols-rounded">fact_check</span>
+        <span>CONFERÊNCIA</span>
+       </div>
+       <div class="conference-qty-box">
+        <span class="conference-qty-label">QUANTIDADE</span>
+        <span class="conference-qty-value ${status === 'missing' ? 'is-missing' : status === 'extra' ? 'is-extra' : ''}">${checked}</span>
+       </div>
+       ${conferenciaGroupHTML}
+      </div>
+     </div>
+
+     ${diagnosesHTML ? `
+      <div class="conference-card-diagnoses">
+       <div class="conference-diagnosis-title">DIVERGÊNCIA ENCONTRADA</div>
+       ${diagnosesHTML}
+      </div>
+     ` : ''}
+    </div>
+   `
+  };
+ });
+
+ const cardsHTML = processedCards.map(c => c.html).join('');
+
+ // 2. Resumo Superior Operacional
+ const summaryTokens = [];
+ const divergentProdsCount = divergentRows.length;
+ summaryTokens.push(`${divergentProdsCount || 1} ${divergentProdsCount === 1 ? 'PRODUTO' : 'PRODUTOS'}`);
+
+ if (fewerUnitsTotal > 0 && extraUnitsTotal === 0) {
+  summaryTokens.push(`FALTA ${fewerUnitsTotal} ${fewerUnitsTotal === 1 ? 'UNIDADE' : 'UNIDADES'}`);
+ } else if (extraUnitsTotal > 0 && fewerUnitsTotal === 0) {
+  summaryTokens.push(`${extraUnitsTotal} ${extraUnitsTotal === 1 ? 'UNIDADE' : 'UNIDADES'} A MAIS`);
+ } else if (fewerUnitsTotal > 0 && extraUnitsTotal > 0) {
+  summaryTokens.push(`FALTA ${fewerUnitsTotal} / ${extraUnitsTotal} A MAIS`);
+ }
 
  if (hasGroupingDivergence) {
-  motives.push({
-   type: 'warning',
-   icon: 'warning',
-   text: 'Agrupamento não realizado'
-  });
- }
-
- if (!hasItemDivergence && hasGroupingDivergence) {
-  motives.push({
-   type: 'success',
-   icon: 'check_circle',
-   text: 'Produtos e quantidades corretos.'
-  });
- }
-
- if (hasItemDivergence) {
-  if (fewerUnitsTotal > 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `Quantidade divergente — ${fewerUnitsTotal} unidade${fewerUnitsTotal > 1 ? 's' : ''} a menos`
-   });
-  }
-  if (extraUnitsTotal > 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `Quantidade divergente — ${extraUnitsTotal} unidade${extraUnitsTotal > 1 ? 's' : ''} a mais`
-   });
-  }
-  if (missingProductsCount > 0 && fewerUnitsTotal === 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `${missingProductsCount} produto${missingProductsCount > 1 ? 's' : ''} faltante${missingProductsCount > 1 ? 's' : ''}`
-   });
-  }
-  if (extraProductsCount > 0 && extraUnitsTotal === 0) {
-   motives.push({
-    type: 'danger',
-    icon: 'error',
-    text: `${extraProductsCount} produto${extraProductsCount > 1 ? 's' : ''} não esperado${extraProductsCount > 1 ? 's' : ''}`
-   });
+  if (totalUnitsPendingGroup > 0) {
+   summaryTokens.push(`${totalUnitsPendingGroup} ${totalUnitsPendingGroup === 1 ? 'UNIDADE PARA AGRUPAR' : 'UNIDADES PARA AGRUPAR'}`);
+  } else {
+   const pCount = groupCheck.expectedGroupCount || 1;
+   summaryTokens.push(`${pCount} ${pCount === 1 ? 'AGRUPAMENTO PENDENTE' : 'AGRUPAMENTOS PENDENTES'}`);
   }
  }
 
+ const summarySubtitleHTML = summaryTokens.join(' &bull; ');
+
+ const okSummaryHTML = okRowsCount > 0 ? `
+  <div class="conference-ok-summary-bar">
+   <span class="material-symbols-rounded">check_circle</span>
+   <span><b>${okRowsCount}</b> ${okRowsCount === 1 ? 'produto conferido corretamente' : 'produtos conferidos corretamente'}</span>
+  </div>
+ ` : '';
+
+ // 3. Botões de Ação Condicionais (AGRUPAR AGORA somente se houver divergência de agrupamento)
  let actionsHTML = '';
- if (hasGroupingDivergence && !hasItemDivergence) {
-  // Scenario B: Only Grouping Divergence
+ if (hasGroupingDivergence) {
   actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions">
+   <div class="conference-divergence-actions">
     <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
      <span class="material-symbols-rounded">hub</span>
      AGRUPAR AGORA
     </button>
-    <button type="button" class="btn-finalizar-mesmo" onclick="authorizeConferenceDivergence()">
-     FINALIZAR ASSIM MESMO
-    </button>
-   </div>
-  `;
- } else if (!hasGroupingDivergence && hasItemDivergence) {
-  // Scenario C: Only Product/Quantity Divergence
-  actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions">
     <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
      <span class="material-symbols-rounded">edit</span>
      CORRIGIR DIVERGÊNCIA
@@ -26110,13 +27128,8 @@ function openConferenceResultModal(groupingCheck = null) {
    </div>
   `;
  } else {
-  // Scenario D: Both Grouping and Product/Quantity Divergences (3 buttons)
   actionsHTML = `
-   <div class="app-confirm-actions conference-divergence-actions has-3-buttons">
-    <button type="button" class="btn-agrupar-agora" onclick="actionAgruparAgoraConference()">
-     <span class="material-symbols-rounded">hub</span>
-     AGRUPAR AGORA
-    </button>
+   <div class="conference-divergence-actions">
     <button type="button" class="btn-corrigir-divergencia" onclick="actionCorrigirDivergenciaConference()">
      <span class="material-symbols-rounded">edit</span>
      CORRIGIR DIVERGÊNCIA
@@ -26128,39 +27141,6 @@ function openConferenceResultModal(groupingCheck = null) {
   `;
  }
 
- const detailsHTML = `
-  <div id="conference-divergence-details-box" class="conference-divergence-details hidden">
-   ${hasItemDivergence ? `
-    <div class="conference-divergence-details-section">
-     <strong>PRODUTOS DIVERGENTES:</strong>
-     ${divergentRows.map(({ row, expected, checked, status }) => {
-      const title = escapeKitAttribute(getPickItemTitle(row));
-      const isMissing = status === 'missing';
-      const diffQty = isMissing ? (expected - checked) : (checked - expected);
-      return `
-       <div class="conference-divergence-detail-row ${isMissing ? 'is-missing' : 'is-extra'}">
-        <span>${title}</span>
-        <small>Esperado: ${expected} | Conferido: ${checked} (${isMissing ? `-${diffQty}` : `+${diffQty}`})</small>
-       </div>
-      `;
-     }).join('')}
-    </div>
-   ` : ''}
-
-   ${hasGroupingDivergence && groupCheck.details && groupCheck.details.length > 0 ? `
-    <div class="conference-divergence-details-section">
-     <strong>AGRUPAMENTOS ESPERADOS:</strong>
-     ${groupCheck.details.map(d => `
-      <div class="conference-divergence-detail-row is-missing">
-       <span>Pacote ${escapeKitAttribute(d.expectedPackageNum)}</span>
-       <small>${escapeKitAttribute(d.expectedDesc)}</small>
-      </div>
-     `).join('')}
-    </div>
-   ` : ''}
-  </div>
- `;
-
  const overlay = document.createElement('div');
  overlay.id = 'conference-result-modal';
  overlay.className = 'app-confirm-overlay app-standard-modal modal-warning open';
@@ -26170,36 +27150,25 @@ function openConferenceResultModal(groupingCheck = null) {
     <span class="material-symbols-rounded">close</span>
    </button>
 
-   <div class="app-confirm-icon warning">
-    <div class="app-confirm-halo-inner">
-     <span class="material-symbols-rounded">warning</span>
+   <div class="conference-divergence-head">
+    <div class="conference-divergence-title-row">
+     <span class="material-symbols-rounded icon-warning">warning</span>
+     <h3 id="conference-divergence-title">ATENÇÃO — DIVERGÊNCIA</h3>
     </div>
+    ${summarySubtitleHTML ? `<div class="conference-divergence-subtitle-bar">${summarySubtitleHTML}</div>` : ''}
    </div>
 
-   <h3 id="conference-divergence-title">ATENÇÃO — DIVERGÊNCIA</h3>
-
-   <div class="conference-divergence-motives-list">
-    ${motives.map(m => `
-     <div class="conference-motive-item is-${m.type}">
-      <span class="material-symbols-rounded">${m.icon}</span>
-      <span>${escapeKitAttribute(m.text)}</span>
-     </div>
-    `).join('')}
+   <div class="conference-divergence-body">
+    ${cardsHTML}
+    ${okSummaryHTML}
    </div>
 
-   <div class="conference-divergence-details-toggle-wrapper">
-    <button id="conference-divergence-details-toggle" type="button" class="conference-divergence-details-toggle" onclick="toggleConferenceDivergenceDetails()">
-     Ver detalhes <span class="material-symbols-rounded">expand_more</span>
-    </button>
-   </div>
-
-   ${detailsHTML}
-
-   ${actionsHTML}
-
-   <div class="app-modal-note-box">
-    <span class="material-symbols-rounded">info</span>
-    <span>Ao finalizar assim mesmo, os itens com divergência serão registrados no histórico.</span>
+   <div class="conference-divergence-footer">
+    ${actionsHTML}
+    <div class="app-modal-note-box">
+     <span class="material-symbols-rounded">info</span>
+     <span>Ao finalizar assim mesmo, os itens com divergência serão registrados no histórico.</span>
+    </div>
    </div>
   </div>
  `;
@@ -26966,15 +27935,11 @@ async function renderRomaneioScreen(selectedType = '', selectedId = '') {
  document.body.classList.remove('menu-active');
 
  try {
- const [data, movements] = await Promise.all([
- DataClient.loadModule('separacao', true),
- DataClient.fetchMovimentosSupabase()
- ]);
+ const data = await DataClient.fetchRomaneioOperationalData();
  if (data) {
  appData.separacao = data.separacao || appData.separacao || [];
- appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+ appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
  }
- appData.movimentacoes = Array.isArray(movements) ? movements : [];
  } catch (error) {
  console.warn('[ROMANEIO] Falha ao atualizar separações e movimentos:', error);
  }
@@ -30961,31 +31926,56 @@ window.renderKitDetailsCard = function(item) {
 };
 
 function renderProductSubMenu() {
- const container = document.getElementById("app");
- const currentUser = localStorage.getItem('currentUser');
+  const container = document.getElementById("app");
+  const currentUser = localStorage.getItem('currentUser');
 
- if (!container) {
- console.log('[INFO] Operacao registrada.');
- return;
- }
+  if (!container) {
+    console.log('[INFO] Operacao registrada.');
+    return;
+  }
 
- if (!currentUser) return renderLogin();
+  if (!currentUser) return renderLogin();
 
- const subItems = [
- { id: 'prod_buscar', label: 'BUSCAR PRODUTO', icon: 'busca', onclick: 'renderSearchScreen()' },
- { id: 'prod_cadastrar', label: 'CADASTRAR', icon: 'cadastrar', onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')", disabled: !navigator.onLine }
- ];
+  const subItems = [
+    {
+      id: 'prod_buscar',
+      label: 'BUSCAR PRODUTO',
+      icon: 'prod_buscar',
+      onclick: 'renderSearchScreen()',
+      description: 'Consulte produtos, estoque e informações.'
+    },
+    {
+      id: 'prod_cadastrar',
+      label: 'CADASTRAR PRODUTO',
+      icon: 'prod_cadastrar',
+      onclick: "typeof openProductCreate === 'function' ? openProductCreate() : renderEmptyModule('Cadastrar Produto')",
+      disabled: !navigator.onLine,
+      description: 'Cadastre novos produtos no sistema.'
+    },
+    {
+      id: 'prod_gestao',
+      label: 'GESTÃO DE PRODUTOS',
+      icon: 'prod_gestao',
+      onclick: "showToast('Módulo de Gestão de Produtos em breve', 'info')",
+      description: 'Gerencie cadastros, códigos e relações.'
+    }
+  ];
 
- container.innerHTML = `
- <div class="dashboard-screen internal fade-in product-submenu-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('produtos')}
+  container.innerHTML = `
+    <div class="dashboard-screen internal fade-in product-submenu-screen produtos-submenu-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('produtos')}
 
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>
- `;
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Produtos</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
 function getConfigBoolean(key, fallback = false) {
@@ -32587,21 +33577,77 @@ function renderNFSubMenu() {
   currentScreen = 'internal';
   document.body.classList.remove('menu-active');
 
-  const draftCount = (typeof getEntradaNFXMLDrafts === 'function' ? getEntradaNFXMLDrafts().length : 0);
-
   const subItems = [
-    { id: 'nf_nova', label: 'NOVA ENTRADA', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML e iniciar um novo recebimento.' },
-    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'abertas', onclick: 'renderEntradaNFEmRecebimento()', description: draftCount ? `Continuar entradas iniciadas (${draftCount} rascunho local).` : 'Continuar entradas iniciadas e acompanhar recebimentos em andamento.' },
-    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'prioridade', onclick: 'renderEntradaNFPendencias()', description: 'Entradas que precisam de atenção ou correção antes da conclusão.' },
-    { id: 'nf_historico', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas e movimentações geradas.' }
+    { id: 'nf_nova', label: 'NOVA ENTRADA', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML manualmente.' },
+    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'nf_recebimento', onclick: 'renderEntradaNFEmRecebimento()', description: 'Continuar notas importadas aguardando recebimento.' },
+    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'nf_pendencias', onclick: 'renderEntradaNFPendencias()', description: 'Notas que precisam de identificação ou correção.' },
+    { id: 'nf_historico', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas.' }
   ];
   
   app.innerHTML = `
-    <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
+    <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('nf')}
 
-      <main class="container">
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Entrada NF</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
+}
+
+function renderEmissaoNFSubMenu() {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const subItems = [
+    {
+      id: 'emissao_nova',
+      label: 'NOVA EMISSÃO',
+      description: 'Emitir nota fiscal de saída ou venda.',
+      icon: 'emissao_nova',
+      onclick: "typeof renderNovaEmissaoNFScreen === 'function' ? renderNovaEmissaoNFScreen() : showToast('Módulo de Nova Emissão em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_emitidas',
+      label: 'NF-E EMITIDAS',
+      description: 'Consultar, reimprimir e baixar XML/DANFE.',
+      icon: 'emissao_emitidas',
+      onclick: "typeof renderNFEmitidasScreen === 'function' ? renderNFEmitidasScreen() : showToast('Módulo de NF-e Emitidas em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_inutilizacao',
+      label: 'INUTILIZAÇÃO / CANCELAMENTO',
+      description: 'Inutilizar numerações e gerenciar cancelamentos.',
+      icon: 'emissao_inutilizacao',
+      onclick: "typeof renderInutilizacaoCancelamentoScreen === 'function' ? renderInutilizacaoCancelamentoScreen() : showToast('Módulo de Inutilização em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_historico',
+      label: 'HISTÓRICO DE EMISSÕES',
+      description: 'Relatórios e histórico completo de transmissões.',
+      icon: 'emissao_historico',
+      onclick: "typeof renderHistoricoEmissoesScreen === 'function' ? renderHistoricoEmissoesScreen() : showToast('Histórico de Emissões em desenvolvimento', 'info')"
+    }
+  ];
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in emissao-nf-submenu-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('emissao_nf')}
+
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Emissão NF</span>
+        </div>
         ${getStandardModuleCardsHTML(subItems)}
       </main>
     </div>
@@ -33557,13 +34603,14 @@ async function renderNFXmlUploadScreen() {
  entradaNfXmlState = null;
 
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+ <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen">
+ ${renderModuleHeader({
+ moduleKey: 'nf',
+ title: 'NOVA ENTRADA',
+ icon: 'xml',
+ backAction: 'renderNFSubMenu()'
+ })}
  <main class="container">
- <div class="screen-mini-title">
- <div class="mini-icon">${menu3DIcons.xml}</div>
- <span>ENTRADA NF - XML</span>
- </div>
  <div id="nfxml-wizard-root">
  ${renderNFXmlWizardHTML()}
  </div>
@@ -34609,7 +35656,7 @@ function buildNFXmlFinancePayload(entradaId) {
  vencimento: item.vencimento,
  data_vencimento: item.vencimento,
  valor: nfXmlMoney(item.valor),
- status: pago ? 'pago' : 'pendente',
+ status: pago ? 'pago' : 'rascunho',
  status_vencimento: pago ? 'pago' : 'em_aberto',
  data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
  forma_pagamento: item.forma_pagamento || null,
@@ -34630,7 +35677,7 @@ function buildNFXmlFinancePayload(entradaId) {
  vencimento: item.vencimento,
  data_vencimento: item.vencimento,
  valor: nfXmlMoney(item.valor),
- status: pago ? 'pago' : 'pendente',
+ status: pago ? 'pago' : 'rascunho',
  status_vencimento: pago ? 'pago' : 'em_aberto',
  data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
  forma_pagamento: item.forma_pagamento || null,
@@ -35428,8 +36475,10 @@ async function fetchEntradaNFItens(entradaId) {
        motivo_divergencia: r.motivo_divergencia,
        observacoes: r.observacoes
      }));
+     normalized.recebimentoPersistido = true;
    } else {
      normalized.recebimentos = getNFXmlItemRecebimentos(normalized);
+      normalized.recebimentoPersistido = false;
    }
    return normalized;
  });
@@ -35698,6 +36747,44 @@ function getEntradaNFFriendlyStatusText(status) {
   return s ? s.replace(/_/g, ' ') : 'Pendente';
 }
 
+function getEntradaNFDisplayStatus(nf) {
+  const s = String(nf?.status || '').toLowerCase();
+  
+  if (s === 'pendente_vinculo' || s === 'pendente_fornecedor') {
+    return {
+      label: 'AGUARDANDO IDENTIFICAÇÃO',
+      color: '#d97706',
+      bg: 'rgba(245, 158, 11, 0.1)',
+      border: 'rgba(245, 158, 11, 0.25)'
+    };
+  }
+  
+  if (s === 'conferencia_iniciada' || s === 'em_conferencia') {
+    return {
+      label: 'AGUARDANDO CONFERÊNCIA',
+      color: '#b45309',
+      bg: 'rgba(234, 179, 8, 0.1)',
+      border: 'rgba(234, 179, 8, 0.25)'
+    };
+  }
+
+  if (s === 'pronta_para_finalizar' || s === 'conferencia_concluida') {
+    return {
+      label: 'PRONTA PARA FINALIZAR',
+      color: '#15803d',
+      bg: 'rgba(34, 197, 94, 0.1)',
+      border: 'rgba(34, 197, 94, 0.25)'
+    };
+  }
+
+  return {
+    label: 'IMPORTADA',
+    color: '#2563eb',
+    bg: 'rgba(37, 99, 235, 0.1)',
+    border: 'rgba(37, 99, 235, 0.25)'
+  };
+}
+
 async function renderNFAbertasList(backAction = 'renderNFSubMenu()') {
   return renderEntradaNFEmRecebimento(backAction);
 }
@@ -35710,36 +36797,65 @@ async function renderEntradaNFEmRecebimento(backAction = 'renderNFSubMenu()') {
   const drafts = getEntradaNFXMLDrafts();
 
   app.innerHTML = `
-    <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
-      ${getTopBarHTML(currentUser, backAction)}
+    <div class="dashboard-screen internal fade-in entrada-nf-em-recebimento-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'ENTRADAS EM RECEBIMENTO',
+        icon: 'nf_recebimento',
+        backAction: backAction
+      })}
       
-      <main class="container" style="max-width: 960px; margin: 0 auto; padding-bottom: 40px;">
-        ${getStandardScreenTitleHTML('ENTRADAS EM RECEBIMENTO', menu3DIcons.abertas)}
+      <main class="container app-page-container entrada-nf-em-recebimento-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        <p style="font-size: 0.85rem; color: var(--muted, #64748b); margin: 0 0 20px 0; font-weight: 500;">
+          Notas fiscais importadas aguardando continuidade do recebimento.
+        </p>
 
-        <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:20px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.04);">
-          <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">Acompanhamento Operacional</strong>
-          <span style="font-size:0.8rem; color:#64748b;">Reúne os rascunhos de XML salvos neste dispositivo e as Notas Fiscais em andamento gravadas no sistema.</span>
+        <!-- RESUMO OPERACIONAL COMPACTO -->
+        <div class="entrada-nf-summary-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;">
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">EM RECEBIMENTO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #0f172a;" id="summary-count-total">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #3b82f6; font-size: 26px; opacity: 0.85;">inbox</span>
+          </div>
+
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">AGUARDANDO IDENTIFICAÇÃO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #b45309;" id="summary-count-ident">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #f59e0b; font-size: 26px; opacity: 0.85;">help_outline</span>
+          </div>
+
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">PRONTAS PARA RECEBIMENTO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #15803d;" id="summary-count-prontas">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #22c55e; font-size: 26px; opacity: 0.85;">check_circle</span>
+          </div>
         </div>
 
         ${drafts.length ? `
-          <div style="margin-bottom: 24px;">
-            <h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-              <span class="material-symbols-rounded" style="color:#f59e0b;">draft</span>
-              RASCUNHOS DE XML NESTE DISPOSITIVO (${drafts.length})
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.85rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="color:#f59e0b; font-size: 18px;">draft</span>
+              Rascunhos Locais de XML (${drafts.length})
             </h3>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
               ${drafts.map(d => {
                 const supplierName = d.fornecedor?.razao_social || d.fornecedor?.nome_fantasia || d.fornecedor?.cnpj || 'Fornecedor não identificado';
                 const totalItems = d.itens?.length || 0;
                 return `
-                  <div style="background: #fff; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                  <div style="background: #fff; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
                     <div style="flex: 1; min-width: 0;">
-                      <div style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">NF ${d.numero_nf || 'XML Sem Número'}</div>
+                      <div style="font-weight: 800; color: #0f172a; font-size: 0.9rem;">NF ${d.numero_nf || 'XML Sem Número'}</div>
                       <div style="font-size: 0.78rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${supplierName}</div>
-                      <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">${totalItems} itens · Salvo localmente</div>
+                      <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">${totalItems} itens · Salvo localmente neste dispositivo</div>
                     </div>
-                    <button type="button" onclick="resumeEntradaNFXMLDraft('${d.chave_acesso}')" class="btn-action" style="background:#f59e0b !important; color:#111827 !important; font-weight:700; padding:8px 14px; border-radius:10px;">
-                      <span class="material-symbols-rounded">restore</span> Continuar
+                    <button type="button" onclick="resumeEntradaNFXMLDraft('${d.chave_acesso}')" style="background:#f59e0b; color:#111827; font-weight:700; padding:8px 14px; border-radius:8px; border:none; cursor:pointer; font-size:0.78rem; display:inline-flex; align-items:center; gap:6px;">
+                      <span class="material-symbols-rounded" style="font-size:16px;">restore</span> Continuar
                     </button>
                   </div>
                 `;
@@ -35748,59 +36864,185 @@ async function renderEntradaNFEmRecebimento(backAction = 'renderNFSubMenu()') {
           </div>
         ` : ''}
 
-        <div>
-          <h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-            <span class="material-symbols-rounded" style="color:#2563eb;">inventory_2</span>
-            NOTAS FISCAIS EM ANDAMENTO NO BANCO
-          </h3>
-          <div id="em-recebimento-banco-list">
-            <div style="text-align: center; padding: 30px; color: var(--muted);">Carregando notas em andamento...</div>
-          </div>
+        <!-- BUSCA COMPACTA -->
+        <div style="margin-bottom: 20px; position: relative;">
+          <span class="material-symbols-rounded" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 20px;">search</span>
+          <input 
+            type="text" 
+            id="search-nf-em-recebimento" 
+            placeholder="Buscar por número da NF ou fornecedor..." 
+            style="width: 100%; padding: 11px 14px 11px 42px; border-radius: 12px; border: 1px solid rgba(15,23,42,0.12); background: var(--bg-card, #fff); color: var(--text-main, #0f172a); font-size: 0.88rem; font-weight: 500; outline: none; transition: border-color 0.2s;"
+            oninput="filterEntradasEmRecebimentoList()"
+          />
+        </div>
+
+        <div id="em-recebimento-banco-list">
+          <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas fiscais em recebimento...</div>
         </div>
       </main>
     </div>
   `;
 
-  const notas = await DataClient.listEntradasNFAbertas();
+  const todasNotas = await DataClient.listEntradasNFAbertas();
   const container = document.getElementById('em-recebimento-banco-list');
   if (!container) return;
 
+  // Filtragem estrita: apenas registros operacionais reais em recebimento aberto (ignora testes 3P, canceladas e finalizadas com estoque_finalizado)
+  const notas = (todasNotas || []).filter(nf => {
+    if (!isEntradaNFHistoricoOperacional(nf)) return false;
+    const status = String(nf?.status || '').toLowerCase();
+    if (status.includes('finalizada') || status === 'entrada_confirmada' || status === 'financeiro_lancado' || nf?.estoque_finalizado) return false;
+    const forn = String(nf?.fornecedor_nome || '').toUpperCase();
+    if (forn.includes('TESTE') || (forn.includes('FORNECEDOR NAO CADASTRADO') && String(nf?.numero_nf || '').includes('TEST'))) return false;
+    const num = String(nf?.numero_nf || '').toUpperCase();
+    if (num.startsWith('B2-TEST') || num.startsWith('B3-TEST') || num.startsWith('VERIF-') || num.startsWith('AUDIT-NF')) return false;
+    return true;
+  });
+
+  // Buscar itens de todas as notas abertas para determinar estado real de identificação
+  const client = window.supabaseClient;
+  const nfIds = notas.map(n => n.id);
+  const itensPorNota = new Map();
+
+  if (client && nfIds.length > 0) {
+    const { data: itensData } = await client
+      .from('entradas_nf_itens')
+      .select('id, entrada_nf_id, nf_id, id_interno, status_vinculo');
+
+    (itensData || []).forEach(item => {
+      const eId = item.entrada_nf_id || item.nf_id;
+      if (eId) {
+        if (!itensPorNota.has(eId)) itensPorNota.set(eId, []);
+        itensPorNota.get(eId).push(item);
+      }
+    });
+  }
+
+  // Analisar itens reais de cada NF
+  notas.forEach(nf => {
+    const itens = itensPorNota.get(nf.id) || [];
+    const totalItens = itens.length;
+    const pendentesCount = itens.filter(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo').length;
+    nf._totalItens = totalItens;
+    nf._pendentesCount = pendentesCount;
+    nf._temPendenciasIdentificacao = totalItens === 0 || pendentesCount > 0;
+  });
+
+  // Atualizar indicadores operacionais com dados reais
+  const countTotal = notas.length;
+  const countIdentificacao = notas.filter(nf => nf._temPendenciasIdentificacao).length;
+  const countProntas = notas.filter(nf => !nf._temPendenciasIdentificacao).length;
+
+  document.getElementById('summary-count-total')?.replaceChildren(document.createTextNode(String(countTotal)));
+  document.getElementById('summary-count-ident')?.replaceChildren(document.createTextNode(String(countIdentificacao)));
+  document.getElementById('summary-count-prontas')?.replaceChildren(document.createTextNode(String(countProntas)));
+
   if (notas.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: 40px 20px; background: #fff; border-radius: 18px; border: 1px dashed rgba(15,23,42,0.16);">
-        <span class="material-symbols-rounded" style="font-size: 40px; color: #94a3b8; margin-bottom: 10px;">task_alt</span>
-        <p style="color: #0f172a; font-weight:800; margin:0 0 4px 0;">Nenhuma nota fiscal em andamento no banco.</p>
-        <p style="color: #64748b; font-size:0.8rem; margin:0;">Inicie uma nova entrada importando um arquivo XML.</p>
+      <div style="text-align: center; padding: 54px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+        <span class="material-symbols-rounded" style="font-size: 48px; color: #94a3b8; margin-bottom: 12px; display: block;">inventory_2</span>
+        <h3 style="color: #0f172a; font-weight: 800; font-size: 1.05rem; margin: 0 0 6px 0;">Nenhuma nota fiscal aguardando recebimento.</h3>
+        <p style="color: #64748b; font-size: 0.85rem; font-weight: 500; margin: 0;">As novas notas importadas aparecerão aqui.</p>
       </div>
     `;
     return;
   }
 
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div id="nf-recebimento-cards-container" style="display: flex; flex-direction: column; gap: 12px;">
       ${notas.map(nf => {
-        const statusInfo = getEntradaNFOpenStatusInfo(nf);
+        const hasUnlinked = nf._temPendenciasIdentificacao;
         const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+        const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+
+        const statusDisplay = hasUnlinked
+          ? {
+              label: 'AGUARDANDO IDENTIFICAÇÃO',
+              color: '#b45309',
+              bg: 'rgba(245, 158, 11, 0.12)',
+              border: 'rgba(245, 158, 11, 0.3)'
+            }
+          : {
+              label: 'PRONTA PARA RECEBIMENTO',
+              color: '#15803d',
+              bg: 'rgba(34, 197, 94, 0.12)',
+              border: 'rgba(34, 197, 94, 0.3)'
+            };
+
+        const targetAction = hasUnlinked
+          ? `renderEntradaNFIdentificacao('${nf.id}')`
+          : `renderNFDetail('${nf.id}')`;
+
+        const buttonHtml = hasUnlinked
+          ? `<button type="button" class="btn-acao-identificar" onclick="event.stopPropagation(); renderEntradaNFIdentificacao('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #111827; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(245,158,11,0.25); transition: transform 0.15s, background 0.15s;">
+               <span class="material-symbols-rounded" style="font-size: 16px;">link</span> IDENTIFICAR PRODUTOS
+             </button>`
+          : `<button type="button" class="btn-acao-recebimento" onclick="event.stopPropagation(); renderNFDetail('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #22c55e; color: #ffffff; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(34,197,94,0.25); transition: transform 0.15s, background 0.15s;">
+               <span class="material-symbols-rounded" style="font-size: 16px;">inventory_2</span> INICIAR RECEBIMENTO
+             </button>`;
+
         return `
-          <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.2s; gap:16px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
-            <div style="flex: 1; min-width:0;">
-              <div style="font-weight: 800; color: #101018; font-size: 1rem;">NF ${nf.numero_nf}</div>
-              <div style="font-size: 0.78rem; color: #64748b; text-transform: uppercase; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nf.fornecedor_nome || 'Fornecedor não cadastrado'}</div>
-              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px;">Emissão: ${dateStr}</div>
-            </div>
-            <div style="text-align: right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-              <div style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
-              <div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;">
-                <span style="width: 8px; height: 8px; background: ${statusInfo.tone}; border-radius: 50%;"></span>
-                <span style="font-size: 0.7rem; font-weight: 800; color: ${statusInfo.tone}; text-transform: uppercase;">${getEntradaNFFriendlyStatusText(nf.status)}</span>
+          <div class="nf-recebimento-card-item" data-numero="${escapeKitAttribute(nf.numero_nf || '')}" data-fornecedor="${escapeKitAttribute(fornecedorNome.toLowerCase())}" onclick="${targetAction}" style="background: #fff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; box-shadow: 0 4px 12px rgba(15,23,42,0.03); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            
+            <!-- LADO ESQUERDO: HIERARQUIA NF + FORNECEDOR + DATA -->
+            <div style="flex: 1; min-width: 220px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">NF ${nf.numero_nf || '-'}</span>
+                <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
               </div>
-              <span style="font-size:0.7rem; font-weight:800; color:#2563eb; text-transform:uppercase;">CONTINUAR</span>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #334155; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px;">
+                ${fornecedorNome}
+              </div>
+              <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">
+                Emissão: ${dateStr}
+              </div>
             </div>
+
+            <!-- ÁREA CENTRAL: STATUS OPERACIONAL -->
+            <div style="display: flex; align-items: center; justify-content: center; min-width: 200px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; background: ${statusDisplay.bg}; color: ${statusDisplay.color}; border: 1px solid ${statusDisplay.border};">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: ${statusDisplay.color};"></span>
+                ${statusDisplay.label}
+              </span>
+            </div>
+
+            <!-- LADO DIREITO: VALOR FISCAL + BOTÃO DE AÇÃO -->
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 220px;">
+              <div style="text-align: right;">
+                <span style="display: block; font-size: 0.68rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Valor Fiscal</span>
+                <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">${nfXmlFormatMoney(nf.valor_total)}</span>
+              </div>
+              ${buttonHtml}
+            </div>
+
           </div>
         `;
       }).join('')}
     </div>
+    <div id="nf-recebimento-search-empty" style="display: none; text-align: center; padding: 36px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+      <span class="material-symbols-rounded" style="font-size: 36px; color: #94a3b8; margin-bottom: 8px; display: block;">search_off</span>
+      <p style="color: #0f172a; font-weight: 700; margin: 0 0 4px 0;">Nenhuma nota encontrada para o filtro informado.</p>
+    </div>
   `;
+}
+
+function filterEntradasEmRecebimentoList() {
+  const query = String(document.getElementById('search-nf-em-recebimento')?.value || '').trim().toLowerCase();
+  const cards = document.querySelectorAll('.nf-recebimento-card-item');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const num = card.dataset.numero || '';
+    const forn = card.dataset.fornecedor || '';
+    const matches = !query || num.toLowerCase().includes(query) || forn.includes(query);
+    card.style.display = matches ? 'flex' : 'none';
+    if (matches) visibleCount++;
+  });
+
+  const emptyMsg = document.getElementById('nf-recebimento-search-empty');
+  if (emptyMsg) {
+    emptyMsg.style.display = (cards.length > 0 && visibleCount === 0) ? 'block' : 'none';
+  }
 }
 
 async function renderEntradaNFPendencias(backAction = 'renderNFSubMenu()', filterCategory = 'TODOS') {
@@ -35809,112 +37051,226 @@ async function renderEntradaNFPendencias(backAction = 'renderNFSubMenu()', filte
   document.body.classList.remove('menu-active');
 
   app.innerHTML = `
-    <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
-      ${getTopBarHTML(currentUser, backAction)}
+    <div class="dashboard-screen internal fade-in entrada-nf-pendencias-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'PENDÊNCIAS OPERACIONAIS',
+        icon: 'nf_pendencias',
+        backAction: backAction
+      })}
       
-      <main class="container" style="max-width: 960px; margin: 0 auto; padding-bottom: 40px;">
-        ${getStandardScreenTitleHTML('PENDÊNCIAS OPERACIONAIS', menu3DIcons.abertas)}
-
-        <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.04);">
-          <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">Visão Agrupada por Nota Fiscal</strong>
-          <span style="font-size:0.8rem; color:#64748b;">Notas fiscais em andamento que possuem inconsistências ou etapas pendentes de decisão (vínculos de produtos, divergências físicas ou financeiro a combinar).</span>
-        </div>
-
-        <div class="entrada-nf-pendencias-filters" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:16px;">
-          ${['TODOS', 'PRODUTO', 'FÍSICO', 'PEDIDO', 'FINANCEIRO'].map(cat => `
-            <button type="button" onclick="renderEntradaNFPendencias('${backAction}', '${cat}')" 
-              style="padding:6px 14px; border-radius:20px; border:1px solid ${filterCategory === cat ? '#2563eb' : 'rgba(15,23,42,0.12)'}; background:${filterCategory === cat ? '#2563eb' : '#fff'}; color:${filterCategory === cat ? '#fff' : '#475569'}; font-weight:700; font-size:0.75rem; cursor:pointer;">
-              ${cat}
-            </button>
-          `).join('')}
-        </div>
-
-        <div id="pendencias-nf-list">
+      <main class="container app-page-container entrada-nf-pendencias-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        <div id="pendencias-container-root">
           <div style="text-align: center; padding: 40px; color: var(--muted);">Analisando pendências operacionais...</div>
         </div>
       </main>
     </div>
   `;
 
-  const notas = await DataClient.listEntradasNFAbertas();
-  const container = document.getElementById('pendencias-nf-list');
-  if (!container) return;
+  const todasNotas = await DataClient.listEntradasNFAbertas();
+  const root = document.getElementById('pendencias-container-root');
+  if (!root) return;
 
-  const listWithBadges = await Promise.all(notas.map(async nf => {
+  const notas = (todasNotas || []).filter(nf => {
+    if (!isEntradaNFHistoricoOperacional(nf)) return false;
+    const status = String(nf?.status || '').toLowerCase();
+    if (status.includes('finalizada') || status === 'entrada_confirmada' || status === 'financeiro_lancado' || nf?.estoque_finalizado) return false;
+    const forn = String(nf?.fornecedor_nome || '').toUpperCase();
+    if (forn.includes('TESTE') || (forn.includes('FORNECEDOR NAO CADASTRADO') && String(nf?.numero_nf || '').includes('TEST'))) return false;
+    const num = String(nf?.numero_nf || '').toUpperCase();
+    if (num.startsWith('B2-TEST') || num.startsWith('B3-TEST') || num.startsWith('VERIF-') || num.startsWith('AUDIT-NF')) return false;
+    return true;
+  });
+
+  const listWithBadges = (await Promise.all(notas.map(async nf => {
     const badges = [];
     const status = String(nf.status || '').toLowerCase();
 
-    if (status === 'pendente_vinculo' || status === 'pendente_fornecedor') {
+    // 1. PRODUTO / FORNECEDOR — Fonte de verdade: ITENS REAIS
+    if (status === 'pendente_fornecedor') {
+      badges.push({ cat: 'PRODUTO', label: 'Fornecedor Pendente', tone: '#f59e0b', icon: 'person_search' });
+    }
+
+    const itens = await fetchEntradaNFItens(nf.id);
+    const temItensNaoIdentificados = Array.isArray(itens) && (itens.length === 0 || itens.some(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo'));
+    if (temItensNaoIdentificados) {
       badges.push({ cat: 'PRODUTO', label: 'Produto Não Identificado', tone: '#f59e0b', icon: 'help_outline' });
     }
-    if (nf.status_financeiro === 'a_combinar') {
+
+    // 2. FÍSICO — Fonte de verdade: RECEBIMENTOS REAIS
+    if (Array.isArray(itens)) {
+      const temRecusa = itens.some(i => (i.recebimentos || []).some(r => r.quantidade_recusada > 0 || r.situacao === 'RECUSADO'));
+      const temDivergenciaFisica = itens.some(i => (i.recebimentos || []).some(r => r.situacao === 'DIVERGENCIA' || (r.quantidade_fisica !== undefined && r.quantidade_fisica !== parseDecimal(i.quantidade))));
+      if (temRecusa) {
+        badges.push({ cat: 'FÍSICO', label: 'Item Recusado', tone: '#ef4444', icon: 'block' });
+      } else if (temDivergenciaFisica) {
+        badges.push({ cat: 'FÍSICO', label: 'Divergência Física', tone: '#f59e0b', icon: 'warning' });
+      }
+    }
+
+    // 3. FINANCEIRO — Condição financeira pendente
+    if (nf.status_financeiro === 'a_combinar' || nf.tipo_condicao_financeira === 'a_combinar') {
       badges.push({ cat: 'FINANCEIRO', label: 'Financeiro A Combinar', tone: '#3b82f6', icon: 'payments' });
     }
+
+    // 4. PEDIDO — Vínculo de Pedido de Compra pendente
     if (nf.tipo_vinculo_pedido === 'COM_PEDIDO') {
       const alocs = await DataClient.fetchAlocacoesPedidoEntradaNF(nf.id);
       if (!alocs || !alocs.length) {
         badges.push({ cat: 'PEDIDO', label: 'Item Não Pedido', tone: '#f59e0b', icon: 'assignment_late' });
       }
     }
-    const itens = await fetchEntradaNFItens(nf.id);
-    if (Array.isArray(itens) && itens.some(i => i.id_interno === null)) {
-      if (!badges.some(b => b.label === 'Produto Não Identificado')) {
-        badges.push({ cat: 'PRODUTO', label: 'Produto Pendente de Vínculo', tone: '#f59e0b', icon: 'help_outline' });
-      }
-    }
 
-    if (!badges.length) {
-      badges.push({ cat: 'PRODUTO', label: 'Aguardando Conferência/Finalização', tone: '#3b82f6', icon: 'hourglass_empty' });
-    }
+    return { nf, badges, itens };
+  }))).filter(item => item.badges.length > 0);
 
-    return { nf, badges };
-  }));
+  // Contadores reais por categoria
+  const countTodos = listWithBadges.length;
+  const countProduto = listWithBadges.filter(i => i.badges.some(b => b.cat === 'PRODUTO')).length;
+  const countFisico = listWithBadges.filter(i => i.badges.some(b => b.cat === 'FÍSICO')).length;
+  const countPedido = listWithBadges.filter(i => i.badges.some(b => b.cat === 'PEDIDO')).length;
+  const countFinanceiro = listWithBadges.filter(i => i.badges.some(b => b.cat === 'FINANCEIRO')).length;
+
+  const filterOptions = [
+    { id: 'TODOS', label: 'TODOS', count: countTodos },
+    { id: 'PRODUTO', label: 'PRODUTO', count: countProduto },
+    { id: 'FÍSICO', label: 'FÍSICO', count: countFisico },
+    { id: 'PEDIDO', label: 'PEDIDO', count: countPedido },
+    { id: 'FINANCEIRO', label: 'FINANCEIRO', count: countFinanceiro }
+  ];
 
   const filtered = listWithBadges.filter(item => {
     if (filterCategory === 'TODOS') return true;
     return item.badges.some(b => b.cat === filterCategory);
   });
 
-  if (filtered.length === 0) {
-    container.innerHTML = `
-      <div style="text-align: center; padding: 50px 20px; background: #fff; border-radius: 20px; border: 1px dashed rgba(15,23,42,0.16);">
-        <span class="material-symbols-rounded" style="font-size: 44px; color: #22c55e; margin-bottom: 12px;">verified</span>
-        <p style="color: #0f172a; font-weight:800; margin:0 0 4px 0;">Nenhuma pendência na categoria '${filterCategory}'.</p>
-        <p style="color: #64748b; font-size:0.8rem; margin:0;">Todas as notas operacionais estão regulares para processamento.</p>
+  root.innerHTML = `
+    <!-- RESUMO COMPACTO DA SEÇÃO -->
+    <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(15,23,42,0.02); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <strong style="display: block; color: #0f172a; font-size: 0.92rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">PENDÊNCIAS ENCONTRADAS</strong>
+        <span style="font-size: 0.78rem; color: #64748b; font-weight: 500;">Somente notas que exigem intervenção antes da finalização.</span>
       </div>
-    `;
-    return;
-  }
+      <div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: ${countTodos > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)'}; color: ${countTodos > 0 ? '#ef4444' : '#15803d'}; border: 1px solid ${countTodos > 0 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.25)'};">
+          <span class="material-symbols-rounded" style="font-size: 16px;">${countTodos > 0 ? 'warning' : 'check_circle'}</span>
+          ${countTodos} ${countTodos === 1 ? 'NOTA COM PENDÊNCIA' : 'NOTAS COM PENDÊNCIA'}
+        </span>
+      </div>
+    </div>
 
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 14px;">
-      ${filtered.map(({ nf, badges }) => `
-        <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 18px; border-radius: 16px; cursor: pointer; transition: transform 0.2s; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:12px;">
-            <div>
-              <div style="font-weight: 800; color: #0f172a; font-size: 1.05rem;">NF ${nf.numero_nf}</div>
-              <div style="font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight:600;">${nf.fornecedor_nome || 'Fornecedor não cadastrado'}</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-weight: 800; color: #0f172a; font-size: 1rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
-              <div style="font-size: 0.72rem; color: #94a3b8;">${formatDateBR(nf.data_emissao || nf.created_at)}</div>
-            </div>
-          </div>
-          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
-            ${badges.map(b => `
-              <span style="display:inline-flex; align-items:center; gap:4px; background:${b.tone}15; color:${b.tone}; border:1px solid ${b.tone}40; padding:4px 10px; border-radius:20px; font-size:0.72rem; font-weight:800; text-transform:uppercase;">
-                <span class="material-symbols-rounded" style="font-size:14px;">${b.icon}</span>
-                ${b.label}
-              </span>
-            `).join('')}
-          </div>
-          <div style="display:flex; justify-content:flex-end;">
-            <span style="font-size:0.75rem; font-weight:800; color:#2563eb; display:inline-flex; align-items:center; gap:4px;">
-              CORRIGIR / CONTINUAR <span class="material-symbols-rounded" style="font-size:16px;">arrow_forward</span>
-            </span>
-          </div>
+    <!-- FILTROS POR CATEGORIA INTEGRADOS COM CONTADORES -->
+    <div class="entrada-nf-pendencias-filters" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 20px;">
+      ${filterOptions.map(opt => {
+        const isActive = filterCategory === opt.id;
+        return `
+          <button type="button" onclick="renderEntradaNFPendencias('${backAction}', '${opt.id}')" 
+            style="padding: 7px 16px; border-radius: 20px; border: 1px solid ${isActive ? '#2563eb' : 'rgba(15,23,42,0.12)'}; background: ${isActive ? '#2563eb' : 'var(--bg-card, #fff)'}; color: ${isActive ? '#ffffff' : '#475569'}; font-weight: 700; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px; box-shadow: ${isActive ? '0 2px 6px rgba(37,99,235,0.25)' : 'none'};">
+            <span>${opt.label}</span>
+            <span style="display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 800; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.06)'}; color: ${isActive ? '#ffffff' : '#64748b'};">${opt.count}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+
+    <div id="pendencias-nf-list">
+      ${filtered.length === 0 ? `
+        <div style="text-align: center; padding: 54px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+          <span class="material-symbols-rounded" style="font-size: 48px; color: #22c55e; margin-bottom: 12px; display: block;">verified</span>
+          <h3 style="color: #0f172a; font-weight: 800; font-size: 1.05rem; margin: 0 0 6px 0;">NENHUMA PENDÊNCIA OPERACIONAL</h3>
+          <p style="color: #64748b; font-size: 0.85rem; font-weight: 500; margin: 0;">${filterCategory === 'TODOS' ? 'Todas as entradas em andamento estão sem pendências que exijam intervenção.' : `Nenhuma entrada possui pendências na categoria '${filterCategory}'.`}</p>
         </div>
-      `).join('')}
+      ` : `
+        <div id="pendencias-cards-container" style="display: flex; flex-direction: column; gap: 12px;">
+          ${filtered.map(({ nf, badges }) => {
+            const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+            const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+            const categories = [...new Set(badges.map(b => b.cat))];
+
+            let actionLabel = 'CORRIGIR PENDÊNCIAS';
+            let actionIcon = 'arrow_forward';
+            let actionBg = '#2563eb';
+            let actionColor = '#ffffff';
+            let actionClick = `continueEntradaNF('${nf.id}')`;
+
+            if (categories.length === 1) {
+              const cat = categories[0];
+              if (cat === 'PRODUTO') {
+                actionLabel = 'IDENTIFICAR PRODUTOS';
+                actionIcon = 'link';
+                actionBg = '#f59e0b';
+                actionColor = '#111827';
+                actionClick = `renderEntradaNFIdentificacao('${nf.id}')`;
+              } else if (cat === 'FÍSICO') {
+                actionLabel = 'CONFERIR / RESOLVER';
+                actionIcon = 'inventory_2';
+                actionBg = '#22c55e';
+                actionColor = '#ffffff';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              } else if (cat === 'FINANCEIRO') {
+                actionLabel = 'DEFINIR FINANCEIRO';
+                actionIcon = 'payments';
+                actionBg = '#3b82f6';
+                actionColor = '#ffffff';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              } else if (cat === 'PEDIDO') {
+                actionLabel = 'VINCULAR PEDIDO';
+                actionIcon = 'assignment_late';
+                actionBg = '#f59e0b';
+                actionColor = '#111827';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              }
+            } else {
+              actionLabel = 'CORRIGIR PENDÊNCIAS';
+              actionIcon = 'arrow_forward';
+              actionBg = '#2563eb';
+              actionColor = '#ffffff';
+              actionClick = categories.includes('PRODUTO') ? `renderEntradaNFIdentificacao('${nf.id}')` : `renderNFDetail('${nf.id}')`;
+            }
+
+            return `
+              <div class="nf-pendencia-card-item" onclick="${actionClick}" style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; box-shadow: 0 4px 12px rgba(15,23,42,0.03); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                
+                <!-- ESQUERDA: NF + FORNECEDOR + EMISSÃO -->
+                <div style="flex: 1; min-width: 220px;">
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">NF ${nf.numero_nf || '-'}</span>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+                  </div>
+                  <div style="font-size: 0.82rem; font-weight: 700; color: #334155; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px;">
+                    ${escapeKitAttribute(fornecedorNome)}
+                  </div>
+                  <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">
+                    Emissão: ${dateStr}
+                  </div>
+                </div>
+
+                <!-- CENTRO: BADGES DAS PENDÊNCIAS REAIS -->
+                <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; min-width: 200px;">
+                  ${badges.map(b => `
+                    <span style="display: inline-flex; align-items: center; gap: 5px; background: ${b.tone}15; color: ${b.tone}; border: 1px solid ${b.tone}40; padding: 5px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">
+                      <span class="material-symbols-rounded" style="font-size: 15px;">${b.icon}</span>
+                      ${b.label}
+                    </span>
+                  `).join('')}
+                </div>
+
+                <!-- DIREITA: VALOR FISCAL + BOTÃO CONTEXTUAL -->
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 220px;">
+                  <div style="text-align: right;">
+                    <span style="display: block; font-size: 0.68rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Valor Fiscal</span>
+                    <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">${nfXmlFormatMoney(nf.valor_total)}</span>
+                  </div>
+                  <button type="button" class="btn-corrigir-entrada" onclick="event.stopPropagation(); ${actionClick}" style="display: inline-flex; align-items: center; gap: 6px; background: ${actionBg}; color: ${actionColor}; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: transform 0.15s, background 0.15s;">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">${actionIcon}</span> ${actionLabel}
+                  </button>
+                </div>
+
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
     </div>
   `;
 }
@@ -36079,520 +37435,2356 @@ function isEntradaNFWithinPeriod(entrada, period) {
  return date >= min;
 }
 
+function isEntradaNFHistoricoOperacional(entrada) {
+  const status = String(entrada?.status || '').toLowerCase();
+  const fornecedor = String(entrada?.fornecedor_nome || '').toUpperCase();
+  if (status === 'cancelada') return false;
+  if (fornecedor.includes('TESTE FASE 3P')) return false;
+  return true;
+}
+
 function getFilteredHistoricoEntradasNF(historico = []) {
- const query = normalizeProductSearchTerm(entradaNFHistoryState.query || '');
- return (historico || []).filter(entrada => {
- const resumo = calcularResumoEntradaNF(entrada);
- const statusLabel = getEntradaNFStatusLabel(entrada).toLowerCase();
- const statusFilter = entradaNFHistoryState.status;
- if (statusFilter !== 'todos') {
- if (statusFilter === 'estoque' && !resumo.gerouEstoque) return false;
- else if (statusFilter === 'financeiro' && !resumo.gerouFinanceiro) return false;
- else if (statusFilter !== 'estoque' && statusFilter !== 'financeiro' && !statusLabel.includes(statusFilter)) return false;
- }
- if (!isEntradaNFWithinPeriod(entrada, entradaNFHistoryState.period)) return false;
- if (!query) return true;
- const itemText = (entrada.itens || []).map(item => `${item.descricao_produto_fornecedor || ''} ${item.descricao_xml || ''} ${item.id_interno || ''}`).join('');
- const haystack = normalizeProductSearchTerm([
- entrada.numero_nf,
- entrada.chave_acesso,
- entrada.fornecedor_nome,
- entrada.fornecedor_cnpj,
- entrada.cnpj_fornecedor,
- entrada.status,
- itemText
- ].join(' '));
- return haystack.includes(query);
- });
+  const query = normalizeProductSearchTerm(entradaNFHistoryState.query || '');
+  const operacionais = (historico || []).filter(isEntradaNFHistoricoOperacional);
+  return operacionais.filter(entrada => {
+    const resumo = calcularResumoEntradaNF(entrada);
+    const statusLabel = getEntradaNFStatusLabel(entrada).toLowerCase();
+    const statusFilter = entradaNFHistoryState.status;
+    if (statusFilter !== 'todos') {
+      if (statusFilter === 'estoque' && !resumo.gerouEstoque) return false;
+      else if (statusFilter === 'financeiro' && !resumo.gerouFinanceiro) return false;
+      else if (statusFilter !== 'estoque' && statusFilter !== 'financeiro' && !statusLabel.includes(statusFilter)) return false;
+    }
+    if (!isEntradaNFWithinPeriod(entrada, entradaNFHistoryState.period)) return false;
+    if (!query) return true;
+    const itemText = (entrada.itens || []).map(item => `${item.descricao_produto_fornecedor || ''} ${item.descricao_xml || ''} ${item.id_interno || ''}`).join('');
+    const haystack = normalizeProductSearchTerm([
+      entrada.numero_nf,
+      entrada.chave_acesso,
+      entrada.fornecedor_nome,
+      entrada.fornecedor_cnpj,
+      entrada.cnpj_fornecedor,
+      entrada.status,
+      itemText
+    ].join(' '));
+    return haystack.includes(query);
+  });
+}
+
+function getDyIconHTML(name, category = 'action') {
+  if (typeof window.dyIcon === 'function') {
+    const svg = window.dyIcon(name, category);
+    if (svg) return svg;
+  }
+  return `<span class="material-symbols-rounded">${name}</span>`;
 }
 
 function renderEntradaNFHistorySummaryCards(historico = []) {
- const total = historico.length;
- const finalizadas = historico.filter(entrada => String(entrada.status || '').toLowerCase().includes('finalizada') || entrada.estoque_finalizado).length;
- const emEstoque = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouEstoque).length;
- const financeiro = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouFinanceiro).length;
- const valorTotal = historico.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
- const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
- const cards = [
- ['receipt_long', 'Total de entradas', total, 'AAiltimos registros'],
- ['task_alt', 'Finalizadas', finalizadas, percent(finalizadas)],
- ['inventory_2', 'Em estoque', emEstoque, percent(emEstoque)],
- ['payments', 'Financeiro', financeiro, percent(financeiro)],
- ['paid', 'Valor total', getEntradaNFMoney(valorTotal), 'SomatArio das NFs']
- ];
- return `
- <section class="entrada-nf-history-summary">
- ${cards.map(([icon, label, value, hint]) => `
- <article>
- <span class="material-symbols-rounded">${icon}</span>
- <div>
- <small>${label}</small>
- <strong>${value}</strong>
- <em>${hint}</em>
- </div>
- </article>
- `).join('')}
- </section>
- `;
+  const operacionais = (historico || []).filter(isEntradaNFHistoricoOperacional);
+  const total = operacionais.length;
+  const finalizadas = operacionais.filter(entrada => String(entrada.status || '').toLowerCase().includes('finalizada') || entrada.estoque_finalizado).length;
+  const emEstoque = operacionais.filter(entrada => calcularResumoEntradaNF(entrada).gerouEstoque).length;
+  const financeiro = operacionais.filter(entrada => calcularResumoEntradaNF(entrada).gerouFinanceiro).length;
+  const valorTotal = operacionais.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
+  const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
+  
+  const cards = [
+    { key: 'total', icon: null, label: 'TOTAL DE ENTRADAS', value: total, hint: 'Últimos registros' },
+    { key: 'finalizadas', icon: 'check_circle', category: 'status', label: 'FINALIZADAS', value: finalizadas, hint: percent(finalizadas) },
+    { key: 'estoque', icon: 'inventory_2', category: 'status', label: 'EM ESTOQUE', value: emEstoque, hint: percent(emEstoque) },
+    { key: 'financeiro', icon: 'financial', category: 'status', label: 'FINANCEIRO', value: financeiro, hint: percent(financeiro) },
+    { key: 'valor', icon: null, label: 'VALOR TOTAL', value: getEntradaNFMoney(valorTotal), hint: 'Somatório das NFs' }
+  ];
+  return `
+  <section class="entrada-nf-history-summary">
+    ${cards.map(c => `
+    <article class="entrada-nf-summary-card card-${c.key} ${!c.icon ? 'no-icon' : ''}">
+      ${c.icon ? `<span class="entrada-nf-summary-icon icon-${c.key}">${(window.dyIcon && window.dyIcon(c.icon, c.category || 'status')) || getDyIconHTML('check_circle', 'navigation')}</span>` : ''}
+      <div class="entrada-nf-summary-info">
+        <small class="entrada-nf-summary-label label-${c.key}">${c.label}</small>
+        <strong class="entrada-nf-summary-val">${c.value}</strong>
+        <em class="entrada-nf-summary-hint">${c.hint}</em>
+      </div>
+    </article>
+    `).join('')}
+  </section>
+  `;
 }
 
 function renderEntradaNFHistoryFilters() {
- return `
- <section class="entrada-nf-history-filters">
- <label class="entrada-nf-history-search">
- <span class="material-symbols-rounded">search</span>
- <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
- </label>
- <label>
- <span>PerAodo</span>
- <select onchange="setEntradaNFHistoryFilter('period', this.value)">
- ${[
- ['30', 'AAiltimos 30 dias'],
- ['90', 'AAiltimos 90 dias'],
- ['180', 'AAiltimos 180 dias'],
- ['todos', 'Todo o hisao']
- ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
- </select>
- </label>
- <label>
- <span>Status</span>
- <select onchange="setEntradaNFHistoryFilter('status', this.value)">
- ${[
- ['todos', 'Todos'],
- ['finalizada', 'Finalizada'],
- ['estoque', 'Estoque'],
- ['financeiro', 'Financeiro'],
- ['rascunho', 'Rascunho'],
- ['pendente', 'Pendente'],
- ['erro', 'Erro XML']
- ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
- </select>
- </label>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">tune</span>
- Mais filtros
- </button>
- </section>
- `;
+  return `
+  <section class="entrada-nf-history-filters">
+    <div class="entrada-nf-history-search">
+      <span class="entrada-nf-history-search-icon">${(window.dyIcon && window.dyIcon('search', 'action')) || getDyIconHTML('search', 'navigation')}</span>
+      <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
+    </div>
+    <label class="entrada-nf-history-filter-select">
+      <span class="filter-label-text">Período</span>
+      <select onchange="setEntradaNFHistoryFilter('period', this.value)">
+        ${[
+          ['30', 'Últimos 30 dias'],
+          ['90', 'Últimos 90 dias'],
+          ['180', 'Últimos 180 dias'],
+          ['todos', 'Todo o histórico']
+        ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+    </label>
+    <label class="entrada-nf-history-filter-select">
+      <span class="filter-label-text">Status</span>
+      <select onchange="setEntradaNFHistoryFilter('status', this.value)">
+        ${[
+          ['todos', 'Todos'],
+          ['finalizada', 'Finalizada'],
+          ['estoque', 'Estoque'],
+          ['financeiro', 'Financeiro'],
+          ['rascunho', 'Rascunho'],
+          ['pendente', 'Pendente'],
+          ['erro', 'Erro XML']
+        ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+    </label>
+    <button type="button" class="btn-more-filters" onclick="showToast('Filtros adicionais em desenvolvimento.', 'info')">
+      ${(window.dyIcon && window.dyIcon('filter', 'action')) || getDyIconHTML('tune', 'navigation')}
+      Mais filtros
+    </button>
+  </section>
+  `;
 }
 
 function renderEntradaNFHistoryBadges(entrada, resumo) {
- const statusLabel = getEntradaNFStatusLabel(entrada);
- const isFinalizada = String(statusLabel || '').toLowerCase().includes('finalizada') || !!entrada.estoque_finalizado;
- const indicators = [];
- const renderIndicator = (type, icon, label) => `
- <span class="entrada-nf-indicator ${type}" title="${label}" aria-label="${label}" role="img">
- <span class="material-symbols-rounded">${icon}</span>
- </span>
- `;
+  const statusLabel = getEntradaNFStatusLabel(entrada);
+  const isFinalizada = String(statusLabel || '').toLowerCase().includes('finalizada') || !!entrada.estoque_finalizado;
+  const indicators = [];
 
- if (isFinalizada) indicators.push(renderIndicator('finalizada', 'check_circle', 'Entrada finalizada'));
- if (resumo.gerouEstoque) indicators.push(renderIndicator('estoque', 'inventory_2', 'Estoque atualizado'));
- if (resumo.gerouFinanceiro) indicators.push(renderIndicator('financeiro', 'account_balance_wallet', 'Financeiro gerado'));
- if (entrada.erro_xml || entrada.xml_error) indicators.push(renderIndicator('erro', 'warning', 'Erro no XML'));
+  const renderBadge = (type, icon, text, category = 'status') => `
+  <span class="entrada-nf-badge ${type}" title="${text}">
+    ${(window.dyIcon && window.dyIcon(icon, category)) || getDyIconHTML('check_circle', 'navigation')}
+    <span>${text}</span>
+  </span>
+  `;
 
- return indicators.length
- ? indicators.join('')
- : renderIndicator('neutro', 'radio_button_unchecked', 'Sem indicadores conteudos');
+  if (isFinalizada) indicators.push(renderBadge('finalizada', 'check_circle', 'Finalizada', 'status'));
+  if (resumo.gerouEstoque) indicators.push(renderBadge('estoque', 'inventory_2', 'Estoque', 'status'));
+  if (resumo.gerouFinanceiro) indicators.push(renderBadge('financeiro', 'financial', 'Financeiro', 'status'));
+  if (entrada.erro_xml || entrada.xml_error) indicators.push(renderBadge('erro', 'warning', 'Erro XML', 'status'));
+
+  return indicators.join('');
 }
 
 function renderEntradaNFHistoryRows(entries = []) {
- return entries.map(entrada => {
- const resumo = calcularResumoEntradaNF(entrada);
- const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor nao informado';
- return `
- <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
- <div class="entrada-nf-history-cell nf">
- <span class="entrada-nf-history-icon material-symbols-rounded">receipt_long</span>
- <div>
- <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
- <small>XML importado</small>
- </div>
- </div>
- <div class="entrada-nf-history-cell supplier">
- <strong>${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
- <small>${escapeKitAttribute(entrada.tipo_lancamento || entrada.chave_acesso || 'Entrada fiscal')}</small>
- </div>
- <div class="entrada-nf-history-cell date"><small>Emisao</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
- <div class="entrada-nf-history-cell date"><small>Lanao</small><strong>${getEntradaNFDateTime(getEntradaNFLaunchDate(entrada))}</strong></div>
- <div class="entrada-nf-history-cell count"><small>Itens</small><strong>${resumo.quantidadeItens}</strong></div>
- <div class="entrada-nf-history-cell total"><small>Total</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
- <div class="entrada-nf-history-cell status">${renderEntradaNFHistoryBadges(entrada, resumo)}</div>
- <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
- <button type="button" title="Visualizar detalhes" aria-label="Visualizar detalhes" onclick="renderDetalheEntradaNF('${entrada.id}')"><span class="material-symbols-rounded">visibility</span></button>
- <button type="button" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')"><span class="material-symbols-rounded">text_snippet</span></button>
- <button type="button" title="Abrir lancamento" aria-label="Abrir lancamento" onclick="editEntradaNFLancamento('${entrada.id}')"><span class="material-symbols-rounded">assignment</span></button>
- <button type="button" title="Mais opcoes" aria-label="Mais opcoes" onclick="cancelEntradaNFHistoryItem('${entrada.id}')"><span class="material-symbols-rounded">more_horiz</span></button>
- </div>
- </article>
- `;
- }).join('');
+  return entries.map(entrada => {
+    const resumo = calcularResumoEntradaNF(entrada);
+    const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor não informado';
+    const launchDateTime = getEntradaNFLaunchDate(entrada);
+    const launchFormatted = getEntradaNFDateTime(launchDateTime);
+    const [launchDateStr, launchTimeStr] = launchFormatted.includes(' ') ? launchFormatted.split(' ') : [launchFormatted, ''];
+
+    return `
+    <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
+      <div class="entrada-nf-history-cell nf">
+        <div class="nf-cell-content">
+          <div class="nf-number-group">
+            <span class="nf-icon-small">${(window.dyIcon && window.dyIcon('xml', 'action')) || ''}</span>
+            <strong class="nf-number">NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
+          </div>
+          <span class="nf-chip-tag">XML IMPORTADO</span>
+        </div>
+      </div>
+      <div class="entrada-nf-history-cell supplier">
+        <strong class="supplier-name" title="${escapeKitAttribute(fornecedor)}">${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
+        <small class="supplier-type">${escapeKitAttribute(entrada.tipo_lancamento || 'ENTRADA_NORMAL')}</small>
+      </div>
+      <div class="entrada-nf-history-cell date">
+        <strong class="date-primary">${getEntradaNFDate(entrada.data_emissao)}</strong>
+      </div>
+      <div class="entrada-nf-history-cell launch-date">
+        <strong class="date-primary">${launchDateStr}</strong>
+        ${launchTimeStr ? `<small class="time-secondary">${launchTimeStr}</small>` : ''}
+      </div>
+      <div class="entrada-nf-history-cell count">
+        <strong class="count-val">${resumo.quantidadeItens}</strong>
+      </div>
+      <div class="entrada-nf-history-cell total">
+        <strong class="total-val">${getEntradaNFMoney(resumo.valorTotal)}</strong>
+      </div>
+      <div class="entrada-nf-history-cell status">
+        ${renderEntradaNFHistoryBadges(entrada, resumo)}
+      </div>
+      <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
+        <button type="button" class="btn-action-icon" title="Visualizar entrada" aria-label="Visualizar entrada" onclick="renderDetalheEntradaNF('${entrada.id}')">
+          ${(window.dyIcon && window.dyIcon('visibility', 'action')) || getDyIconHTML('visibility', 'action')}
+        </button>
+        <button type="button" class="btn-action-icon" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')">
+          ${(window.dyIcon && window.dyIcon('xml', 'action')) || getDyIconHTML('text_snippet', 'action')}
+        </button>
+      </div>
+    </article>
+    `;
+  }).join('');
 }
 
-function renderEntradaNFHistoryDashboard(historico = []) {
- const filtered = getFilteredHistoricoEntradasNF(historico);
- const totalPages = Math.max(1, Math.ceil(filtered.length / entradaNFHistoryState.pageSize));
- entradaNFHistoryState.page = Math.min(Math.max(1, entradaNFHistoryState.page), totalPages);
- const start = (entradaNFHistoryState.page - 1) * entradaNFHistoryState.pageSize;
- const pageEntries = filtered.slice(start, start + entradaNFHistoryState.pageSize);
- const showingStart = filtered.length ? start + 1 : 0;
- const showingEnd = start + pageEntries.length;
 
- return `
- <section class="entrada-nf-history-hero">
- <button type="button" class="entrada-nf-history-back back-button-standard" onclick="renderNFSubMenu()" aria-label="Voltar">
- ${getBackButtonStandardIconHTML()}
- </button>
- <div>
- <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
- <h1>HISTORICO DE ENTRADAS</h1>
- </div>
- </section>
- ${renderEntradaNFHistorySummaryCards(historico)}
- ${renderEntradaNFHistoryFilters()}
- <section class="entrada-nf-history-table-card">
- <div class="entrada-nf-history-table-head">
- <span>NF-e</span>
- <span>Fornecedor</span>
- <span>Emisao</span>
- <span>Lanao</span>
- <span>Itens</span>
- <span>Total</span>
- <span>Indicadores</span>
- <span>A\u00e7\u00f5es</span>
- </div>
- <div class="entrada-nf-history-list">
- ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
- <div class="entrada-nf-empty-state compact">
- <span class="material-symbols-rounded">search_off</span>
- <strong>Nenhuma entrada encontrada com os filtros atuais.</strong>
- </div>
- `}
- </div>
- <footer class="entrada-nf-history-pagination">
- <span>Mostrando ${showingStart} a ${showingEnd} de ${filtered.length} entradas</span>
- <div>
- <button type="button" ${entradaNFHistoryState.page <= 1 ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page - 1})">
- <span class="material-symbols-rounded">chevron_left</span>
- </button>
- <strong>${entradaNFHistoryState.page} / ${totalPages}</strong>
- <button type="button" ${entradaNFHistoryState.page >= totalPages ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page + 1})">
- <span class="material-symbols-rounded">chevron_right</span>
- </button>
- </div>
- </footer>
- </section>
- `;
+function renderEntradaNFHistoryDashboard(historico = []) {
+  const filtered = getFilteredHistoricoEntradasNF(historico);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / entradaNFHistoryState.pageSize));
+  entradaNFHistoryState.page = Math.min(Math.max(1, entradaNFHistoryState.page), totalPages);
+  const start = (entradaNFHistoryState.page - 1) * entradaNFHistoryState.pageSize;
+  const pageEntries = filtered.slice(start, start + entradaNFHistoryState.pageSize);
+  const showingStart = filtered.length ? start + 1 : 0;
+  const showingEnd = start + pageEntries.length;
+
+  return `
+  ${renderEntradaNFHistorySummaryCards(historico)}
+  ${renderEntradaNFHistoryFilters()}
+  <section class="entrada-nf-history-table-card">
+    <div class="entrada-nf-history-table-head">
+      <span>NF-e</span>
+      <span>Fornecedor</span>
+      <span>Emissão</span>
+      <span>Lançamento</span>
+      <span>Itens</span>
+      <span>Total</span>
+      <span>STATUS</span>
+      <span>Ações</span>
+    </div>
+    <div class="entrada-nf-history-list">
+      ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
+      <div class="entrada-nf-empty-state compact">
+        ${(window.dyIcon && window.dyIcon('search', 'action')) || getDyIconHTML('search_off', 'navigation')}
+        <strong>Nenhuma entrada encontrada com os filtros atuais.</strong>
+      </div>
+      `}
+    </div>
+    <footer class="entrada-nf-history-pagination">
+      <span>Mostrando ${showingStart} a ${showingEnd} de ${filtered.length} entradas</span>
+      <div>
+        <button type="button" ${entradaNFHistoryState.page <= 1 ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page - 1})">
+          ${(window.dyIcon && window.dyIcon('previous', 'navigation')) || getDyIconHTML('chevron_left', 'navigation')}
+        </button>
+        <strong>${entradaNFHistoryState.page} / ${totalPages}</strong>
+        <button type="button" ${entradaNFHistoryState.page >= totalPages ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page + 1})">
+          ${(window.dyIcon && window.dyIcon('next', 'navigation')) || `<span class="material-symbols-rounded">chevron_right</span>`}
+        </button>
+      </div>
+    </footer>
+  </section>
+  `;
 }
 
 function refreshEntradaNFHistoryDashboard() {
- const container = document.getElementById('entrada-nf-history-content');
- if (!container) return;
- const activeInput = document.getElementById('entrada-nf-history-search-input');
- const shouldRestoreFocus = document.activeElement === activeInput;
- const selectionStart = activeInput?.selectionStart ?? null;
- const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
- container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
- if (!shouldRestoreFocus) return;
- requestAnimationFrame(() => {
- const nextInput = document.getElementById('entrada-nf-history-search-input');
- if (!nextInput) return;
- nextInput.focus({ preventScroll: true });
- const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
- const end = Math.min(selectionEnd ?? start, nextInput.value.length);
- nextInput.setSelectionRange(start, end);
- });
+  const container = document.getElementById('entrada-nf-history-content');
+  if (!container) return;
+  const activeInput = document.getElementById('entrada-nf-history-search-input');
+  const shouldRestoreFocus = document.activeElement === activeInput;
+  const selectionStart = activeInput?.selectionStart ?? null;
+  const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
+  container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
+  if (!shouldRestoreFocus) return;
+  requestAnimationFrame(() => {
+    const nextInput = document.getElementById('entrada-nf-history-search-input');
+    if (!nextInput) return;
+    nextInput.focus({ preventScroll: true });
+    const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+    const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+    nextInput.setSelectionRange(start, end);
+  });
 }
 
 function setEntradaNFHistoryFilter(key, value) {
- entradaNFHistoryState[key] = value;
- entradaNFHistoryState.page = 1;
- refreshEntradaNFHistoryDashboard();
+  entradaNFHistoryState[key] = value;
+  entradaNFHistoryState.page = 1;
+  refreshEntradaNFHistoryDashboard();
 }
 
 function setEntradaNFHistoryPage(page) {
- entradaNFHistoryState.page = page;
- refreshEntradaNFHistoryDashboard();
+  entradaNFHistoryState.page = page;
+  refreshEntradaNFHistoryDashboard();
 }
 
 function openEntradaNFXML(entradaId) {
- const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
- if (!entrada?.xml_original) {
- showToast('Operacao concluida.', 'info');
- return;
- }
- const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
- const url = URL.createObjectURL(blob);
- window.open(url, '_blank');
- setTimeout(() => URL.revokeObjectURL(url), 5000);
+  const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+  if (!entrada?.xml_original) {
+    showToast('XML original não disponível para esta NF.', 'warning');
+    return;
+  }
+  const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function editEntradaNFLancamento(entradaId) {
- renderNFDetail(entradaId);
+  renderNFDetail(entradaId);
 }
 
 function cancelEntradaNFHistoryItem(entradaId) {
- const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
- if (!entrada) return;
- if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
- showToast('Operacao concluida.', 'info');
- return;
- }
- showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
- renderDetalheEntradaNF(entradaId);
+  const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+  if (!entrada) return;
+  if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
+    showToast('NF finalizada não pode ser cancelada.', 'warning');
+    return;
+  }
+  showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
+  renderNFDetail(entradaId);
 }
 
 async function renderHistoricoEntradasNF() {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
- <main class="container entrada-nf-history-workspace">
- <div id="entrada-nf-history-content" class="entrada-nf-history-content">
- <div class="entrada-nf-history-loading">
- <span class="material-symbols-rounded">sync</span>
- <strong>Carregando hisao...</strong>
- </div>
- </div>
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'HISTÓRICO DE ENTRADAS',
+        icon: 'historico',
+        backAction: 'renderNFSubMenu()'
+      })}
+      <main class="container app-page-container entrada-nf-history-workspace">
+        <div id="entrada-nf-history-content" class="entrada-nf-history-content">
+          <div class="entrada-nf-history-loading">
+            <span class="material-symbols-rounded">sync</span>
+            <strong>Carregando histórico...</strong>
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
 
- const container = document.getElementById('entrada-nf-history-content');
- try {
- const historico = await loadHistoricoEntradasNF(true);
- if (!container) return;
+  const container = document.getElementById('entrada-nf-history-content');
+  try {
+    const historico = await loadHistoricoEntradasNF(true);
+    if (!container) return;
 
- if (!historico.length) {
- container.innerHTML = `
- <div class="entrada-nf-empty-state">
- <span class="material-symbols-rounded">history</span>
- <strong>Nenhuma entrada de nota fiscal encontrada.</strong>
- </div>
- `;
- return;
- }
+    if (!historico.length) {
+      container.innerHTML = `
+        <div class="entrada-nf-empty-state">
+          <span class="material-symbols-rounded">history</span>
+          <strong>Nenhuma entrada de nota fiscal encontrada.</strong>
+        </div>
+      `;
+      return;
+    }
 
- container.innerHTML = renderEntradaNFHistoryDashboard(historico);
- } catch (error) {
- console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
- if (container) {
- container.innerHTML = `
- <div class="entrada-nf-empty-state">
- <span class="material-symbols-rounded">error</span>
- <strong>NAo foi possAvel carregar o hisao agora.</strong>
- <small>Tente novamente em alguns instantes.</small>
- </div>
- `;
- }
- }
+    container.innerHTML = renderEntradaNFHistoryDashboard(historico);
+  } catch (error) {
+    console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
+    if (container) {
+      container.innerHTML = `
+        <div class="entrada-nf-empty-state">
+          <span class="material-symbols-rounded">error</span>
+          <strong>Não foi possível carregar o histórico agora.</strong>
+          <small>Tente novamente em alguns instantes.</small>
+        </div>
+      `;
+    }
+  }
 }
 
 async function renderDetalheEntradaNF(entradaId) {
- const currentUser = localStorage.getItem('currentUser');
- const historico = await loadHistoricoEntradasNF(false);
- const entrada = (historico || []).find(item => String(item.id) === String(entradaId));
+  if (typeof renderNFDetail === 'function') {
+    return renderNFDetail(entradaId);
+  }
+}
 
- if (!entrada) {
- showToast('Operacao concluida.', 'info');
- renderHistoricoEntradasNF();
- return;
- }
 
- const itens = entrada.itens || [];
- const parcelas = entrada.parcelas || [];
- const resumo = calcularResumoEntradaNF(entrada, itens);
- const parcelasNota = resumo.parcelasNota || parcelas.filter(item => !isEntradaNFParcelaComplementar(item));
- const parcelasComplementares = resumo.parcelasComplementares || parcelas.filter(isEntradaNFParcelaComplementar);
+const entradaNFComplementarUIState = {};
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderHistoricoEntradasNF()')}
- <main class="container entrada-nf-history-workspace">
- ${getStandardScreenTitleHTML(`NF ${escapeKitAttribute(entrada.numero_nf || '-')}`, menu3DIcons.nf)}
- <section class="entrada-nf-detail-card">
- <header class="entrada-nf-detail-header">
- <div>
- <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')} / SArie ${escapeKitAttribute(entrada.serie || '-')}</strong>
- <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')}</small>
- </div>
- ${renderEntradaNFStatusPill(entrada.status)}
- </header>
+function getEntradaNFComplementarState(entradaId) {
+  if (!entradaNFComplementarUIState[entradaId]) {
+    entradaNFComplementarUIState[entradaId] = {
+      isModalOpen: false,
+      isMockActive: false,
+      descricao: 'Acordo Comercial / Frete Adicional',
+      valorTotal: 1174.42,
+      incorporarCusto: true,
+      parcelas: [
+        { numero: 1, vencimento: '2026-10-15', valor: 500.00 },
+        { numero: 2, vencimento: '2026-11-15', valor: 674.42 }
+      ]
+    };
+  }
+  return entradaNFComplementarUIState[entradaId];
+}
 
- <div class="entrada-nf-detail-grid">
- <div><small>Data de emisao</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
- <div><small>Data de lancamento</small><strong>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</strong></div>
- <div><small>Total oficial da NF</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
- <div><small>Parcelas da nota</small><strong>${getEntradaNFMoney(resumo.totalParcelasNota)}</strong></div>
- <div><small>Lanaos complementares</small><strong>${getEntradaNFMoney(resumo.totalComplementares)}</strong></div>
- <div><small>Total financeiro previsto</small><strong>${getEntradaNFMoney(resumo.totalFinanceiroPrevisto)}</strong></div>
- <div><small>Usao</small><strong>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</strong></div>
- <div><small>Gerou estoque</small><strong>${resumo.gerouEstoque ? 'Sim' : 'NAo'}</strong></div>
- <div><small>Gerou financeiro</small><strong>${resumo.gerouFinanceiro ? 'Sim' : 'NAo'}</strong></div>
- </div>
+function openModalComplementarNF(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  state.isModalOpen = true;
+  renderNFDetail(entradaId);
+}
 
- <h3>Produtos lanaos</h3>
- ${itens.length ? `
- <div class="entrada-nf-detail-list">
- ${itens.map(item => `
- <article class="entrada-nf-detail-row">
- <div>
- <strong>${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</strong>
- <small>ID interno: ${escapeKitAttribute(item.id_interno || item.produto_id_interno || '-')} - EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</small>
- </div>
- <div>
- <span><b>Qtd</b>${Number(item.quantidade || 0).toLocaleString('pt-BR')}</span>
- <span><b>Custo NF</b>${getEntradaNFMoney(item.custo_nota_unitario ?? item.valor_unitario)}</span>
- <span><b>Custo real un.</b>${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
- <span><b>Complemento rateado</b>${getEntradaNFMoney(roundMoney(item.custo_real_unitario ?? item.valor_unitario) - roundMoney(item.custo_nota_unitario ?? item.valor_unitario))}</span>
- <span><b>Custo real total</b>${getEntradaNFMoney(item.custo_real_total ?? item.valor_total)}</span>
- <span><b>Local</b>${escapeKitAttribute(item.local_entrada || item.local || 'TERREO')}</span>
- <span><b>Status</b>${escapeKitAttribute(item.status_vinculo || item.status || '-')}</span>
- </div>
- <div class="entrada-nf-cost-breakdown">
- <span><b>IPI</b>${getEntradaNFMoney(item.valor_ipi)}</span>
- <span><b>ICMS ST</b>${getEntradaNFMoney(item.valor_icms_st)}</span>
- <span><b>Frete</b>${getEntradaNFMoney(item.valor_frete_rateado)}</span>
- <span><b>Seguro</b>${getEntradaNFMoney(item.valor_seguro_rateado)}</span>
- <span><b>Outras desp.</b>${getEntradaNFMoney(item.valor_outras_despesas_rateado)}</span>
- <span><b>Desconto</b>${getEntradaNFMoney(item.valor_desconto_rateado)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum item encontrado para esta entrada.</strong></div>`}
+function closeModalComplementarNF(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  state.isModalOpen = false;
+  renderNFDetail(entradaId);
+}
 
- <h3>Parcelas da nota</h3>
- ${parcelasNota.length ? `
- <div class="entrada-nf-detail-list">
- ${parcelasNota.map(parcela => `
- <article class="entrada-nf-detail-row finance">
- <div>
- <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || '-')}</strong>
- <small>Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} - Status: ${escapeKitAttribute(parcela.status || '-')}</small>
- </div>
- <div>
- <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
- <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhuma parcela da nota vinculada.</strong></div>`}
+function toggleMockComplementarNF(entradaId, active) {
+  const state = getEntradaNFComplementarState(entradaId);
+  state.isMockActive = active;
+  showToast(active ? 'Simulação de Complementar R$ 1.174,42 ATIVADA na UI' : 'Simulação de Complementar DESATIVADA', 'info');
+  renderNFDetail(entradaId);
+}
 
- <h3>Lanaos complementares</h3>
- ${parcelasComplementares.length ? `
- <div class="entrada-nf-detail-list">
- ${parcelasComplementares.map(parcela => `
- <article class="entrada-nf-detail-row finance">
- <div>
- <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || 'Lanao complementar')}</strong>
- <small>Complementar - Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} - Status: ${escapeKitAttribute(parcela.status || '-')}</small>
- </div>
- <div>
- <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
- <span><b>Forma</b>${escapeKitAttribute(parcela.forma_pagamento || '-')}</span>
- <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum lancamento complementar vinculado.</strong></div>`}
- </section>
- </main>
- </div>
- `;
+function updateComplementarField(entradaId, field, value) {
+  const state = getEntradaNFComplementarState(entradaId);
+  if (field === 'valorTotal') {
+    state.valorTotal = parseDecimal(value);
+  } else if (field === 'incorporarCusto') {
+    state.incorporarCusto = !!value;
+  } else {
+    state[field] = value;
+  }
+  renderNFDetail(entradaId);
+}
+
+function addComplementarParcela(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const nextNum = state.parcelas.length + 1;
+  const today = new Date().toISOString().split('T')[0];
+  state.parcelas.push({ numero: nextNum, vencimento: today, valor: 0 });
+  renderNFDetail(entradaId);
+}
+
+function removeComplementarParcela(entradaId, index) {
+  const state = getEntradaNFComplementarState(entradaId);
+  if (state.parcelas.length <= 1) return;
+  state.parcelas.splice(index, 1);
+  renderNFDetail(entradaId);
+}
+
+function updateComplementarParcelaField(entradaId, index, field, value) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const p = state.parcelas[index];
+  if (!p) return;
+  if (field === 'valor') {
+    p.valor = parseDecimal(value);
+  } else {
+    p[field] = value;
+  }
+  renderNFDetail(entradaId);
+}
+
+async function salvarComplementarDoModal(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const somaParcelasComp = state.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasComp = Math.round((state.valorTotal - somaParcelasComp) * 100) / 100;
+
+  if (Math.abs(diffParcelasComp) > 0.01 || state.valorTotal <= 0 || !state.parcelas.every(p => parseDecimal(p.valor) > 0 && p.vencimento)) {
+    showToast('Preencha os valores e vencimentos de todas as parcelas corretamente. A soma das parcelas deve ser igual ao valor total.', 'warning');
+    return;
+  }
+
+  try {
+    const payload = {
+      descricao: state.descricao || 'Lancamento Complementar',
+      valorTotal: state.valorTotal,
+      incorporarCusto: !!state.incorporarCusto,
+      parcelas: state.parcelas.map((p, idx) => ({
+        numeroParcela: idx + 1,
+        valor: parseDecimal(p.valor),
+        vencimento: p.vencimento
+      }))
+    };
+
+    const res = await DataClient.salvarComplementarEntradaNFSupabase(entradaId, payload);
+    if (res.success) {
+      showToast('Lancamento Complementar salvo com sucesso!', 'success');
+      state.isModalOpen = false;
+      state.savedInUI = true;
+      renderNFDetail(entradaId);
+    }
+  } catch (err) {
+    console.error('[COMPLEMENTAR] Erro ao salvar complementar:', err);
+    showToast('Erro ao salvar lancamento complementar: ' + err.message, 'error');
+  }
+}
+
+const entradaNFAbertaConferenciaState = {};
+
+function initEntradaNFConferenciaState(entradaId, itensRaw, temRecebimentosNoBanco) {
+  if (!entradaNFAbertaConferenciaState[entradaId]) {
+    entradaNFAbertaConferenciaState[entradaId] = {
+      dirty: false,
+      conferenciaSalva: temRecebimentosNoBanco,
+      itensState: {}
+    };
+  } else if (!entradaNFAbertaConferenciaState[entradaId].dirty) {
+    entradaNFAbertaConferenciaState[entradaId].conferenciaSalva = temRecebimentosNoBanco;
+  }
+
+  const state = entradaNFAbertaConferenciaState[entradaId];
+  if (!state.itensState) state.itensState = {};
+
+  (itensRaw || []).forEach(item => {
+    if (!state.itensState[item.id]) {
+      const rec = (item.recebimentos && item.recebimentos[0]) || {};
+      const qFis = parseDecimal(rec.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+      const qAce = parseDecimal(rec.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+      const qRec = parseDecimal(rec.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+      const loc = String(rec.local_destino || item.local_destino || 'TERREO').toUpperCase();
+
+      const sit = calcularSituacaoRecebimentoItem(item, [{
+        id_interno: item.id_interno,
+        quantidade_fisica: qFis,
+        quantidade_aceita: qAce,
+        quantidade_recusada: qRec,
+        local_destino: loc
+      }]);
+
+      state.itensState[item.id] = {
+        quantidade_fisica: qFis,
+        quantidade_aceita: qAce,
+        quantidade_recusada: qRec,
+        local_destino: loc,
+        situacao: sit,
+        motivo_divergencia: rec.motivo_divergencia || '',
+        observacoes: rec.observacoes || '',
+        isEditing: false,
+        errorMsg: null
+      };
+    }
+  });
+
+  return state;
+}
+
+function toggleEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+  itemState.isEditing = !itemState.isEditing;
+  itemState.errorMsg = null;
+  renderNFDetail(entradaId);
+}
+
+function cancelEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+  itemState.isEditing = false;
+  itemState.errorMsg = null;
+  renderNFDetail(entradaId);
+}
+
+function updateConferenciaItemField(entradaId, itemId, field, value) {
+  const state = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!state) return;
+
+  if (field === 'quantidade_fisica') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_fisica = val;
+    if (state.quantidade_aceita > val) {
+      state.quantidade_aceita = val;
+      state.quantidade_recusada = 0;
+    } else {
+      state.quantidade_recusada = Math.max(0, val - state.quantidade_aceita);
+    }
+  } else if (field === 'quantidade_aceita') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_aceita = val;
+    state.quantidade_recusada = Math.max(0, state.quantidade_fisica - val);
+  } else if (field === 'quantidade_recusada') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_recusada = val;
+    state.quantidade_aceita = Math.max(0, state.quantidade_fisica - val);
+  } else if (field === 'local_destino') {
+    state.local_destino = String(value || 'TERREO').toUpperCase();
+  } else {
+    state[field] = value;
+  }
+
+  // Validação em tempo real: Aceito + Recusado === Físico
+  const soma = Math.round((state.quantidade_aceita + state.quantidade_recusada) * 10000) / 10000;
+  const fis = Math.round(state.quantidade_fisica * 10000) / 10000;
+  if (Math.abs(soma - fis) > 0.0001) {
+    state.errorMsg = `Aceito (${state.quantidade_aceita}) + Recusado (${state.quantidade_recusada}) deve ser igual ao Físico (${state.quantidade_fisica}).`;
+  } else {
+    state.errorMsg = null;
+  }
+
+  renderNFDetail(entradaId);
+}
+
+function confirmEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+
+  const soma = Math.round((itemState.quantidade_aceita + itemState.quantidade_recusada) * 10000) / 10000;
+  const fis = Math.round(itemState.quantidade_fisica * 10000) / 10000;
+  if (Math.abs(soma - fis) > 0.0001) {
+    showToast('Aceito + Recusado deve ser exatamente igual à Quantidade Física.', 'warning');
+    return;
+  }
+
+  itemState.isEditing = false;
+  itemState.errorMsg = null;
+  entradaNFAbertaConferenciaState[entradaId].dirty = true;
+  showToast('Item atualizado no rascunho de conferência.', 'info');
+  renderNFDetail(entradaId);
+}
+
+function marcarConferenciaNFAbertaDirty(entradaId) {
+  if (!entradaNFAbertaConferenciaState[entradaId]) {
+    entradaNFAbertaConferenciaState[entradaId] = { dirty: true, conferenciaSalva: false, itensState: {} };
+  } else {
+    entradaNFAbertaConferenciaState[entradaId].dirty = true;
+    entradaNFAbertaConferenciaState[entradaId].conferenciaSalva = false;
+  }
+}
+
+async function salvarConferenciaFisicaEntradaNF(entradaId) {
+  const itens = await fetchEntradaNFItens(entradaId);
+  if (!itens.length) {
+    showToast('Nenhum item encontrado para conferir', 'warning');
+    return;
+  }
+  const pendentes = itens.filter(item => !item.id_interno);
+  if (pendentes.length) {
+    showToast('Existem itens pendentes de vínculo com produtos DY', 'warning');
+    return;
+  }
+
+  const confState = entradaNFAbertaConferenciaState[entradaId]?.itensState || {};
+
+  // Validação de integridade de todos os itens antes do envio
+  for (const item of itens) {
+    const st = confState[item.id] || {};
+    const qFis = parseDecimal(st.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+    const qAce = parseDecimal(st.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+    const qRec = parseDecimal(st.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+    const soma = Math.round((qAce + qRec) * 10000) / 10000;
+    const fis = Math.round(qFis * 10000) / 10000;
+
+    if (Math.abs(soma - fis) > 0.0001) {
+      showToast(`Item ${item.id_interno || item.numero_item}: Aceito + Recusado deve ser igual ao Físico.`, 'warning');
+      return;
+    }
+  }
+
+  const recebimentosPayload = itens.map(item => {
+    const st = confState[item.id] || {};
+    const qFis = parseDecimal(st.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+    const qAce = parseDecimal(st.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+    const qRec = parseDecimal(st.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+    const loc = String(st.local_destino || item.local_destino || 'TERREO').toUpperCase();
+    const sit = calcularSituacaoRecebimentoItem(item, [{
+      id_interno: item.id_interno,
+      quantidade_fisica: qFis,
+      quantidade_aceita: qAce,
+      quantidade_recusada: qRec,
+      local_destino: loc
+    }]);
+
+    return {
+      entrada_nf_item_id: item.id,
+      produto_id: item.produto_id || null,
+      id_interno: item.id_interno || '',
+      quantidade_fisica: qFis,
+      quantidade_aceita: qAce,
+      quantidade_recusada: qRec,
+      local_destino: loc,
+      situacao: sit,
+      motivo_divergencia: st.motivo_divergencia || null,
+      observacoes: st.observacoes || null
+    };
+  });
+
+  const saveRecRes = await DataClient.saveEntradaNFRecebimentos(entradaId, recebimentosPayload);
+  if (!saveRecRes.ok) {
+    showToast('Falha ao salvar a conferência física: ' + (saveRecRes.error?.message || 'Erro desconhecido'), 'error');
+    return;
+  }
+
+  entradaNFAbertaConferenciaState[entradaId] = {
+    dirty: false,
+    conferenciaSalva: true,
+    itensState: {}
+  };
+  showToast('Conferência física salva com sucesso!', 'success');
+  renderNFDetail(entradaId);
+}
+
+function getContasPagarDisplayStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'rascunho') {
+    return {
+      label: 'RASCUNHO | EFETIVA AO FINALIZAR',
+      bg: 'rgba(245, 158, 11, 0.12)',
+      color: '#b45309',
+      border: 'rgba(245, 158, 11, 0.3)'
+    };
+  }
+  if (s === 'pago') {
+    return {
+      label: 'PAGO',
+      bg: 'rgba(34, 197, 94, 0.12)',
+      color: '#15803d',
+      border: 'rgba(34, 197, 94, 0.3)'
+    };
+  }
+  if (s === 'parcial') {
+    return {
+      label: 'PARCIAL',
+      bg: 'rgba(147, 51, 234, 0.12)',
+      color: '#7e22ce',
+      border: 'rgba(147, 51, 234, 0.3)'
+    };
+  }
+  return {
+    label: 'PENDENTE',
+    bg: 'rgba(37, 99, 235, 0.12)',
+    color: '#1d4ed8',
+    border: 'rgba(37, 99, 235, 0.3)'
+  };
+}
+
+async function continueEntradaNF(entradaId) {
+  if (!entradaId) return;
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  if (!nf) {
+    showToast('Nota fiscal não encontrada.', 'warning');
+    return;
+  }
+  const itens = await fetchEntradaNFItens(entradaId);
+  const temItensPendentes = itens.some(i => i.status_vinculo === 'pendente_vinculo' || !i.id_interno);
+  
+  if (temItensPendentes || nf.status === 'pendente_vinculo' || nf.status === 'pendente_fornecedor') {
+    renderEntradaNFIdentificacao(entradaId);
+  } else {
+    renderNFDetail(entradaId);
+  }
+}
+
+async function renderEntradaNFIdentificacao(entradaId) {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  if (!nf) {
+    showToast('Nota fiscal não encontrada.', 'warning');
+    renderEntradaNFEmRecebimento();
+    return;
+  }
+
+  const itens = await fetchEntradaNFItens(entradaId);
+  const totalItens = itens.length;
+  const vinculadosCount = itens.filter(i => i.id_interno && i.status_vinculo !== 'pendente_vinculo').length;
+  const todosVinculados = totalItens > 0 && vinculadosCount === totalItens;
+
+  const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+  const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-identificacao-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'IDENTIFICAÇÃO DE PRODUTOS',
+        icon: 'nf_identificacao',
+        backAction: 'renderEntradaNFEmRecebimento()'
+      })}
+      
+      <main class="container app-page-container entrada-nf-identificacao-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        
+        <!-- CABEÇALHO DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 14px;">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">IDENTIFICAÇÃO DE PRODUTOS DA NOTA FISCAL</span>
+              <h1 style="font-size: 1.35rem; font-weight: 900; color: #0f172a; margin: 2px 0 0 0; display: flex; align-items: center; gap: 8px;">
+                NF ${nf.numero_nf || '-'} 
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+              </h1>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              ${todosVinculados ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span> IDENTIFICAÇÃO CONCLUÍDA (${totalItens}/${totalItens})
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">help_outline</span> AGUARDANDO IDENTIFICAÇÃO (${vinculadosCount}/${totalItens})
+                </span>
+              `}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: center;">
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b; text-transform: uppercase; word-break: break-word;">${escapeKitAttribute(fornecedorNome)}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">CNPJ FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${escapeKitAttribute(nf.cnpj_fornecedor || nf.fornecedor_cnpj || '-')}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">DATA DE EMISSÃO</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${dateStr}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">VALOR FISCAL DA NF</span>
+              <strong style="font-size: 1.15rem; font-weight: 900; color: #2563eb;">${nfXmlFormatMoney(nf.valor_total)}</strong>
+            </div>
+          </div>
+        </div>
+
+        ${todosVinculados ? `
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; box-shadow: 0 4px 14px rgba(34,197,94,0.08);">
+            <div>
+              <strong style="color: #15803d; font-size: 1rem; display: block; font-weight: 800;">TODOS OS PRODUTOS IDENTIFICADOS</strong>
+              <span style="font-size: 0.82rem; color: #166534; font-weight: 500;">A nota fiscal está pronta para iniciar a conferência física e recebimento.</span>
+            </div>
+            <button type="button" onclick="renderNFDetail('${nf.id}')" style="background: #22c55e; color: #ffffff; border: none; padding: 11px 22px; border-radius: 10px; font-weight: 800; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(34,197,94,0.25);">
+              <span class="material-symbols-rounded" style="font-size: 20px;">inventory_2</span> INICIAR RECEBIMENTO
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- LISTA DE ITENS DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <div>
+              <h2 style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0;">ITENS DA NOTA FISCAL (${totalItens})</h2>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">Vincule cada item fiscal a um Produto Mestre do sistema.</p>
+            </div>
+            <span style="font-size: 0.78rem; font-weight: 800; color: #3b82f6; background: rgba(59,130,246,0.08); padding: 4px 12px; border-radius: 16px;">
+              ${vinculadosCount} de ${totalItens} vinculados
+            </span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${await (async () => {
+              const client = window.supabaseClient;
+              const idInternos = itens.map(i => i.id_interno).filter(Boolean);
+              let produtosMap = new Map();
+              if (idInternos.length > 0 && client) {
+                const { data: prodsData } = await client
+                  .from('produtos')
+                  .select('id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+                  .in('id_interno', idInternos);
+                (prodsData || []).forEach(p => produtosMap.set(p.id_interno, p));
+              }
+
+              return itens.map((item, idx) => {
+                const isVinculado = !!item.id_interno && item.status_vinculo !== 'pendente_vinculo';
+                const prod = item.id_interno ? produtosMap.get(item.id_interno) : null;
+                const nomeComercial = prod?.descricao_completa || prod?.descricao_base || '-';
+                const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || 'Item sem descrição fiscal';
+                const cProd = item.codigo_produto_fornecedor || 'N/A';
+                const eanFiscal = item.ean_fornecedor || item.ean_xml || 'Sem EAN';
+
+                return `
+                  <div style="background: ${isVinculado ? '#f0fdf4' : '#fffbebf5'}; border: 1px solid ${isVinculado ? '#bbf7d0' : '#fef3c7'}; border-left: 5px solid ${isVinculado ? '#22c55e' : '#f59e0b'}; border-radius: 14px; padding: 16px 18px;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 10px;">
+                      
+                      <!-- LADO ESQUERDO: DADOS FISCAIS DO ITEM -->
+                      <div style="flex: 1; min-width: 240px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                          <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; background: rgba(100,116,139,0.1); padding: 2px 8px; border-radius: 6px;">Item #${idx + 1}</span>
+                          <span style="font-size: 0.72rem; font-weight: 800; color: #475569; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">cProd: ${escapeKitAttribute(cProd)}</span>
+                          ${eanFiscal !== 'Sem EAN' ? `<span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">EAN: ${escapeKitAttribute(eanFiscal)}</span>` : ''}
+                        </div>
+                        <h4 style="font-size: 0.92rem; font-weight: 800; color: #0f172a; margin: 4px 0;">
+                          ${escapeKitAttribute(descFiscal)}
+                        </h4>
+                        <div style="font-size: 0.75rem; color: #64748b; display: flex; gap: 14px; margin-top: 4px;">
+                          <span>Qtd Fiscal: <b>${formatStockNumber(item.quantidade)} ${escapeKitAttribute(item.unidade || 'UN')}</b></span>
+                          <span>Valor Unit: <b>${getEntradaNFMoney(item.valor_unitario)}</b></span>
+                          <span>Total: <b>${getEntradaNFMoney(item.valor_total)}</b></span>
+                        </div>
+                      </div>
+
+                      <!-- LADO DIREITO: STATUS DO VÍNCULO E BOTÃO -->
+                      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px;">
+                        ${isVinculado ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check_circle</span> IDENTIFICADO
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Alterar Vínculo
+                          </button>
+                        ` : `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">help_outline</span> NÃO IDENTIFICADO
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: #2563eb; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(37,99,235,0.25);">
+                            <span class="material-symbols-rounded" style="font-size: 16px;">link</span> MAPEAR PRODUTO
+                          </button>
+                        `}
+                      </div>
+
+                    </div>
+
+                    <!-- BLOCO DE PRODUTO MESTRE VINCULADO (SE HOUVER) -->
+                    ${isVinculado ? `
+                      <div style="margin-top: 10px; padding: 10px 14px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+                        <span style="background: #fef08a; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
+                          ${escapeKitAttribute(item.id_interno)}
+                        </span>
+                        <div style="flex: 1; min-width: 0;">
+                          <strong style="display: block; font-size: 0.85rem; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${escapeKitAttribute(nomeComercial)}
+                          </strong>
+                          <div style="font-size: 0.72rem; color: #64748b; display: flex; gap: 10px;">
+                            ${prod?.marca ? `<span>Marca: <b>${escapeKitAttribute(prod.marca)}</b></span>` : ''}
+                            ${prod?.sku_fornecedor ? `<span>SKU: <b>${escapeKitAttribute(prod.sku_fornecedor)}</b></span>` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                  </div>
+                `;
+              }).join('');
+            })()}
+          </div>
+        </div>
+
+      </main>
+    </div>
+  `;
+}
+
+async function openModalMapearProdutoEntradaNF(entradaId, itemId) {
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  const itens = await fetchEntradaNFItens(entradaId);
+  const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+  if (!item) {
+    showToast('Item da nota não encontrado.', 'warning');
+    return;
+  }
+
+  const existingModal = document.getElementById('modal-mapear-produto-container');
+  if (existingModal) existingModal.remove();
+
+  const cProd = item.codigo_produto_fornecedor || 'N/A';
+  const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || '-';
+
+  const modalHtml = `
+    <div id="modal-mapear-produto-container" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:white; border-radius:24px; max-width:680px; width:100%; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.25);">
+        
+        <!-- CABEÇALHO DO MODAL -->
+        <div style="padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span style="font-size:0.72rem; font-weight:800; color:#3b82f6; text-transform:uppercase; letter-spacing:0.5px;">MAPEAMENTO DE PRODUTO FISCAL</span>
+            <h3 style="margin:2px 0 0 0; font-family:'Fjalla One', sans-serif; font-size:1.25rem; color:#0f172a;">VINCULAR PRODUTO MESTRE</h3>
+          </div>
+          <button type="button" onclick="document.getElementById('modal-mapear-produto-container').remove()" style="background:none; border:none; color:#64748b; cursor:pointer; padding:6px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+
+        <!-- INFO DO ITEM FISCAL -->
+        <div style="padding:14px 24px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+          <div style="font-size:0.72rem; color:#64748b; font-weight:700;">ITEM FISCAL SELECIONADO:</div>
+          <div style="font-size:0.88rem; font-weight:800; color:#0f172a; margin-top:2px;">${escapeKitAttribute(descFiscal)}</div>
+          <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">Código Fornecedor: <b>${escapeKitAttribute(cProd)}</b></div>
+        </div>
+
+        <!-- CAMPO DE BUSCA -->
+        <div style="padding:16px 24px; border-bottom:1px solid #f1f5f9;">
+          <div style="position:relative;">
+            <span class="material-symbols-rounded" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:20px;">search</span>
+            <input 
+              type="text" 
+              id="input-busca-produto-mestre" 
+              placeholder="Buscar por ID Interno, Descrição, SKU ou EAN..." 
+              style="width:100%; padding:10px 14px 10px 40px; border-radius:10px; border:1px solid #cbd5e1; font-size:0.88rem; font-weight:500; outline:none;"
+              oninput="buscarProdutosParaMapeamento('${entradaId}', '${itemId}')"
+            />
+          </div>
+        </div>
+
+        <!-- LISTA DE RESULTADOS DE PRODUTOS MESTRES -->
+        <div id="resultado-busca-produtos-mestre" style="flex:1; overflow-y:auto; padding:16px 24px; display:flex; flex-direction:column; gap:10px; min-height:220px;">
+          <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+            Digite acima para buscar produtos no catálogo mestre.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('input-busca-produto-mestre')?.focus();
+}
+
+async function buscarProdutosParaMapeamento(entradaId, itemId) {
+  const query = String(document.getElementById('input-busca-produto-mestre')?.value || '').trim();
+  const container = document.getElementById('resultado-busca-produtos-mestre');
+  if (!container) return;
+
+  if (query.length < 2) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+        Digite ao menos 2 caracteres para buscar.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `<div style="text-align:center; padding:30px 10px; color:#64748b;">Buscando produtos...</div>`;
+
+  const client = window.supabaseClient;
+  if (!client) return;
+
+  const { data: prods, error } = await client
+    .from('produtos')
+    .select('id, id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+    .or(`id_interno.ilike.%${query}%,descricao_completa.ilike.%${query}%,descricao_base.ilike.%${query}%,sku_fornecedor.ilike.%${query}%,ean.ilike.%${query}%`)
+    .limit(15);
+
+  if (error || !prods || prods.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+        Nenhum produto encontrado no catálogo para "${escapeKitAttribute(query)}".
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = prods.map(p => {
+    const nomeComercial = p.descricao_completa || p.descricao_base || '-';
+    const prodJsonStr = escapeKitAttribute(JSON.stringify(p));
+
+    return `
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; transition:border-color 0.15s;">
+        <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0;">
+          
+          <div style="width:48px; height:48px; min-width:48px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            ${p.url_imagem ? `<img src="${escapeKitAttribute(p.url_imagem)}" style="width:100%; height:100%; object-fit:cover;">` : `<span class="material-symbols-rounded" style="color:#94a3b8; font-size:24px;">image</span>`}
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+              <span style="background:#fef08a; color:#854d0e; font-weight:900; font-size:0.72rem; padding:2px 6px; border-radius:4px; border:1px solid #fde047;">
+                ${escapeKitAttribute(p.id_interno)}
+              </span>
+              ${p.marca ? `<span style="font-size:0.7rem; font-weight:700; color:#64748b; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escapeKitAttribute(p.marca)}</span>` : ''}
+            </div>
+            <strong style="font-size:0.85rem; color:#0f172a; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeKitAttribute(nomeComercial)}
+            </strong>
+            <div style="font-size:0.72rem; color:#64748b; display:flex; gap:10px; margin-top:2px;">
+              ${p.sku_fornecedor ? `<span>SKU: <b>${escapeKitAttribute(p.sku_fornecedor)}</b></span>` : ''}
+              ${p.ean ? `<span>EAN: <b>${escapeKitAttribute(p.ean)}</b></span>` : ''}
+            </div>
+          </div>
+
+        </div>
+
+        <button type="button" onclick="openConfirmModalVinculoItem('${entradaId}', '${itemId}', ${prodJsonStr})" style="background:#2563eb; color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:800; font-size:0.75rem; cursor:pointer; white-space:nowrap;">
+          SELECIONAR
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function openConfirmModalVinculoItem(entradaId, itemId, produto) {
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  const itens = await fetchEntradaNFItens(entradaId);
+  const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+  if (!item || !produto) return;
+
+  const existingConfirm = document.getElementById('modal-confirm-vinculo-container');
+  if (existingConfirm) existingConfirm.remove();
+
+  const cProd = item.codigo_produto_fornecedor || 'N/A';
+  const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || '-';
+  const nomeComercial = produto.descricao_completa || produto.descricao_base || '-';
+
+  const confirmHtml = `
+    <div id="modal-confirm-vinculo-container" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.7); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:white; border-radius:24px; max-width:540px; width:100%; padding:24px; box-shadow:0 25px 50px rgba(0,0,0,0.3);">
+        
+        <h3 style="margin:0 0 12px 0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a; display:flex; align-items:center; gap:8px;">
+          <span class="material-symbols-rounded" style="color:#2563eb;">link</span> CONFIRMAR VÍNCULO DE PRODUTO
+        </h3>
+
+        <p style="font-size:0.8rem; color:#64748b; margin:0 0 16px 0;">
+          Confira o produto da Nota Fiscal e o Produto Mestre selecionado antes de efetivar o vínculo.
+        </p>
+
+        <!-- CARD DE COMPARAÇÃO -->
+        <div style="display:flex; flex-direction:column; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:20px;">
+          
+          <div>
+            <span style="font-size:0.68rem; font-weight:800; color:#b45309; text-transform:uppercase; display:block; margin-bottom:2px;">1. ITEM DA NOTA FISCAL (XML)</span>
+            <strong style="font-size:0.85rem; color:#0f172a; display:block;">cProd: ${escapeKitAttribute(cProd)}</strong>
+            <span style="font-size:0.8rem; color:#334155;">${escapeKitAttribute(descFiscal)}</span>
+          </div>
+
+          <div style="border-top:1px dashed #cbd5e1; padding-top:10px;">
+            <span style="font-size:0.68rem; font-weight:800; color:#15803d; text-transform:uppercase; display:block; margin-bottom:2px;">2. PRODUTO MESTRE SELECIONADO</span>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+              <span style="background:#fef08a; color:#854d0e; font-weight:900; font-size:0.75rem; padding:2px 6px; border-radius:4px; border:1px solid #fde047;">
+                ${escapeKitAttribute(produto.id_interno)}
+              </span>
+              ${produto.marca ? `<span style="font-size:0.7rem; font-weight:700; color:#64748b; background:#e2e8f0; padding:2px 6px; border-radius:4px;">${escapeKitAttribute(produto.marca)}</span>` : ''}
+            </div>
+            <strong style="font-size:0.88rem; color:#0f172a; display:block;">${escapeKitAttribute(nomeComercial)}</strong>
+          </div>
+
+        </div>
+
+        <!-- AÇÕES DO MODAL DE CONFIRMAÇÃO -->
+        <div style="display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" onclick="document.getElementById('modal-confirm-vinculo-container').remove()" style="padding:10px 20px; border-radius:10px; border:none; background:#ef4444; color:white; font-weight:800; font-size:0.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(239,68,68,0.25); transition:background 0.15s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+            <span class="material-symbols-rounded" style="font-size:18px; color:white;">close</span> CANCELAR
+          </button>
+          <button type="button" onclick="confirmarVinculoItemEntradaNF('${entradaId}', '${itemId}', '${produto.id_interno}', '${produto.id}')" style="padding:10px 20px; border-radius:10px; border:none; background:#22c55e; color:white; font-weight:800; font-size:0.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(34,197,94,0.3);">
+            <span class="material-symbols-rounded" style="font-size:18px;">check</span> CONFIRMAR VÍNCULO
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', confirmHtml);
+}
+
+async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produtoId) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInterno) return;
+
+  try {
+    const nf = await DataClient.getEntradaNFById(entradaId);
+    const itens = await fetchEntradaNFItens(entradaId);
+    const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+    if (!item) {
+      showToast('Item não encontrado.', 'warning');
+      return;
+    }
+
+    // 1. Atualizar o item na tabela entradas_nf_itens (mantendo os dados fiscais originais 100% intactos)
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        produto_id: produtoId,
+        id_interno: idInterno,
+        produto_id_interno: idInterno,
+        status_vinculo: 'vinculado',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) {
+      throw new Error('Falha ao atualizar vinculo do item: ' + errItem.message);
+    }
+
+    // 2. Verificação de conflito prévio em fornecedor_produtos (Ressalva OBRIGATÓRIA #6)
+    if (nf?.cnpj_fornecedor && item?.codigo_produto_fornecedor) {
+      const cnpjClean = String(nf.cnpj_fornecedor).replace(/\D/g, '');
+      const cProdClean = String(item.codigo_produto_fornecedor).trim();
+
+      const { data: existingFp } = await client
+        .from('fornecedor_produtos')
+        .select('*')
+        .eq('fornecedor_cnpj', cnpjClean)
+        .eq('codigo_produto_fornecedor', cProdClean)
+        .maybeSingle();
+
+      let autorizarUpsert = true;
+
+      if (existingFp && existingFp.id_interno && existingFp.id_interno !== idInterno) {
+        autorizarUpsert = await showAppConfirm({
+          title: 'Conflito de Vínculo de Fornecedor',
+          message: `Já existe um vínculo registrado para o fornecedor (CNPJ ${cnpjClean}) e código "${cProdClean}" apontando para o produto mestre "${existingFp.id_interno}".`,
+          detail: `Deseja atualizar este vínculo global para apontar para o novo produto "${idInterno}"?`,
+          confirmLabel: 'Atualizar Vínculo de Fornecedor',
+          cancelLabel: 'Manter Vínculo Anterior',
+          danger: true
+        });
+      }
+
+      if (autorizarUpsert) {
+        const payloadVinculo = {
+          fornecedor_cnpj: cnpjClean,
+          codigo_produto_fornecedor: cProdClean,
+          descricao_produto_fornecedor: item.descricao_produto_fornecedor || item.descricao_xml || null,
+          ean_fornecedor: item.ean_fornecedor || item.ean_xml || null,
+          id_interno: idInterno,
+          produto_id: produtoId,
+          ultimo_custo: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
+          ultima_quantidade: parseDecimal(item.quantidade),
+          ultima_compra_em: nf.data_emissao || getDataBrasilISO(),
+          atualizado_em: new Date().toISOString()
+        };
+
+        const { error: errFp } = await client
+          .from('fornecedor_produtos')
+          .upsert(payloadVinculo, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
+
+        if (errFp) {
+          console.warn('[FORNECEDOR_PRODUTOS] aviso ao registrar vinculo:', errFp.message);
+        }
+      }
+    }
+
+    // 3. Sincronizar status do cabeçalho da NF caso todos os itens estejam vinculados
+    try {
+      const { data: itensNfCheck } = await client
+        .from('entradas_nf_itens')
+        .select('id, id_interno, status_vinculo')
+        .or(`entrada_nf_id.eq.${entradaId},nf_id.eq.${entradaId}`);
+
+      const temRestante = (itensNfCheck || []).some(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo');
+      if (!temRestante && String(nf?.status || '').toLowerCase() === 'pendente_vinculo') {
+        await client
+          .from('entradas_nf')
+          .update({ status: 'importada', updated_at: new Date().toISOString() })
+          .eq('id', entradaId);
+      }
+    } catch (errSync) {
+      console.warn('[VINCULO] aviso ao sincronizar status do cabeçalho:', errSync);
+    }
+
+    showToast('Vínculo confirmado com sucesso!', 'success');
+    document.getElementById('modal-confirm-vinculo-container')?.remove();
+    document.getElementById('modal-mapear-produto-container')?.remove();
+
+    if (document.querySelector('.nf-identificacao-screen')) {
+      renderEntradaNFIdentificacao(entradaId);
+    } else {
+      renderNFDetail(entradaId);
+    }
+  } catch (err) {
+    console.error('[VINCULO] Erro ao confirmar vínculo:', err);
+    showToast('Erro ao confirmar vínculo: ' + err.message, 'error');
+  }
+}
+
+  // ==========================================
+  // ESTADO E CONTROLE DO MODAL DE PAGAMENTO NF
+  // ==========================================
+  const entradaNFPagamentoModalState = {};
+
+  function getEntradaNFPagamentoState(entradaId, nf, parcelasExistentes) {
+    if (!entradaNFPagamentoModalState[entradaId]) {
+      const valorTotal = parseDecimal(nf.valor_total || 0);
+      let parcelasIniciais = [];
+
+      if (parcelasExistentes && parcelasExistentes.length > 0) {
+        parcelasIniciais = parcelasExistentes.map((p, idx) => ({
+          numero: p.numero_parcela || (idx + 1),
+          vencimento: p.data_vencimento || p.vencimento || '',
+          valor: parseDecimal(p.valor || 0)
+        }));
+      } else {
+        const hojeISO = getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+        parcelasIniciais = [{
+          numero: 1,
+          vencimento: hojeISO,
+          valor: valorTotal
+        }];
+      }
+
+      entradaNFPagamentoModalState[entradaId] = {
+        isOpen: false,
+        condicao: (parcelasIniciais.length > 1) ? 'parcelado' : (nf.tipo_condicao_financeira || 'a_vista'),
+        formaPagamento: (parcelasExistentes && parcelasExistentes[0]?.forma_pagamento) || 'boleto',
+        observacao: nf.observacao_financeira || '',
+        qtdParcelas: parcelasIniciais.length || 1,
+        primeiroVencimento: parcelasIniciais[0]?.vencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
+        intervaloDias: 30,
+        parcelas: parcelasIniciais
+      };
+    }
+    return entradaNFPagamentoModalState[entradaId];
+  }
+
+  function openModalPagamentoNF(entradaId) {
+    if (entradaNFPagamentoModalState[entradaId]) {
+      entradaNFPagamentoModalState[entradaId].isOpen = true;
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function closeModalPagamentoNF(entradaId) {
+    if (entradaNFPagamentoModalState[entradaId]) {
+      entradaNFPagamentoModalState[entradaId].isOpen = false;
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function setCondicaoPagamentoNF(entradaId, condicao, valorTotal) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+    state.condicao = condicao;
+    if (condicao === 'a_vista') {
+      state.qtdParcelas = 1;
+      state.parcelas = [{
+        numero: 1,
+        vencimento: state.primeiroVencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
+        valor: parseDecimal(valorTotal)
+      }];
+    } else {
+      if (state.qtdParcelas < 2) state.qtdParcelas = 2;
+      gerarParcelasPagamentoNF(entradaId, valorTotal);
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function gerarParcelasPagamentoNF(entradaId, valorTotal) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+
+    const n = Math.max(1, parseInt(state.qtdParcelas, 10) || 1);
+    const totalCentavos = Math.round(parseDecimal(valorTotal) * 100);
+    const baseCentavos = Math.floor(totalCentavos / n);
+    const restoCentavos = totalCentavos % n;
+
+    const dataBase = state.primeiroVencimento ? new Date(state.primeiroVencimento + 'T12:00:00') : new Date();
+    const intervalo = parseInt(state.intervaloDias, 10) || 30;
+
+    const novasParcelas = [];
+    for (let i = 0; i < n; i++) {
+      const centavosDestaParcela = baseCentavos + (i < restoCentavos ? 1 : 0);
+      const dataVenc = new Date(dataBase);
+      dataVenc.setDate(dataBase.getDate() + (i * intervalo));
+      const vencStr = dataVenc.toISOString().split('T')[0];
+
+      novasParcelas.push({
+        numero: i + 1,
+        vencimento: vencStr,
+        valor: centavosDestaParcela / 100
+      });
+    }
+
+    state.parcelas = novasParcelas;
+    renderNFDetail(entradaId);
+  }
+
+  function updateParcelaPagamentoField(entradaId, index, field, value) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state || !state.parcelas[index]) return;
+
+    if (field === 'valor') {
+      state.parcelas[index].valor = parseDecimal(value || 0);
+    } else if (field === 'vencimento') {
+      state.parcelas[index].vencimento = value;
+    }
+
+    // Re-render dinâmico do footer de fechamento financeiro do modal
+    const totalFiscal = state.valorTotalNf || 0;
+    const somaParcelas = state.parcelas.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
+    const somaCentavos = Math.round(somaParcelas * 100);
+    const fiscalCentavos = Math.round(totalFiscal * 100);
+    const diffCentavos = somaCentavos - fiscalCentavos;
+    const diffValor = diffCentavos / 100;
+
+    const somaEl = document.getElementById('modal-pagamento-soma');
+    const diffEl = document.getElementById('modal-pagamento-diff');
+    const btnSalvar = document.getElementById('btn-salvar-pagamento-nf');
+
+    if (somaEl) somaEl.innerText = formatCurrency(somaCentavos / 100);
+    if (diffEl) {
+      if (diffCentavos === 0) {
+        diffEl.innerHTML = '<span style="color:#15803d; font-weight:800;">R$ 0,00 (PAGAMENTO CONFERIDO ✓)</span>';
+      } else {
+        diffEl.innerHTML = `<span style="color:#b91c1c; font-weight:800;">${diffValor > 0 ? '+' : ''}${formatCurrency(diffValor)} (VALORES NÃO FECHAM)</span>`;
+      }
+    }
+    if (btnSalvar) {
+      if (diffCentavos === 0) {
+        btnSalvar.removeAttribute('disabled');
+        btnSalvar.style.opacity = '1';
+        btnSalvar.style.cursor = 'pointer';
+      } else {
+        btnSalvar.setAttribute('disabled', 'true');
+        btnSalvar.style.opacity = '0.5';
+        btnSalvar.style.cursor = 'not-allowed';
+      }
+    }
+  }
+
+  function updatePagamentoField(entradaId, field, value) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+    state[field] = value;
+  }
+
+  async function salvarPagamentoNFDoModal(entradaId) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+
+    try {
+      const payload = {
+        condicao: state.condicao,
+        formaPagamento: state.formaPagamento,
+        observacao: state.observacao,
+        parcelas: state.parcelas
+      };
+
+      const res = await DataClient.saveEntradaNFParcelasFiscais(entradaId, payload);
+      if (res.success) {
+        showToast('Pagamento da nota fiscal configurado com sucesso!', 'success');
+        state.isOpen = false;
+        delete entradaNFPagamentoModalState[entradaId];
+        renderNFDetail(entradaId);
+      }
+    } catch (err) {
+      console.error('[FINANCEIRO_NF] Erro ao salvar pagamento:', err);
+      showToast('Erro ao salvar parcelas fiscais: ' + err.message, 'error');
+    }
+  }
+
+function getItemSituacaoDisplayStatus(situacao) {
+  const s = String(situacao || '').toUpperCase();
+  if (s === 'CONFERE' || s === 'CONFERIDO' || s === 'VINCULADO') {
+    return {
+      label: 'CONFERE',
+      color: '#15803d',
+      bg: 'rgba(34, 197, 94, 0.1)',
+      border: 'rgba(34, 197, 94, 0.25)'
+    };
+  }
+  if (s === 'RECUSADO') {
+    return {
+      label: 'RECUSADO',
+      color: '#dc2626',
+      bg: 'rgba(239, 68, 68, 0.1)',
+      border: 'rgba(239, 68, 68, 0.25)'
+    };
+  }
+  if (s.includes('DIVERG') || s === 'DIVERGENTE' || s === 'DIVERGENCIA' || s === 'DIVERGENCIA_XML_FISICO') {
+    return {
+      label: 'DIVERGÊNCIA',
+      color: '#d97706',
+      bg: 'rgba(245, 158, 11, 0.1)',
+      border: 'rgba(245, 158, 11, 0.25)'
+    };
+  }
+  return {
+    label: 'AGUARDANDO CONFERÊNCIA',
+    color: '#b45309',
+    bg: 'rgba(245, 158, 11, 0.1)',
+    border: 'rgba(245, 158, 11, 0.25)'
+  };
 }
 
 async function renderNFDetail(id) {
- const currentUser = localStorage.getItem('currentUser');
- const nf = await DataClient.getEntradaNFById(id);
- 
- if (!nf) {
- showToast('Operacao concluida.', 'info');
- renderNFAbertasList();
- return;
- }
+  const currentUser = localStorage.getItem('currentUser');
+  const nf = await DataClient.getEntradaNFById(id);
+  
+  if (!nf) {
+    showToast('Operação concluída.', 'info');
+    renderNFAbertasList();
+    return;
+  }
 
- const itens = await fetchEntradaNFItens(id);
- const podeFinalizar = nf.tipo_lancamento === 'entrada_normal' &&
- nf.afeta_estoque !== false &&
- !nf.estoque_finalizado &&
- String(nf.status || '').toLowerCase() !== 'finalizada' &&
- itens.length > 0 &&
- itens.every(item => item.id_interno && parseDecimal(item.quantidade) > 0);
+  const client = window.supabaseClient;
+  let todasContasPagar = [];
+  if (client) {
+    const { data: cpData } = await client
+      .from('contas_pagar')
+      .select('*')
+      .eq('entrada_nf_id', id);
+    todasContasPagar = cpData || [];
+  }
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen">
- ${getTopBarHTML(currentUser, 'renderNFAbertasList()')}
- 
- <main class="container">
- <div style="padding: 12px 20px 40px 20px;">
- <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
- <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px;">
- <div>
- <div style="font-size: 0.6rem; color: #999; text-transform: uppercase; font-weight: 700;">NAOmero / SArie</div>
- <div style="font-size: 1.2rem; font-weight: 900; color: #101018;">${nf.numero_nf} / ${nf.serie || '1'}</div>
- </div>
- <div style="text-align: right;">
- <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 4px 12px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">
- ${nf.status}
- </div>
- </div>
- </div>
- <div class="form-grid" style="gap: 12px;">
- <div class="input-group">
- <label style="color: #999; font-size: 0.6rem;">FORNECEDOR</label>
- <div style="font-weight: 700; color: #101018; font-size: 0.85rem;">${nf.fornecedor_nome}</div>
- </div>
- <div class="input-group">
- <label style="color: #999; font-size: 0.6rem;">VALOR TOTAL (NF)</label>
- <div style="font-weight: 800; color: var(--primary); font-size: 1rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
- </div>
- </div>
+  const parcelasFiscais = todasContasPagar.filter(cp => {
+    const t = String(cp.tipo_lancamento || cp.origem || '').toLowerCase();
+    const obs = String(cp.observacao || cp.observacoes || '');
+    return (t === 'nota_fiscal' || t === 'nf' || (!t.includes('complementar') && !cp.complementar_id && !obs.includes('[COMPLEMENTAR:')));
+  }).sort((a, b) => Number(a.numero_parcela || 1) - Number(b.numero_parcela || 1));
 
- <!-- SECAO DE ITENS (PREPARACAO FASE 2) -->
- <div style="margin-top: 30px; border-top: 2px solid #f0f0f0; padding-top: 20px;">
- <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
- <h3 style="color: #101018; font-family: 'Fjalla One', sans-serif; font-size: 1.1rem;">ITENS DA NOTA</h3>
- ${podeFinalizar ? `
- <button class="btn-action" onclick="confirmarFinalizarEntradaNFAberta('${nf.id}')" style="padding: 8px 16px; font-size: 0.75rem; background: #22c55e !important;">
- <span class="material-symbols-rounded">check_circle</span> FINALIZAR ENTRADA
- </button>
- ` : ''}
- </div>
+  const itensRaw = await fetchEntradaNFItens(id);
+  const temRecebimentosNoBanco = itensRaw.length > 0 && itensRaw.every(i => i.recebimentoPersistido);
+  const estadoConferencia = initEntradaNFConferenciaState(id, itensRaw, temRecebimentosNoBanco);
+  const compState = getEntradaNFComplementarState(id);
+  const complementaresSalvos = await DataClient.fetchComplementaresEntradaNF(id);
+  const pagState = getEntradaNFPagamentoState(id, nf, parcelasFiscais);
 
- ${itens.length ? `
- <div id="nf-items-container" style="display: flex; flex-direction: column; gap: 10px;">
- ${itens.map(item => `
- <div style="background:#f9f9f9; border:1px solid #eee; border-radius:14px; padding:12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;">
- <div style="min-width:0;">
- <div style="font-weight:800; color:#101018; font-size:0.85rem;">${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</div>
- <div style="color:#666; font-size:0.72rem; margin-top:4px;">ID: ${escapeKitAttribute(item.id_interno || '-')} | EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</div>
- </div>
- <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; color:#333; font-size:0.74rem; font-weight:700;">
- <span>Qtd ${formatStockNumber(item.quantidade)}</span>
- <span>Custo ${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
- <span>${escapeKitAttribute(item.status_vinculo || '-')}</span>
- </div>
- </div>
- `).join('')}
- </div>
- ` : `
- <div id="nf-items-container" style="text-align: center; padding: 30px; background: #f9f9f9; border-radius: 16px; border: 1px dashed #ddd;">
- <span class="material-symbols-rounded" style="font-size: 32px; color: #ccc; margin-bottom: 10px;">inventory_2</span>
- <p style="color: #999; font-size: 0.85rem; font-weight: 500;">NENHUM ITEM ENCONTRADO</p>
- </div>
- `}
- </div>
- </div>
+  // Calcular impacto do Complementar
+  let valorComplementar = (complementaresSalvos || []).reduce((sum, c) => sum + Number(c.valor_total || 0), 0);
+  if (compState.isMockActive) {
+    valorComplementar += compState.valorTotal;
+  }
 
- </div>
- </main>
- </div>
- `;
+  const valorFiscalNF = parseDecimal(nf.valor_total) || 0;
+  const totalFinanceiroPrevisto = valorFiscalNF + valorComplementar;
+
+  // Recalcular custos dos itens dinamicamente na UI com os complementares que incorporam ao custo
+  const totalProdutos = itensRaw.reduce((sum, i) => sum + parseDecimal(i.valor_total), 0);
+
+  let totalComplementarIncorporadoNf = 0;
+  (complementaresSalvos || []).forEach(comp => {
+    if (comp.incorporar_custo) {
+      totalComplementarIncorporadoNf += Number(comp.valor_total || 0);
+    }
+  });
+
+  if (compState.isMockActive && compState.incorporarCusto) {
+    totalComplementarIncorporadoNf += compState.valorTotal;
+  }
+
+  const itens = itensRaw.map(item => {
+    const vProd = parseDecimal(item.valor_total);
+    const qCom = parseDecimal(item.quantidade);
+    const prop = totalProdutos > 0 ? vProd / totalProdutos : 0;
+    const custoBaseNota = parseDecimal(item.custo_real_unitario ?? item.valor_unitario);
+    const custoBaseTotalItem = parseDecimal(item.custo_real_total ?? (custoBaseNota * qCom));
+    
+    const complementoItem = totalComplementarIncorporadoNf * prop;
+    const custoRealTotalCalculado = custoBaseTotalItem + complementoItem;
+    const custoRealUnitarioCalculado = qCom > 0 ? custoRealTotalCalculado / qCom : custoBaseNota;
+
+    return {
+      ...item,
+      custo_real_total_ui: custoRealTotalCalculado,
+      custo_real_unitario_ui: custoRealUnitarioCalculado,
+      complemento_rateado_item: complementoItem
+    };
+  });
+
+  const custoTotalAquisicao = itens.reduce((sum, i) => sum + i.custo_real_total_ui, 0);
+
+  const isEntradaFinalizada = nf.status === 'finalizada' || !!nf.estoque_finalizado;
+
+  // VALIDAÇÃO FINANCEIRA RIGOROSA
+  const somaParcelasFiscais = parcelasFiscais.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffFinanceira = Math.abs(Math.round((valorFiscalNF - somaParcelasFiscais) * 100) / 100);
+  const financeiroValido = parcelasFiscais.length > 0 && 
+    diffFinanceira <= 0.005 && 
+    parcelasFiscais.every(p => parseDecimal(p.valor) > 0 && (p.vencimento || p.data_vencimento));
+
+  const podeFinalizar = nf.tipo_lancamento === 'entrada_normal' &&
+    nf.afeta_estoque !== false &&
+    !isEntradaFinalizada &&
+    estadoConferencia.conferenciaSalva &&
+    !estadoConferencia.dirty &&
+    !compState.isModalOpen &&
+    !pagState.isOpen &&
+    itens.length > 0 &&
+    itens.every(item => item.id_interno && parseDecimal(item.quantidade) > 0) &&
+    financeiroValido;
+
+  const headerStatus = isEntradaFinalizada 
+    ? { label: 'FINALIZADA', color: '#15803d', bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.3)' }
+    : getEntradaNFDisplayStatus(nf);
+
+  // Cálculo das parcelas do modal de complementar
+  const somaParcelasComp = compState.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasComp = Math.round((compState.valorTotal - somaParcelasComp) * 100) / 100;
+  const parcelasValidasComp = Math.abs(diffParcelasComp) <= 0.01 && compState.valorTotal > 0 && compState.parcelas.every(p => p.valor > 0 && p.vencimento);
+
+  // Cálculo das parcelas do modal de pagamento da NF
+  const somaParcelasPagModal = pagState.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasPagModal = Math.round((valorFiscalNF - somaParcelasPagModal) * 100) / 100;
+  const parcelasValidasPagModal = Math.abs(diffParcelasPagModal) <= 0.005 && 
+    pagState.parcelas.length > 0 && 
+    pagState.parcelas.every(p => parseDecimal(p.valor) > 0 && p.vencimento);
+
+  const temItensPendentesVinculo = itensRaw.some(i => i.status_vinculo === 'pendente_vinculo' || !i.id_interno);
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen entrada-nf-detail-v2">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'CONFERÊNCIA FÍSICA & RECEBIMENTO',
+        icon: 'nf_recebimento',
+        backAction: 'renderEntradaNFEmRecebimento()'
+      })}
+      
+      <main class="container app-page-container entrada-nf-detail-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        
+        ${temItensPendentesVinculo ? `
+          <div style="background: #fffbebf5; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 16px 20px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <strong style="color: #92400e; font-size: 0.9rem; display: block;">⚠ ESTA NOTA FISCAL POSSUI ITENS AGUARDANDO IDENTIFICAÇÃO</strong>
+              <span style="font-size: 0.8rem; color: #b45309;">Vincule todos os produtos fiscais ao Produto Mestre antes da conferência física.</span>
+            </div>
+            <button type="button" onclick="renderEntradaNFIdentificacao('${nf.id}')" style="background: #f59e0b; color: #111827; border: none; padding: 9px 16px; border-radius: 10px; font-weight: 800; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">link</span> IDENTIFICAR PRODUTOS
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- CABEÇALHO DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 16px;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 14px;">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">ENTRADA DE NOTA FISCAL</span>
+              <h1 style="font-size: 1.35rem; font-weight: 900; color: #0f172a; margin: 2px 0 0 0; display: flex; align-items: center; gap: 8px;">
+                NF ${nf.numero_nf || '-'} 
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+              </h1>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              ${isEntradaFinalizada ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span>
+                  ✓ ENTRADA FINALIZADA
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: ${headerStatus.bg}; color: ${headerStatus.color}; border: 1px solid ${headerStatus.border};">
+                  <span style="width: 7px; height: 7px; border-radius: 50%; background: ${headerStatus.color};"></span>
+                  ${headerStatus.label}
+                </span>
+              `}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: center;">
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b; text-transform: uppercase; word-break: break-word;">${nf.fornecedor_nome || 'FORNECEDOR NÃO INFORMADO'}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">DATA DE EMISSÃO</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${formatDateBR(nf.data_emissao || nf.created_at)}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">VALOR FISCAL DA NF</span>
+              <strong style="font-size: 1.15rem; font-weight: 900; color: #2563eb;">${nfXmlFormatMoney(nf.valor_total)}</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- DOIS CARDS DE RESUMO (FINANCEIRO & CUSTO AQUISIÇÃO) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          
+          <!-- CARD 1: RESUMO FINANCEIRO -->
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
+            <div style="font-size: 0.75rem; font-weight: 800; color: #2563eb; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">payments</span> RESUMO FINANCEIRO
+            </div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 10px; font-weight: 500;">Quanto a empresa terá que pagar no total.</div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+              <span style="color: #64748b;">Valor fiscal da NF:</span>
+              <strong style="color: #0f172a;">${getEntradaNFMoney(valorFiscalNF)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 10px;">
+              <span style="color: #64748b;">Complementares:</span>
+              <strong style="color: ${valorComplementar > 0 ? '#d97706' : '#94a3b8'};">${valorComplementar > 0 ? '+ ' + getEntradaNFMoney(valorComplementar) : 'R$ 0,00'}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #0f172a; font-size: 0.88rem;">TOTAL FINANCEIRO:</strong>
+              <strong style="color: #2563eb; font-size: 1.15rem; font-weight: 900;">${getEntradaNFMoney(totalFinanceiroPrevisto)}</strong>
+            </div>
+          </div>
+
+          <!-- CARD 2: CUSTO DA AQUISIÇÃO -->
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
+            <div style="font-size: 0.75rem; font-weight: 800; color: #16a34a; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">inventory_2</span> CUSTO DA AQUISIÇÃO
+            </div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 10px; font-weight: 500;">Quanto efetivamente compõe o custo dos produtos.</div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+              <span style="color: #64748b;">Custo base da NF:</span>
+              <strong style="color: #0f172a;">${getEntradaNFMoney(valorFiscalNF)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 10px;">
+              <span style="color: #64748b;">Complemento incorporado:</span>
+              <strong style="color: ${totalComplementarIncorporadoNf > 0 ? '#16a34a' : '#94a3b8'};">${totalComplementarIncorporadoNf > 0 ? '+ ' + getEntradaNFMoney(totalComplementarIncorporadoNf) : 'R$ 0,00'}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #0f172a; font-size: 0.88rem;">CUSTO DA AQUISIÇÃO:</strong>
+              <strong style="color: #16a34a; font-size: 1.15rem; font-weight: 900;">${getEntradaNFMoney(custoTotalAquisicao)}</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- SEÇÃO: FINANCEIRO DA ENTRADA -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 24px;">
+          
+          <div style="margin-bottom: 16px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <h2 style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0;">FINANCEIRO DA ENTRADA</h2>
+            <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">Condição de pagamento da Nota Fiscal e lançamentos complementares.</p>
+          </div>
+
+          <!-- BLOCO 1: PARCELAS DA NOTA FISCAL -->
+          <div style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <span class="material-symbols-rounded" style="color: #2563eb; font-size: 18px;">receipt_long</span> PARCELAS DA NOTA FISCAL
+                </h3>
+                <span style="font-size: 0.72rem; color: #64748b;">Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>
+              </div>
+
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="openModalPagamentoNF('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: ${parcelasFiscais.length ? '#ffffff' : '#2563eb'}; color: ${parcelasFiscais.length ? '#2563eb' : '#ffffff'}; border: 1px solid #2563eb; padding: 7px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.15s ease; box-shadow: ${parcelasFiscais.length ? 'none' : '0 2px 8px rgba(37,99,235,0.25)'};">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">${parcelasFiscais.length ? 'edit' : 'add'}</span>
+                  ${parcelasFiscais.length ? 'REVISAR PAGAMENTO' : 'DEFINIR PAGAMENTO'}
+                </button>
+              ` : ''}
+            </div>
+            
+            ${parcelasFiscais.length ? `
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${parcelasFiscais.map(p => {
+                  const st = getContasPagarDisplayStatus(p.status);
+                  const dtVenc = getEntradaNFDate(p.vencimento || p.data_vencimento);
+                  return `
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                      <div>
+                        <div style="font-weight: 800; color: #0f172a; font-size: 0.85rem;">Parcela ${p.parcela || '1/1'}</div>
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Vencimento: <b>${dtVenc}</b> ${p.forma_pagamento ? `· Forma: <span style="text-transform:uppercase;">${escapeKitAttribute(p.forma_pagamento)}</span>` : ''}</div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 14px;">
+                        <span style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">${getEntradaNFMoney(p.valor || nf.valor_total)}</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 14px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; background: ${st.bg}; color: ${st.color}; border: 1px solid ${st.border};">
+                          ${st.label}
+                        </span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <!-- AVISO CLARO QUANDO NÃO HÁ PARCELAS PERSISTIDAS -->
+              <div style="background: #fffbeb; border: 1px dashed #f59e0b; border-radius: 10px; padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <strong style="color: #92400e; font-size: 0.82rem; display: block; text-transform: uppercase;">⚠ CONDIÇÃO DE PAGAMENTO: NÃO DEFINIDA</strong>
+                  <span style="font-size: 0.75rem; color: #b45309;">Defina as parcelas da nota fiscal antes de finalizar a entrada.</span>
+                </div>
+                ${!isEntradaFinalizada ? `
+                  <button type="button" onclick="openModalPagamentoNF('${nf.id}')" style="background: #f59e0b; color: #111827; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">add_card</span> DEFINIR PAGAMENTO
+                  </button>
+                ` : ''}
+              </div>
+            `}
+          </div>
+
+          <!-- BLOCO 2: LANÇAMENTOS COMPLEMENTARES -->
+          <div style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <span class="material-symbols-rounded" style="color: #d97706; font-size: 18px;">add_card</span> LANÇAMENTOS COMPLEMENTARES
+                </h3>
+                <span style="font-size: 0.72rem; color: #64748b;">Fretes e despesas adicionais vinculadas à entrada</span>
+              </div>
+
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="openModalComplementarNF('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; color: #d97706; border: 1px solid #d97706; padding: 7px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.15s ease;">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">add</span> + ADICIONAR COMPLEMENTAR
+                </button>
+              ` : ''}
+            </div>
+
+            ${(complementaresSalvos.length || compState.isMockActive) ? `
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${complementaresSalvos.map(comp => {
+                  const valorCompTotal = Number(comp.valor_total || comp.parcelas.reduce((s, p) => s + parseDecimal(p.valor), 0));
+                  const incCustoLabel = comp.incorporar_custo ? 'INCORPORA AO CUSTO' : 'NÃO INCORPORA AO CUSTO';
+                  const incCustoBg = comp.incorporar_custo ? 'rgba(34, 197, 94, 0.12)' : 'rgba(100, 116, 139, 0.12)';
+                  const incCustoColor = comp.incorporar_custo ? '#15803d' : '#475569';
+                  const incCustoBorder = comp.incorporar_custo ? 'rgba(34, 197, 94, 0.3)' : 'rgba(100, 116, 139, 0.3)';
+                  
+                  return `
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #d97706; border-radius: 10px; padding: 12px 14px;">
+                      
+                      <!-- CABEÇALHO DO GRUPO COMPLEMENTAR -->
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
+                        <div>
+                          <strong style="color: #0f172a; font-size: 0.85rem; display: block;">${escapeKitAttribute(comp.descricao || 'Lançamento Complementar')}</strong>
+                          <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">${comp.parcelas.length} parcela(s)</span>
+                        </div>
+                        
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                          <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(valorCompTotal)}</strong>
+                          <span style="display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: ${incCustoBg}; color: ${incCustoColor}; border: 1px solid ${incCustoBorder};">
+                            ${incCustoLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- PARCELAS DO COMPLEMENTAR -->
+                      <div style="display: flex; flex-direction: column; gap: 6px;">
+                        ${comp.parcelas.map(p => {
+                          const stP = getContasPagarDisplayStatus(p.status);
+                          const dtVencP = getEntradaNFDate(p.vencimento || p.data_vencimento);
+                          return `
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+                              <div>
+                                <span style="font-weight: 700; color: #334155;">Parcela ${p.parcela || p.numero_parcela || '1'}</span>
+                                <span style="color: #64748b; margin-left: 10px;">Vencimento: <b>${dtVencP}</b></span>
+                              </div>
+                              <div style="display: flex; align-items: center; gap: 10px;">
+                                <strong style="color: #0f172a;">${getEntradaNFMoney(p.valor)}</strong>
+                                <span style="display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: ${stP.bg}; color: ${stP.color}; border: 1px solid ${stP.border};">
+                                  ${stP.label}
+                                </span>
+                              </div>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+
+                    </div>
+                  `;
+                }).join('')}
+
+                ${compState.isMockActive ? `
+                  <div style="background: #fffbebf5; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 10px; padding: 12px 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; border-bottom: 1px dashed #fef3c7; padding-bottom: 8px;">
+                      <div>
+                        <strong style="color: #92400e; font-size: 0.85rem; display: block;">[Simulação UI] ${escapeKitAttribute(compState.descricao)}</strong>
+                        <span style="font-size: 0.7rem; color: #b45309; font-weight: 500;">${compState.parcelas.length} parcelas</span>
+                      </div>
+                      <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                        <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(compState.valorTotal)}</strong>
+                        <span style="display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                          ${compState.incorporarCusto ? 'INCORPORA AO CUSTO' : 'NÃO INCORPORA AO CUSTO'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      ${compState.parcelas.map((p, idx) => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #fef3c7; border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+                          <div>
+                            <span style="font-weight: 700; color: #334155;">Parcela ${idx + 1}</span>
+                            <span style="color: #64748b; margin-left: 10px;">Vencimento: <b>${getEntradaNFDate(p.vencimento)}</b></span>
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <strong style="color: #0f172a;">${getEntradaNFMoney(p.valor)}</strong>
+                            <span style="display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309;">
+                              RASCUNHO | EFETIVA AO FINALIZAR
+                            </span>
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <div style="text-align: center; padding: 14px; background: #ffffff; border-radius: 10px; border: 1px dashed #e2e8f0; color: #64748b; font-size: 0.75rem; font-weight: 500;">
+                Nenhum lançamento complementar vinculado a esta entrada.
+              </div>
+            `}
+          </div>
+
+        </div>
+
+        <!-- MODAL: CONFIGURAR / REVISAR PAGAMENTO DA NOTA FISCAL -->
+        ${pagState.isOpen ? `
+          <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div style="background:white; border-radius:24px; max-width:620px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+              
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
+                <div>
+                  <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
+                    ${pagState.isRevisao ? 'REVISAR PAGAMENTO DA NOTA' : 'CONFIGURAR PAGAMENTO DA NOTA'}
+                  </h3>
+                  <span style="font-size:0.75rem; color:#64748b;">NF ${nf.numero_nf || '-'} · ${escapeKitAttribute(nf.fornecedor_nome || '')}</span>
+                </div>
+                <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b;">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:16px;">
+                
+                <!-- SELETOR DE CONDIÇÃO -->
+                <div>
+                  <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:6px;">TIPO DE CONDIÇÃO</label>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'a_vista' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'a_vista' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'a_vista' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
+                      À VISTA (1x)
+                    </button>
+                    <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'parcelado', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'parcelado' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'parcelado' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'parcelado' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
+                      PARCELADO
+                    </button>
+                  </div>
+                </div>
+
+                <!-- FORMA DE PAGAMENTO E OBSERVAÇÃO -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <div>
+                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">FORMA DE PAGAMENTO</label>
+                    <select onchange="updatePagamentoField('${nf.id}', 'formaPagamento', this.value)" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600; background:white;">
+                      <option value="boleto" ${pagState.formaPagamento === 'boleto' ? 'selected' : ''}>Boleto Bancário</option>
+                      <option value="pix" ${pagState.formaPagamento === 'pix' ? 'selected' : ''}>Pix</option>
+                      <option value="transferencia" ${pagState.formaPagamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
+                      <option value="cartao" ${pagState.formaPagamento === 'cartao' ? 'selected' : ''}>Cartão de Crédito</option>
+                      <option value="dinheiro" ${pagState.formaPagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                      <option value="outro" ${pagState.formaPagamento === 'outro' ? 'selected' : ''}>Outro</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">PRIMEIRO VENCIMENTO</label>
+                    <input type="date" value="${pagState.primeiroVencimento}" onchange="updatePagamentoField('${nf.id}', 'primeiroVencimento', this.value); if(pagState.condicao==='a_vista') setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF});" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600;">
+                  </div>
+                </div>
+
+                ${pagState.condicao === 'parcelado' ? `
+                  <!-- GERADOR DE PARCELAS -->
+                  <div style="background:#f1f5f9; border-radius:12px; padding:12px 14px; display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:flex-end;">
+                    <div>
+                      <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">Nº DE PARCELAS</label>
+                      <input type="number" min="2" max="24" value="${pagState.qtdParcelas}" onchange="updatePagamentoField('${nf.id}', 'qtdParcelas', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
+                    </div>
+                    <div>
+                      <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">INTERVALO (DIAS)</label>
+                      <input type="number" min="1" max="90" value="${pagState.intervaloDias}" onchange="updatePagamentoField('${nf.id}', 'intervaloDias', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
+                    </div>
+                    <div>
+                      <button type="button" onclick="gerarParcelasPagamentoNF('${nf.id}', ${valorFiscalNF})" style="background:#2563eb; color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:800; font-size:0.75rem; cursor:pointer;">
+                        GERAR PARCELAS
+                      </button>
+                    </div>
+                  </div>
+                ` : ''}
+
+                <!-- GRADE DE PARCELAS -->
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <strong style="font-size:0.8rem; color:#0f172a; text-transform:uppercase;">PARCELAS FISCAIS (${pagState.parcelas.length})</strong>
+                    <span style="font-size:0.72rem; color:#64748b;">Ajuste vencimentos e valores se necessário</span>
+                  </div>
+
+                  <div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto;">
+                    ${pagState.parcelas.map((p, idx) => `
+                      <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:center; background:white; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <span style="font-size:0.75rem; font-weight:800; color:#64748b; min-width:35px;">#${p.numero || idx + 1}</span>
+                        <input type="date" value="${p.vencimento}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
+                        <input type="number" step="0.01" value="${p.valor}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:800; font-size:0.78rem; text-align:right;">
+                      </div>
+                    `).join('')}
+                  </div>
+
+                  <!-- VALIDAÇÃO EM TEMPO REAL -->
+                  <div style="margin-top:14px; padding-top:10px; border-top:1px dashed #cbd5e1; font-size:0.78rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Valor Fiscal da NF:</span>
+                      <strong>${getEntradaNFMoney(valorFiscalNF)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Soma das Parcelas:</span>
+                      <strong style="color:${parcelasValidasPagModal ? '#16a34a' : '#ef4444'};">${getEntradaNFMoney(somaParcelasPagModal)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; color:${parcelasValidasPagModal ? '#16a34a' : '#ef4444'};">
+                      <span>Diferença:</span>
+                      <span>${getEntradaNFMoney(diffParcelasPagModal)}</span>
+                    </div>
+                    ${!parcelasValidasPagModal ? `
+                      <div style="color:#ef4444; font-weight:700; font-size:0.72rem; margin-top:6px; background:#fef2f2; padding:6px 10px; border-radius:6px;">
+                        ⚠ A soma das parcelas deve ser EXATAMENTE igual ao valor fiscal da NF (R$ ${valorFiscalNF.toFixed(2)}).
+                      </div>
+                    ` : `
+                      <div style="color:#16a34a; font-weight:700; font-size:0.72rem; margin-top:6px; background:#f0fdf4; padding:6px 10px; border-radius:6px;">
+                        ✓ Pagamento conferido. Valor fecha perfeitamente.
+                      </div>
+                    `}
+                  </div>
+                </div>
+
+                <!-- OBSERVAÇÃO OPCIONAL -->
+                <div>
+                  <label style="display:block; font-size:0.72rem; font-weight:700; color:#475569; margin-bottom:4px;">OBSERVAÇÃO FINANCEIRA (OPCIONAL)</label>
+                  <input type="text" value="${escapeKitAttribute(pagState.observacao || '')}" onchange="updatePagamentoField('${nf.id}', 'observacao', this.value)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem;" placeholder="Ex: Negociação com fornecedor / prazo especial">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+                  <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; font-weight:700; cursor:pointer;">
+                    Cancelar
+                  </button>
+                  <button type="button" ${!parcelasValidasPagModal ? 'disabled' : ''} onclick="salvarPagamentoNFDoModal('${nf.id}', ${valorFiscalNF})" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasPagModal ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; cursor:${parcelasValidasPagModal ? 'pointer' : 'not-allowed'}; box-shadow:${parcelasValidasPagModal ? '0 4px 12px rgba(34,197,94,0.25)' : 'none'};">
+                    Salvar Pagamento
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- MODAL / FORMULÁRIO DE ADICIONAR COMPLEMENTAR -->
+        ${compState.isModalOpen ? `
+          <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div style="background:white; border-radius:24px; max-width:600px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">COMPLEMENTAR / ESPECIAL</h3>
+                <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b;">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                  <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">DESCRIÇÃO DO COMPLEMENTAR</label>
+                  <input type="text" value="${escapeKitAttribute(compState.descricao)}" onchange="updateComplementarField('${nf.id}', 'descricao', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:600;" placeholder="Ex: Acordo Comercial / Frete Adicional">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <div>
+                    <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">VALOR TOTAL (R$)</label>
+                    <input type="number" step="0.01" value="${compState.valorTotal}" onchange="updateComplementarField('${nf.id}', 'valorTotal', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:800; color:#0f172a;">
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px; padding-top:20px;">
+                    <input type="checkbox" id="comp-inc-custo" ${compState.incorporarCusto ? 'checked' : ''} onchange="updateComplementarField('${nf.id}', 'incorporarCusto', this.checked)">
+                    <label for="comp-inc-custo" style="font-size:0.78rem; font-weight:800; color:#1e293b; cursor:pointer;">INCORPORAR AO CUSTO DOS PRODUTOS</label>
+                  </div>
+                </div>
+
+                <!-- SEÇÃO DE PARCELAS -->
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px; padding:16px; margin-top:6px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <strong style="font-size:0.85rem; color:#0f172a;">PARCELAS DO COMPLEMENTAR</strong>
+                    <button type="button" onclick="addComplementarParcela('${nf.id}')" style="background:#2563eb; color:white; border:none; padding:4px 10px; border-radius:8px; font-weight:700; font-size:0.72rem; cursor:pointer;">
+                      + Adicionar Parcela
+                    </button>
+                  </div>
+
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${compState.parcelas.map((p, idx) => `
+                      <div style="display:grid; grid-template-columns:auto 1fr 1fr auto; gap:8px; align-items:center; background:white; padding:8px 12px; border-radius:10px; border:1px solid #e2e8f0;">
+                        <span style="font-size:0.75rem; font-weight:800; color:#64748b;">#${idx + 1}</span>
+                        <input type="date" value="${p.vencimento}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
+                        <input type="number" step="0.01" value="${p.valor}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:0.78rem;">
+                        ${compState.parcelas.length > 1 ? `
+                          <button type="button" onclick="removeComplementarParcela('${nf.id}', ${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer;">
+                            <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
+                          </button>
+                        ` : '<div></div>'}
+                      </div>
+                    `).join('')}
+                  </div>
+
+                  <!-- VALIDAÇÃO EM TEMPO REAL -->
+                  <div style="margin-top:14px; padding-top:10px; border-top:1px dashed #cbd5e1; font-size:0.78rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Valor Total do Complementar:</span>
+                      <strong>${getEntradaNFMoney(compState.valorTotal)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Soma das Parcelas:</span>
+                      <strong style="color:${parcelasValidasComp ? '#16a34a' : '#ef4444'};">${getEntradaNFMoney(somaParcelasComp)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; color:${parcelasValidasComp ? '#16a34a' : '#ef4444'};">
+                      <span>Diferença:</span>
+                      <span>${getEntradaNFMoney(diffParcelasComp)}</span>
+                    </div>
+                    ${!parcelasValidasComp ? `
+                      <div style="color:#ef4444; font-weight:700; font-size:0.72rem; margin-top:6px; background:#fef2f2; padding:6px 10px; border-radius:6px;">
+                        ⚠ A soma das parcelas deve ser exatamente igual ao valor total do complementar.
+                      </div>
+                    ` : `
+                      <div style="color:#16a34a; font-weight:700; font-size:0.72rem; margin-top:6px; background:#f0fdf4; padding:6px 10px; border-radius:6px;">
+                        ✓ Soma das parcelas válida.
+                      </div>
+                    `}
+                  </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+                  <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; font-weight:700; cursor:pointer;">
+                    Cancelar
+                  </button>
+                  <button type="button" ${!parcelasValidasComp ? 'disabled' : ''} onclick="salvarComplementarDoModal('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasComp ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; cursor:${parcelasValidasComp ? 'pointer' : 'not-allowed'};">
+                    Salvar Complementar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- SEÇÃO DE ITENS E CONFERÊNCIA FÍSICA -->
+        <div style="margin-top: 24px; background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <div>
+              <h3 style="color: #0f172a; font-family: 'Fjalla One', sans-serif; font-size: 1.15rem; margin: 0;">ITENS DA NOTA E CONFERÊNCIA FÍSICA</h3>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">
+                ${isEntradaFinalizada ? 'Material recebido e registrado nesta entrada.' : 'Confira o material recebido e aloque o local de destino antes de finalizar a entrada.'}
+              </p>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              ${isEntradaFinalizada ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">verified</span>
+                  ✓ RECEBIMENTO FINALIZADO
+                </span>
+              ` : (estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span>
+                  ✓ CONFERÊNCIA FÍSICA SALVA
+                </span>
+              ` : (estadoConferencia.dirty ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">pending_actions</span>
+                  ⚠ ALTERAÇÕES PENDENTES DE SALVAMENTO
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(100, 116, 139, 0.12); color: #475569; border: 1px solid rgba(100, 116, 139, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">hourglass_empty</span>
+                  AGUARDANDO SALVAMENTO DA CONFERÊNCIA
+                </span>
+              `))}
+            </div>
+          </div>
+
+          ${itens.length ? `
+            <div id="nf-items-container" style="display: flex; flex-direction: column; gap: 14px;">
+              ${await (async () => {
+                const idInternos = itens.map(i => i.id_interno).filter(Boolean);
+                let produtosMap = new Map();
+                if (idInternos.length > 0 && client) {
+                  const { data: prodsData } = await client
+                    .from('produtos')
+                    .select('id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+                    .in('id_interno', idInternos);
+                  (prodsData || []).forEach(p => produtosMap.set(p.id_interno, p));
+                }
+
+                return itens.map(item => {
+                  const prod = item.id_interno ? produtosMap.get(item.id_interno) : null;
+                  const itemConf = estadoConferencia.itensState?.[item.id] || {
+                    quantidade_fisica: parseDecimal(item.quantidade),
+                    quantidade_aceita: parseDecimal(item.quantidade),
+                    quantidade_recusada: 0,
+                    local_destino: 'TERREO',
+                    situacao: 'CONFERE',
+                    isEditing: false,
+                    errorMsg: null
+                  };
+
+                  const sitItemCalc = calcularSituacaoRecebimentoItem(item, [{
+                    id_interno: item.id_interno,
+                    quantidade_fisica: itemConf.quantidade_fisica,
+                    quantidade_aceita: itemConf.quantidade_aceita,
+                    quantidade_recusada: itemConf.quantidade_recusada,
+                    local_destino: itemConf.local_destino
+                  }]);
+
+                  const situacaoSt = getItemSituacaoDisplayStatus(sitItemCalc);
+                  const localDisplayMap = { 'TERREO': 'TÉRREO', '1ANDAR': '1º ANDAR', 'MOSTRUARIO': 'MOSTRUÁRIO' };
+                  const localDestinoDisplay = localDisplayMap[itemConf.local_destino] || itemConf.local_destino;
+
+                  const nomeComercial = prod?.descricao_completa || prod?.descricao_base || item.descricao_produto_fornecedor || item.descricao_xml || '-';
+                  const skuStr = prod?.sku_fornecedor || item.sku_fornecedor || item.cprod_fornecedor;
+                  const eanStr = prod?.ean || item.ean_fornecedor || item.ean_xml;
+
+                  return `
+                    <div class="nf-item-card-v2" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+                      
+                      <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+                        
+                        <!-- FOTO DA EMBALAGEM / PRODUTO -->
+                        <div style="width: 72px; height: 72px; min-width: 72px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                          ${prod?.url_imagem ? `
+                            <img src="${escapeKitAttribute(prod.url_imagem)}" alt="${escapeKitAttribute(item.id_interno)}" style="width: 100%; height: 100%; object-fit: cover;">
+                          ` : `
+                            <span class="material-symbols-rounded" style="font-size: 32px; color: #94a3b8;">image</span>
+                          `}
+                        </div>
+
+                        <!-- IDENTIFICAÇÃO COMERCIAL DO PRODUTO -->
+                        <div style="flex: 1; min-width: 240px;">
+                          ${item.id_interno ? `
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+                              <span style="background: #fef08a; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
+                                ${escapeKitAttribute(item.id_interno)}
+                              </span>
+                              ${prod?.marca ? `<span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 6px;">${escapeKitAttribute(prod.marca)}</span>` : ''}
+                            </div>
+                            <h4 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 4px 0 6px 0; line-height: 1.25;">
+                              ${escapeKitAttribute(nomeComercial)}
+                            </h4>
+                            <div style="font-size: 0.72rem; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px;">
+                              ${skuStr ? `<span>SKU: <b>${escapeKitAttribute(skuStr)}</b></span>` : ''}
+                              ${eanStr ? `<span>EAN: <b>${escapeKitAttribute(eanStr)}</b></span>` : ''}
+                            </div>
+                          ` : `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                              <span style="background: rgba(245, 158, 11, 0.12); color: #b45309; font-weight: 800; font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3);">
+                                AGUARDANDO IDENTIFICAÇÃO
+                              </span>
+                            </div>
+                            <h4 style="font-size: 0.9rem; font-weight: 700; color: #334155; margin: 4px 0;">
+                              ${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || 'Item sem vínculo')}
+                            </h4>
+                          `}
+
+                          <div style="font-size: 0.7rem; color: #94a3b8; background: #f8fafc; padding: 4px 8px; border-radius: 6px; display: inline-block;">
+                            Descrição na NF: <span style="color: #475569; font-weight: 600;">${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || '-')}</span>
+                          </div>
+                        </div>
+
+                        <!-- DETALHES DE CONFERÊNCIA E CUSTO (DIREITA) -->
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px;">
+                          
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <!-- BADGE DA SITUAÇÃO DA CONFERÊNCIA -->
+                            <span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: ${situacaoSt.bg}; color: ${situacaoSt.color}; border: 1px solid ${situacaoSt.border};">
+                              ${situacaoSt.label}
+                            </span>
+
+                            ${!isEntradaFinalizada ? `
+                              <button type="button" onclick="toggleEditConferenciaItem('${nf.id}', '${item.id}')" style="display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; border: 1px solid ${itemConf.isEditing ? '#ef4444' : '#cbd5e1'}; background: ${itemConf.isEditing ? '#fee2e2' : '#ffffff'}; color: ${itemConf.isEditing ? '#b91c1c' : '#475569'};">
+                                <span class="material-symbols-rounded" style="font-size: 14px;">${itemConf.isEditing ? 'close' : 'tune'}</span>
+                                ${itemConf.isEditing ? 'CANCELAR' : 'CONFERIR / AJUSTAR'}
+                              </button>
+                            ` : ''}
+                          </div>
+
+                          <!-- LOCAL DE DESTINO & CUSTO UNITÁRIO -->
+                          <div style="text-align: right; font-size: 0.75rem;">
+                            <div style="color: #64748b;">Local de Destino: <b style="color: #0f172a; text-transform: uppercase;">${escapeKitAttribute(localDestinoDisplay)}</b></div>
+                            <div style="color: #64748b; margin-top: 2px;">Custo Unitário: <b style="color: #16a34a; font-size: 0.88rem;">${getEntradaNFMoney(item.custo_real_unitario_ui)}/un</b></div>
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 1px;">Custo Total: ${getEntradaNFMoney(item.custo_real_total_ui)}</div>
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      ${!itemConf.isEditing ? `
+                        <!-- BLOCO DE QUANTIDADES MODO LEITURA (XML | FÍSICO | ACEITO | RECUSADO) -->
+                        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f8fafc; border-radius: 10px; padding: 10px 14px;">
+                          
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">XML</span>
+                            <strong style="font-size: 0.95rem; color: #475569;">${formatStockNumber(item.quantidade)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">FÍSICO</span>
+                            <strong style="font-size: 0.95rem; color: #0f172a;">${formatStockNumber(itemConf.quantidade_fisica)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">ACEITO</span>
+                            <strong style="font-size: 0.95rem; color: ${itemConf.quantidade_aceita > 0 ? '#15803d' : '#64748b'};">${formatStockNumber(itemConf.quantidade_aceita)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">RECUSADO</span>
+                            <strong style="font-size: 0.95rem; color: ${itemConf.quantidade_recusada > 0 ? '#dc2626' : '#94a3b8'};">${formatStockNumber(itemConf.quantidade_recusada)}</strong>
+                          </div>
+
+                        </div>
+                      ` : `
+                        <!-- BLOCO DE EDIÇÃO E AJUSTE DA CONFERÊNCIA DO ITEM -->
+                        <div style="margin-top: 14px; padding: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; display: flex; flex-direction: column; gap: 12px;">
+                          
+                          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; align-items: flex-end;">
+                            
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE XML</label>
+                              <input type="text" value="${formatStockNumber(item.quantidade)}" readonly disabled style="width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #e2e8f0; font-weight: 800; font-size: 0.85rem; color: #475569; text-align: center;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE FÍSICA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_fisica}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_fisica', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #94a3b8; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE ACEITA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_aceita}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_aceita', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #86efac; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff; color: #15803d;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #dc2626; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE RECUSADA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_recusada}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_recusada', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #fca5a5; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff; color: #dc2626;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 2px;">LOCAL DE DESTINO</label>
+                              <select onchange="updateConferenciaItemField('${nf.id}', '${item.id}', 'local_destino', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 700; font-size: 0.8rem; background: #ffffff;">
+                                <option value="TERREO" ${itemConf.local_destino === 'TERREO' ? 'selected' : ''}>TÉRREO</option>
+                                <option value="1ANDAR" ${itemConf.local_destino === '1ANDAR' ? 'selected' : ''}>1º ANDAR</option>
+                                <option value="MOSTRUARIO" ${itemConf.local_destino === 'MOSTRUARIO' ? 'selected' : ''}>MOSTRUÁRIO</option>
+                              </select>
+                            </div>
+
+                          </div>
+
+                          ${itemConf.errorMsg ? `
+                            <div style="color: #b91c1c; font-size: 0.75rem; font-weight: 700; background: #fee2e2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fca5a5;">
+                              ⚠ ${escapeKitAttribute(itemConf.errorMsg)}
+                            </div>
+                          ` : ''}
+
+                          <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px;">
+                            <button type="button" onclick="cancelEditConferenciaItem('${nf.id}', '${item.id}')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 700; font-size: 0.75rem; cursor: pointer;">
+                              CANCELAR
+                            </button>
+                            <button type="button" ${itemConf.errorMsg ? 'disabled' : ''} onclick="confirmEditConferenciaItem('${nf.id}', '${item.id}')" style="padding: 6px 16px; border-radius: 8px; border: none; background: ${itemConf.errorMsg ? '#94a3b8' : '#22c55e'}; color: #ffffff; font-weight: 800; font-size: 0.75rem; cursor: ${itemConf.errorMsg ? 'not-allowed' : 'pointer'}; box-shadow: ${itemConf.errorMsg ? 'none' : '0 2px 8px rgba(34,197,94,0.25)'};">
+                              CONFIRMAR ITEM
+                            </button>
+                          </div>
+
+                        </div>
+                      `}
+
+                    </div>
+                  `;
+                }).join('');
+              })()}
+            </div>
+
+            <!-- PAINEL DE SALVAMENTO DA CONFERÊNCIA FÍSICA -->
+            <div style="margin-top: 20px; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+              <div>
+                <strong style="display: block; font-size: 0.88rem; color: #0f172a;">
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '✓ CONFERÊNCIA FÍSICA SALVA' : (estadoConferencia.dirty ? '⚠ ALTERAÇÕES PENDENTES DE SALVAR' : 'CONFERÊNCIA PRONTA PARA SALVAR')}
+                </strong>
+                <span style="font-size: 0.75rem; color: #64748b;">
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'Os quantitativos e locais de destino estão persistidos no banco de dados.' : 'Clique no botão ao lado para gravar a conferência física e liberar a finalização da entrada.'}
+                </span>
+              </div>
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="salvarConferenciaFisicaEntradaNF('${nf.id}')" style="background: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '#ffffff' : '#2563eb'}; color: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '#2563eb' : '#ffffff'}; border: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '1px solid #2563eb' : 'none'}; padding: 11px 22px; border-radius: 10px; font-weight: 800; font-size: 0.82rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'none' : '0 4px 14px rgba(37,99,235,0.25)'};">
+                  <span class="material-symbols-rounded" style="font-size: 18px;">${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'refresh' : 'save'}</span>
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'RE-SALVAR CONFERÊNCIA' : 'SALVAR CONFERÊNCIA FÍSICA'}
+                </button>
+              ` : ''}
+            </div>
+          ` : `
+            <div id="nf-items-container" style="text-align: center; padding: 30px; background: #f8fafc; border-radius: 16px; border: 1px dashed #e2e8f0;">
+              <span class="material-symbols-rounded" style="font-size: 32px; color: #cbd5e1; margin-bottom: 10px;">inventory_2</span>
+              <p style="color: #64748b; font-size: 0.85rem; font-weight: 600;">NENHUM ITEM ENCONTRADO</p>
+            </div>
+          `}
+
+          <!-- AÇÕES DO RODAPÉ SE A ENTRADA ESTIVER ABERTA -->
+          ${!isEntradaFinalizada ? `
+            <div style="margin-top: 30px; display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding-top: 20px; border-top: 1px solid #e2e8f0; flex-wrap: wrap;">
+              ${!podeFinalizar ? `
+                <div style="font-size: 0.82rem; color: #b45309; font-weight: 700; display: flex; align-items: center; gap: 6px; background: #fef3c7; border: 1px solid #fde68a; padding: 8px 14px; border-radius: 10px;">
+                  <span class="material-symbols-rounded" style="font-size: 18px; color: #d97706;">lock</span>
+                  <span>${!financeiroValido ? 'Defina ou corrija o pagamento da nota fiscal antes de finalizar.' : (temItensPendentesVinculo ? 'Identifique todos os itens da nota antes de finalizar.' : (!estadoConferencia.conferenciaSalva ? 'Salve a conferência física dos itens antes de finalizar.' : 'Aguardando validação completa para finalizar.'))}</span>
+                </div>
+              ` : ''}
+              <button class="btn-action" ${!podeFinalizar ? 'disabled style="opacity: 0.5; cursor: not-allowed; padding: 12px 24px; font-size: 0.85rem; background: #94a3b8 !important;"' : 'style="padding: 12px 24px; font-size: 0.85rem; background: #22c55e !important; box-shadow: 0 4px 14px rgba(34,197,94,0.3); font-weight: 800; cursor: pointer;" onclick="confirmarFinalizarEntradaNFAberta(\'' + nf.id + '\')"'}>
+                <span class="material-symbols-rounded">check_circle</span> FINALIZAR ENTRADA
+              </button>
+            </div>
+          ` : ''}
+
+        </div>
+
+      </main>
+    </div>
+  `;
 }
+
 
 function renderNFPlaceholder(title) {
  const currentUser = localStorage.getItem('currentUser');
@@ -36777,9 +39969,11 @@ function findDevolucaoProductForItem(item = {}) {
 }
 
 function getDevolucaoItemAutoCost(item = {}) {
+ const existingCost = parseInventoryMoney(item.valor_unitario);
+ if (existingCost > 0) return roundMoney(existingCost);
  const product = findDevolucaoProductForItem(item);
- const productCost = product ? getDevolucaoProductCost(product) : 0;
- return productCost > 0 ? productCost : Number(item.valor_unitario || 0);
+ const primaryCost = parseInventoryMoney(product?.preco_custo);
+ return primaryCost > 0 ? roundMoney(primaryCost) : 0;
 }
 
 function getDevolucaoItemCostFromCatalog(item = {}) {
@@ -38353,7 +41547,7 @@ function renderRomaneioUiModal(canais) {
 }
 renderRomaneioScreen = async function(selectedType='', selectedId='') {
  const currentUser=localStorage.getItem('currentUser'); document.body.classList.remove('menu-active');
- try { const [data,movements]=await Promise.all([DataClient.loadModule('separacao',true),DataClient.fetchMovimentosSupabase()]); if(data){appData.separacao=data.separacao||appData.separacao||[];appData.separacao_itens=data.separacao_itens||appData.separacao_itens||[];} appData.movimentacoes=Array.isArray(movements)?movements:[]; } catch(error){console.warn('[ROMANEIO] Falha ao atualizar dados:',error);}
+ try { const data = await DataClient.fetchRomaneioOperationalData(); if (data) { appData.separacao = data.separacao || appData.separacao || []; appData.movimentacoes = data.movimentacoes || appData.movimentacoes || []; } } catch (error) { console.warn('[ROMANEIO] Falha ao atualizar dados:', error); }
  const canais=getRomaneioAvailableChannels(), selectedChannels=parseRomaneioSelectedChannels(selectedType); if(selectedChannels.length)romaneioUi.canais=selectedChannels;
  const records=getRomaneios().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)), selected=selectedId?records.find(item=>item.id===selectedId):null, metrics=selectedChannels.length?getRomaneioTodayMetrics(selectedChannels,selectedChannels):null;
  app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen romaneio-screen">${getTopBarHTML(currentUser,'renderMenu()')}${getModuleSidebarHTML('pick')}<main class="container romaneio-shell romaneio-ui-shell"><section class="romaneio-ui-toolbar"><div class="romaneio-ui-title"><strong>Gerar romaneio</strong><small>Controle de retirada e assinaturas</small></div><button class="romaneio-ui-channel-button" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">inventory_2</span><span id="romaneio-ui-channel-count">${romaneioUi.canais.length?romaneioUi.canais.length+' selecionado(s)':'Selecione os canais'}</span><span class="material-symbols-rounded">expand_more</span></button><label><small>Mes referencia</small><input type="month" value="${romaneioUi.mes}" onchange="romaneioUiFiltro('mes',this.value)"></label><label><small>Status</small><select onchange="romaneioUiFiltro('status',this.value)"><option value="todos">Todos</option><option value="concluido" ${romaneioUi.status==='concluido'?'selected':''}>Concluido</option><option value="andamento" ${romaneioUi.status==='andamento'?'selected':''}>Em andamento</option><option value="erro" ${romaneioUi.status==='erro'?'selected':''}>Erro / cancelado</option></select></label><button class="romaneio-ui-generate" onclick="romaneioUiAbrirModal()"><span class="material-symbols-rounded">description</span>Gerar romaneio</button></section>${metrics?renderRomaneioForm(metrics):''}${selected?renderRomaneioDetail(selected):''}${renderRomaneioUiHistory(records)}</main>${renderRomaneioUiModal(canais)}</div>`;
@@ -38380,15 +41574,26 @@ renderRomaneioScreen = async function(selectedType = '', selectedId = '') {
  app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-choice-screen">${getTopBarHTML(currentUser, 'renderRomaneioScreen()')}${getModuleSidebarHTML('romaneios', 'NOVO ROMANEIO')}<main class="container romaneio-shell romaneio-choice-shell">${channelSelector}</main></div>`;
  return;
  }
+ let loadSuccess = false;
  try {
- const [data, movements] = await Promise.all([DataClient.loadModule('separacao', true), DataClient.fetchMovimentosSupabase()]);
+ const fetchPromise = DataClient.fetchRomaneioOperationalData();
+ const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite excedido ao carregar romaneio (8s)')), 8000));
+ const data = await Promise.race([fetchPromise, timeoutPromise]);
  if (data) {
  appData.separacao = data.separacao || appData.separacao || [];
- appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+ appData.movimentacoes = data.movimentacoes || appData.movimentacoes || [];
+ loadSuccess = true;
  }
- appData.movimentacoes = Array.isArray(movements) ? movements : [];
  } catch (error) {
  console.warn('[ROMANEIO] Falha ao atualizar dados:', error);
+ }
+
+ if (!loadSuccess && (!appData.separacao || !appData.separacao.length)) {
+ const errHeaderKey = selectedKey === 'FLEX' ? 'romaneio_flex' : selectedKey === 'CORREIOS' ? 'romaneio_correios' : 'romaneios';
+ const errHeaderLabel = completedListRequested ? 'ROMANEIOS REALIZADOS' : selectedKey === 'FLEX' ? 'ROMANEIO - FLEX' : selectedKey === 'CORREIOS' ? 'ROMANEIO - CORREIOS' : 'ROMANEIOS';
+ const errBackAction = selectedId ? `renderRomaneioScreen('', '__realizados__')` : requestedChannel ? `renderRomaneioScreen('', '__novo__')` : 'renderRomaneioScreen()';
+ app.innerHTML = `<div class="dashboard-screen internal fade-in module-screen romaneio-screen romaneio-channel-${selectedKey.toLowerCase() || 'choice'}">${getTopBarHTML(currentUser, errBackAction)}${getModuleSidebarHTML(errHeaderKey, errHeaderLabel)}<main class="container romaneio-shell romaneio-ui-shell"><div class="sd-report-error" style="margin: 40px auto; max-width: 480px; text-align: center; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);"><span class="material-symbols-rounded" style="font-size: 48px; color: #ef4444; margin-bottom: 12px;">cloud_off</span><h2 style="font-size: 1.1rem; color: #0f172a; margin-bottom: 8px;">N&#227;o foi poss&#237;vel carregar os dados do Romaneio neste momento.</h2><p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">Verifique a conex&#227;o de rede ou tente novamente.</p><button type="button" class="pending-sync-now" style="margin: auto;" onclick="renderRomaneioScreen('${escapeKitAttribute(selectedType)}','${escapeKitAttribute(selectedId)}')"><span class="material-symbols-rounded">refresh</span>Tentar novamente</button></div></main></div>`;
+ return;
  }
  await SharedWork.refresh(true);
  if (selectedId && !completedListRequested && !newRomaneioRequested) {
@@ -38426,19 +41631,22 @@ function sdPeriodCount(period){return {mes:1,bimestre:2,trimestre:3,'6meses':6,'
 function setSaidaDevolucaoPeriod(period){saidaDevolucaoReportState.periodo=period;const count=sdPeriodCount(period);if(count)saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,count).sort();refreshSaidaDevolucaoReport();}
 function addSaidaDevolucaoMonth(month){if(!month)return;saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=[...new Set([...saidaDevolucaoReportState.meses,month])].sort();refreshSaidaDevolucaoReport();}
 function removeSaidaDevolucaoMonth(month){saidaDevolucaoReportState.periodo='custom';saidaDevolucaoReportState.meses=saidaDevolucaoReportState.meses.filter(item=>item!==month);refreshSaidaDevolucaoReport();}
+function sdFormatQty(value){const num=parseFloat(String(value??0).replace(',','.'));if(!Number.isFinite(num))return '0';return num.toLocaleString('pt-BR',{maximumFractionDigits:2});}
+function isSaidaDevolucaoDemoAllowed(){return typeof isHomologationEnvironment==='function'&&isHomologationEnvironment();}
 function getSaidaDevolucaoDemoMonths(){const now=new Date();return Array.from({length:12},(_,index)=>{const date=new Date(now.getFullYear(),now.getMonth()-index,1);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;});}
-function buildSaidaDevolucaoDemoRows(){const months=saidaDevolucaoReportState.meses||[],allMonths=[...(saidaDevolucaoReportState.demoMonths||[])].sort(),products=(saidaDevolucaoReportState.products||[]).filter(product=>String(product.id_interno||product.col_A||product.col_a||'').trim()).slice(0,12),patterns=['up','down','stable','wave','zeros'];return products.map((product,index)=>{const id=String(product.id_interno||product.col_A||product.col_a).trim(),pattern=patterns[index%patterns.length],base=16+(index*7)%34,fullSales=allMonths.map((month,monthIndex)=>{let value=base;if(pattern==='up')value=base+monthIndex*4;if(pattern==='down')value=base+(11-monthIndex)*4;if(pattern==='stable')value=base+[0,1,-1,0,2,-1,1,0,-2,1,0,1][monthIndex];if(pattern==='wave')value=base+[2,15,-5,12,-2,18,-7,9,1,16,-4,11][monthIndex];if(pattern==='zeros')value=monthIndex%4===1?0:base+[3,-2,6,0,-4,8,1,-1,5,0,7,-3][monthIndex];return Math.max(0,Math.round(value));}),fullReturns=fullSales.map((sales,monthIndex)=>sales?Math.max(0,Math.round(sales*(0.015+((index+monthIndex)%5)*0.009))):0),sales=months.map(month=>fullSales[allMonths.indexOf(month)]||0),returns=months.map(month=>fullReturns[allMonths.indexOf(month)]||0),totalSales=sales.reduce((sum,value)=>sum+value,0),totalReturns=returns.reduce((sum,value)=>sum+value,0);return {id_interno:id,descricao:product.descricao_completa||product.descricao_base||product.descricao||product.nome||product.col_B||`Produto ${id}`,marca:product.marca||product.fabricante||'',sku:product.sku_fornecedor||product.sku||'',cor:product.cor||'',categoria:product.categoria||'Sem categoria',sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
-function toggleSaidaDevolucaoDemo(enabled){saidaDevolucaoReportState.demo=Boolean(enabled);saidaDevolucaoReportState.periodo='trimestre';saidaDevolucaoReportState.mesesDisponiveis=enabled?saidaDevolucaoReportState.demoMonths:saidaDevolucaoReportState.realMonths;saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,3).sort();saidaDevolucaoReportState.categoria='todas';refreshSaidaDevolucaoReport();const toggle=document.querySelector('.sd-demo-toggle input');if(toggle)toggle.checked=Boolean(enabled);const categoryLabel=[...document.querySelectorAll('.sd-report-filters label')].find(label=>label.querySelector('small')?.textContent==='Categoria');if(categoryLabel?.querySelector('select'))categoryLabel.querySelector('select').value='todas';document.querySelector('.sd-report-screen')?.classList.toggle('is-demo',Boolean(enabled));}
-function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=saidaDevolucaoReportState.demo?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=(saidaDevolucaoReportState.demo?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
-function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">x</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></section>`;}
-function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
-function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
-function renderSdSparkline(values,label){const w=184,h=34,p=5,max=Math.max(...values,1),min=Math.min(...values,0),range=max-min||1,x=i=>p+i*(w-p*2)/Math.max(values.length-1,1),y=v=>h-p-(v-min)/range*(h-p*2),first=Number(values[0]||0),last=Number(values[values.length-1]||0),average=values.length?values.reduce((sum,value)=>sum+Number(value||0),0)/values.length:0,tolerance=Math.max(1,average*.08),delta=last-first,trend=Math.abs(delta)<=tolerance?'stable':delta>0?'up':'down',title=saidaDevolucaoReportState.meses.map((m,i)=>`${sdMonthLabel(m)}: ${formatStockNumber(values[i]||0)}`).join(' - ');return `<svg class="sd-sparkline trend-${trend}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(title)}</title><polyline points="${values.map((v,i)=>`${x(i)},${y(v)}`).join(' ')}"/>${values.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="2"><title>${escapeKitAttribute(sdMonthLabel(saidaDevolucaoReportState.meses[i],true))}: ${formatStockNumber(v)}</title></circle>`).join('')}</svg>`;}
-function renderSdProductCell(row){return `<td class="sd-product-cell"><strong><b>${escapeKitAttribute(row.id_interno)}</b><i>-</i>${escapeKitAttribute(row.descricao)}</strong><small>${escapeKitAttribute(row.categoria||'Sem categoria')}</small></td>`;}
-function renderSdComparativeTable(rows){const months=saidaDevolucaoReportState.meses||[];return `<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Vendas, devolucoes e taxa por produto em uma unica linha</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table"><thead><tr><th rowspan="2">Produto</th>${months.map(month=>`<th colspan="3" class="sd-comparative-month"><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th rowspan="2">Total<br>Vendas</th><th rowspan="2">Total<br>Devolvido</th><th rowspan="2">Taxa<br>Geral</th><th rowspan="2">Tendencia</th></tr><tr>${months.map(()=>'<th>Vendas</th><th>Dev.</th><th>Taxa</th>').join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${months.map((month,index)=>{const sales=row.sales[index]||0,returns=row.returns[index]||0,rate=sales?returns/sales*100:null;return `<td>${formatStockNumber(sales)}</td><td>${formatStockNumber(returns)}</td><td><span class="sd-month-rate">${rate===null?'-':rate.toFixed(1).replace('.',',')+'%'}</span></td>`;}).join('')}<td><strong>${formatStockNumber(row.totalSales)}</strong></td><td><strong>${formatStockNumber(row.totalReturns)}</strong></td><td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td><td>${renderSdSparkline(row.sales,`Tendencia de vendas de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
-function renderSdComparisonTable(rows,type){const months=saidaDevolucaoReportState.meses,isSales=type==='sales',title=isSales?'Vendas / Saidas':'Devolucoes',key=isSales?'sales':'returns',total=isSales?'totalSales':'totalReturns',average=isSales?'averageSales':'averageReturns',extra=isSales?'':'<th>Taxa</th>';return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">${isSales?'trending_up':'assignment_return'}</span><div><h2>${title}</h2><small>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'} - valores por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>${months.map(month=>`<th><span class="sd-month-heading">${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" title="Remover mes">x</button></span></th>`).join('')}<th>Total</th><th>Media</th>${extra}<th>Tendencia</th></tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${row[key].map(value=>`<td>${formatStockNumber(value)}</td>`).join('')}<td><strong>${formatStockNumber(row[total])}</strong></td><td>${formatStockNumber(row[average])}</td>${isSales?'':`<td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td>`}<td>${renderSdSparkline(row[key],`Tendencia de ${title.toLowerCase()} de ${row.descricao}`)}</td></tr>`).join('')||`<tr><td colspan="${months.length+(isSales?4:5)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
-function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses,totalSales=rows.reduce((s,r)=>s+r.totalSales,0),totalReturns=rows.reduce((s,r)=>s+r.totalReturns,0),averageSales=months.length?totalSales/months.length:0,averageReturns=months.length?totalReturns/months.length:0,pct=totalSales?totalReturns/totalSales*100:0,tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTable(rows,'returns');return `${renderSaidaDevolucaoPeriodControls()}<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>${formatStockNumber(totalSales)}</strong><span>Media mensal: ${formatStockNumber(averageSales)}</span></article><article><small>Total devolvido</small><strong>${formatStockNumber(totalReturns)}</strong><span>Media mensal: ${formatStockNumber(averageReturns)}</span></article><article class="${pct>5?'danger':pct>2?'warning':'success'}"><small>Taxa de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong><span>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</span></article></section><section class="sd-report-history-note ready"><strong>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'}</strong><span>Media mensal: ${formatStockNumber(averageSales)} - Total vendido: ${formatStockNumber(totalSales)} - Total devolvido: ${formatStockNumber(totalReturns)}</span></section>${tables}`;}
-async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML='<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>';try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes,sep]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase(),DataClient.loadModule('separacao',true)]),products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[],available=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse(),channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();Object.assign(saidaDevolucaoReportState,{periodo:saidaDevolucaoReportState.periodo||'trimestre',mesesDisponiveis:available,movements,products,sessions,devolucoes});if(!['venda_desc','venda_asc','devolucao_desc','percentual_desc','crescimento_desc','queda_desc'].includes(saidaDevolucaoReportState.ordenacao))saidaDevolucaoReportState.ordenacao='venda_desc';if(!Array.isArray(saidaDevolucaoReportState.meses)||!saidaDevolucaoReportState.meses.length)saidaDevolucaoReportState.meses=available.slice(0,3).sort();saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. VENDAS / DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;refreshSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos dos meses visiveis. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
+function buildSaidaDevolucaoDemoRows(){const months=saidaDevolucaoReportState.meses||[],allMonths=[...(saidaDevolucaoReportState.demoMonths||[])].sort(),products=(saidaDevolucaoReportState.products||[]).filter(product=>String(product.id_interno||product.col_A||product.col_a||'').trim()).slice(0,12),patterns=['up','down','stable','wave','zeros'];return products.map((product,index)=>{const id=String(product.id_interno||product.col_A||product.col_a).trim(),pattern=patterns[index%patterns.length],base=16+(index*7)%34,fullSales=allMonths.map((month,monthIndex)=>{let value=base;if(pattern==='up')value=base+monthIndex*4;if(pattern==='down')value=base+(11-monthIndex)*4;if(pattern==='stable')value=base+[0,1,-1,0,2,-1,1,0,-2,1,0,1][monthIndex];if(pattern==='wave')value=base+[2,15,-5,12,-2,18,-7,9,1,16,-4,11][monthIndex];if(pattern==='zeros')value=monthIndex%4===1?0:base+[3,-2,6,0,-4,8,1,-1,5,0,7,-3][monthIndex];return Math.max(0,Math.round(value));}),fullReturns=fullSales.map((sales,monthIndex)=>sales?Math.max(0,Math.round(sales*(0.015+((index+monthIndex)%5)*0.009))):0),sales=months.map(month=>fullSales[allMonths.indexOf(month)]||0),returns=months.map(month=>fullReturns[allMonths.indexOf(month)]||0),totalSales=sales.reduce((sum,value)=>sum+value,0),totalReturns=returns.reduce((sum,value)=>sum+value,0),unitCost=28.5+((index*7.5)%85),returnCosts=returns.map(qty=>qty*unitCost),missingCosts=returns.map(()=>0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=0;return {id_interno:id,descricao:product.descricao_completa||product.descricao_base||product.descricao||product.nome||product.col_B||`Produto ${id}`,marca:product.marca||product.fabricante||'',sku:product.sku_fornecedor||product.sku||'',ean:product.ean||'',cor:product.cor||'',categoria:product.categoria||'Sem categoria',url_imagem:getProductImageUrl(product)||product.url_imagem||product.image_path||'',rawProduct:product,sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function toggleSaidaDevolucaoDemo(enabled){if(!isSaidaDevolucaoDemoAllowed()){saidaDevolucaoReportState.demo=false;return;}saidaDevolucaoReportState.demo=Boolean(enabled);saidaDevolucaoReportState.periodo='trimestre';saidaDevolucaoReportState.mesesDisponiveis=enabled?saidaDevolucaoReportState.demoMonths:saidaDevolucaoReportState.realMonths;saidaDevolucaoReportState.meses=saidaDevolucaoReportState.mesesDisponiveis.slice(0,3).sort();saidaDevolucaoReportState.categoria='todas';refreshSaidaDevolucaoReport();const toggle=document.querySelector('.sd-demo-toggle input');if(toggle)toggle.checked=Boolean(enabled);const categoryLabel=[...document.querySelectorAll('.sd-report-filters label')].find(label=>label.querySelector('small')?.textContent==='Categoria');if(categoryLabel?.querySelector('select'))categoryLabel.querySelector('select').value='todas';document.querySelector('.sd-report-screen')?.classList.toggle('is-demo',Boolean(enabled));}
+function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=(saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=((saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela de homologacao. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
+function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-left"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div></div><div class="sd-period-right"><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">×</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></div></section>`;}
+function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),custo_desc:(a,b)=>(b.totalReturnCost||0)-(a.totalReturnCost||0),custo_asc:(a,b)=>(a.totalReturnCost||0)-(b.totalReturnCost||0),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
+function renderSdSparkline(values,label,type='sales',width=150,height=32,isMini=false){const w=width,h=height,p=isMini?4:6,nums=values.map(v=>Number(v||0)),len=nums.length;if(!len)return '<span class="sd-sparkline-empty">-</span>';if(len===1){const v=nums[0],fmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<svg class="sd-sparkline sd-trend-neutral ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}: ${fmt}</title><line x1="${p}" y1="${h/2}" x2="${w-p}" y2="${h/2}" class="sd-sparkline-baseline"/><circle cx="${w/2}" cy="${h/2}" r="${isMini?2.5:3.5}"/></svg>`;}const max=Math.max(...nums,0.0001),min=Math.min(...nums,0),range=(max-min)||1,x=i=>p+i*(w-p*2)/(len-1),y=v=>h-p-((v-min)/range)*(h-p*2),first=nums[0],last=nums[len-1],avg=nums.reduce((a,b)=>a+b,0)/len,tol=Math.max(0.01,Math.abs(avg)*0.05),delta=last-first;let trend='neutral';if(type==='returns'){trend=delta<-tol?'positive':delta>tol?'negative':'neutral';}else{trend=delta>tol?'positive':delta<-tol?'negative':'neutral';}const points=nums.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');const months=saidaDevolucaoReportState.meses||[];const dotR=isMini?2.5:3;const dots=nums.map((v,i)=>{const mLabel=months[i]?sdMonthLabel(months[i],true):`Mês ${i+1}`;const valFmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${dotR}"><title>${escapeKitAttribute(mLabel)}: ${valFmt}</title></circle>`;}).join('');return `<svg class="sd-sparkline sd-trend-${trend} ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}</title><polyline class="sd-sparkline-line" points="${points}"/>${dots}</svg>`;}
+function renderSdComparativeTrend(row,months){const returnRates=months.map((m,i)=>(row.sales||[])[i]?((row.returns||[])[i]/(row.sales||[])[i]*100):((row.returns||[])[i]?100:0));return `<div class="sd-comparative-trends"><div class="sd-trend-row"><span class="sd-trend-lbl">Vendas</span>${renderSdSparkline(row.sales||[],`Tendência de vendas de ${row.descricao}`,'sales',118,18,true)}</div><div class="sd-trend-row"><span class="sd-trend-lbl">Dev.</span>${renderSdSparkline(returnRates,`Tendência da taxa de devolução de ${row.descricao}`,'returns',118,18,true)}</div></div>`;}
+function renderSdProductCell(row){const rawP=row.rawProduct||{},imgUrl=(row.url_imagem||getProductImageUrl(rawP)||'').trim(),idInterno=escapeKitAttribute(row.id_interno||''),desc=escapeKitAttribute(row.descricao||'Produto sem descricao'),sku=row.sku?escapeKitAttribute(row.sku):'',ean=row.ean?escapeKitAttribute(row.ean):'',marca=row.marca?escapeKitAttribute(row.marca):'',cor=row.cor?escapeKitAttribute(row.cor):'',categoria=(row.categoria&&row.categoria!=='Sem categoria')?escapeKitAttribute(row.categoria):'';const meta1=[];if(sku)meta1.push(`<span class="sd-meta-item"><span class="sd-meta-label">SKU:</span> <span class="sd-meta-val">${sku}</span></span>`);if(ean)meta1.push(`<span class="sd-meta-item"><span class="sd-meta-label">EAN:</span> <span class="sd-meta-val">${ean}</span></span>`);const meta2=[];if(marca)meta2.push(`<span>${marca}</span>`);if(cor)meta2.push(`<span>${cor}</span>`);if(categoria)meta2.push(`<span>${categoria}</span>`);const imgHtml=(imgUrl&&/^https?:\/\//i.test(imgUrl))?`<img src="${imgUrl}" alt="" class="sd-product-thumb-img" loading="lazy" onerror="this.remove(); var fb=this.nextElementSibling; if(fb)fb.style.display='inline-flex';"><span class="material-symbols-rounded sd-product-no-img" style="display:none;">inventory_2</span>`:`<span class="material-symbols-rounded sd-product-no-img">inventory_2</span>`;return `<td class="sd-product-cell"><div class="sd-product-card-inline"><div class="sd-product-thumb">${imgHtml}</div><div class="sd-product-info"><div class="sd-product-header-line"><span class="sd-product-id-badge">${idInterno}</span><span class="sd-product-name" title="${desc}">${desc}</span></div>${meta1.length?`<div class="sd-product-meta-row">${meta1.join('<span class="sd-meta-bullet">•</span>')}</div>`:''}${meta2.length?`<div class="sd-product-submeta-row">${meta2.join('<span class="sd-meta-bullet">•</span>')}</div>`:''}</div></div></td>`;}
+function renderSdComparativeTable(rows){const months=saidaDevolucaoReportState.meses||[],taxaTooltip="Percentual das unidades vendidas que foram devolvidas.\nCálculo: devoluções ÷ vendas × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas.\nCálculo: total devolvido ÷ total vendido × 100.",colgroupHtml=`<colgroup><col class="sd-col-prod" style="width: 380px; min-width: 380px;">${months.map(()=>'<col class="sd-col-vendas" style="width: 70px; min-width: 70px;"><col class="sd-col-dev" style="width: 60px; min-width: 60px;"><col class="sd-col-taxa sd-col-month-end" style="width: 80px; min-width: 80px;">').join('')}<col class="sd-col-tot-sales" style="width: 78px; min-width: 78px;"><col class="sd-col-tot-dev" style="width: 78px; min-width: 78px;"><col class="sd-col-taxa-geral" style="width: 84px; min-width: 84px;"><col class="sd-col-trend" style="width: 185px; min-width: 185px;"></colgroup>`;return `<section class="sd-report-table-card sd-comparative-card"><header class="sd-comparative-header"><div class="sd-header-title"><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Vendas, devoluções e taxa por produto</small></div></div></header><div class="sd-report-table"><table class="sd-comparative-table">${colgroupHtml}<thead><tr><th rowspan="2" class="sd-th-product">Produto</th>${months.map(month=>`<th colspan="3" class="sd-comparative-month"><span>${sdMonthLabel(month)}</span></th>`).join('')}<th rowspan="2" class="sd-th-total-sales">Total<br>Vendas</th><th rowspan="2" class="sd-th-total-returns">Total<br>Devolvido</th><th rowspan="2" class="sd-th-general-rate"><span class="sd-th-with-help"><span>Taxa<br>Geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th><th rowspan="2" class="sd-th-trend">Tendência</th></tr><tr class="sd-subheaders">${months.map(()=>`<th class="sd-sub-vendas">Vendas</th><th class="sd-sub-dev">Dev.</th><th class="sd-col-month-end sd-sub-taxa"><span class="sd-th-with-help"><span>Taxa</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaTooltip)}">ⓘ</span></span></th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${renderSdProductCell(row)}${months.map((month,index)=>{const sales=row.sales[index]||0,returns=row.returns[index]||0,rate=sales?returns/sales*100:(returns?100:null);return `<td class="sd-cell-vendas">${sdFormatQty(sales)}</td><td class="sd-cell-dev">${sdFormatQty(returns)}</td><td class="sd-col-month-end sd-cell-taxa"><span class="sd-month-rate">${rate===null?'-':rate.toFixed(1).replace('.',',')+'%'}</span></td>`;}).join('')}<td class="sd-cell-total-sales"><strong>${sdFormatQty(row.totalSales)}</strong></td><td class="sd-cell-total-returns"><strong>${sdFormatQty(row.totalReturns)}</strong></td><td class="sd-cell-general-rate"><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td><td class="sd-td-trend">${renderSdComparativeTrend(row,months)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSdComparisonTable(rows,type){const months=saidaDevolucaoReportState.meses,isSales=type==='sales',title=isSales?'Vendas / Saidas':'Devolucoes',key=isSales?'sales':'returns',total=isSales?'totalSales':'totalReturns',average=isSales?'averageSales':'averageReturns',extra=isSales?'':'<th>Taxa</th>';return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">${isSales?'trending_up':'assignment_return'}</span><div><h2>${title}</h2><small>${months.length} ${months.length===1?'mes selecionado':'meses selecionados'} - valores por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th class="sd-th-product">Produto</th>${months.map((month,i)=>`<th class="${i===months.length-1?'sd-col-month-end':''}"><span>${sdMonthLabel(month)}</span></th>`).join('')}<th>Total</th><th>Media</th>${extra}<th class="sd-th-trend">Tendencia</th></tr></thead><tbody>${rows.map(row=>{const returnRates=months.map((m,i)=>(row.sales||[])[i]?((row.returns||[])[i]/(row.sales||[])[i]*100):((row.returns||[])[i]?100:0));const sparklineHtml=isSales?renderSdSparkline(row.sales,`Tendencia de vendas de ${row.descricao}`,'sales',150,30):renderSdSparkline(returnRates,`Tendencia da taxa de devolucoes de ${row.descricao}`,'returns',150,30);return `<tr>${renderSdProductCell(row)}${row[key].map((value,i)=>`<td class="${i===row[key].length-1?'sd-col-month-end':''}">${sdFormatQty(value)}</td>`).join('')}<td><strong>${sdFormatQty(row[total])}</strong></td><td>${sdFormatQty(row[average])}</td>${isSales?'':`<td><span class="sd-rate ${row.percentual===null?'neutral':row.percentual>5?'danger':row.percentual>2?'warning':'success'}">${row.percentual===null?'-':row.percentual.toFixed(2).replace('.',',')+'%'}</span></td>`}<td class="sd-td-trend">${sparklineHtml}</td></tr>`;}).join('')||`<tr><td colspan="${months.length+(isSales?4:5)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`;}
+function renderSaidaDevolucaoReportBody(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses,totalSales=rows.reduce((s,r)=>s+r.totalSales,0),totalReturns=rows.reduce((s,r)=>s+r.totalReturns,0),averageSales=months.length?totalSales/months.length:0,averageReturns=months.length?totalReturns/months.length:0,pct=totalSales?totalReturns/totalSales*100:0,tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTable(rows,'returns');return `${renderSaidaDevolucaoPeriodControls()}<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">shopping_cart</span></div><div class="sd-card-body"><small>Total vendido</small><strong>${sdFormatQty(totalSales)}</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">assignment_return</span></div><div class="sd-card-body"><small>Total devolvido</small><strong>${sdFormatQty(totalReturns)}</strong></div></article><article class="sd-card sd-card-rate ${pct>5?'danger':pct>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${pct.toFixed(2).replace('.',',')}%</strong></div></article></section>${tables}`;}
+async function renderSaidaDevolucaoReport(){const currentUser=localStorage.getItem('currentUser');app.innerHTML='<div class="dashboard-screen internal fade-in module-screen"><div class="sd-loading">Carregando relatorio...</div></div>';try{if(!(await ensureSupabaseAuthenticatedAccess()))throw new Error('Acesso automatico ao Supabase nao iniciado.');const[data,movements,devolucoes,sep]=await Promise.all([DataClient.loadModule('produtos',true),DataClient.fetchMovimentosSupabase(),DataClient.listDevolucoesSupabase(),DataClient.loadModule('separacao',true)]),products=data?.produtos||data?.products||appData.products||appData.produtos||[],sessions=sep?.separacao||appData.separacao||[],available=[...new Set(movements.map(m=>String(m.data_hora||m.criado_em||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse(),channels=[...new Set([...sessions.map(s=>s.canal_nome||s.canal||s.col_c),...devolucoes.map(d=>d.canal)].filter(Boolean))].sort();Object.assign(saidaDevolucaoReportState,{periodo:saidaDevolucaoReportState.periodo||'trimestre',mesesDisponiveis:available,movements,products,sessions,devolucoes});if(!['venda_desc','venda_asc','devolucao_desc','percentual_desc','custo_desc','custo_asc','crescimento_desc','queda_desc'].includes(saidaDevolucaoReportState.ordenacao))saidaDevolucaoReportState.ordenacao='venda_desc';if(!Array.isArray(saidaDevolucaoReportState.meses)||!saidaDevolucaoReportState.meses.length)saidaDevolucaoReportState.meses=available.slice(0,3).sort();saidaDevolucaoReportState.rows=buildSaidaDevolucaoRows(movements,products,sessions,devolucoes);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen sd-report-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}${getModuleSidebarHTML('movimentos','REL. VENDAS / DEVOLUCOES','<details class="sd-report-export-menu app-export-menu"><summary class="sd-report-export"><span class="material-symbols-rounded">download</span><span class="app-export-label">Exportar</span><span class="material-symbols-rounded sd-export-chevron app-export-chevron">arrow_drop_down</span></summary><div class="sd-report-export-options app-export-options"><button type="button" onclick="exportSaidaDevolucaoCSV()"><span class="material-symbols-rounded">description</span><span><strong>CSV</strong><small>Compativel com Excel</small></span></button><button type="button" onclick="exportSaidaDevolucaoXLSX()"><span class="material-symbols-rounded">table_view</span><span><strong>Excel (.xlsx)</strong><small>Planilha formatada</small></span></button></div></details>')}<main class="container sd-report-shell"><section class="sd-report-filters"><label class="search"><small>Produto</small><input value="${escapeKitAttribute(saidaDevolucaoReportState.busca)}" oninput="filterSaidaDevolucaoReport(this.value)" placeholder="ID, descricao, marca, SKU ou cor"></label><label><small>Canal</small><select onchange="saidaDevolucaoReportState.canal=this.value;refreshSaidaDevolucaoReport()"><option value="todos">Todos os canais</option>${channels.map(c=>`<option value="${escapeKitAttribute(c)}" ${saidaDevolucaoReportState.canal===c?'selected':''}>${escapeKitAttribute(c)}</option>`).join('')}</select></label></section><div id="sd-report-body">${renderSaidaDevolucaoReportBody()}</div><p class="sd-report-note">O relatorio compara eventos dos meses visiveis. Uma devolucao pode pertencer a uma separacao realizada anteriormente.</p><button id="sd-scroll-top" class="sd-scroll-top" type="button" onclick="scrollSaidaDevolucaoToTop()" aria-label="Voltar ao topo"><span class="material-symbols-rounded">arrow_upward</span></button></main></div>`;requestAnimationFrame(initializeSaidaDevolucaoScrollTop);}catch(error){console.error('[RELATORIO]',error);app.innerHTML=`<div class="dashboard-screen internal fade-in module-screen">${getTopBarHTML(currentUser,'renderMovimentacoesSubMenu()')}<main class="container"><div class="sd-report-error"><h2>Nao foi possivel carregar</h2><p>${escapeKitAttribute(error.message||'Erro desconhecido')}</p><button onclick="renderSaidaDevolucaoReport()">Tentar novamente</button></div></main></div>`;}}
 function getSaidaDevolucaoScrollContainer(){const shell=document.querySelector('.sd-report-shell');if(shell&&shell.scrollHeight>shell.clientHeight+8)return shell;return window;}
 function initializeSaidaDevolucaoReportControls(){
  const filters=document.querySelector('.sd-report-filters');
@@ -38459,13 +41667,18 @@ function initializeSaidaDevolucaoReportControls(){
  };
  const categories=[...new Set(saidaDevolucaoReportState.rows.map(row=>String(row.categoria||'Sem categoria').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
  if(saidaDevolucaoReportState.categoria!=='todas'&&!categories.some(category=>normalizeOperationalLabel(category)===normalizeOperationalLabel(saidaDevolucaoReportState.categoria)))saidaDevolucaoReportState.categoria='todas';
- const demoLabel=document.createElement('label');demoLabel.className='sd-demo-toggle';demoLabel.dataset.sdExtraFilter='true';demoLabel.innerHTML='<small>Visualizacao</small><span><input type="checkbox" onchange="toggleSaidaDevolucaoDemo(this.checked)"><i></i><b>Dados de demonstracao</b></span>';
- filters.append(
-  createFilter('Modo',saidaDevolucaoReportState.viewMode,[{value:'separate',label:'Separado'},{value:'comparative',label:'Comparativo'}],value=>{saidaDevolucaoReportState.viewMode=value;}),
-  demoLabel,
+ const extraFilters=[
+  createFilter('Modo',saidaDevolucaoReportState.viewMode,[{value:'separate',label:'Separado'},{value:'comparative',label:'Comparativo'}],value=>{saidaDevolucaoReportState.viewMode=value;})
+ ];
+ if(isSaidaDevolucaoDemoAllowed()){
+  const demoLabel=document.createElement('label');demoLabel.className='sd-demo-toggle';demoLabel.dataset.sdExtraFilter='true';demoLabel.innerHTML='<small>Visualizacao <span class="sd-demo-env-badge">HOMOLOGACAO</span></small><span><input type="checkbox" onchange="toggleSaidaDevolucaoDemo(this.checked)"><i></i><b>Dados de demonstracao</b></span>';
+  extraFilters.push(demoLabel);
+ }
+ extraFilters.push(
   createFilter('Categoria',saidaDevolucaoReportState.categoria,[{value:'todas',label:'Todas as categorias'},...categories.map(category=>({value:category,label:category}))],value=>{saidaDevolucaoReportState.categoria=value;}),
-  createFilter('Ordenar por',saidaDevolucaoReportState.ordenacao,[{value:'venda_desc',label:'Maior venda'},{value:'venda_asc',label:'Menor venda'},{value:'devolucao_desc',label:'Maior devolucao'},{value:'percentual_desc',label:'Maior percentual de devolucao'},{value:'crescimento_desc',label:'Maior crescimento'},{value:'queda_desc',label:'Maior queda'}],value=>{saidaDevolucaoReportState.ordenacao=value;})
+  createFilter('Ordenar por',saidaDevolucaoReportState.ordenacao,[{value:'venda_desc',label:'Maior venda'},{value:'venda_asc',label:'Menor venda'},{value:'devolucao_desc',label:'Maior devolucao'},{value:'percentual_desc',label:'Maior taxa de devolucao'},{value:'custo_desc',label:'Custo devolvido — maior → menor'},{value:'custo_asc',label:'Custo devolvido — menor → maior'},{value:'crescimento_desc',label:'Maior crescimento'},{value:'queda_desc',label:'Maior queda'}],value=>{saidaDevolucaoReportState.ordenacao=value;})
  );
+ filters.append(...extraFilters);
 }
 function initializeSaidaDevolucaoScrollTop(){initializeSaidaDevolucaoReportControls();const button=document.getElementById('sd-scroll-top');if(!button)return;const scroller=getSaidaDevolucaoScrollContainer();const update=()=>{const top=scroller===window?(window.scrollY||document.documentElement.scrollTop||0):scroller.scrollTop;button.classList.toggle('visible',top>260);};scroller.addEventListener('scroll',update,{passive:true,once:false});update();}
 function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
@@ -38837,16 +42050,147 @@ async function renderFinalizedSeparationDetails(sessionId, returnScope = 'today'
  const items = getSeparationItemsForSession(session).filter(
   it => (Number(it.qtd_separada ?? it.qtd_solicitada ?? 0) || 0) > 0
  );
+
+ const allProducts = appData.produtos || appData.products || [];
+ const prodMap = new Map();
+ (allProducts || []).forEach(p => {
+  const code = String(p.id_interno || p.col_a || p.col_A || '').trim().toUpperCase();
+  if (code) prodMap.set(code, p);
+  if (p.ean && String(p.ean).trim()) prodMap.set(String(p.ean).trim(), p);
+ });
+
  let itemCancellations = [];
- try { const response = await window.supabaseClient.from('separacao_item_cancelamentos').select('*').eq('separacao_id', sessionId).order('cancelado_em', { ascending: true }); if (response.error) throw response.error; itemCancellations = response.data || []; } catch (error) { console.warn('[SEP HIST] Cancelamentos nao carregados:', error); }
+ try {
+  const response = await window.supabaseClient.from('separacao_item_cancelamentos').select('*').eq('separacao_id', sessionId).order('cancelado_em', { ascending: true });
+  if (response.error) throw response.error;
+  itemCancellations = response.data || [];
+ } catch (error) { console.warn('[SEP HIST] Cancelamentos nao carregados:', error); }
+
  const cancelledByProduct = new Map();
  itemCancellations.forEach(row => cancelledByProduct.set(String(row.id_interno || ''), (cancelledByProduct.get(String(row.id_interno || '')) || 0) + Number(row.quantidade || 1)));
+
  const packageByProduct = new Map();
- packages.forEach(pacote => (pacote.itens || []).forEach(item => { const key=String(item.id_interno||''); if(!packageByProduct.has(key))packageByProduct.set(key,[]); packageByProduct.get(key).push({id:pacote.pacote_id,type:pacote.tipo,qty:Number(item.quantidade||0)}); }));
- const standalone = packages.filter(row => String(row.tipo).toUpperCase()==='AVULSO' && String(row.status).toUpperCase()!=='CANCELADO').length, grouped = packages.filter(row => String(row.tipo).toUpperCase()==='AGRUPADO' && String(row.status).toUpperCase()!=='CANCELADO').length;
+ packages.forEach(pacote => (pacote.itens || []).forEach(item => {
+  const key = String(item.id_interno || '');
+  if (!packageByProduct.has(key)) packageByProduct.set(key, []);
+  packageByProduct.get(key).push({ id: pacote.pacote_id, type: pacote.tipo, qty: Number(item.quantidade || 0) });
+ }));
+
+ const standalone = packages.filter(row => String(row.tipo).toUpperCase() === 'AVULSO' && String(row.status).toUpperCase() !== 'CANCELADO').length;
+ const grouped = packages.filter(row => String(row.tipo).toUpperCase() === 'AGRUPADO' && String(row.status).toUpperCase() !== 'CANCELADO').length;
  const cancelledProducts = cancelledByProduct.size;
- app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">${getTopBarHTML(currentUser,`renderFinalizedSeparationsScreen('${returnScope}')`)}${getModuleSidebarHTML('pick')}<main class="container finalized-detail-shell"><header class="finalized-detail-header tone-${view.channel.tone}"><button type="button" onclick="renderFinalizedSeparationsScreen('${returnScope}')" aria-label="Voltar para separações finalizadas"><span class="material-symbols-rounded">arrow_back</span></button><div class="finalized-detail-title"><h1>SEPARAÇÃO <i>•</i> ${escapeKitAttribute(view.channel.label)}</h1><p>${escapeKitAttribute(view.sessionId)} <i>•</i> ${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} <i>•</i> Modo ${view.mode}</p></div><div class="finalized-detail-state"><span class="material-symbols-rounded">task_alt</span><strong>FINALIZADA</strong><small>Somente leitura</small></div></header><section class="finalized-detail-summary" aria-label="Resumo da separação"><article><small>Produtos</small><strong>${view.products}</strong></article><article><small>Unidades</small><strong>${view.items}</strong></article><article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article><article><small>Pacotes</small><strong>${view.packages}</strong></article><article><small>Agrupados</small><strong>${grouped}</strong></article></section><section class="finalized-detail-meta"><span class="material-symbols-rounded">person</span><span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>${view.conferenceOperator?`<span class="finalized-detail-conference">Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>`:''}</section><section class="finalized-detail-products"><header><div><small>HISTÓRICO DA OPERAÇÃO</small><h2>PRODUTOS SEPARADOS</h2></div><span><span class="material-symbols-rounded">visibility</span> CONSULTA</span></header>${items.map(item=>{const productId=getPickingProductId(item)||item.id_interno||'',links=packageByProduct.get(String(productId))||[],qty=Number(item.qtd_separada??item.qtd_solicitada??0)||0,cancelled=cancelledByProduct.get(String(productId))||0,remaining=Math.max(qty-cancelled,0);return `<article class="${cancelled?'has-cancelled-item':''} ${remaining===0?'is-fully-cancelled':''}"><span class="finalized-product-check material-symbols-rounded">check_circle</span><div><strong>${escapeKitAttribute(getPickItemTitle(item))}</strong><span>ID ${escapeKitAttribute(productId)} · EAN ${escapeKitAttribute(item.ean||'-')}</span><small>${links.length?links.map(link=>`${link.type==='AGRUPADO'?'Agrupado':'Avulso'}: ${link.qty} un.`).join(' · '):'Composição de pacote não informada'}</small>${cancelled?`<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>`:``}</div><b>${remaining}<small>un.</small></b></article>`;}).join('')}</section></main></div>`;
- document.querySelector('.finalized-detail-state')?.insertAdjacentHTML('beforebegin', `<button class="finalized-grouping-edit" type="button" onclick="openFinalizedGroupingCorrection(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})"><span class="material-symbols-rounded">inventory_2</span>EDITAR AGRUPAMENTO</button>`);
+
+ const renderedItemsHTML = items.map(item => {
+  const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
+  const prodObj = prodMap.get(productId.toUpperCase()) || prodMap.get(String(item.ean || '').trim()) || {};
+  const mergedItem = { ...prodObj, ...item };
+
+  const links = packageByProduct.get(String(productId)) || [];
+  const qty = Number(item.qtd_separada ?? item.qtd_solicitada ?? 0) || 0;
+  const cancelled = cancelledByProduct.get(String(productId)) || 0;
+  const remaining = Math.max(qty - cancelled, 0);
+
+  const rawImg = getPickProductImage(mergedItem) || (prodObj.url_imagem ? formatImageUrl(prodObj.url_imagem) : '');
+  let rawTitle = getPickItemTitle(mergedItem) || mergedItem.descricao_completa || mergedItem.descricao_base || mergedItem.descricao || productId;
+  if (rawTitle) rawTitle = String(rawTitle).replace(/_/g, ' ').trim();
+
+  const marcaRaw = getPickItemBrand(mergedItem);
+  const marca = (marcaRaw && !['SEM MARCA', 'N/A', '-'].includes(String(marcaRaw).toUpperCase())) ? String(marcaRaw).trim() : null;
+
+  const skuRaw = getPickItemSku(mergedItem);
+  const sku = (skuRaw && skuRaw !== '-') ? String(skuRaw).trim() : null;
+
+  const eanRaw = getPickItemEan(mergedItem);
+  const ean = (eanRaw && eanRaw !== '-') ? String(eanRaw).trim() : null;
+
+  const corRaw = getPickItemColor(mergedItem);
+  const cor = (corRaw && !['SEM COR', 'NAO INFORMADA', 'NAO INFORMADO', '-'].includes(normalizeOperationalLabel(corRaw))) ? String(corRaw).trim() : null;
+
+  const packageBadges = links.length ? links.map(link => {
+   const isAgrupado = String(link.type).toUpperCase() === 'AGRUPADO';
+   return `<span class="finalized-pkg-chip ${isAgrupado ? 'is-agrupado' : 'is-avulso'}">${isAgrupado ? 'AGRUPADO' : 'AVULSO'} · ${link.qty} un.</span>`;
+  }).join('') : '<span class="finalized-pkg-chip is-unknown">Composição de pacote não informada</span>';
+
+  return `<article class="finalized-product-card ${cancelled ? 'has-cancelled-item' : ''} ${remaining === 0 ? 'is-fully-cancelled' : ''}">
+   <div class="finalized-product-thumb">
+    ${rawImg ? `<img src="${escapeKitAttribute(rawImg)}" alt="${escapeKitAttribute(rawTitle)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><span class="material-symbols-rounded" style="display:none">inventory_2</span>` : `<span class="material-symbols-rounded">inventory_2</span>`}
+   </div>
+   <div class="finalized-product-body">
+    <strong class="finalized-product-name">${escapeKitAttribute(rawTitle)}</strong>
+    <div class="finalized-product-meta-row">
+     <span class="finalized-meta-chip id-chip">ID: <strong>${escapeKitAttribute(productId)}</strong></span>
+     ${sku ? `<span class="finalized-meta-chip">SKU: <strong>${escapeKitAttribute(sku)}</strong></span>` : ''}
+     ${ean ? `<span class="finalized-meta-chip">EAN: <strong>${escapeKitAttribute(ean)}</strong></span>` : ''}
+     ${marca ? `<span class="finalized-meta-chip">Marca: <strong>${escapeKitAttribute(marca)}</strong></span>` : ''}
+     ${cor ? `<span class="finalized-meta-chip" style="${getProductColorDotStyle(cor)}">Cor: <strong>${escapeKitAttribute(cor)}</strong></span>` : ''}
+    </div>
+    <div class="finalized-product-packages-row">
+     ${packageBadges}
+     ${cancelled ? `<em class="finalized-item-cancelled-note">${cancelled} un. cancelada(s) · ${remaining} restante(s)</em>` : ''}
+    </div>
+   </div>
+   <div class="finalized-product-qty-box">
+    <b>${remaining}</b>
+    <small>un.</small>
+   </div>
+  </article>`;
+ }).join('');
+
+ app.innerHTML = `<div class="dashboard-screen internal fade-in finalized-separation-detail-screen">
+  ${getTopBarHTML(currentUser, `renderFinalizedSeparationsScreen('${returnScope}')`)}
+  ${getModuleSidebarHTML('pick')}
+  <main class="container finalized-detail-shell">
+   <header class="finalized-detail-header tone-${view.channel.tone}">
+    <button type="button" class="finalized-back-btn" onclick="renderFinalizedSeparationsScreen('${returnScope}')" aria-label="Voltar para separações finalizadas">
+     <span class="material-symbols-rounded">arrow_back</span>
+    </button>
+    <div class="finalized-detail-title">
+     <h1>SEPARAÇÃO <i>•</i> ${escapeKitAttribute(view.channel.label)}</h1>
+     <p>${escapeKitAttribute(view.sessionId)} <i>•</i> ${escapeKitAttribute(formatPackSeparationDate(view.finishedAt))} <i>•</i> Modo ${view.mode}</p>
+    </div>
+    <div class="finalized-detail-actions">
+     <button class="finalized-grouping-edit" type="button" onclick="openFinalizedGroupingCorrection(${quotePackInlineArg(sessionId)},${quotePackInlineArg(returnScope)})">
+      <span class="material-symbols-rounded">inventory_2</span>
+      <span>EDITAR AGRUPAMENTO</span>
+     </button>
+     <div class="finalized-detail-state">
+      <span class="material-symbols-rounded">task_alt</span>
+      <div>
+       <strong>FINALIZADA</strong>
+       <small>Somente leitura</small>
+      </div>
+     </div>
+    </div>
+   </header>
+
+   <section class="finalized-detail-summary" aria-label="Resumo da separação">
+    <article><small>Produtos</small><strong>${view.products}</strong></article>
+    <article><small>Unidades</small><strong>${view.items}</strong></article>
+    <article class="is-cancelled-total"><small>Cancelados</small><strong>${cancelledProducts}</strong></article>
+    <article><small>Pacotes</small><strong>${view.packages}</strong></article>
+    <article><small>Agrupados</small><strong>${grouped}</strong></article>
+   </section>
+
+   <section class="finalized-detail-meta">
+    <span class="material-symbols-rounded">person</span>
+    <span>Separado por <strong>${escapeKitAttribute(view.operator)}</strong></span>
+    ${view.conferenceOperator ? `<span class="finalized-detail-conference">Conferido por <strong>${escapeKitAttribute(view.conferenceOperator)}</strong></span>` : ''}
+   </section>
+
+   <section class="finalized-detail-products">
+    <header>
+     <div>
+      <small>HISTÓRICO DA OPERAÇÃO</small>
+      <h2>PRODUTOS SEPARADOS</h2>
+     </div>
+     <span><span class="material-symbols-rounded">visibility</span> CONSULTA</span>
+    </header>
+    <div class="finalized-products-list">
+     ${renderedItemsHTML}
+    </div>
+   </section>
+  </main>
+ </div>`;
 }
 
 let finalizedGroupingCorrectionState = null;
@@ -38863,22 +42207,55 @@ function isFinalizedGroupingCorrectionActive(request) {
 
 function buildFinalizedGroupingCorrectionUnitsFromItems(items = [], packages = []) {
  const units = [];
+ const allProducts = appData.produtos || appData.products || [];
+ const prodMap = new Map();
+ (allProducts || []).forEach(p => {
+  const code = String(p.id_interno || p.col_a || p.col_A || '').trim().toUpperCase();
+  if (code) prodMap.set(code, p);
+  if (p.ean && String(p.ean).trim()) prodMap.set(String(p.ean).trim(), p);
+ });
+
  (items || []).forEach(item => {
   const productId = String(getPickingProductId(item) || item.id_interno || '').trim();
   const quantity = Math.max(0, Number(item.qtd_separada ?? item.qtd_solicitada ?? item.quantidade ?? 0) || 0);
   if (!productId || quantity <= 0) return;
+
+  const prodObj = prodMap.get(productId.toUpperCase()) || prodMap.get(String(item.ean || '').trim()) || {};
+  const mergedItem = { ...prodObj, ...item };
+
+  const rawImg = getPickProductImage(mergedItem) || (prodObj.url_imagem ? formatImageUrl(prodObj.url_imagem) : '');
+  let rawTitle = getPickItemTitle(mergedItem) || mergedItem.descricao_completa || mergedItem.descricao_base || mergedItem.descricao || productId;
+  if (rawTitle) rawTitle = String(rawTitle).replace(/_/g, ' ').trim();
+
+  const marcaRaw = getPickItemBrand(mergedItem);
+  const marca = (marcaRaw && !['SEM MARCA', 'N/A', '-'].includes(String(marcaRaw).toUpperCase())) ? String(marcaRaw).trim() : null;
+
+  const skuRaw = getPickItemSku(mergedItem);
+  const sku = (skuRaw && skuRaw !== '-') ? String(skuRaw).trim() : null;
+
+  const eanRaw = getPickItemEan(mergedItem);
+  const ean = (eanRaw && eanRaw !== '-') ? String(eanRaw).trim() : null;
+
+  const corRaw = getPickItemColor(mergedItem);
+  const cor = (corRaw && !['SEM COR', 'NAO INFORMADA', 'NAO INFORMADO', '-'].includes(normalizeOperationalLabel(corRaw))) ? String(corRaw).trim() : null;
+
   for (let index = 0; index < quantity; index++) {
    units.push({
     key: `${productId}:${index + 1}`,
     id_interno: productId,
-    descricao: getPickItemTitle(item) || item.descricao || productId,
-    ean: item.ean || '',
+    descricao: rawTitle,
+    sku: sku,
+    ean: ean,
+    marca: marca,
+    cor: cor,
+    url_imagem: rawImg,
     ordinal: index + 1,
     pacote_id: null,
     selected: false
    });
   }
  });
+
  const activePackages = (packages || []).filter(pkg => String(pkg.status || 'ATIVO').toUpperCase() === 'ATIVO');
  if (activePackages.length > 0) {
   activePackages.forEach(pkg => {
@@ -39024,11 +42401,107 @@ function renderFinalizedGroupingCorrectionModal() {
  const oldModal = document.getElementById('finalized-grouping-correction-modal');
  const focusIndex = oldModal ? [...oldModal.querySelectorAll('button')].indexOf(document.activeElement) : 0;
  document.getElementById('finalized-grouping-correction-modal')?.remove();
- const groupedIds = [...new Set(state.units.map(unit => unit.pacote_id).filter(Boolean))];
+
+ const selectedCount = (state.units || []).filter(unit => unit.selected).length;
+ const groupedIds = [...new Set((state.units || []).map(unit => unit.pacote_id).filter(Boolean))];
+
+ const unitsHTML = (state.units || []).map(unit => {
+  const isAgrupado = Boolean(unit.pacote_id);
+  return `<button type="button" class="grouping-unit-card ${unit.selected ? 'is-selected' : ''} ${isAgrupado ? 'is-agrupado' : 'is-avulso'}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})">
+   <div class="grouping-unit-check">
+    <span class="material-symbols-rounded">${unit.selected ? 'check_box' : 'check_box_outline_blank'}</span>
+   </div>
+   <div class="grouping-unit-thumb">
+    ${unit.url_imagem ? `<img src="${escapeKitAttribute(unit.url_imagem)}" alt="${escapeKitAttribute(unit.descricao)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><span class="material-symbols-rounded" style="display:none">inventory_2</span>` : `<span class="material-symbols-rounded">inventory_2</span>`}
+   </div>
+   <div class="grouping-unit-info">
+    <strong class="grouping-unit-title">${escapeKitAttribute(unit.descricao)}</strong>
+    <div class="grouping-unit-meta">
+     <span class="grouping-meta-chip id-chip">ID: <strong>${escapeKitAttribute(unit.id_interno)}</strong></span>
+     ${unit.sku ? `<span class="grouping-meta-chip">SKU: <strong>${escapeKitAttribute(unit.sku)}</strong></span>` : ''}
+     ${unit.ean ? `<span class="grouping-meta-chip">EAN: <strong>${escapeKitAttribute(unit.ean)}</strong></span>` : ''}
+     ${unit.marca ? `<span class="grouping-meta-chip">Marca: <strong>${escapeKitAttribute(unit.marca)}</strong></span>` : ''}
+     ${unit.cor ? `<span class="grouping-meta-chip" style="${getProductColorDotStyle(unit.cor)}">Cor: <strong>${escapeKitAttribute(unit.cor)}</strong></span>` : ''}
+    </div>
+   </div>
+   <div class="grouping-unit-badge-col">
+    <span class="grouping-pkg-badge ${isAgrupado ? 'is-agrupado' : 'is-avulso'}">${isAgrupado ? 'AGRUPADO' : 'AVULSO'}</span>
+    <small class="grouping-unit-ordinal">Unidade ${unit.ordinal}</small>
+   </div>
+  </button>`;
+ }).join('');
+
+ const currentGroupingsHTML = groupedIds.length ? `<div class="finalized-grouping-current">
+  <h3>AGRUPAMENTOS ATUAIS</h3>
+  <div class="finalized-packages-list">
+   ${groupedIds.map((id, index) => {
+    const members = state.units.filter(unit => unit.pacote_id === id);
+    const memberSummaries = [...new Set(members.map(u => u.id_interno))].map(idInt => {
+     const first = members.find(u => u.id_interno === idInt);
+     const count = members.filter(u => u.id_interno === idInt).length;
+     const metaParts = [];
+     if (first.sku) metaParts.push('SKU: ' + first.sku);
+     if (first.ean) metaParts.push('EAN: ' + first.ean);
+     if (first.cor) metaParts.push('Cor: ' + first.cor);
+     return `<div class="grouped-member-row">
+      <strong class="grouped-member-title">${escapeKitAttribute(first.descricao)}</strong>
+      <small class="grouped-member-details">ID ${escapeKitAttribute(first.id_interno)}${metaParts.length ? ' · ' + metaParts.map(escapeKitAttribute).join(' · ') : ''} · ${count} un.</small>
+     </div>`;
+    }).join('');
+
+    return `<article class="finalized-package-card">
+     <header class="finalized-package-header">
+      <div class="finalized-package-title-block">
+       <strong>PACOTE AGRUPADO ${index + 1}</strong>
+       <span class="finalized-package-count-badge">${members.length} UNIDADE(S)</span>
+      </div>
+      <button type="button" class="btn-ungroup-pkg" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">
+       <span class="material-symbols-rounded">link_off</span>
+       <span>DESFAZER</span>
+      </button>
+     </header>
+     <div class="finalized-package-members">
+      ${memberSummaries}
+     </div>
+    </article>`;
+   }).join('')}
+  </div>
+ </div>` : '';
+
  const modal = document.createElement('div');
  modal.id = 'finalized-grouping-correction-modal';
  modal.className = 'finalized-grouping-correction-modal';
- modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title"><header><div><small>CORREÇÃO PÓS-FINALIZAÇÃO</small><h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2><p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p></div><button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></header><div class="finalized-grouping-lock"><span class="material-symbols-rounded">lock</span><span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span></div><div class="finalized-grouping-units">${state.units.map(unit=>`<button type="button" class="${unit.selected?'is-selected':''}" onclick="toggleFinalizedGroupingUnit(${quotePackInlineArg(unit.key)})"><span class="material-symbols-rounded">${unit.selected?'check_box':'check_box_outline_blank'}</span><div><strong>${escapeKitAttribute(unit.descricao)}</strong><small>ID ${escapeKitAttribute(unit.id_interno)} · unidade ${unit.ordinal}</small></div><em>${unit.pacote_id?'AGRUPADO':'AVULSO'}</em></button>`).join('')}</div><div class="finalized-grouping-actions"><button type="button" onclick="groupSelectedFinalizedUnits()"><span class="material-symbols-rounded">inventory_2</span>AGRUPAR SELECIONADAS</button></div>${groupedIds.length?`<div class="finalized-grouping-current"><h3>AGRUPAMENTOS ATUAIS</h3>${groupedIds.map((id,index)=>{const members=state.units.filter(unit=>unit.pacote_id===id);return `<article><div><strong>Pacote agrupado ${index+1}</strong><small>${members.length} unidade(s) · ${[...new Set(members.map(unit=>unit.descricao))].map(escapeKitAttribute).join(', ')}</small></div><button type="button" onclick="ungroupFinalizedPackage(${quotePackInlineArg(id)})">DESFAZER</button></article>`;}).join('')}</div>`:''}<footer><button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button><button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button></footer></section>`;
+ modal.innerHTML = `<section role="dialog" aria-modal="true" aria-labelledby="grouping-correction-title">
+  <header>
+   <div>
+    <small>CORREÇÃO PÓS-FINALIZAÇÃO</small>
+    <h2 id="grouping-correction-title">EDITAR AGRUPAMENTO</h2>
+    <p>${escapeKitAttribute(state.sessionId)} · produtos e quantidades bloqueados</p>
+   </div>
+   <button type="button" onclick="closeFinalizedGroupingCorrection()" aria-label="Fechar">
+    <span class="material-symbols-rounded">close</span>
+   </button>
+  </header>
+  <div class="finalized-grouping-lock">
+   <span class="material-symbols-rounded">lock</span>
+   <span>Somente a composição dos pacotes será alterada. Estoque e movimentos não serão tocados.</span>
+  </div>
+  <div class="finalized-grouping-units">
+   ${unitsHTML}
+  </div>
+  <div class="finalized-grouping-actions">
+   <button type="button" class="btn-group-selected ${selectedCount >= 2 ? 'is-enabled' : ''}" ${selectedCount < 2 ? 'disabled' : ''} onclick="groupSelectedFinalizedUnits()">
+    <span class="material-symbols-rounded">inventory_2</span>
+    <span>${selectedCount >= 2 ? `AGRUPAR ${selectedCount} SELECIONADAS` : 'AGRUPAR SELECIONADAS'}</span>
+   </button>
+  </div>
+  ${currentGroupingsHTML}
+  <footer>
+   <button type="button" onclick="closeFinalizedGroupingCorrection()">CANCELAR</button>
+   <button class="is-save" type="button" onclick="saveFinalizedGroupingCorrection()">SALVAR CORREÇÃO</button>
+  </footer>
+ </section>`;
+
  document.body.appendChild(modal);
  if (finalizedGroupingCorrectionPreviousInert === null) finalizedGroupingCorrectionPreviousInert = app.inert;
  app.inert = true;
@@ -39086,17 +42559,28 @@ initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReport
 
 /* Rel. Vendas / Devolucoes: custo historico de cada devolucao. */
 function sdMoney(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function sdMovementCost(m,id,rows){const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i),dev=match&&(rows||[]).find(r=>String(r.id)===match[1]);if(!dev)return null;const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);return qty?Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty:null}
-function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
-function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(2).replace('.',',')+'%';return mode==='percent'?pct:mode==='cost'?sdMoney(cost):'<span class="sd-cost-metric"><strong>'+pct+'</strong><small>'+sdMoney(cost)+(missing?' · parcial':'')+'</small></span>'}
+function sdMovementCost(m,id,rows,product){const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i),dev=match&&(rows||[]).find(r=>String(r.id)===match[1]);if(dev){const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);if(qty>0)return Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty;}const fallbackUnitCost=Number(product?.preco_custo||0);if(fallbackUnitCost>0)return Math.abs(Number(m.quantidade||0))*fallbackUnitCost;return null;}
+function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes,p);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
+function sdDevolutionMonthCell(returnsQty,salesQty,cost,missing,mode){const rate=salesQty?(returnsQty/salesQty*100):(returnsQty?100:null),rateStr=rate===null?'-':rate.toFixed(1).replace('.',',')+'%',costStr=sdMoney(cost||0)+(missing?' · parcial':'');if(mode==='cost')return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-cost">${costStr}</span></div>`;if(mode==='combined')return `<div class="sd-cell-stat sd-cell-combined"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-rate">${rateStr}</span><span class="sd-cell-cost">${costStr}</span></div>`;return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-rate">${rateStr}</span></div>`}
+function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(1).replace('.',',')+'%';if(mode==='percent')return pct;if(mode==='cost')return sdMoney(cost)+(missing?' · parcial':'');return `<div class="sd-comparative-metric"><strong class="sd-pct">${pct}</strong><small class="sd-cost">${sdMoney(cost)+(missing?' · p':'')}</small></div>`}
 function renderSdFinanceModeFilterCost(){const mode=saidaDevolucaoReportState.financeMode||'percent';return '<div class="sd-finance-filter" data-sd-extra-filter><small>Devolucoes</small><div role="group" aria-label="Visualizacao financeira">'+[['percent','%'],['cost','Valor'],['combined','% + Valor']].map(([v,l])=>'<button type="button" class="'+(mode===v?'active':'')+'" onclick="sdSetFinanceMode(\''+v+'\')">'+l+'</button>').join('')+'</div><em>Valor = custo do produto devolvido</em></div>'}
-function sdSetFinanceMode(mode){saidaDevolucaoReportState.financeMode=mode;const filter=document.querySelector('.sd-finance-filter');if(filter)filter.outerHTML=renderSdFinanceModeFilter();const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody()}
-function renderSdBodyCost(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',sold=rows.reduce((s,r)=>s+r.totalSales,0),returned=rows.reduce((s,r)=>s+r.totalReturns,0),cost=rows.reduce((s,r)=>s+(r.totalReturnCost||0),0),missing=rows.reduce((s,r)=>s+(r.missingCostQty||0),0),rate=sold?returned/sold*100:0;const displayRows=rows;const tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTable(displayRows):renderSdComparisonTable(displayRows,'sales')+renderSdComparisonTable(displayRows,'returns');return renderSaidaDevolucaoPeriodControls()+'<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential"><article><small>Total vendido</small><strong>'+formatStockNumber(sold)+'</strong></article><article><small>Total devolvido</small><strong>'+formatStockNumber(returned)+'</strong></article>'+(mode!=='cost'?'<article><small>Taxa de devolucao</small><strong>'+rate.toFixed(2).replace('.',',')+'%</strong></article>':'')+(mode!=='percent'?'<article><small>Custo devolvido</small><strong>'+sdMoney(cost)+'</strong><span>'+(missing?'Total parcial':'Custo historico registrado')+'</span></article>':'')+'</section>'+(missing?'<aside class="sd-financial-warning"><strong>'+formatStockNumber(missing)+' unidade(s) sem custo registrado</strong><small> Entram na quantidade e taxa, mas nao no Custo devolvido.</small></aside>':'')+'<section class="sd-report-history-note ready"><strong>'+months.length+' meses selecionados</strong><span>Total vendido: '+formatStockNumber(sold)+' - Total devolvido: '+formatStockNumber(returned)+'</span></section>'+tables}
+function sdSetFinanceMode(mode){saidaDevolucaoReportState.financeMode=mode;const filter=document.querySelector('.sd-finance-filter');if(filter)filter.outerHTML=renderSdFinanceModeFilter();const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();requestAnimationFrame(sdUpdateTopScrollbars);}
+function renderSdBodyCost(){const rows=getSaidaDevolucaoFilteredRows(),months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',sold=rows.reduce((s,r)=>s+r.totalSales,0),returned=rows.reduce((s,r)=>s+r.totalReturns,0),cost=rows.reduce((s,r)=>s+(r.totalReturnCost||0),0),missing=rows.reduce((s,r)=>s+(r.missingCostQty||0),0),rate=sold?(returned/sold*100):0;let cardsHTML=`<article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">shopping_cart</span></div><div class="sd-card-body"><small>Total vendido</small><strong>${sdFormatQty(sold)}</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">assignment_return</span></div><div class="sd-card-body"><small>Total devolvido</small><strong>${sdFormatQty(returned)}</strong></div></article>`;if(mode==='combined'){cardsHTML+=`<article class="sd-card sd-card-rate ${rate>5?'danger':rate>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${rate.toFixed(2).replace('.',',')}%</strong></div></article><article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">monetization_on</span></div><div class="sd-card-body"><small>Custo das devolucoes</small><strong>${sdMoney(cost)}</strong><span class="sd-card-subtext">${missing?'Total parcial':'Custo historico registrado'}</span></div></article>`;}else if(mode==='cost'){cardsHTML+=`<article class="sd-card"><div class="sd-card-icon"><span class="material-symbols-rounded">monetization_on</span></div><div class="sd-card-body"><small>Custo devolvido</small><strong>${sdMoney(cost)}</strong><span class="sd-card-subtext">${missing?'Total parcial':'Custo historico registrado'}</span></div></article>`;}else{cardsHTML+=`<article class="sd-card sd-card-rate ${rate>5?'danger':rate>2?'warning':'success'}"><div class="sd-card-icon"><span class="material-symbols-rounded">percent</span></div><div class="sd-card-body"><small>Taxa de devolucao</small><strong>${rate.toFixed(2).replace('.',',')}%</strong></div></article>`;}const tables=saidaDevolucaoReportState.viewMode==='comparative'?renderSdComparativeTableFinancial(rows):renderSdComparisonTable(rows,'sales')+renderSdComparisonTableFinancial(rows,'returns');requestAnimationFrame(sdUpdateTopScrollbars);return renderSaidaDevolucaoPeriodControls()+`<section class="sd-report-cards sd-report-cards-primary sd-report-cards-essential">${cardsHTML}</section>`+(missing?`<aside class="sd-financial-warning"><strong class="material-symbols-rounded">warning</strong><div><strong>${sdFormatQty(missing)} unidade(s) sem custo registrado</strong><small> Entram na quantidade e taxa, mas nao no Custo devolvido.</small></div></aside>`:'')+tables}
 buildSaidaDevolucaoRows=buildSdRowsCost;renderSdFinanceModeFilter=renderSdFinanceModeFilterCost;renderSaidaDevolucaoReportBody=renderSdBodyCost;
 initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReportControlsBase();const filters=document.querySelector('.sd-report-filters');if(!filters||filters.querySelector('.sd-account-filter'))return;if(!['percent','cost','combined'].includes(saidaDevolucaoReportState.financeMode))saidaDevolucaoReportState.financeMode='percent';saidaDevolucaoReportState.contasDisponiveis=sdGetAvailableAccounts();if(saidaDevolucaoReportState.contasSelecionadas===undefined)saidaDevolucaoReportState.contasSelecionadas=null;[...filters.querySelectorAll('label')].find(l=>l.querySelector('small')?.textContent==='Canal')?.remove();filters.insertAdjacentHTML('afterbegin',renderSdAccountsFilter());filters.insertAdjacentHTML('beforeend',renderSdFinanceModeFilter())};
 
-const renderSdComparisonTableQuantity=renderSdComparisonTable;
-function renderSdComparisonTableFinancial(rows,type){if(type==='sales'||saidaDevolucaoReportState.financeMode==='percent')return renderSdComparisonTableQuantity(rows,type);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined';return '<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">assignment_return</span><div><h2>Devolucoes</h2><small>Custo historico registrado em cada devolucao</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(sdMonthLabel).map(x=>'<th>'+x+'</th>').join('')+'<th>Custo devolvido</th><th>'+(combined?'Taxa / Custo':'Custo')+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td><strong>'+sdMoney(r.totalReturnCost)+'</strong></td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
-const renderSdComparativeTableQuantity=renderSdComparativeTable;
-function renderSdComparativeTableFinancial(rows){if(saidaDevolucaoReportState.financeMode==='percent')return renderSdComparativeTableQuantity(rows);const months=saidaDevolucaoReportState.meses||[],combined=saidaDevolucaoReportState.financeMode==='combined',label=combined?'Taxa / Custo':'Custo devolvido';return '<section class="sd-report-table-card sd-comparative-card"><header><div><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>Quantidade e impacto em custo por produto</small></div></div></header><div class="sd-report-table"><table><thead><tr><th>Produto</th>'+months.map(m=>'<th colspan="3">'+sdMonthLabel(m)+'</th>').join('')+'<th>Total vendido</th><th>Total devolvido</th><th>'+label+'</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+renderSdProductCell(r)+months.map((m,i)=>'<td>'+formatStockNumber(r.sales[i])+'</td><td>'+formatStockNumber(r.returns[i])+'</td><td>'+sdMetric(combined&&r.sales[i]?r.returns[i]/r.sales[i]*100:null,r.returnCosts[i],r.missingCosts[i])+'</td>').join('')+'<td>'+formatStockNumber(r.totalSales)+'</td><td>'+formatStockNumber(r.totalReturns)+'</td><td>'+sdMetric(r.percentual,r.totalReturnCost,r.missingCostQty)+'</td></tr>').join('')+'</tbody></table></div></section>'}
+let isSyncingSdScroll=false;
+function sdSyncScroll(sourceEl,type){if(isSyncingSdScroll)return;isSyncingSdScroll=true;const card=sourceEl.closest('.sd-report-table-card');if(card){const topWrap=card.querySelector('.sd-top-scrollbar-wrap'),tableDiv=card.querySelector('.sd-report-table');if(topWrap&&tableDiv){if(type==='top')tableDiv.scrollLeft=topWrap.scrollLeft;else topWrap.scrollLeft=tableDiv.scrollLeft;}}requestAnimationFrame(()=>{isSyncingSdScroll=false;});}
+function sdUpdateTopScrollbars(){document.querySelectorAll('.sd-report-table-card').forEach(card=>{const tableDiv=card.querySelector('.sd-report-table'),topWrap=card.querySelector('.sd-top-scrollbar-wrap'),topInner=card.querySelector('.sd-top-scrollbar-inner'),table=tableDiv?.querySelector('table');if(!tableDiv||!topWrap||!topInner||!table)return;const tableWidth=parseInt(table.style.width,10)||table.scrollWidth||tableDiv.scrollWidth;const clientWidth=tableDiv.clientWidth;if(tableWidth>clientWidth+2){topWrap.style.display='block';topInner.style.width=tableWidth+'px';topWrap.scrollLeft=tableDiv.scrollLeft;}else{topWrap.style.display='none';}});}
+if(typeof window!=='undefined'&&!window._sdScrollResizeBound){window._sdScrollResizeBound=true;window.addEventListener('resize',()=>{requestAnimationFrame(sdUpdateTopScrollbars);});}
+
+const renderSdComparisonTableBase=renderSdComparisonTable;
+function renderSdComparisonTableFinancial(rows,type){if(type==='sales')return renderSdComparisonTableBase(rows,type);const months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',taxaTooltip="Percentual das unidades vendidas que foram devolvidas no período. Cálculo: (Devoluções ÷ Vendas) × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas no período total. Cálculo: (Total devolvido ÷ Total vendido) × 100.";let extraTh='';let extraColsWidth=0;if(mode==='combined'){extraTh=`<th>Total dev.</th><th><span class="sd-th-with-help"><span>Taxa geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th><th>Custo devolvido</th><th class="sd-th-trend">Tendencia</th>`;extraColsWidth=78+84+110+200;}else if(mode==='cost'){extraTh='<th>Total dev.</th><th>Media</th><th>Custo devolvido</th><th class="sd-th-trend">Tendencia</th>';extraColsWidth=78+78+110+200;}else{extraTh=`<th>Total dev.</th><th>Media</th><th><span class="sd-th-with-help"><span>Taxa</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaTooltip)}">ⓘ</span></span></th><th class="sd-th-trend">Tendencia</th>`;extraColsWidth=78+78+84+200;}const tableWidth=380+(75*months.length)+extraColsWidth+24;return `<section class="sd-report-table-card"><header><div><span class="material-symbols-rounded">assignment_return</span><div><h2>Devolucoes</h2><small>${mode==='combined'?'Frequencia (quantidade, taxa) e impacto em custo por produto':mode==='cost'?'Quantidade e custo historico registrado em cada devolucao':'Quantidade e taxa de devolucao por produto'}</small></div></div></header><div class="sd-top-scrollbar-wrap" onscroll="sdSyncScroll(this, 'top')"><div class="sd-top-scrollbar-inner" style="width: ${tableWidth}px;"></div></div><div class="sd-report-table" onscroll="sdSyncScroll(this, 'bottom')"><table style="width: ${tableWidth}px; min-width: ${tableWidth}px; table-layout: fixed;"><thead><tr><th class="sd-th-product">Produto</th>${months.map((m,i)=>`<th class="${i===months.length-1?'sd-col-month-end':''}"><span>${sdMonthLabel(m)}</span></th>`).join('')}${extraTh}</tr></thead><tbody>${rows.map(r=>{const cells=months.map((m,i)=>`<td class="${i===months.length-1?'sd-col-month-end':''}">${sdDevolutionMonthCell((r.returns||[])[i]||0,(r.sales||[])[i]||0,(r.returnCosts||[])[i]||0,(r.missingCosts||[])[i]||0,mode)}</td>`).join('');const rateBadge=`<span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'-':r.percentual.toFixed(2).replace('.',',')+'%'}</span>`;const costVal=`<strong>${sdMoney(r.totalReturnCost||0)}</strong>${r.missingCostQty?' <small class="sd-warn-txt">(parcial)</small>':''}`;const returnRates=months.map((m,i)=>(r.sales||[])[i]?((r.returns||[])[i]/(r.sales||[])[i]*100):((r.returns||[])[i]?100:0));const sparklineHtml=renderSdSparkline(returnRates,`Tendencia da taxa de devolucoes de ${r.descricao}`,'returns',150,30);let totalCols='';if(mode==='combined'){totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${rateBadge}</td><td>${costVal}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}else if(mode==='cost'){totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${sdFormatQty(r.averageReturns)}</td><td>${costVal}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}else{totalCols=`<td><strong>${sdFormatQty(r.totalReturns)}</strong></td><td>${sdFormatQty(r.averageReturns)}</td><td>${rateBadge}</td><td class="sd-td-trend">${sparklineHtml}</td>`;}return `<tr>${renderSdProductCell(r)}${cells}${totalCols}</tr>`;}).join('')||`<tr><td colspan="${months.length+5}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`}
+
+function renderSdComparativeTableFinancial(rows){const months=saidaDevolucaoReportState.meses||[],mode=saidaDevolucaoReportState.financeMode||'percent',metricLabel=mode==='cost'?'Custo':mode==='combined'?'Taxa / Custo':'Taxa',taxaTooltip="Percentual das unidades vendidas que foram devolvidas.\nCálculo: devoluções ÷ vendas × 100.",taxaGeralTooltip="Percentual geral das unidades vendidas que foram devolvidas.\nCálculo: total devolvido ÷ total vendido × 100.",monthTaxaWidth=mode==='combined'?105:(mode==='cost'?95:80),monthWidth=70+60+monthTaxaWidth,totalsWidth=mode==='percent'?240:350,tableWidth=380+(monthWidth*months.length)+totalsWidth+200+24,colgroupHtml=`<colgroup><col class="sd-col-prod" style="width: 380px; min-width: 380px;">${months.map(()=>`<col class="sd-col-vendas" style="width: 70px; min-width: 70px;"><col class="sd-col-dev" style="width: 60px; min-width: 60px;"><col class="sd-col-taxa sd-col-month-end" style="width: ${monthTaxaWidth}px; min-width: ${monthTaxaWidth}px;">`).join('')}<col class="sd-col-tot-sales" style="width: 78px; min-width: 78px;"><col class="sd-col-tot-dev" style="width: 78px; min-width: 78px;"><col class="sd-col-taxa-geral" style="width: 84px; min-width: 84px;">${mode!=='percent'?'<col class="sd-col-tot-cost" style="width: 110px; min-width: 110px;">':''}<col class="sd-col-trend" style="width: 200px; min-width: 200px;"></colgroup>`;return `<section class="sd-report-table-card sd-comparative-card"><header class="sd-comparative-header"><div class="sd-header-title"><span class="material-symbols-rounded">compare_arrows</span><div><h2>Comparativo mensal</h2><small>${mode==='combined'?'Vendas, devoluções, taxa e impacto em custo por produto':mode==='cost'?'Vendas, devoluções e impacto financeiro por produto':'Vendas, devoluções e taxa por produto'}</small></div></div></header><div class="sd-top-scrollbar-wrap" onscroll="sdSyncScroll(this, 'top')"><div class="sd-top-scrollbar-inner" style="width: ${tableWidth}px;"></div></div><div class="sd-report-table" onscroll="sdSyncScroll(this, 'bottom')"><table class="sd-comparative-table" style="width: ${tableWidth}px; min-width: ${tableWidth}px; table-layout: fixed;">${colgroupHtml}<thead><tr><th rowspan="2" class="sd-th-product">Produto</th>${months.map(m=>`<th colspan="3" class="sd-comparative-month"><span>${sdMonthLabel(m)}</span></th>`).join('')}<th rowspan="2" class="sd-th-total-sales">Total<br>Vendas</th><th rowspan="2" class="sd-th-total-returns">Total<br>Devolvido</th><th rowspan="2" class="sd-th-general-rate"><span class="sd-th-with-help"><span>Taxa<br>Geral</span><span class="sd-help-icon" title="${escapeKitAttribute(taxaGeralTooltip)}">ⓘ</span></span></th>${mode!=='percent'?'<th rowspan="2" class="sd-th-total-cost">Custo<br>Devolvido</th>':''}<th rowspan="2" class="sd-th-trend">Tendência</th></tr><tr class="sd-subheaders">${months.map(()=>`<th class="sd-sub-vendas">Vendas</th><th class="sd-sub-dev">Dev.</th><th class="sd-col-month-end sd-sub-taxa"><span class="sd-th-with-help"><span>${metricLabel}</span><span class="sd-help-icon" title="${escapeKitAttribute(mode==='cost'?'Custo histórico registrado das unidades devolvidas no mês.':taxaTooltip)}">ⓘ</span></span></th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${renderSdProductCell(r)}${months.map((m,i)=>{const sales=(r.sales||[])[i]||0,returns=(r.returns||[])[i]||0,rate=sales?returns/sales*100:(returns?100:null);return `<td class="sd-cell-vendas">${sdFormatQty(sales)}</td><td class="sd-cell-dev">${sdFormatQty(returns)}</td><td class="sd-col-month-end sd-cell-taxa">${sdMetric(rate,(r.returnCosts||[])[i]||0,(r.missingCosts||[])[i]||0)}</td>`}).join('')}<td class="sd-cell-total-sales"><strong>${sdFormatQty(r.totalSales)}</strong></td><td class="sd-cell-total-returns"><strong>${sdFormatQty(r.totalReturns)}</strong></td><td class="sd-cell-general-rate"><span class="sd-rate ${r.percentual===null?'neutral':r.percentual>5?'danger':r.percentual>2?'warning':'success'}">${r.percentual===null?'-':r.percentual.toFixed(2).replace('.',',')+'%'}</span></td>${mode!=='percent'?`<td class="sd-cell-total-cost"><strong>${sdMoney(r.totalReturnCost||0)}</strong>${r.missingCostQty?' <small class="sd-warn-txt">(parcial)</small>':''}</td>`:''}<td class="sd-td-trend">${renderSdComparativeTrend(r,months)}</td></tr>`).join('')||`<tr><td colspan="${months.length*3+(mode!=='percent'?7:6)}" class="sd-empty">Nenhum movimento encontrado nos meses selecionados.</td></tr>`}</tbody></table></div></section>`}
 renderSdComparisonTable=renderSdComparisonTableFinancial;renderSdComparativeTable=renderSdComparativeTableFinancial;
+
+// Exposição global de funções de navegação da Entrada NF
+window.renderNFDetail = renderNFDetail;
+window.renderEntradaNFIdentificacao = renderEntradaNFIdentificacao;
+window.renderEntradaNFEmRecebimento = renderEntradaNFEmRecebimento;

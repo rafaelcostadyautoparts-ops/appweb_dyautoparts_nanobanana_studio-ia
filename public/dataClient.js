@@ -561,36 +561,24 @@ const DataClient = (function () {
         return data;
     }
 
-    async function finalizarInventarioEstoqueSupabase(inventarioId, usuario, executionId = '') {
-        const client = window.supabaseClient;
-        if (!client) throw new Error('Supabase client nao encontrado');
-        const { data, error } = await client.rpc('finalizar_inventario_estoque_temporario', {
-            p_inventario_id: String(inventarioId || '').trim(),
-            p_usuario: usuario || 'N/A',
-            p_execution_id: executionId || `inventario:${inventarioId}`
-        });
-        if (error) {
-            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('finalizar_inventario_estoque');
-            throw new Error(missingRpc
-                ? 'A migracao de inventario transacional ainda nao foi aplicada no Supabase. A finalizacao foi bloqueada.'
-                : (error.message || 'Erro ao finalizar inventario'));
-        }
-        invalidateCache('inventarios');
-        invalidateCache('produtos');
-        invalidateCache('movimentos');
-        return data;
-    }
-
     async function finalizarSeparacaoRapidaAtomicaSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
-        const sessionId = String(payload.sessionId || payload.separacao_id || '').trim();
-        if (!sessionId) throw new Error('Separacao nao informada');
-        const { data, error } = await client.rpc('finalizar_separacao_rapida_atomica_temporario', {
-            p_separacao_id: sessionId,
+        const draftId = String(payload.draftId || payload.sessionId || payload.separacao_id || '').trim();
+        if (!draftId) throw new Error('Identificador da separacao obrigatorio');
+
+        const rpcPayload = {
+            p_draft_id: draftId,
+            p_canal_id: String(payload.canalId || payload.canal_id || '').trim(),
+            p_canal_nome: String(payload.canalNome || payload.canal_nome || '').trim(),
+            p_pacotes: Array.isArray(payload.pacotes) ? payload.pacotes : [],
             p_usuario: payload.usuario || localStorage.getItem('currentUser') || 'N/A',
-            p_permitir_negativo: payload.permitirNegativo === true
-        });
+            p_permitir_negativo: payload.permitirNegativo === true || payload.permitir_negativo === true,
+            p_observacao: payload.observacao ? String(payload.observacao).trim() : null,
+            p_execution_id: payload.executionId || payload.execution_id ? String(payload.executionId || payload.execution_id).trim() : null
+        };
+
+        const { data, error } = await client.rpc('finalizar_separacao_rapida_atomica', rpcPayload);
         if (error) {
             const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('finalizar_separacao_rapida_atomica');
             throw new Error(missingRpc
@@ -603,64 +591,8 @@ const DataClient = (function () {
         invalidateCache('movimentos');
         return data;
     }
-    /**
-     * Reflete a contagem fisica do inventario em estoque_atual.
-     * O inventario e a fonte de verdade: saldo_disponivel e saldo_total recebem saldo_fisico.
-     */
-    async function aplicarSaldoFisicoInventarioSupabase(id_interno, localRaw, saldoFisicoRaw) {
-        const client = window.supabaseClient;
-        const local = normalizeLocal(localRaw);
-        const saldoFisico = Number(saldoFisicoRaw || 0);
 
-        if (!client || !id_interno || !local || !Number.isFinite(saldoFisico)) {
-            console.error('[INV-DIAG] aplicar saldo fisico ERRO: parametros invalidos', { id_interno, local, saldoFisicoRaw });
-            return false;
-        }
 
-        try {
-            const { data: current, error: fetchError } = await client
-                .from('estoque_atual')
-                .select('id')
-                .eq('id_interno', id_interno)
-                .eq('local', local)
-                .maybeSingle();
-
-            if (fetchError) throw fetchError;
-
-            const now = getDataHoraBrasil();
-            let result;
-
-            if (current) {
-                result = await client
-                    .from('estoque_atual')
-                    .update({
-                        saldo_disponivel: saldoFisico,
-                        saldo_total: saldoFisico,
-                        atualizado_em: now
-                    })
-                    .eq('id_interno', id_interno)
-                    .eq('local', local);
-            } else {
-                result = await client
-                    .from('estoque_atual')
-                    .insert([{
-                        id_interno: id_interno,
-                        local: local,
-                        saldo_disponivel: saldoFisico,
-                        saldo_reservado: 0,
-                        saldo_em_transito: 0,
-                        saldo_total: saldoFisico,
-                        atualizado_em: now
-                    }]);
-            }
-
-            if (result.error) throw result.error;
-            return true;
-        } catch (err) {
-            console.error('[INV-DIAG] aplicar saldo fisico ERRO fatal:', err.message || err);
-            return false;
-        }
-    }
 
     /**
      * Busca saldos de estoque por local para um produto especfico
@@ -1113,6 +1045,120 @@ const DataClient = (function () {
         }
 
         return data || [];
+    }
+
+    /**
+     * Carrega dados operacionais otimizados exclusivamente para o Dashboard.
+     * Retorna apenas separacoes recentes/abertas, conferencias recentes e canais.
+     * Nao carrega separacao_itens nem conferencia_itens.
+     */
+    async function fetchDashboardOperationalData() {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const todayIso = typeof getDataBrasilISO === 'function' ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+
+        try {
+            const [sepRes, confRes, channelRes] = await Promise.all([
+                client
+                    .from('separacao')
+                    .select('*')
+                    .or(`criado_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                    .order('criado_em', { ascending: false }),
+                client
+                    .from('conferencia')
+                    .select('*')
+                    .or(`conferido_em.gte.${todayIso}T00:00:00,atualizado_em.gte.${todayIso}T00:00:00,status.eq.em_conferencia`)
+                    .order('conferido_em', { ascending: false }),
+                client
+                    .from('canais_envio')
+                    .select('*')
+            ]);
+
+            if (sepRes.error) throw sepRes.error;
+            if (confRes.error) throw confRes.error;
+
+            return {
+                separacao: sepRes.data || [],
+                conferencia: confRes.data || [],
+                channels: channelRes.data || []
+            };
+        } catch (error) {
+            console.error('[DataClient] Erro ao carregar dados operacionais do Dashboard:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Carrega dados operacionais otimizados exclusivamente para o Romaneio.
+     * Retorna separacoes recentes/abertas e movimentos a partir da menor data de criacao das separacoes ativas.
+     */
+    async function fetchRomaneioOperationalData() {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+
+        const todayIso = typeof getDataBrasilISO === 'function' ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+
+        try {
+            // 1. Buscar separacoes de hoje ou abertas
+            const sepRes = await client
+                .from('separacao')
+                .select('*')
+                .or(`criado_em.gte.${todayIso}T00:00:00,status.eq.aberta`)
+                .order('criado_em', { ascending: false });
+
+            if (sepRes.error) throw sepRes.error;
+
+            const separacoes = sepRes.data || [];
+            if (!separacoes.length) {
+                return { separacao: [], movimentacoes: [] };
+            }
+
+            // 2. Calcular a menor data de criacao entre as separacoes ativas
+            let minTimestamp = Infinity;
+            separacoes.forEach(item => {
+                const rawDate = item.criado_em || item.atualizado_em;
+                if (rawDate) {
+                    const ts = new Date(rawDate).getTime();
+                    if (!isNaN(ts) && ts < minTimestamp) minTimestamp = ts;
+                }
+            });
+
+            let minDateIso = todayIso;
+            if (minTimestamp !== Infinity) {
+                const minDateObj = new Date(minTimestamp);
+                minDateIso = typeof getDataBrasilISO === 'function'
+                    ? getDataBrasilISO(minDateObj)
+                    : minDateObj.toISOString().split('T')[0];
+            }
+
+            // 3. Buscar movimentos desde o inicio do dia da separacao mais antiga (paginado para evitar truncamento em 1000)
+            let allMovements = [];
+            let from = 0;
+            const pageSize = 1000;
+            while (true) {
+                const movRes = await client
+                    .from('movimentos')
+                    .select('*')
+                    .gte('data_hora', `${minDateIso}T00:00:00`)
+                    .order('data_hora', { ascending: false })
+                    .range(from, from + pageSize - 1);
+
+                if (movRes.error) throw movRes.error;
+                const rows = movRes.data || [];
+                allMovements = allMovements.concat(rows);
+                if (rows.length < pageSize) break;
+                from += pageSize;
+            }
+
+            return {
+                separacao: separacoes,
+                movimentacoes: allMovements
+            };
+        } catch (error) {
+            console.error('[DataClient] Erro ao carregar dados operacionais do Romaneio:', error);
+            throw error;
+        }
     }
 
     async function fetchEntradasNfProdutoSupabase(id_interno) {
@@ -1811,6 +1857,25 @@ const DataClient = (function () {
         }));
     }
 
+    async function listarItensSeparacaoSupabase(sessionId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const cleanSessionId = String(sessionId || '').trim();
+        if (!cleanSessionId) return [];
+        const { data, error } = await client
+            .from('separacao_itens')
+            .select('*')
+            .eq('separacao_id', cleanSessionId)
+            .gt('qtd_separada', 0)
+            .order('id_interno');
+        if (error) {
+            const missingTable = error.code === '42P01' || String(error.message || '').includes('separacao_itens');
+            if (missingTable) return [];
+            throw error;
+        }
+        return data || [];
+    }
+
     async function cancelarSeparacaoAntesDespachoSupabase(payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase client nao encontrado');
@@ -1868,6 +1933,42 @@ const DataClient = (function () {
                 : (error.message || 'Erro ao sincronizar pacotes'));
         }
         invalidateCache('separacao');
+        return data;
+    }
+
+    async function salvarContagemInventarioItemSupabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const inventarioId = String(payload.inventario_id || payload.inventarioId || '').trim();
+        const idInterno = String(payload.id_interno || payload.idInterno || '').trim();
+        const local = String(payload.local || '').trim();
+        const saldoFisico = Number(payload.saldo_fisico ?? payload.saldoFisico ?? 0);
+        const usuario = String(payload.usuario || localStorage.getItem('currentUser') || 'N/A').trim();
+        const valorUnitario = payload.valor_unitario !== undefined ? Number(payload.valor_unitario) : null;
+
+        if (!inventarioId || !idInterno) throw new Error('Inventario e produto sao obrigatorios.');
+        if (saldoFisico < 0) throw new Error('Saldo fisico nao pode ser negativo.');
+
+        const { data, error } = await client.rpc('salvar_contagem_inventario_item', {
+            p_inventario_id: inventarioId,
+            p_id_interno: idInterno,
+            p_local: local,
+            p_saldo_fisico: saldoFisico,
+            p_usuario: usuario,
+            p_valor_unitario: valorUnitario
+        });
+
+        if (error) {
+            const missingRpc = error.code === 'PGRST202' || String(error.message || '').includes('salvar_contagem_inventario_item');
+            if (missingRpc) {
+                console.warn('[INV] RPC salvar_contagem_inventario_item nao disponivel. Usando insercao direta com fallback.');
+                return null;
+            }
+            throw new Error(error.message || 'Erro ao salvar contagem do inventario.');
+        }
+
+        invalidateCache('inventarios_itens');
+        invalidateCache('inventarios');
         return data;
     }
 
@@ -3261,7 +3362,284 @@ const DataClient = (function () {
         return data;
     }
 
+    async function salvarContagemInventarioItemSupabase(payload) {
+        const client = window.supabaseClient;
+        if (!client) {
+            throw new Error('Supabase client nao encontrado');
+        }
+
+        const rpcPayload = {
+            p_inventario_id: String(payload.inventario_id || payload.inventarioId || '').trim(),
+            p_id_interno: String(payload.id_interno || payload.idInterno || '').trim(),
+            p_local: String(payload.local || '').trim(),
+            p_saldo_fisico: Number(payload.saldo_fisico ?? payload.saldoFisico ?? 0),
+            p_usuario: String(payload.usuario || payload.auditUser || localStorage.getItem('currentUser') || 'Sistema').trim(),
+            p_valor_unitario: payload.valor_unitario != null ? Number(payload.valor_unitario) : null
+        };
+
+        console.log('[INV RPC] salvar_contagem_inventario_item payload:', rpcPayload);
+
+        const { data, error } = await client.rpc('salvar_contagem_inventario_item', rpcPayload);
+        if (error) {
+            console.error('[INV RPC] salvar_contagem_inventario_item erro:', error);
+            const isMissingRpc = error.code === 'PGRST202' || error.code === '42883' || String(error.message || '').includes('salvar_contagem_inventario_item');
+            const rpcError = new Error(isMissingRpc
+                ? 'A funcao de reconciliacao de inventario (salvar_contagem_inventario_item) ainda nao foi aplicada no Supabase. A contagem foi bloqueada por seguranca.'
+                : (error.message || 'Erro ao salvar contagem do inventario no Supabase'));
+            rpcError.code = error.code;
+            rpcError.details = error.details;
+            rpcError.hint = error.hint;
+            rpcError.supabaseError = error;
+            throw rpcError;
+        }
+
+        invalidateCache('inventarios');
+        return data;
+    }
+
+    async function finalizarInventarioEstoqueSupabase(inventarioId, usuario, executionId) {
+        const client = window.supabaseClient;
+        if (!client) {
+            throw new Error('Supabase client nao encontrado');
+        }
+
+        const rpcPayload = {
+            p_inventario_id: String(inventarioId || '').trim(),
+            p_usuario: String(usuario || localStorage.getItem('currentUser') || 'Sistema').trim(),
+            p_execution_id: executionId ? String(executionId).trim() : null
+        };
+
+        console.log('[INV RPC] finalizar_inventario_estoque payload:', rpcPayload);
+
+        const { data, error } = await client.rpc('finalizar_inventario_estoque', rpcPayload);
+        if (error) {
+            console.error('[INV RPC] finalizar_inventario_estoque erro:', error);
+            const isMissingRpc = error.code === 'PGRST202' || error.code === '42883' || String(error.message || '').includes('finalizar_inventario_estoque');
+            const rpcError = new Error(isMissingRpc
+                ? 'A RPC transacional de finalizacao (finalizar_inventario_estoque) ainda nao foi aplicada no Supabase. O fechamento foi bloqueado por seguranca.'
+                : (error.message || 'Erro ao finalizar inventario no Supabase'));
+            rpcError.code = error.code;
+            rpcError.details = error.details;
+            rpcError.hint = error.hint;
+            rpcError.supabaseError = error;
+            throw rpcError;
+        }
+
+        invalidateCache('inventarios');
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        return data;
+    }
+
+    /**
+     * Persiste ou atualiza rascunho de orçamento no Supabase
+     */
+    async function salvarRascunhoOrcamentoSupabase({ id = null, cliente = {}, itens = [], condicoes = {}, usuario = 'Sistema' }) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+        const { data, error } = await client.rpc('salvar_rascunho_orcamento', {
+            p_id: id || null,
+            p_cliente: cliente || {},
+            p_itens: itens || [],
+            p_condicoes: condicoes || {},
+            p_usuario: usuario || 'Sistema'
+        });
+
+        if (error) {
+            console.error('[ORCAMENTOS] Erro ao salvar rascunho:', error);
+            throw new Error('Falha ao salvar rascunho no Supabase: ' + error.message);
+        }
+
+        return data;
+    }
+
+    /**
+     * Gera versão oficial do orçamento no Supabase (atribui número e cria snapshot V1/V2/V3...)
+     */
+    async function gerarVersaoOficialOrcamentoSupabase({ id = null, cliente = {}, itens = [], condicoes = {}, usuario = 'Sistema', executionId = null }) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+        const execId = executionId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `EXEC-${Date.now()}-${Math.random()}`);
+
+        const { data, error } = await client.rpc('gerar_versao_oficial_orcamento', {
+            p_id: id || null,
+            p_cliente: cliente || {},
+            p_itens: itens || [],
+            p_condicoes: condicoes || {},
+            p_usuario: usuario || 'Sistema',
+            p_execution_id: execId
+        });
+
+        if (error) {
+            console.error('[ORCAMENTOS] Erro ao gerar versão oficial:', error);
+            throw new Error('Falha ao gerar versão oficial no Supabase: ' + error.message);
+        }
+
+        return data;
+    }
+
+    /**
+     * Lista orçamentos (rascunhos e gerados) do Supabase com ordenação por atualizado_em desc
+     */
+    async function listarOrcamentosSupabase({ busca = '', status = '', limit = 50 } = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+        let queryBuilder = client
+            .from('orcamentos')
+            .select('*')
+            .order('atualizado_em', { ascending: false })
+            .limit(limit);
+
+        if (status) {
+            queryBuilder = queryBuilder.eq('status', status);
+        }
+
+        const { data, error } = await queryBuilder;
+        if (error) {
+            console.error('[ORCAMENTOS] Erro ao listar orçamentos:', error);
+            throw error;
+        }
+
+        let results = (data || []).map(row => ({
+            ...row,
+            cliente: {
+                empresa: row.cliente_empresa || '',
+                documento: row.cliente_documento || '',
+                responsavel: row.cliente_responsavel || '',
+                email: row.cliente_email || '',
+                telefone: row.cliente_telefone || '',
+                endereco: row.cliente_endereco || ''
+            },
+            condicoes: {
+                emissao: row.emissao,
+                validade: row.validade,
+                forma_pagamento: row.forma_pagamento,
+                desconto_opcao: row.desconto_opcao,
+                desconto: Number(row.desconto_percentual || 0),
+                frete_responsavel: row.frete_responsavel,
+                frete_valor: Number(row.frete_valor || 0),
+                condicao_negociada: row.condicao_negociada,
+                observacoes: row.observacoes
+            },
+            totais: {
+                subtotal: Number(row.subtotal || 0),
+                descontoValor: Number(row.desconto_valor || 0),
+                freteCobrado: Number(row.frete_cobrado || 0),
+                total: Number(row.total || 0)
+            }
+        }));
+
+        if (busca && busca.trim()) {
+            const cleanBusca = busca.trim().toLowerCase();
+            results = results.filter(row => {
+                const num = String(row.numero_orcamento || '').toLowerCase();
+                const emp = String(row.cliente?.empresa || '').toLowerCase();
+                const doc = String(row.cliente?.documento || '').toLowerCase();
+                const resp = String(row.cliente?.responsavel || '').toLowerCase();
+                const email = String(row.cliente?.email || '').toLowerCase();
+                return num.includes(cleanBusca) || emp.includes(cleanBusca) || doc.includes(cleanBusca) || resp.includes(cleanBusca) || email.includes(cleanBusca);
+            });
+        }
+
+        return results;
+    }
+
+    /**
+     * Obtém orçamento completo por ID e suas versões históricas
+     */
+    async function obterOrcamentoPorIdSupabase(id) {
+        if (!id) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+        const { data: rawOrc, error: errOrc } = await client
+            .from('orcamentos')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (errOrc || !rawOrc) {
+            console.error('[ORCAMENTOS] Erro ao buscar orçamento por ID:', errOrc);
+            return null;
+        }
+
+        const orcamento = {
+            ...rawOrc,
+            cliente: {
+                empresa: rawOrc.cliente_empresa || '',
+                documento: rawOrc.cliente_documento || '',
+                responsavel: rawOrc.cliente_responsavel || '',
+                email: rawOrc.cliente_email || '',
+                telefone: rawOrc.cliente_telefone || '',
+                endereco: rawOrc.cliente_endereco || ''
+            },
+            condicoes: {
+                emissao: rawOrc.emissao,
+                validade: rawOrc.validade,
+                forma_pagamento: rawOrc.forma_pagamento,
+                desconto_opcao: rawOrc.desconto_opcao,
+                desconto: Number(rawOrc.desconto_percentual || 0),
+                frete_responsavel: rawOrc.frete_responsavel,
+                frete_valor: Number(rawOrc.frete_valor || 0),
+                condicao_negociada: rawOrc.condicao_negociada,
+                observacoes: rawOrc.observacoes
+            },
+            totais: {
+                subtotal: Number(rawOrc.subtotal || 0),
+                descontoValor: Number(rawOrc.desconto_valor || 0),
+                freteCobrado: Number(rawOrc.frete_cobrado || 0),
+                total: Number(rawOrc.total || 0)
+            }
+        };
+
+        const { data: versoes, error: errVers } = await client
+            .from('orcamento_versoes')
+            .select('*')
+            .eq('orcamento_id', id)
+            .order('versao', { ascending: false });
+
+        if (errVers) {
+            console.warn('[ORCAMENTOS] Erro ao buscar versões do orçamento:', errVers);
+        }
+
+        return {
+            orcamento,
+            versoes: versoes || []
+        };
+    }
+
+    /**
+     * Obtém snapshot de uma versão específica de um orçamento
+     */
+    async function obterVersaoOrcamentoSupabase(orcamentoId, versao) {
+        if (!orcamentoId || !versao) return null;
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+        const { data, error } = await client
+            .from('orcamento_versoes')
+            .select('*')
+            .eq('orcamento_id', orcamentoId)
+            .eq('versao', versao)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[ORCAMENTOS] Erro ao buscar versão do orçamento:', error);
+            return null;
+        }
+
+        return data;
+    }
+
     return {
+        salvarRascunhoOrcamentoSupabase,
+        gerarVersaoOficialOrcamentoSupabase,
+        listarOrcamentosSupabase,
+        obterOrcamentoPorIdSupabase,
+        obterVersaoOrcamentoSupabase,
         loadModule,
         loadModules,
         query,
@@ -3272,10 +3650,12 @@ const DataClient = (function () {
         savePickingDraftItemsBatchSupabase,
         removerItemSeparacaoSupabase,
         esvaziarSeparacaoParaReutilizacaoSupabase,
+        listarItensSeparacaoSupabase,
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
         aplicarOperacaoProgressoSupabase,
         alocarNumeroSeparacaoDefinitivaSupabase,
+        finalizarSeparacaoRapidaAtomicaSupabase,
         autorizarCorrecaoAgrupamentoFinalizadoSupabase,
         salvarCorrecaoAgrupamentoFinalizadoSupabase,
         cancelarSeparacaoAntesDespachoSupabase,
@@ -3291,12 +3671,14 @@ const DataClient = (function () {
         registrarAjusteEstoqueSupabase,
         registrarMovimentoEstoqueSupabase,
         finalizarInventarioEstoqueSupabase,
-        finalizarSeparacaoRapidaAtomicaSupabase,
-        aplicarSaldoFisicoInventarioSupabase,
+        salvarContagemInventarioItemSupabase,
+
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,
         fetchMovimentosSupabase,
         fetchMovimentosProdutoSupabase,
+        fetchDashboardOperationalData,
+        fetchRomaneioOperationalData,
         fetchEntradasNfProdutoSupabase,
         fetchFornecedoresProdutoSupabase,
         fetchUsuariosSupabase,
@@ -3322,6 +3704,9 @@ const DataClient = (function () {
         fetchPedidosCompraCandidatos,
         salvarAlocacoesPedidoEntradaNF,
         fetchAlocacoesPedidoEntradaNF,
+        salvarComplementarEntradaNFSupabase,
+        fetchComplementaresEntradaNF,
+        saveEntradaNFParcelasFiscais,
 
         // GARANTIA
         saveGarantiaSupabase,
@@ -3598,8 +3983,12 @@ const DataClient = (function () {
         return data;
     }
 
-    async function saveMercadoLivreItemMappingTransacional({ itemId, variationId = null, tipoIdentificacao = 'produto', observacao = '', componentes = [], criadoPor = 'usuario', accountId = 1 }) {
+    async function saveMercadoLivreItemMappingTransacional({ itemId, variationId = null, tipoIdentificacao = 'produto', observacao = '', componentes = [], criadoPor = 'usuario', accountId }) {
         if (!itemId) throw new Error('item_id e obrigatorio.');
+        const accIdNum = Number(accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            throw new Error('accountId e obrigatorio e deve ser um ID valido (inteiro positivo).');
+        }
         if (!componentes || !componentes.length) throw new Error('Pelo menos um componente deve ser informado.');
         const client = window.supabaseClient;
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
@@ -3917,12 +4306,13 @@ const DataClient = (function () {
         return data;
     }
 
-    async function biparItemSeparacaoEquivalente(separacaoItemId, codigoOuEan, usuario = 'Sistema') {
+    async function biparItemSeparacaoEquivalente(separacaoItemId, codigoOuEan, usuario = 'Sistema', localOrigem = 'TERREO') {
         if (!separacaoItemId || !codigoOuEan) throw new Error('Item de separacao e codigo sao obrigatorios.');
         const client = window.supabaseClient;
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
 
         const cleanCode = String(codigoOuEan).trim().toUpperCase();
+        const finalLocalOrigem = localOrigem ? String(localOrigem).trim().toUpperCase() : 'TERREO';
 
         const { data: prodData, error: errProd } = await client
             .from('produtos')
@@ -3962,6 +4352,7 @@ const DataClient = (function () {
             produto_id: prodFisico.id,
             id_interno: prodFisico.id_interno,
             ean: prodFisico.ean,
+            local_origem: finalLocalOrigem,
             bipado_em: new Date().toISOString()
         });
 
@@ -3985,6 +4376,7 @@ const DataClient = (function () {
             id_interno: prodFisico.id_interno,
             ean: prodFisico.ean,
             quantidade: 1,
+            local_origem: finalLocalOrigem,
             bipado_por: usuario,
             bipado_em: new Date().toISOString()
         }]);
@@ -3995,7 +4387,8 @@ const DataClient = (function () {
         return {
             success: true,
             nova_qtd_separada: novaQtd,
-            produto_fisico: prodFisico
+            produto_fisico: prodFisico,
+            local_origem: finalLocalOrigem
         };
     }
 
@@ -4049,6 +4442,218 @@ const DataClient = (function () {
             console.error('[Produto Mestre] Falha na consulta do produto mestre:', err?.message || err);
             throw err;
         }
+    }
+
+    /**
+     * Salva lancamento complementar com suas parcelas no Supabase (contas_pagar)
+     * @param {string} entradaId
+     * @param {Object} payload { descricao, valorTotal, incorporarCusto, parcelas, fornecedor_nome, fornecedor_cnpj, numero_nf }
+     */
+    async function salvarComplementarEntradaNFSupabase(entradaId, payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponivel');
+        if (!entradaId) throw new Error('entrada_nf_id e obrigatorio para salvar lancamento complementar');
+
+        const {
+            descricao = 'Lancamento Complementar',
+            valorTotal = 0,
+            incorporarCusto = false,
+            parcelas = [],
+            fornecedor_nome = null,
+            fornecedor_cnpj = null,
+            numero_nf = null
+        } = payload;
+
+        if (!parcelas.length) throw new Error('O lancamento complementar deve conter ao menos uma parcela.');
+
+        const complementarId = crypto.randomUUID();
+        const totalParcelas = parcelas.length;
+        const incFlag = !!incorporarCusto;
+        const metaTag = `[COMPLEMENTAR:${complementarId}:${incFlag ? 'INC_CUSTO=1' : 'INC_CUSTO=0'}] ${descricao}`.trim();
+
+        const rows = parcelas.map((p, idx) => {
+            const numParcela = Number(p.numeroParcela || p.parcela || idx + 1);
+            const numText = `${numParcela}/${totalParcelas}`;
+            const dtVenc = p.vencimento || p.data_vencimento || new Date().toISOString().slice(0, 10);
+            const valNum = Number(p.valor || 0);
+
+            return {
+                entrada_nf_id: entradaId,
+                nf_id: entradaId,
+                complementar_id: complementarId,
+                incorporar_custo: incFlag,
+                tipo_lancamento: 'complementar',
+                origem: 'complementar',
+                numero_parcela: numParcela,
+                parcela: numText,
+                valor: valNum,
+                vencimento: dtVenc,
+                data_vencimento: dtVenc,
+                descricao: descricao,
+                observacao: descricao,
+                observacoes: descricao,
+                status: 'rascunho',
+                status_vencimento: 'em_aberto',
+                fornecedor_nome: fornecedor_nome || null,
+                fornecedor_cnpj: fornecedor_cnpj || null,
+                numero_nf: numero_nf || null
+            };
+        });
+
+        console.log('[DataClient] Salvando lancamento complementar:', { complementarId, count: rows.length, incorporarCusto: incFlag });
+
+        let { data, error } = await client
+            .from('contas_pagar')
+            .insert(rows)
+            .select();
+
+        if (error) {
+            if (error.code === '42703' || String(error.message || '').includes('column')) {
+                console.warn('[DataClient] Fallback de insercao em contas_pagar sem colunas estendidas:', error.message);
+                const safeRows = rows.map(r => {
+                    const copy = { ...r };
+                    delete copy.complementar_id;
+                    delete copy.incorporar_custo;
+                    return copy;
+                });
+                const fallbackRes = await client.from('contas_pagar').insert(safeRows).select();
+                if (fallbackRes.error) throw fallbackRes.error;
+                data = fallbackRes.data;
+            } else {
+                throw error;
+            }
+        }
+
+        invalidateCache('nf');
+        return {
+            success: true,
+            complementarId,
+            data: data || rows
+        };
+    }
+
+    /**
+     * Busca e agrupa os lancamentos complementares de uma entrada_nf
+     * @param {string} entradaId
+     */
+    async function fetchComplementaresEntradaNF(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        const { data, error } = await client
+            .from('contas_pagar')
+            .select('*')
+            .eq('entrada_nf_id', entradaId);
+
+        if (error) {
+            console.error('[DataClient] Erro ao buscar complementares de contas_pagar:', error);
+            return [];
+        }
+
+        const rawList = (data || []).filter(item => {
+            const tipo = String(item.tipo_lancamento || item.origem || '').toLowerCase();
+            const obs = String(item.observacao || item.observacoes || '');
+            return tipo.includes('complementar') || obs.includes('[COMPLEMENTAR:');
+        });
+
+        const groupsMap = new Map();
+
+        rawList.forEach(item => {
+            let compId = item.complementar_id;
+            let incCusto = item.incorporar_custo;
+            let desc = item.descricao;
+
+            const obs = String(item.observacao || item.observacoes || '');
+            const matchTag = obs.match(/\[COMPLEMENTAR:([a-f0-9\-]+):(INC_CUSTO=[01])\](?:\s*(.*))?/i);
+
+            if (matchTag) {
+                if (!compId) compId = matchTag[1];
+                if (incCusto === null || incCusto === undefined) {
+                    incCusto = matchTag[2].toUpperCase().includes('1');
+                }
+                if (!desc && matchTag[3]) desc = matchTag[3].trim();
+            }
+
+            if (!compId) {
+                compId = `legacy_${item.id}`;
+                incCusto = false;
+            }
+
+            if (!groupsMap.has(compId)) {
+                groupsMap.set(compId, {
+                    complementar_id: compId,
+                    is_legacy: compId.startsWith('legacy_'),
+                    descricao: desc || item.descricao || 'Lancamento Complementar',
+                    incorporar_custo: !!incCusto,
+                    parcelas: []
+                });
+            }
+
+            const group = groupsMap.get(compId);
+            group.parcelas.push(item);
+        });
+
+        const complementares = Array.from(groupsMap.values()).map(grp => {
+            grp.parcelas.sort((a, b) => Number(a.numero_parcela || 0) - Number(b.numero_parcela || 0));
+            grp.valor_total = grp.parcelas.reduce((sum, p) => sum + Number(p.valor || 0), 0);
+            return grp;
+        });
+
+        return complementares;
+    }
+
+    /**
+     * Salva ou substitui as parcelas fiscais da Entrada NF de forma atômica via RPC PostgreSQL
+     * @param {string} entradaId
+     * @param {Object} payload { condicao, formaPagamento, observacao, parcelas }
+     */
+    async function saveEntradaNFParcelasFiscais(entradaId, payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!entradaId) throw new Error('ID da Entrada NF não informado.');
+
+        const {
+            condicao = 'a_vista',
+            formaPagamento = 'boleto',
+            observacao = '',
+            parcelas = []
+        } = payload;
+
+        if (!parcelas.length) {
+            throw new Error('Informe ao menos uma parcela.');
+        }
+
+        const currentUser = localStorage.getItem('currentUser') || 'SISTEMA';
+
+        const parcelasPayload = parcelas.map((p, idx) => ({
+            numero_parcela: Number(p.numero || p.numero_parcela || idx + 1),
+            vencimento: p.vencimento || p.data_vencimento || '',
+            valor: Number(p.valor || 0)
+        }));
+
+        const rpcParams = {
+            p_entrada_nf_id: entradaId,
+            p_tipo_condicao_financeira: condicao === 'parcelado' ? 'parcelado' : 'a_vista',
+            p_forma_pagamento: formaPagamento || 'boleto',
+            p_observacao_financeira: observacao ? String(observacao).trim() : null,
+            p_parcelas: parcelasPayload,
+            p_usuario: currentUser
+        };
+
+        const { data, error } = await client.rpc('salvar_parcelas_fiscais_entrada_nf', rpcParams);
+
+        if (error) {
+            console.error('[DataClient] Erro na RPC salvar_parcelas_fiscais_entrada_nf:', error);
+            throw new Error(error.message || 'Falha ao salvar parcelas fiscais da nota fiscal.');
+        }
+
+        invalidateCache('nf');
+        invalidateCache('contas_pagar');
+
+        return {
+            success: true,
+            data: data
+        };
     }
 
 })();
