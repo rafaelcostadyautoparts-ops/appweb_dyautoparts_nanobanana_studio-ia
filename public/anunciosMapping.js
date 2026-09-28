@@ -52,1401 +52,34 @@
     const getCatalogoAtual = () => (CATALOGO_PRODUTOS_REAIS && CATALOGO_PRODUTOS_REAIS.length > 0) ? CATALOGO_PRODUTOS_REAIS : [];
     const findProduto = id => getCatalogoAtual().find(p => p.id_interno === id || p.id === id);
 
-    // Estado do Módulo de Anúncios
+    // Estado do Módulo de Anúncios (Conectado ao Catálogo Real do Supabase)
     const AnunciosState = {
         filter: 'todos', // 'todos' | 'nao_mapeados' | 'mapeados' | 'revisar'
         search: '',
         accountFilter: 'todas',
+        marketplaceFilter: 'todos', // 'todos' | 'mercadolibre' | 'shopee'
+        statusFilter: 'todos', // 'todos' | 'active' | 'paused' | 'under_review'
+        page: 1,
+        pageSize: 50,
+        totalCount: 0,
+        totalPages: 1,
+        loading: false,
+        error: null,
+        contasCache: [],
+        searchDebounceTimer: null,
+        summaryCounts: {
+            total: 0,
+            unmapped: 0,
+            mapped: 0,
+            review: 0
+        },
         activeAnuncioId: null,
         activeVariationId: null,
         modalMode: 'equivalents', // 'equivalents' | 'kit'
         modalSearch: '',
         modalAcceptedProducts: [], // array de produtos equivalentes
         modalKitComponents: [],    // array de { product, qty }
-               // Anúncios Reais (10 Mercado Livre da conta 238451947 + 10 Shopee da conta 284803847)
-        anuncios: [
-          {
-                    "id": "MLB1096816640",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1096816640",
-                    "variation_id": "42874954132",
-                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
-                    "seller_sku": null,
-                    "titulo": "Par H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 7200lm C6",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_857856-MLB73225010878_122023-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1096816640-par-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-7200lm-c6-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 78.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "18/08/2026 03:11",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "42874954132",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H7",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954237",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H9",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H9",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954153",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954181",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H11",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "64605684907",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 (PSX24W)",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 (PSX24W)",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954172",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H8",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H8",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "64638075023",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 (PGJ19)",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 (PGJ19)",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954163",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H27",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H27",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954195",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB4",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB4",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954144",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H1",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H1",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "42874954215",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1204939243",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1204939243",
-                    "variation_id": "173985461425",
-                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 PSX24W",
-                    "seller_sku": null,
-                    "titulo": "Par Lâmpadas H16 Super Led Full Branca 6000k 7200 Lumens C6",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_610416-MLB73709288187_122023-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1204939243-par-lmpadas-h16-super-led-full-branca-6000k-7200-lumens-c6-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 78.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "26/07/2026 22:50",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "173985461425",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 PSX24W",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 PSX24W",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "173985461426",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 PGJ19",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 PGJ19",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1205646824",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1205646824",
-                    "variation_id": "34858496132",
-                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
-                    "seller_sku": null,
-                    "titulo": "Par H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 7200 Lumens C6",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_896861-MLB91582569775_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1205646824-par-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-7200-lumens-c6-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "26/07/2026 22:50",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "34858496132",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H7",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496140",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H1",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H1",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496147",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496154",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H27",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H27",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496161",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H8",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H8",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496168",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H11",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H11",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496175",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H16 - Tipo 2",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H16 - Tipo 2",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "34858496182",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB4",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB4",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1228481882",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1228481882",
-                    "variation_id": "36814463991",
-                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
-                    "seller_sku": null,
-                    "titulo": "Kit 10 Pares H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_730672-MLB74694972532_022024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1228481882-kit-10-pares-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 599.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "26/07/2026 22:50",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "36814463991",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H7",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H7",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464004",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H1",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H1",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464011",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464018",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H27",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H27",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464025",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H8",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H8",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464034",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H11",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H11",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464041",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=H16 - Tipo 2",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: H16 - Tipo 2",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464048",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB4",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB4",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "36814464055",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco_CAR_LED_BULB_TYPE=HB3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco, Tipo de conector: HB3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1446105806",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1446105806",
-                    "variation_id": "51170113969",
-                    "variation_key": "custom=Branco",
-                    "seller_sku": null,
-                    "titulo": "Fita Led Luz Interna Neon Painel Carro 5m Metros Tunning",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_877128-MLB73373224627_122023-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1446105806-fita-led-luz-interna-neon-painel-carro-5m-metros-tunning-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 78.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "11/09/2026 10:22",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "51170113969",
-                                        "variation_key": "custom=Branco",
-                                        "attribute": "Cor: Branco",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "51170113978",
-                                        "variation_key": "custom=Azul Gelo",
-                                        "attribute": "Cor: Azul Gelo",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "61136977879",
-                                        "variation_key": "custom=Amarelo",
-                                        "attribute": "Cor: Amarelo",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "51170114003",
-                                        "variation_key": "custom=Roxo",
-                                        "attribute": "Cor: Roxo",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "59861083726",
-                                        "variation_key": "custom=Azul",
-                                        "attribute": "Cor: Azul",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "51170113987",
-                                        "variation_key": "custom=Vermelho Alaranjado",
-                                        "attribute": "Cor: Vermelho Alaranjado",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "60808217548",
-                                        "variation_key": "custom=Verde",
-                                        "attribute": "Cor: Verde",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "59465369631",
-                                        "variation_key": "custom=Verde Fluorescente",
-                                        "attribute": "Cor: Verde Fluorescente",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "51170113995",
-                                        "variation_key": "custom=Rosa",
-                                        "attribute": "Cor: Rosa",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "51170197459",
-                                        "variation_key": "custom=Laranja Âmbar",
-                                        "attribute": "Cor: Laranja Âmbar",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1575591367",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1575591367",
-                    "variation_id": "58919628239",
-                    "variation_key": "COLOR=Preto",
-                    "seller_sku": null,
-                    "titulo": "Sensor Ré Estacionamento Display Sonoro Preto Branco Prata",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_851202-MLB73376317259_122023-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1575591367-sensor-re-estacionamento-display-sonoro-preto-branco-prata-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 150,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "16/08/2026 20:35",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "58919628239",
-                                        "variation_key": "COLOR=Preto",
-                                        "attribute": "Cor: Preto",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "58919628241",
-                                        "variation_key": "COLOR=Prateado",
-                                        "attribute": "Cor: Prateado",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "58919628243",
-                                        "variation_key": "COLOR=Branco",
-                                        "attribute": "Cor: Branco",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1575598033",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1575598033",
-                    "variation_id": "58919575934",
-                    "variation_key": "COLOR=Preto",
-                    "seller_sku": null,
-                    "titulo": "Sensor Ré Estacionamento Display Sonoro Preto Branco Prata",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_821078-MLB112005166533_052026-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1575598033-sensor-re-estacionamento-display-sonoro-preto-branco-prata-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 129.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "26/07/2026 23:22",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "58919575934",
-                                        "variation_key": "COLOR=Preto",
-                                        "attribute": "Cor: Preto",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "58919575937",
-                                        "variation_key": "COLOR=Prata",
-                                        "attribute": "Cor: Prata",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "58919575940",
-                                        "variation_key": "COLOR=Branco",
-                                        "attribute": "Cor: Branco",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1778807007",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1778807007",
-                    "variation_id": "74199899176",
-                    "variation_key": "COLOR=Cinza",
-                    "seller_sku": null,
-                    "titulo": "Carregador Celular 3 Entradas Usb Porta Copo 12v 24v Carro",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_963158-MLB92165867587_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1778807007-carregador-celular-3-entradas-usb-porta-copo-12v-24v-carro-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 39.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "13/08/2026 21:34",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "74199899176",
-                                        "variation_key": "COLOR=Cinza",
-                                        "attribute": "Cor: Cinza",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "74199899160",
-                                        "variation_key": "COLOR=Preto",
-                                        "attribute": "Cor: Preto",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1797149159",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1797149159",
-                    "variation_id": "76259778108",
-                    "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
-                    "seller_sku": null,
-                    "titulo": "Lâmpada H1 H3 H7 H8 H11 H16 H27 Hb3/4 Super Led 6000k 3600lm",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_978142-MLB73328076115_122023-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1797149159-lmpada-h1-h3-h7-h8-h11-h16-h27-hb34-super-led-6000k-3600lm-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 49.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "26/07/2026 23:13",
-                    "payload_original": null,
-                    "has_variations": true,
-                    "variations": [
-                              {
-                                        "variation_id": "76259778108",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H11",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H11",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778093",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778131",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H1",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H1",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778179",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H8",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H8",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778116",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB3",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB3",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778101",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-2 (PGJ19)",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-2 (PGJ19)",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778087",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H7",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H7",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778168",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H9",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H9",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778123",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H16-1 (PSX24W)",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H16-1 (PSX24W)",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778139",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=H27",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: H27",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              },
-                              {
-                                        "variation_id": "76259778155",
-                                        "variation_key": "COLOR=Branco_LIGHT_COLOR=Branco-frio_CAR_LED_BULB_TYPE=HB4",
-                                        "attribute": "Cor: Branco, Cor da luz: Branco-frio, Tipo de conector: HB4",
-                                        "seller_sku": null,
-                                        "situacao_mapeamento": "NAO_MAPEADO",
-                                        "mapping": null
-                              }
-                    ],
-                    "mapping": null
-          },
-          {
-                    "id": "MLB1862105883",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "source_account_id": "238451947",
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1862105883",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": null,
-                    "titulo": "Par Lâmpadas H1 Farol Alto Astra 1999 Super Led Nano S14 H1 Branco Branco-frio",
-                    "thumbnail_url": "http://http2.mlstatic.com/D_801588-MLB91733740249_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1862105883-par-lmpadas-h1-farol-alto-astra-1999-super-led-nano-s14-h1-branco-branco-frio-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 139.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "11/09/2026 03:09",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "ml_MLB1248464127",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1248464127",
-                    "seller_sku": "MLB1248464127",
-                    "titulo": "Central Multimídia Universal Mp5 Touch 2 Din 7 Usb Bluetooth",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_707730-MLB75381747893_032024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1248464127-central-multimidia-universal-mp5-touch-2-din-7-usb-bluetooth-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 999.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 23:21",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1811816952",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1811816952",
-                    "seller_sku": null,
-                    "titulo": "Kit Farol Milha Gol G7 2016/2018 Moldura Botão Shocklight",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_967359-MLB74723450790_032024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1811816952-kit-farol-milha-gol-g7-20162018-moldura-boto-shocklight-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 449.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:51",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1433567301",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1433567301",
-                    "seller_sku": "MLB1433567301",
-                    "titulo": "Par Espelhos Retrovisores Câmera De Ré E Frontal 4,3 Full",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_895378-MLB74179471827_012024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1433567301-par-espelhos-retrovisores-cmera-de-re-e-frontal-43-full-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 479.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:51",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1427731939",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1427731939",
-                    "seller_sku": "MLB1427731939_50220518246",
-                    "titulo": "Rádio Automotivo Bluetooth Usb Sd Som Carro Controle Mp3",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_827017-MLB92575240339_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1427731939-radio-automotivo-bluetooth-usb-sd-som-carro-controle-mp3-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 249.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "10/08/2026 03:26",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1298745229",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1298745229",
-                    "seller_sku": "MLKIT_MLB1298745229_42142392443",
-                    "titulo": "Par Encosto Tela Lcd 7 Polegadas Independente Controle Vídeo Imagem Usb Micro Sd Fone De Ouvido Cinza Preto/prata",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_742632-MLB107081265147_022026-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1298745229-par-encosto-tela-lcd-7-polegadas-independente-controle-video-imagem-usb-micro-sd-fone-de-ouvido-cinza-pretoprata-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 1699.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "09/08/2026 03:09",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1789721097",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1789721097",
-                    "seller_sku": null,
-                    "titulo": "Kit 13 Fitas Led Interna Rgb 64 Cores Neon App Carro Tunning",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_786299-MLB74179571255_012024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1789721097-kit-13-fitas-led-interna-rgb-64-cores-neon-app-carro-tunning-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 3250,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "11/08/2026 21:01",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1623274631",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1623274631",
-                    "seller_sku": "MLKIT_MLB1623274631_61665546086",
-                    "titulo": "Kit Par Hb4 + Par Hb3 +  Par H11 Ultra Led 6000k Shocklight Hb4 Branco Branco-frio",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_901584-MLB91918632546_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1623274631-kit-par-hb4-par-hb3-par-h11-ultra-led-6000k-shocklight-hb4-branco-branco-frio-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 749.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:51",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1065406191",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1065406191",
-                    "seller_sku": "MLKIT_MLB1065406191",
-                    "titulo": "20 Lâmpadas H1 Halogena P14.5s 24v 70w Amarelo Conv. Gerlux",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_922653-MLB74309669919_012024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1065406191-20-lmpadas-h1-halogena-p145s-24v-70w-amarelo-conv-gerlux-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 159.99,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:50",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1856969886",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1856969886",
-                    "seller_sku": null,
-                    "titulo": "Par Lâmpadas H4 Alto Baixo Ranger 2004 Super Led Nano S14 H4 Branco Branco-frio",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_988910-MLB91699173017_092025-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1856969886-par-lmpadas-h4-alto-baixo-ranger-2004-super-led-nano-s14-h4-branco-branco-frio-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 159.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:53",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "ml_MLB1631771847",
-                    "marketplace": "MERCADO_LIVRE",
-                    "account_id": 1,
-                    "account_externo_id": "238451947",
-                    "seller_nome": "DY PARTS AUTO PECAS LTDA",
-                    "seller_externo_id": "238451947",
-                    "external_item_id": "MLB1631771847",
-                    "seller_sku": "MLB1631771847",
-                    "titulo": "Kit 50 1 Polo + 50 2 Polos 12v + 50 1 Polo + 50 2 Polos 24v",
-                    "thumbnail_url": "https://http2.mlstatic.com/D_986995-MLB75249005254_032024-I.jpg",
-                    "permalink": "https://produto.mercadolivre.com.br/MLB-1631771847-kit-50-1-polo-50-2-polos-12v-50-1-polo-50-2-polos-24v-_JM",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 359.9,
-                    "preco_original": null,
-                    "preco_promocional": null,
-                    "ultimo_preco_venda": null,
-                    "ultima_sincronizacao": "26/07/2026 22:51",
-                    "has_variations": false,
-                    "situacao_mapeamento": "NAO_MAPEADO",
-                    "mapped_product_id": null,
-                    "mapped_product_sku": null,
-                    "mapped_product_nome": null,
-                    "mapped_variations_count": 0,
-                    "total_variations_count": 0,
-                    "variations": []
-          },
-          {
-                    "id": "18097497298",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497298",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "DY-COMPC6-0095",
-                    "titulo": "Fita Barra Led P/ Painel RGB Jac J2 2012 2013 2014 2015 2016 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497298",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497315",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497315",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLB900538129",
-                    "titulo": "Fita Barra Led P/ Painel RGB Ford Fiesta 2003 2004 2005 2006 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497315",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497319",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497319",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLKIT_MLB1088307789",
-                    "titulo": "Fita Barra Led P/ Painel RGB Ford Fiesta 1997 1998 2007 2008 2009 2010 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497319",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497327",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497327",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "DY-COMPC6-0072",
-                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2010 2011 2012 2013 2014 2015 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497327",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497328",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497328",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "DY-COMPC6-0070",
-                    "titulo": "Fita Barra Led P/ Painel RGB Golf 1998 1999 2000 2001 2002 2003 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497328",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497330",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497330",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLB1623344237_61669212722",
-                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2000 2001 2002 2003 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497330",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497332",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497332",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLKIT_MLB1061704958",
-                    "titulo": "Fita Barra Led P/ Painel RGB Ford Focus 2004 2005 2006 2007 2008 2009 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497332",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497333",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497333",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLB1155941936_33931016785",
-                    "titulo": "Fita Barra Led P/ Painel RGB Golf 2002 2003 2004 2005 2006 2007 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497333",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18097497348",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18097497348",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLB1155941936_33931016785",
-                    "titulo": "Fita Barra Led P/ Painel RGB Mitsubishi ASX 2011 2012 2013 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18097497348",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          },
-          {
-                    "id": "18099073609",
-                    "marketplace": "SHOPEE",
-                    "account_id": null,
-                    "source_account_id": "284803847",
-                    "account_externo_id": "284803847",
-                    "seller_nome": "DJOZU AUTO PEÇAS",
-                    "seller_externo_id": "284803847",
-                    "external_item_id": "18099073609",
-                    "variation_id": null,
-                    "variation_key": "",
-                    "seller_sku": "MLB1209647498_35166842137",
-                    "titulo": "Fita Barra Led P/ Painel RGB Renault Logan 2011 2012 2013 5m Tunning Tomada Conector USB",
-                    "thumbnail_url": "https://cf.shopee.com.br/file/br-11134201-7r98o-lnkc9rfy8jwvfd",
-                    "permalink": "https://shopee.com.br/product/284803847/18099073609",
-                    "marketplace_status": "ACTIVE",
-                    "preco_venda": 99.9,
-                    "preco_original": 99.9,
-                    "preco_promocional": null,
-                    "moeda": "BRL",
-                    "situacao_mapeamento": "MAPPING_NAO_HABILITADO",
-                    "mapping_id": null,
-                    "mapping_versao": null,
-                    "tipo_mapeamento": null,
-                    "mapping_resumo": null,
-                    "ultima_sincronizacao": "25/08/2026 18:22",
-                    "payload_original": null,
-                    "has_variations": false,
-                    "variations": [],
-                    "mapping": null
-          }
-        ]
+        anuncios: []
     };
 
     // Helpers de Normalização e Sanitização (Declaração Hoisted para Evitar TDZ ReferenceError)
@@ -1468,7 +101,345 @@
         }
         return '';
     }
-    function accountOptions() { const found = new Map(); AnunciosState.anuncios.forEach(an => { const key = accountKey(an); if (key && !found.has(key)) found.set(key, sellerLabel(an) || key); }); return [...found].map(([key, label]) => `<option value="${escapeHtml(key)}" ${AnunciosState.accountFilter === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join(''); }
+
+    function accountOptions() {
+        let contas = AnunciosState.contasCache || [];
+        if (AnunciosState.marketplaceFilter && AnunciosState.marketplaceFilter !== 'todos') {
+            contas = contas.filter(c => c.platform === AnunciosState.marketplaceFilter);
+        }
+        return contas.map(c => {
+            const key = `id:${c.id}`;
+            const label = c.nome_operacional || c.nickname || `Conta ${c.id}`;
+            return `<option value="${escapeHtml(key)}" ${AnunciosState.accountFilter === key ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+        }).join('');
+    }
+
+    // Carregamento das Contas Sincronizadas do Supabase (Apenas Contas com Anúncios)
+    async function carregarContasCatalogo() {
+        if (AnunciosState.contasCache && AnunciosState.contasCache.length > 0) {
+            return AnunciosState.contasCache;
+        }
+        const client = window.supabaseClient;
+        if (!client) return [];
+        try {
+            const { data: accountsData, error } = await client
+                .from('mercadolivre_accounts')
+                .select('id, platform, source_account_id, nickname, nome_operacional')
+                .not('platform', 'is', null)
+                .not('source_account_id', 'is', null)
+                .neq('id', 1)
+                .order('nome_operacional', { ascending: true });
+
+            const { data: catAccounts } = await client
+                .from('marketplace_anuncios_catalogo')
+                .select('account_id')
+                .eq('ausente_na_origem', false)
+                .not('account_id', 'is', null);
+
+            if (!error && Array.isArray(accountsData)) {
+                const activeAccountIds = new Set((catAccounts || []).map(r => Number(r.account_id)));
+                AnunciosState.contasCache = accountsData.filter(c => activeAccountIds.has(Number(c.id)));
+                return AnunciosState.contasCache;
+            }
+        } catch (err) {
+            console.warn('[ANUNCIOS_MAPPING] Falha ao carregar contas do catálogo:', err);
+        }
+        return [];
+    }
+
+    // Contadores Globais dos Cards de Resumo (Nível de Anúncio Pai: Todos, Não Mapeados, Mapeados, Parciais)
+    async function carregarContadoresResumoGlobais() {
+        const client = window.supabaseClient;
+        if (!client) return;
+        try {
+            const { count: totalCat } = await client
+                .from('marketplace_anuncios_catalogo')
+                .select('*', { count: 'exact', head: true })
+                .eq('ausente_na_origem', false);
+
+            const { data: activeMappings } = await client
+                .from('mercadolivre_item_mappings')
+                .select('id, item_id, variation_id, variation_key')
+                .eq('ativo', true);
+
+            const total = typeof totalCat === 'number' ? totalCat : 20000;
+            const mappingsList = Array.isArray(activeMappings) ? activeMappings : [];
+            const mappedItemIds = Array.from(new Set(mappingsList.map(m => m.item_id)));
+
+            let mappedCount = 0;
+            let parciaisCount = 0;
+
+            if (mappedItemIds.length > 0) {
+                const { data: mappedAds } = await client
+                    .from('marketplace_anuncios_catalogo')
+                    .select('id, item_id, has_variations, variations_data')
+                    .in('item_id', mappedItemIds)
+                    .eq('ausente_na_origem', false);
+
+                if (Array.isArray(mappedAds)) {
+                    for (const ad of mappedAds) {
+                        if (!ad.has_variations) {
+                            mappedCount++;
+                        } else {
+                            const vars = Array.isArray(ad.variations_data) ? ad.variations_data : [];
+                            const totalVars = vars.length;
+                            const adMaps = mappingsList.filter(m => m.item_id === ad.item_id);
+                            let mappedVarsCount = 0;
+                            for (const v of vars) {
+                                const vId = v.variation_id ? String(v.variation_id) : null;
+                                const vKey = v.variation_key ? String(v.variation_key) : null;
+                                const hasM = adMaps.some(m =>
+                                    (vId && String(m.variation_id) === vId) ||
+                                    (vKey && String(m.variation_key) === vKey)
+                                );
+                                if (hasM) mappedVarsCount++;
+                            }
+                            if (mappedVarsCount >= totalVars && totalVars > 0) {
+                                mappedCount++;
+                            } else if (mappedVarsCount > 0) {
+                                parciaisCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const unmappedCount = Math.max(0, total - mappedCount - parciaisCount);
+
+            AnunciosState.summaryCounts = {
+                total,
+                unmapped: unmappedCount,
+                mapped: mappedCount,
+                review: parciaisCount
+            };
+
+            atualizarContadoresResumo();
+        } catch (err) {
+            console.warn('[ANUNCIOS_MAPPING] Erro ao carregar contadores globais:', err);
+        }
+    }
+
+    // Carregamento Paginado e Filtrado do Catálogo Real no Supabase
+    async function carregarCatalogoAnuncios(page = 1) {
+        const client = window.supabaseClient;
+        if (!client) {
+            AnunciosState.error = 'Cliente Supabase não inicializado.';
+            renderAnunciosCardsUI();
+            return;
+        }
+
+        AnunciosState.page = Math.max(1, page);
+        AnunciosState.loading = true;
+        AnunciosState.error = null;
+        renderAnunciosCardsUI();
+
+        try {
+            await carregarContasCatalogo();
+            const contasMap = new Map();
+            (AnunciosState.contasCache || []).forEach(c => {
+                contasMap.set(Number(c.id), c);
+                if (c.source_account_id) contasMap.set(String(c.source_account_id).trim(), c);
+            });
+
+            let query = client
+                .from('marketplace_anuncios_catalogo')
+                .select('id, marketplace, source_account_id, account_id, item_id, title, price, available_quantity, status, seller_sku, thumbnail, permalink, has_variations, variations_data, last_updated_sql', { count: 'exact' })
+                .eq('ausente_na_origem', false);
+
+            // Filtro por Marketplace
+            if (AnunciosState.marketplaceFilter && AnunciosState.marketplaceFilter !== 'todos') {
+                query = query.eq('marketplace', AnunciosState.marketplaceFilter);
+            }
+
+            // Filtro por Conta
+            if (AnunciosState.accountFilter && AnunciosState.accountFilter !== 'todas') {
+                if (AnunciosState.accountFilter.startsWith('id:')) {
+                    const accId = Number(AnunciosState.accountFilter.replace('id:', ''));
+                    if (accId) query = query.eq('account_id', accId);
+                } else if (AnunciosState.accountFilter.startsWith('source:') || AnunciosState.accountFilter.startsWith('external:') || AnunciosState.accountFilter.startsWith('seller:')) {
+                    const srcId = AnunciosState.accountFilter.split(':')[1];
+                    if (srcId) query = query.eq('source_account_id', srcId);
+                }
+            }
+
+            // Filtro por Status
+            if (AnunciosState.statusFilter && AnunciosState.statusFilter !== 'todos') {
+                query = query.eq('status', AnunciosState.statusFilter);
+            }
+
+            // Busca Textual Server-Side
+            const q = String(AnunciosState.search || '').trim();
+            if (q) {
+                const term = q.replace(/[%_,]/g, ' ');
+                query = query.or(`title.ilike.%${term}%,item_id.ilike.%${term}%,seller_sku.ilike.%${term}%`);
+            }
+
+            // Ordenação Determinística Estável
+            query = query
+                .order('marketplace', { ascending: true })
+                .order('source_account_id', { ascending: true })
+                .order('item_id', { ascending: true });
+
+            // Paginação Server-Side (PAGE_SIZE: 50)
+            const offset = (AnunciosState.page - 1) * AnunciosState.pageSize;
+            query = query.range(offset, offset + AnunciosState.pageSize - 1);
+
+            const { data: rows, count, error } = await query;
+            if (error) throw error;
+
+            AnunciosState.totalCount = typeof count === 'number' ? count : (rows?.length || 0);
+            AnunciosState.totalPages = Math.max(1, Math.ceil(AnunciosState.totalCount / AnunciosState.pageSize));
+
+            const pageRows = Array.isArray(rows) ? rows : [];
+
+            // Normalização dos registros para o formato da UI
+            const normalizedAnuncios = pageRows.map(row => {
+                const conta = contasMap.get(Number(row.account_id)) || contasMap.get(String(row.source_account_id).trim());
+                const sellerNome = conta ? (conta.nome_operacional || conta.nickname) : row.source_account_id;
+                const mpUpper = row.marketplace === 'mercadolibre' ? 'MERCADO_LIVRE' : (row.marketplace === 'shopee' ? 'SHOPEE' : String(row.marketplace).toUpperCase());
+                const rawVars = Array.isArray(row.variations_data) ? row.variations_data : [];
+
+                return {
+                    id: String(row.item_id),
+                    catalog_id: row.id,
+                    marketplace: mpUpper,
+                    account_id: Number(row.account_id),
+                    source_account_id: String(row.source_account_id),
+                    account_externo_id: String(row.source_account_id),
+                    seller_nome: sellerNome,
+                    seller_externo_id: String(row.source_account_id),
+                    external_item_id: String(row.item_id),
+                    variation_id: null,
+                    variation_key: null,
+                    seller_sku: row.seller_sku || null,
+                    titulo: row.title || 'Sem título',
+                    thumbnail_url: row.thumbnail || '/assets/images/placeholder.webp',
+                    permalink: row.permalink || null,
+                    marketplace_status: String(row.status || 'ACTIVE').toUpperCase(),
+                    preco_venda: row.price !== null && row.price !== undefined ? Number(row.price) : null,
+                    preco_original: null,
+                    preco_promocional: null,
+                    ultimo_preco_venda: null,
+                    moeda: 'BRL',
+                    situacao_mapeamento: 'NAO_MAPEADO',
+                    mapping_id: null,
+                    mapping_versao: null,
+                    tipo_mapeamento: null,
+                    mapping_resumo: null,
+                    ultima_sincronizacao: row.last_updated_sql ? new Date(row.last_updated_sql).toLocaleDateString('pt-BR') : '',
+                    payload_original: null,
+                    has_variations: Boolean(row.has_variations),
+                    variations: rawVars.map(v => ({
+                        variation_id: v.variation_id ? String(v.variation_id) : null,
+                        variation_key: v.variation_key || (v.variation_id ? `id:${v.variation_id}` : null),
+                        attribute: v.attribute || 'Variação',
+                        seller_sku: v.seller_sku || null,
+                        price: v.price !== null && v.price !== undefined ? Number(v.price) : null,
+                        available_quantity: v.available_quantity || 0,
+                        situacao_mapeamento: 'NAO_MAPEADO',
+                        mapping: null
+                    })),
+                    mapping: null
+                };
+            });
+
+            // Carregamento de Mappings em Lote da Página (Zero N+1)
+            if (normalizedAnuncios.length > 0) {
+                const pageItemIds = normalizedAnuncios.map(a => a.external_item_id);
+                try {
+                    const { data: mappingsData, error: mapErr } = await client
+                        .from('mercadolivre_item_mappings')
+                        .select(`
+                            *,
+                            mercadolivre_item_mapping_versions!mercadolivre_item_mappings_current_version_fkey(
+                                *,
+                                mercadolivre_item_mapping_componentes(
+                                    *,
+                                    produtos:produto_id(*),
+                                    grupos_equivalencia:grupo_equivalencia_id(*, grupo_equivalencia_skus(*, produtos(*))),
+                                    produto_referencia:produto_referencia_id(*)
+                                )
+                            )
+                        `)
+                        .in('item_id', pageItemIds)
+                        .eq('ativo', true);
+
+                    if (!mapErr && Array.isArray(mappingsData) && mappingsData.length > 0) {
+                        for (const mapRecord of mappingsData) {
+                            if (!mapRecord.ativo || !mapRecord.current_version_id) continue;
+                            const versao = mapRecord.mercadolivre_item_mapping_versions;
+                            if (!versao) continue;
+                            const componentes = versao.mercadolivre_item_mapping_componentes || [];
+                            if (!componentes.length) continue;
+
+                            const targetAnuncio = normalizedAnuncios.find(a =>
+                                Number(a.account_id) === Number(mapRecord.mercadolivre_account_id) &&
+                                String(a.external_item_id) === String(mapRecord.item_id)
+                            );
+                            if (!targetAnuncio) continue;
+
+                            const mappedProducts = componentes.map(c => {
+                                const p = c.produtos || c.produto_referencia || {};
+                                return {
+                                    id: p.id || c.produto_id,
+                                    id_interno: p.id_interno || 'DY-???',
+                                    nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
+                                    marca: p.marca || '-',
+                                    ean: p.ean || '-',
+                                    sku_fornecedor: p.sku_fornecedor || '-'
+                                };
+                            });
+
+                            const uiMapping = {
+                                type: versao.tipo_identificacao === 'kit' ? 'kit' : (mappedProducts.length > 1 ? 'equivalents' : 'single'),
+                                products: mappedProducts,
+                                components: componentes.map(c => ({
+                                    product: mappedProducts.find(mp => mp.id === c.produto_id) || mappedProducts[0],
+                                    qty: c.quantidade_por_unidade || 1
+                                }))
+                            };
+
+                            const targetVarKey = mapRecord.variation_key || '__SEM_VARIACAO__';
+
+                            if (targetAnuncio.has_variations && Array.isArray(targetAnuncio.variations)) {
+                                const targetVar = targetAnuncio.variations.find(v =>
+                                    (hasValue(v.variation_id) && String(v.variation_id) === String(mapRecord.variation_id)) ||
+                                    (hasValue(v.variation_key) && String(v.variation_key) === targetVarKey)
+                                );
+                                if (targetVar) {
+                                    targetVar.mapping = uiMapping;
+                                    targetVar.situacao_mapeamento = 'MAPEADO';
+                                }
+                                const allMapped = targetAnuncio.variations.every(v => v.situacao_mapeamento === 'MAPEADO');
+                                targetAnuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
+                            } else {
+                                if (targetVarKey === '__SEM_VARIACAO__' || !targetAnuncio.variation_key || targetAnuncio.variation_key === targetVarKey) {
+                                    targetAnuncio.mapping = uiMapping;
+                                    targetAnuncio.situacao_mapeamento = 'MAPEADO';
+                                    targetAnuncio.mapping_id = mapRecord.id;
+                                    targetAnuncio.mapping_versao = versao.versao;
+                                }
+                            }
+                        }
+                    }
+                } catch (mapLoadErr) {
+                    console.warn('[ANUNCIOS_MAPPING] Falha ao hidratar mappings da página:', mapLoadErr);
+                }
+            }
+
+            AnunciosState.anuncios = normalizedAnuncios;
+            AnunciosState.loading = false;
+            AnunciosState.error = null;
+
+        } catch (err) {
+            console.error('[ANUNCIOS_MAPPING] Erro ao carregar catálogo de anúncios:', err);
+            AnunciosState.loading = false;
+            AnunciosState.error = err.message || 'Erro ao consultar catálogo do Supabase.';
+            AnunciosState.anuncios = [];
+        }
+
+        renderAnunciosCardsUI();
+    }
 
     // Estado do Mapeamento em Massa (Fase 1 - Seleção Explícita)
     window.AnunciosMassSelectionState = {
@@ -1548,16 +519,13 @@
                 return false;
             }
 
-            if (state.batchAccountId === null) {
-                state.batchAccountId = accIdNum;
-            }
-
             state.selectedKeys.add(key);
-            state.selectedItems.set(key, { ...itemPayload, key });
+            state.selectedItems.set(key, itemPayload);
+            state.batchAccountId = accIdNum;
         } else {
             state.selectedKeys.delete(key);
             state.selectedItems.delete(key);
-            if (state.selectedItems.size === 0) {
+            if (state.selectedKeys.size === 0) {
                 state.batchAccountId = null;
             }
         }
@@ -1569,146 +537,106 @@
     };
 
     window.anToggleCardSelection = function (event, anuncioId) {
-        if (event && event.stopPropagation) {
-            event.stopPropagation();
-        }
-        // Tratar caso em que 1º argumento é o anuncioId (se disparado sem evento)
-        const targetId = typeof event === 'string' ? event : anuncioId;
-        const anuncio = AnunciosState.anuncios.find(a => String(a.id) === String(targetId));
+        const anuncio = AnunciosState.anuncios.find(a => a.id === anuncioId);
         if (!anuncio) return;
 
-        const state = window.AnunciosMassSelectionState;
+        const isChecked = event?.target ? event.target.checked : true;
 
         if (anuncio.has_variations && Array.isArray(anuncio.variations) && anuncio.variations.length > 0) {
-            let selCount = 0;
-            for (const v of anuncio.variations) {
-                const k = getAnuncioItemKey(anuncio, v);
-                if (state.selectedKeys.has(k)) selCount++;
-            }
-            const shouldSelect = selCount < anuncio.variations.length;
-
             for (const v of anuncio.variations) {
                 const payload = createMassSelectionItemPayload(anuncio, v);
-                const ok = window.anToggleItemSelection(payload, shouldSelect, true);
-                if (!ok && shouldSelect && state.selectedItems.size >= 50) break;
+                const ok = window.anToggleItemSelection(payload, isChecked, true);
+                if (!ok && isChecked) break;
             }
-            anUpdateMassSelectionUI();
         } else {
             const payload = createMassSelectionItemPayload(anuncio, null);
-            const k = getAnuncioItemKey(anuncio, null);
-            const isSel = state.selectedKeys.has(k);
-            const shouldSelect = !isSel;
-            window.anToggleItemSelection(payload, shouldSelect, false);
+            window.anToggleItemSelection(payload, isChecked, true);
         }
+
+        anUpdateMassSelectionUI();
     };
 
     window.anToggleVariationSelection = function (anuncioId, variationRefStr, checked) {
-        const anuncio = AnunciosState.anuncios.find(a => String(a.id) === String(anuncioId));
+        const anuncio = AnunciosState.anuncios.find(a => a.id === anuncioId);
         if (!anuncio) return;
+        const v = findVariationByRef(anuncio, variationRefStr);
+        if (!v) return;
 
-        const targetVar = findVariationByRef(anuncio, variationRefStr);
-        if (!targetVar) return;
-
-        const payload = createMassSelectionItemPayload(anuncio, targetVar);
+        const payload = createMassSelectionItemPayload(anuncio, v);
         window.anToggleItemSelection(payload, checked, false);
     };
 
     window.anSelectVisibleItems = function () {
-        const visibleRows = getFilteredAnuncios();
-        const mlRows = visibleRows.filter(an => (an.marketplace || 'MERCADO_LIVRE') === 'MERCADO_LIVRE');
+        const visible = getFilteredAnuncios();
+        let targetAccountId = window.AnunciosMassSelectionState.batchAccountId;
 
-        if (!mlRows.length) {
+        if (!targetAccountId) {
+            const firstMeli = visible.find(a => a.marketplace === 'MERCADO_LIVRE' && hasValue(a.account_id));
+            if (firstMeli) {
+                targetAccountId = Number(firstMeli.account_id);
+            }
+        }
+
+        if (!targetAccountId) {
             if (typeof showToast === 'function') {
-                showToast('Nenhum anúncio Mercado Livre visível para selecionar.', 'warning');
+                showToast('Nenhum anúncio Mercado Livre elegível na página para seleção.', 'warning');
             }
             return;
         }
 
-        const state = window.AnunciosMassSelectionState;
-        let targetAccId = state.batchAccountId;
-        if (targetAccId === null) {
-            const firstValidAcc = mlRows.find(an => Number(an.account_id) > 0);
-            if (firstValidAcc) {
-                targetAccId = Number(firstValidAcc.account_id);
-            }
-        }
-
-        let addedCount = 0;
-        for (const an of mlRows) {
-            if (targetAccId !== null && Number(an.account_id) !== Number(targetAccId)) continue;
+        let added = 0;
+        for (const an of visible) {
+            if (an.marketplace !== 'MERCADO_LIVRE') continue;
+            if (Number(an.account_id) !== targetAccountId) continue;
 
             if (an.has_variations && Array.isArray(an.variations) && an.variations.length > 0) {
                 for (const v of an.variations) {
-                    if (state.selectedItems.size >= 50) break;
-                    const payload = createMassSelectionItemPayload(an, v);
-                    const key = getAnuncioItemKey(an, v);
-                    if (!state.selectedKeys.has(key)) {
-                        const ok = window.anToggleItemSelection(payload, true, true);
-                        if (ok) addedCount++;
-                    }
+                    const p = createMassSelectionItemPayload(an, v);
+                    const ok = window.anToggleItemSelection(p, true, true);
+                    if (ok) added++;
                 }
             } else {
-                if (state.selectedItems.size >= 50) break;
-                const payload = createMassSelectionItemPayload(an, null);
-                const key = getAnuncioItemKey(an, null);
-                if (!state.selectedKeys.has(key)) {
-                    const ok = window.anToggleItemSelection(payload, true, true);
-                    if (ok) addedCount++;
-                }
+                const p = createMassSelectionItemPayload(an, null);
+                const ok = window.anToggleItemSelection(p, true, true);
+                if (ok) added++;
             }
         }
 
         anUpdateMassSelectionUI();
-
-        if (addedCount === 0 && state.selectedItems.size >= 50) {
-            if (typeof showToast === 'function') {
-                showToast('Limite de 50 unidades atingido.', 'warning');
-            }
+        if (typeof showToast === 'function') {
+            showToast(`${window.AnunciosMassSelectionState.selectedKeys.size} itens selecionados para mapeamento.`, 'info');
         }
     };
 
     window.anClearMassSelection = function () {
-        const state = window.AnunciosMassSelectionState;
-        state.selectedKeys.clear();
-        state.selectedItems.clear();
-        state.batchAccountId = null;
+        window.AnunciosMassSelectionState.selectedKeys.clear();
+        window.AnunciosMassSelectionState.selectedItems.clear();
+        window.AnunciosMassSelectionState.batchAccountId = null;
         anUpdateMassSelectionUI();
     };
 
     function renderMassActionBarHTML() {
         const state = window.AnunciosMassSelectionState;
-        const count = state.selectedItems.size;
-        const isActive = count > 0;
-
-        let accLabel = '';
-        if (state.batchAccountId !== null && count > 0) {
-            const sampleItem = [...state.selectedItems.values()][0];
-            if (sampleItem?.anuncioRef) {
-                accLabel = sellerLabel(sampleItem.anuncioRef) || `Conta #${state.batchAccountId}`;
-            } else {
-                accLabel = `Conta #${state.batchAccountId}`;
-            }
-        }
+        const count = state.selectedKeys.size;
+        if (count === 0) return '';
 
         return `
-            <div id="an-mass-action-bar" class="an-mass-action-bar ${isActive ? 'active' : ''}">
-                <div class="an-mass-bar-info">
-                    <span class="material-symbols-rounded">check_box</span>
-                    <strong>${count} unidade(s) selecionada(s)</strong>
-                    ${accLabel ? `<small>• Conta: <b>${escapeHtml(accLabel)}</b></small>` : ''}
+            <div class="an-mass-action-bar fade-in">
+                <div class="an-mass-action-info">
+                    <span class="material-symbols-rounded">checklist</span>
+                    <strong>${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}</strong>
+                    <small>Conta ID: ${escapeHtml(state.batchAccountId)} (Mercado Livre)</small>
                 </div>
-                <div class="an-mass-bar-actions">
-                    <button type="button" class="an-btn-mass-primary" onclick="anStartMassMappingFlow()">
-                        <span class="material-symbols-rounded">schema</span>
-                        MAPEAR EM MASSA
-                    </button>
+                <div class="an-mass-action-buttons">
                     <button type="button" class="an-btn-mass-outline" onclick="anSelectVisibleItems()">
-                        <span class="material-symbols-rounded">select_all</span>
-                        SELECIONAR VISÍVEIS
+                        Selecionar página
                     </button>
                     <button type="button" class="an-btn-mass-text" onclick="anClearMassSelection()">
-                        <span class="material-symbols-rounded">clear_all</span>
-                        LIMPAR SELEÇÃO
+                        Limpar seleção
+                    </button>
+                    <button type="button" class="an-btn-mass-primary" onclick="anStartMassMappingFlow()">
+                        <span class="material-symbols-rounded">alt_route</span>
+                        Mapear Selecionados (${count})
                     </button>
                 </div>
             </div>
@@ -1716,59 +644,33 @@
     }
 
     function anUpdateMassSelectionUI() {
-        const barContainer = document.getElementById('an-mass-action-bar-container');
-        if (barContainer) {
-            barContainer.innerHTML = renderMassActionBarHTML();
+        const container = document.getElementById('an-mass-action-bar-container');
+        if (container) {
+            container.innerHTML = renderMassActionBarHTML();
         }
 
-        const state = window.AnunciosMassSelectionState;
-        document.querySelectorAll('.an-card[data-anuncio-id]').forEach(cardEl => {
-            const anId = cardEl.getAttribute('data-anuncio-id');
-            const anuncio = AnunciosState.anuncios.find(a => String(a.id) === String(anId));
-            if (!anuncio) return;
+        const massState = window.AnunciosMassSelectionState;
+        const cards = document.querySelectorAll('.an-card');
 
-            const chk = cardEl.querySelector('.an-card-checkbox');
+        cards.forEach(card => {
+            const anId = card.getAttribute('data-anuncio-id');
+            const an = AnunciosState.anuncios.find(a => a.id === anId);
+            if (!an) return;
+
+            const chk = card.querySelector('.an-card-checkbox');
             if (chk) {
-                if (anuncio.has_variations && Array.isArray(anuncio.variations) && anuncio.variations.length > 0) {
+                if (an.has_variations && Array.isArray(an.variations) && an.variations.length > 0) {
                     let selCount = 0;
-                    for (const v of anuncio.variations) {
-                        const k = getAnuncioItemKey(anuncio, v);
-                        if (state.selectedKeys.has(k)) selCount++;
+                    for (const v of an.variations) {
+                        const k = getAnuncioItemKey(an, v);
+                        if (massState.selectedKeys.has(k)) selCount++;
                     }
-                    const isAll = selCount === anuncio.variations.length && selCount > 0;
-                    const isSome = selCount > 0 && selCount < anuncio.variations.length;
-
-                    chk.checked = isAll;
-                    chk.indeterminate = isSome;
-
-                    if (isAll) {
-                        chk.setAttribute('checked', 'checked');
-                        chk.classList.add('is-checked');
-                        chk.classList.remove('is-indeterminate');
-                    } else {
-                        chk.removeAttribute('checked');
-                        chk.classList.remove('is-checked');
-                    }
-
-                    if (isSome) {
-                        chk.classList.add('is-indeterminate');
-                    } else {
-                        chk.classList.remove('is-indeterminate');
-                    }
+                    chk.checked = selCount === an.variations.length && selCount > 0;
+                    chk.indeterminate = selCount > 0 && selCount < an.variations.length;
                 } else {
-                    const k = getAnuncioItemKey(anuncio, null);
-                    const isSel = state.selectedKeys.has(k);
-                    chk.checked = isSel;
+                    const k = getAnuncioItemKey(an, null);
+                    chk.checked = massState.selectedKeys.has(k);
                     chk.indeterminate = false;
-
-                    if (isSel) {
-                        chk.setAttribute('checked', 'checked');
-                        chk.classList.add('is-checked');
-                    } else {
-                        chk.removeAttribute('checked');
-                        chk.classList.remove('is-checked');
-                    }
-                    chk.classList.remove('is-indeterminate');
                 }
             }
         });
@@ -1776,27 +678,27 @@
 
     window.anStartMassMappingFlow = function () {
         const state = window.AnunciosMassSelectionState;
-        if (!state.selectedItems.size) {
-            if (typeof showToast === 'function') showToast('Selecione pelo menos um anúncio para mapear em massa.', 'warning');
-            return;
-        }
+        if (state.selectedItems.size === 0) return;
 
-        const items = [...state.selectedItems.values()];
-        const accId = state.batchAccountId;
+        const items = Array.from(state.selectedItems.values());
+        const firstItem = items[0];
 
         window.openSharedItemMappingModal({
-            isBatch: true,
-            batchItems: items,
-            batchCount: items.length,
             marketplace: 'MERCADO_LIVRE',
-            accountId: accId,
-            itemId: items[0].itemId,
-            titulo: `Mapeamento em Massa (${items.length} unidade(s) selecionada(s))`,
-            thumbnailUrl: items[0].thumbnailUrl,
+            accountId: state.batchAccountId,
+            sourceAccountId: firstItem.sourceAccountId,
+            itemId: firstItem.itemId,
+            variationId: null,
+            sellerSku: null,
+            titulo: `Mapeamento em Lote (${items.length} itens da conta ${state.batchAccountId})`,
+            thumbnailUrl: firstItem.thumbnailUrl,
             initialMapping: null,
-            onSavedBatch: async ({ tipoIdentificacao, componentesPayload, chosenUiMapping }) => {
-                await anOpenMassMappingPreValidationModal({
-                    batchItems: items,
+            isBatchMode: true,
+            batchItems: items,
+            onSaved: async ({ tipoIdentificacao, componentesPayload, chosenUiMapping }) => {
+                await anExecuteBatchMappingPersistence({
+                    items,
+                    accountId: state.batchAccountId,
                     tipoIdentificacao,
                     componentesPayload,
                     chosenUiMapping
@@ -1805,38 +707,17 @@
         });
     };
 
-    // Filtros de Listagem
+    // Filtros de Listagem da Página
     function getFilteredAnuncios() {
-        const q = normText(AnunciosState.search);
-        const acc = AnunciosState.accountFilter;
-
+        if (AnunciosState.filter === 'todos') return AnunciosState.anuncios;
         return AnunciosState.anuncios.filter(an => {
-            // Filtro por tab/status
             if (AnunciosState.filter === 'nao_mapeados') {
-                if (an.situacao_mapeamento !== 'NAO_MAPEADO' && an.situacao_mapeamento !== 'PARCIAL') return false;
+                return an.situacao_mapeamento !== 'MAPEADO';
             } else if (AnunciosState.filter === 'mapeados') {
-                if (an.situacao_mapeamento !== 'MAPEADO') return false;
-            } else if (AnunciosState.filter === 'revisar') {
-                if (an.situacao_mapeamento !== 'REVISAR') return false;
+                return an.situacao_mapeamento === 'MAPEADO';
+            } else if (AnunciosState.filter === 'revisar' || AnunciosState.filter === 'parciais') {
+                return an.situacao_mapeamento === 'PARCIAL' || an.situacao_mapeamento === 'REVISAR';
             }
-
-            // Filtro por conta
-            if (acc !== 'todas' && accountKey(an) !== acc) return false;
-
-            // Filtro por texto
-            if (q) {
-                const searchCorpus = [
-                    an.external_item_id,
-                    an.titulo,
-                    an.seller_sku,
-                    an.seller_nome,
-                    an.has_variations ? an.variations.map(v => v.attribute + ' ' + v.seller_sku).join(' ') : '',
-                    an.mapping?.products ? an.mapping.products.map(p => p.id_interno + ' ' + p.nome + ' ' + p.marca + ' ' + p.ean).join(' ') : '',
-                    an.mapping?.components ? an.mapping.components.map(c => c.product.id_interno + ' ' + c.product.nome).join(' ') : ''
-                ].join(' ');
-                if (!normText(searchCorpus).includes(q)) return false;
-            }
-
             return true;
         });
     }
@@ -1959,8 +840,59 @@
         `;
     }
 
+    // Barra de Paginação Server-Side
+    function renderPaginationHTML() {
+        if (AnunciosState.totalCount <= 0) return '';
+        const startItem = (AnunciosState.page - 1) * AnunciosState.pageSize + 1;
+        const endItem = Math.min(AnunciosState.totalCount, AnunciosState.page * AnunciosState.pageSize);
+        const hasPrev = AnunciosState.page > 1;
+        const hasNext = AnunciosState.page < AnunciosState.totalPages;
+
+        return `
+            <div class="an-pagination">
+                <div class="an-pagination-info">
+                    Exibindo <strong>${startItem}</strong> a <strong>${endItem}</strong> de <strong>${AnunciosState.totalCount.toLocaleString('pt-BR')}</strong> anúncios
+                </div>
+                <div class="an-pagination-controls">
+                    <button type="button" class="an-pagination-btn" ${!hasPrev || AnunciosState.loading ? 'disabled' : ''} onclick="anGoToPage(${AnunciosState.page - 1})">
+                        <span class="material-symbols-rounded">chevron_left</span>
+                        Anterior
+                    </button>
+                    <span class="an-pagination-page-indicator">
+                        Página ${AnunciosState.page} de ${AnunciosState.totalPages}
+                    </span>
+                    <button type="button" class="an-pagination-btn" ${!hasNext || AnunciosState.loading ? 'disabled' : ''} onclick="anGoToPage(${AnunciosState.page + 1})">
+                        Próxima
+                        <span class="material-symbols-rounded">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     // Renderização dos Cards de Anúncio
     function renderAnunciosCards() {
+        if (AnunciosState.loading) {
+            return `
+                <div class="an-loading-state">
+                    <div class="an-loading-spinner"></div>
+                    <strong style="color:#0f172a;font-size:16px;">Carregando anúncios...</strong>
+                    <span style="color:#64748b;font-size:13px;margin-top:4px;">Consultando catálogo real em Homologação</span>
+                </div>
+            `;
+        }
+
+        if (AnunciosState.error) {
+            return `
+                <div class="an-error-state">
+                    <span class="material-symbols-rounded" style="font-size:44px;color:#ef4444;margin-bottom:12px;">error</span>
+                    <h3 style="margin:0 0 6px;color:#0f172a;font-size:18px;">Erro ao carregar anúncios</h3>
+                    <p style="margin:0 0 16px;font-size:13px;color:#64748b;">${escapeHtml(AnunciosState.error)}</p>
+                    <button type="button" class="an-btn an-btn-primary" onclick="carregarCatalogoAnuncios(${AnunciosState.page})">Tentar novamente</button>
+                </div>
+            `;
+        }
+
         const rows = getFilteredAnuncios();
         if (!rows.length) {
             return `
@@ -1981,7 +913,6 @@
 
             const massState = window.AnunciosMassSelectionState;
             let isChecked = false;
-            let isIndeterminate = false;
 
             if (an.has_variations && Array.isArray(an.variations) && an.variations.length > 0) {
                 let selCount = 0;
@@ -1990,7 +921,6 @@
                     if (massState.selectedKeys.has(k)) selCount++;
                 }
                 isChecked = selCount === an.variations.length && selCount > 0;
-                isIndeterminate = selCount > 0 && selCount < an.variations.length;
             } else {
                 const k = getAnuncioItemKey(an, null);
                 isChecked = massState.selectedKeys.has(k);
@@ -2030,9 +960,9 @@
                         ${priceHTML(an)}
                         <div class="an-card-submeta">
                             <span class="an-status-dot ${externalStatus === 'ACTIVE' ? 'active' : 'paused'}">
-                                ${externalStatus === 'ACTIVE' ? 'Anúncio Ativo' : 'Anúncio Pausado'}
+                                ${externalStatus === 'ACTIVE' ? 'Anúncio Ativo' : (externalStatus === 'UNDER_REVIEW' ? 'Sob Revisão' : 'Anúncio Pausado')}
                             </span>
-                            ${hasValue(an.ultima_sincronizacao) ? `<span>•</span><span>Sincronizado: ${escapeHtml(an.ultima_sincronizacao)}</span>` : ''}
+                            ${hasValue(an.ultima_sincronizacao) ? `<span>•</span><span>Atualizado na origem: ${escapeHtml(an.ultima_sincronizacao)}</span>` : ''}
                         </div>
                     </div>
 
@@ -2053,6 +983,18 @@
         }).join('');
     }
 
+    function renderAnunciosCardsUI() {
+        const listContainer = document.getElementById('an-list-container');
+        if (listContainer) {
+            listContainer.innerHTML = renderAnunciosCards();
+        }
+        const pagContainer = document.getElementById('an-pagination-container');
+        if (pagContainer) {
+            pagContainer.innerHTML = renderPaginationHTML();
+        }
+        anUpdateMassSelectionUI();
+    }
+
     // Tela Principal de Anúncios
     window.renderAnunciosScreen = function (push = true) {
         const currentUser = localStorage.getItem('currentUser');
@@ -2061,10 +1003,10 @@
         currentScreen = 'anuncios';
         if (push && typeof pushNav === 'function') pushNav('anuncios');
 
-        const totalCount = AnunciosState.anuncios.length;
-        const unmappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'NAO_MAPEADO' || a.situacao_mapeamento === 'PARCIAL').length;
-        const mappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'MAPEADO').length;
-        const reviewCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'REVISAR').length;
+        const totalCount = AnunciosState.summaryCounts.total || 0;
+        const unmappedCount = AnunciosState.summaryCounts.unmapped || 0;
+        const mappedCount = AnunciosState.summaryCounts.mapped || 0;
+        const reviewCount = AnunciosState.summaryCounts.review || 0;
 
         const container = document.getElementById('app');
         if (!container) return;
@@ -2076,7 +1018,7 @@
 
                 <main class="container an-shell app-page-container">
                     <div class="app-breadcrumb">
-                        <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+                        <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
                         <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
                         <span class="app-breadcrumb-current">Anúncios</span>
                     </div>
@@ -2084,23 +1026,23 @@
                     <section class="an-summary" aria-label="Indicadores de mapeamento">
                         <button type="button" class="tab-todos ${AnunciosState.filter === 'todos' ? 'active' : ''}" onclick="anSetFilter('todos')">
                             <span class="material-symbols-rounded">storefront</span>
-                            <strong>${totalCount}</strong>
+                            <strong>${totalCount.toLocaleString('pt-BR')}</strong>
                             <small>Todos os anúncios</small>
                         </button>
                         <button type="button" class="tab-nao-mapeados ${AnunciosState.filter === 'nao_mapeados' ? 'active' : ''}" onclick="anSetFilter('nao_mapeados')">
                             <span class="material-symbols-rounded">link_off</span>
-                            <strong>${unmappedCount}</strong>
+                            <strong>${unmappedCount.toLocaleString('pt-BR')}</strong>
                             <small>Não mapeados</small>
                         </button>
                         <button type="button" class="tab-mapeados ${AnunciosState.filter === 'mapeados' ? 'active' : ''}" onclick="anSetFilter('mapeados')">
                             <span class="material-symbols-rounded">check_circle</span>
-                            <strong>${mappedCount}</strong>
+                            <strong>${mappedCount.toLocaleString('pt-BR')}</strong>
                             <small>Mapeados</small>
                         </button>
-                        <button type="button" class="tab-revisar ${AnunciosState.filter === 'revisar' ? 'active' : ''}" onclick="anSetFilter('revisar')">
-                            <span class="material-symbols-rounded">warning</span>
-                            <strong>${reviewCount}</strong>
-                            <small>Para revisar</small>
+                        <button type="button" class="tab-revisar ${AnunciosState.filter === 'revisar' || AnunciosState.filter === 'parciais' ? 'active' : ''}" onclick="anSetFilter('revisar')">
+                            <span class="material-symbols-rounded">tune</span>
+                            <strong>${reviewCount.toLocaleString('pt-BR')}</strong>
+                            <small>Parciais</small>
                         </button>
                     </section>
 
@@ -2109,16 +1051,27 @@
                         <header class="an-panel-header">
                             <div class="an-panel-title">
                                 <h2>Gestão de Mapeamento de Anúncios</h2>
-                                <small>Vincule anúncios Mercado Livre aos produtos internos e suas marcas equivalentes aceitas na separação.</small>
+                                <small>Vincule anúncios Mercado Livre e Shopee aos produtos internos e suas marcas equivalentes aceitas na separação.</small>
                             </div>
                             <div class="an-controls">
                                 <label class="an-search" aria-label="Buscar anúncios">
                                     <span class="material-symbols-rounded">search</span>
-                                    <input type="text" id="an-search-input" value="${escapeHtml(AnunciosState.search)}" oninput="anOnSearchInput(this.value)" placeholder="Buscar MLB, SKU, título, conta ou ID interno...">
+                                    <input type="text" id="an-search-input" value="${escapeHtml(AnunciosState.search)}" oninput="anOnSearchInput(this.value)" placeholder="Buscar MLB, SKU, título, conta ou ID...">
                                 </label>
-                                <select class="an-account-select" onchange="anOnAccountChange(this.value)" aria-label="Filtrar por conta">
+                                <select class="an-marketplace-select" onchange="anOnMarketplaceChange(this.value)" aria-label="Filtrar por marketplace">
+                                    <option value="todos" ${AnunciosState.marketplaceFilter === 'todos' ? 'selected' : ''}>Todos os Canais</option>
+                                    <option value="mercadolibre" ${AnunciosState.marketplaceFilter === 'mercadolibre' ? 'selected' : ''}>Mercado Livre</option>
+                                    <option value="shopee" ${AnunciosState.marketplaceFilter === 'shopee' ? 'selected' : ''}>Shopee</option>
+                                </select>
+                                <select class="an-account-select" id="an-account-select-el" onchange="anOnAccountChange(this.value)" aria-label="Filtrar por conta">
                                     <option value="todas" ${AnunciosState.accountFilter === 'todas' ? 'selected' : ''}>Todas as Contas</option>
                                     ${accountOptions()}
+                                </select>
+                                <select class="an-status-select" onchange="anOnStatusChange(this.value)" aria-label="Filtrar por status">
+                                    <option value="todos" ${AnunciosState.statusFilter === 'todos' ? 'selected' : ''}>Todos os Status</option>
+                                    <option value="active" ${AnunciosState.statusFilter === 'active' ? 'selected' : ''}>Ativos</option>
+                                    <option value="paused" ${AnunciosState.statusFilter === 'paused' ? 'selected' : ''}>Pausados</option>
+                                    <option value="under_review" ${AnunciosState.statusFilter === 'under_review' ? 'selected' : ''}>Sob Revisão</option>
                                 </select>
                             </div>
                         </header>
@@ -2130,145 +1083,88 @@
                         <div id="an-list-container" class="an-list">
                             ${renderAnunciosCards()}
                         </div>
+
+                        <div id="an-pagination-container">
+                            ${renderPaginationHTML()}
+                        </div>
                     </section>
                 </main>
             </div>
         `;
 
-        // Hidratar mappings salvos no Supabase ao carregar a tela
-        hidratarMappingsPersistidos();
-
-        // Sincronizar estado e UI da seleção em massa (barra de ação e checkboxes)
-        anUpdateMassSelectionUI();
+        // Carregamento assíncrono inicial dos dados do catálogo real e contadores
+        carregarContadoresResumoGlobais();
+        carregarCatalogoAnuncios(AnunciosState.page);
     };
 
     function atualizarContadoresResumo() {
-        const totalCount = AnunciosState.anuncios.length;
-        const unmappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'NAO_MAPEADO' || a.situacao_mapeamento === 'PARCIAL').length;
-        const mappedCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'MAPEADO').length;
-        const reviewCount = AnunciosState.anuncios.filter(a => a.situacao_mapeamento === 'REVISAR').length;
+        const totalCount = AnunciosState.summaryCounts.total || 0;
+        const unmappedCount = AnunciosState.summaryCounts.unmapped || 0;
+        const mappedCount = AnunciosState.summaryCounts.mapped || 0;
+        const reviewCount = AnunciosState.summaryCounts.review || 0;
 
         const tabTodos = document.querySelector('.an-summary .tab-todos strong');
-        if (tabTodos) tabTodos.textContent = totalCount;
+        if (tabTodos) tabTodos.textContent = totalCount.toLocaleString('pt-BR');
         const tabNaoMap = document.querySelector('.an-summary .tab-nao-mapeados strong');
-        if (tabNaoMap) tabNaoMap.textContent = unmappedCount;
+        if (tabNaoMap) tabNaoMap.textContent = unmappedCount.toLocaleString('pt-BR');
         const tabMap = document.querySelector('.an-summary .tab-mapeados strong');
-        if (tabMap) tabMap.textContent = mappedCount;
+        if (tabMap) tabMap.textContent = mappedCount.toLocaleString('pt-BR');
         const tabRev = document.querySelector('.an-summary .tab-revisar strong');
-        if (tabRev) tabRev.textContent = reviewCount;
+        if (tabRev) tabRev.textContent = reviewCount.toLocaleString('pt-BR');
     }
 
-    async function hidratarMappingsPersistidos() {
-        if (!window.DataClient?.listMercadoLivreItemMappings) return;
-
-        // Contas Mercado Livre na amostra atual com account_id válido (ex: 1)
-        const accountIds = [...new Set(
-            AnunciosState.anuncios
-                .filter(a => a.marketplace === 'MERCADO_LIVRE' && hasValue(a.account_id))
-                .map(a => Number(a.account_id))
-        )].filter(id => Number.isInteger(id) && id > 0);
-
-        let houveMudanca = false;
-
-        for (const accId of accountIds) {
-            try {
-                const mappings = await window.DataClient.listMercadoLivreItemMappings(accId);
-                if (!Array.isArray(mappings) || !mappings.length) continue;
-
-                for (const mapRecord of mappings) {
-                    if (!mapRecord.ativo || !mapRecord.current_version_id) continue;
-                    const versao = mapRecord.mercadolivre_item_mapping_versions;
-                    if (!versao) continue;
-
-                    const componentes = versao.mercadolivre_item_mapping_componentes || [];
-                    if (!componentes.length) continue;
-
-                    // Identidade do mapping: account_id + external_item_id
-                    const targetAnuncio = AnunciosState.anuncios.find(a =>
-                        a.marketplace === 'MERCADO_LIVRE' &&
-                        Number(a.account_id) === Number(mapRecord.mercadolivre_account_id) &&
-                        String(a.external_item_id) === String(mapRecord.item_id)
-                    );
-                    if (!targetAnuncio) continue;
-
-                    const mappedProducts = componentes.map(c => {
-                        const p = c.produtos || c.produto_referencia || {};
-                        return {
-                            id: p.id || c.produto_id,
-                            id_interno: p.id_interno || 'DY-???',
-                            nome: p.descricao_completa || p.nome || p.id_interno || 'Produto',
-                            marca: p.marca || '-',
-                            ean: p.ean || '-',
-                            sku_fornecedor: p.sku_fornecedor || '-'
-                        };
-                    });
-
-                    const uiMapping = {
-                        type: versao.tipo_identificacao === 'kit' ? 'kit' : (mappedProducts.length > 1 ? 'equivalents' : 'single'),
-                        products: mappedProducts,
-                        components: componentes.map(c => ({
-                            product: mappedProducts.find(mp => mp.id === c.produto_id) || mappedProducts[0],
-                            qty: c.quantidade_por_unidade || 1
-                        }))
-                    };
-
-                    const targetVarKey = mapRecord.variation_key || '__SEM_VARIACAO__';
-
-                    if (targetAnuncio.has_variations && Array.isArray(targetAnuncio.variations)) {
-                        const targetVar = targetAnuncio.variations.find(v =>
-                            (hasValue(v.variation_id) && String(v.variation_id) === String(mapRecord.variation_id)) ||
-                            (hasValue(v.variation_key) && String(v.variation_key) === targetVarKey)
-                        );
-                        if (targetVar) {
-                            targetVar.mapping = uiMapping;
-                            targetVar.situacao_mapeamento = 'MAPEADO';
-                            houveMudanca = true;
-                        }
-                        const allMapped = targetAnuncio.variations.every(v => v.situacao_mapeamento === 'MAPEADO');
-                        targetAnuncio.situacao_mapeamento = allMapped ? 'MAPEADO' : 'PARCIAL';
-                    } else {
-                        if (targetVarKey === '__SEM_VARIACAO__' || !targetAnuncio.variation_key || targetAnuncio.variation_key === targetVarKey) {
-                            targetAnuncio.mapping = uiMapping;
-                            targetAnuncio.situacao_mapeamento = 'MAPEADO';
-                            targetAnuncio.mapping_id = mapRecord.id;
-                            targetAnuncio.mapping_versao = versao.versao;
-                            houveMudanca = true;
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn('[ANUNCIOS_MAPPING] Erro ao carregar mappings da conta ' + accId + ':', err);
-            }
-        }
-
-        if (houveMudanca) {
-            const listContainer = document.getElementById('an-list-container');
-            if (listContainer) {
-                listContainer.innerHTML = renderAnunciosCards();
-                anUpdateMassSelectionUI();
-            }
-            atualizarContadoresResumo();
-        }
-    };
-
-    // Event Handlers de Filtros e Busca
+    // Event Handlers de Filtros, Busca e Paginação
     window.anSetFilter = function (filterKey) {
+        anClearMassSelection();
         AnunciosState.filter = filterKey;
-        renderAnunciosScreen(false);
-    };
-
-    window.anOnSearchInput = function (term) {
-        AnunciosState.search = term;
         const listContainer = document.getElementById('an-list-container');
         if (listContainer) {
             listContainer.innerHTML = renderAnunciosCards();
             anUpdateMassSelectionUI();
         }
+        document.querySelectorAll('.an-summary button').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.querySelector(`.an-summary .tab-${filterKey.replace('_', '-')}`);
+        if (activeBtn) activeBtn.classList.add('active');
+    };
+
+    window.anOnSearchInput = function (term) {
+        anClearMassSelection();
+        AnunciosState.search = term;
+        if (AnunciosState.searchDebounceTimer) {
+            clearTimeout(AnunciosState.searchDebounceTimer);
+        }
+        AnunciosState.searchDebounceTimer = setTimeout(() => {
+            carregarCatalogoAnuncios(1);
+        }, 400);
+    };
+
+    window.anOnMarketplaceChange = function (mp) {
+        anClearMassSelection();
+        AnunciosState.marketplaceFilter = mp;
+        AnunciosState.accountFilter = 'todas';
+        const accSelect = document.getElementById('an-account-select-el');
+        if (accSelect) {
+            accSelect.innerHTML = `<option value="todas">Todas as Contas</option>${accountOptions()}`;
+        }
+        carregarCatalogoAnuncios(1);
     };
 
     window.anOnAccountChange = function (acc) {
+        anClearMassSelection();
         AnunciosState.accountFilter = acc;
-        renderAnunciosScreen(false);
+        carregarCatalogoAnuncios(1);
+    };
+
+    window.anOnStatusChange = function (st) {
+        anClearMassSelection();
+        AnunciosState.statusFilter = st;
+        carregarCatalogoAnuncios(1);
+    };
+
+    window.anGoToPage = function (page) {
+        if (page < 1 || page > AnunciosState.totalPages || page === AnunciosState.page) return;
+        anClearMassSelection();
+        carregarCatalogoAnuncios(page);
     };
 
     // Visualizador de Imagem Ampliada
@@ -2309,14 +1205,6 @@
         if (!context) return false;
 
         const marketplace = context.marketplace || 'MERCADO_LIVRE';
-
-        // Regra 4: Shopee não habilitado nesta fase
-        if (marketplace === 'SHOPEE') {
-            if (typeof showToast === 'function') {
-                showToast('A identificação de itens Shopee está bloqueada nesta fase.', 'warning');
-            }
-            return false;
-        }
 
         // Regra 5: Conta não resolvida para Mercado Livre (Identificação só abre se houver account_id local resolvido > 0)
         if (marketplace === 'MERCADO_LIVRE') {

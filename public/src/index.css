@@ -77518,3 +77518,40 @@ html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen
   color: #0f172a;
   font-weight: 800;
 }
+
+/* ==========================================================================
+   BREADCRUMB & SHELL ANÚNCIOS (100% ESCOPADO)
+   ========================================================================== */
+
+#app main.an-shell .app-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+#app main.an-shell .app-breadcrumb .app-breadcrumb-parent {
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  outline: none;
+}
+
+#app main.an-shell .app-breadcrumb .app-breadcrumb-parent:hover,
+#app main.an-shell .app-breadcrumb .app-breadcrumb-parent:focus-visible {
+  color: #0f172a;
+  text-decoration: underline;
+}
+
+#app main.an-shell .app-breadcrumb .material-symbols-rounded {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+#app main.an-shell .app-breadcrumb .app-breadcrumb-current {
+  color: #0f172a;
+  font-weight: 800;
+}
