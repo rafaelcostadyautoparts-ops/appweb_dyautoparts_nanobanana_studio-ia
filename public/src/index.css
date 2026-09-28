@@ -77481,3 +77481,40 @@ html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen
   .conference-workflow-screen .pick-list-header { align-items:flex-start!important; gap:8px; }
   .conference-workflow-screen .pick-list-filters { width:100%; margin-left:0; overflow-x:auto; }
 }
+
+/* ==========================================================================
+   BREADCRUMB & SHELL PEDIDOS (100% ESCOPADO)
+   ========================================================================== */
+
+#app main.ped-shell .app-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+#app main.ped-shell .app-breadcrumb .app-breadcrumb-parent {
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  outline: none;
+}
+
+#app main.ped-shell .app-breadcrumb .app-breadcrumb-parent:hover,
+#app main.ped-shell .app-breadcrumb .app-breadcrumb-parent:focus-visible {
+  color: #0f172a;
+  text-decoration: underline;
+}
+
+#app main.ped-shell .app-breadcrumb .material-symbols-rounded {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+#app main.ped-shell .app-breadcrumb .app-breadcrumb-current {
+  color: #0f172a;
+  font-weight: 800;
+}

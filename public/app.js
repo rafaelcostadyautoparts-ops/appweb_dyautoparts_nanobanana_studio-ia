@@ -4428,20 +4428,47 @@ async function resolverAccountIdLocalParaPedido(sourceAccountId) {
   return null;
 }
 
+let pedidosRenderToken = 0;
+
 async function hidratarPedidosPreviewMappings(todosPreview) {
   if (!Array.isArray(todosPreview) || !window.DataClient?.listMercadoLivreItemMappings) return;
 
   const mappingsPorConta = new Map();
 
+  // 1. Extrai IDs de contas únicas do Mercado Livre para resolver em lote
+  const mlPedidos = todosPreview.filter(p => p.platform === 'MERCADOLIBRE');
+  const uniqueSourceAccountIds = Array.from(new Set(mlPedidos.map(p => String(p.source_account_id || '').trim()).filter(Boolean)));
+
+  // Resolve todas as contas em paralelo
+  await Promise.all(uniqueSourceAccountIds.map(srcId => resolverAccountIdLocalParaPedido(srcId)));
+
+  // 2. Extrai IDs locais únicos para carregar mappings em paralelo
+  const uniqueLocalAccountIds = Array.from(new Set(
+    uniqueSourceAccountIds.map(srcId => contasResolvedMapCache.get(srcId)).filter(Boolean)
+  ));
+
+  await Promise.all(uniqueLocalAccountIds.map(async (accId) => {
+    if (!mappingsPorConta.has(accId)) {
+      try {
+        const list = await window.DataClient.listMercadoLivreItemMappings(accId);
+        mappingsPorConta.set(accId, list || []);
+      } catch (err) {
+        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accId, err);
+        mappingsPorConta.set(accId, []);
+      }
+    }
+  }));
+
+  // 3. Aplica os mappings aos itens em memória
   for (const ped of todosPreview) {
-    // Isolamento estrito: Shopee não consulta mapping do Mercado Livre
     if (ped.platform !== 'MERCADOLIBRE') {
       ped.status_identificacao_preview = 'pendente_identificacao';
       ped.conta_resolvida = false;
       continue;
     }
 
-    let accountIdLocal = await resolverAccountIdLocalParaPedido(ped.source_account_id);
+    const strSrcId = String(ped.source_account_id || '').trim();
+    const accountIdLocal = contasResolvedMapCache.get(strSrcId);
     ped.accountIdLocal = accountIdLocal;
 
     if (!accountIdLocal) {
@@ -4451,17 +4478,6 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
     }
 
     ped.conta_resolvida = true;
-
-    if (!mappingsPorConta.has(accountIdLocal)) {
-      try {
-        const list = await window.DataClient.listMercadoLivreItemMappings(accountIdLocal);
-        mappingsPorConta.set(accountIdLocal, list || []);
-      } catch (err) {
-        console.warn('[PEDIDOS PREVIEW] Erro ao listar mappings da conta ' + accountIdLocal, err);
-        mappingsPorConta.set(accountIdLocal, []);
-      }
-    }
-
     const accountMappings = mappingsPorConta.get(accountIdLocal) || [];
     let todosItensIdentificados = (ped.itens || []).length > 0;
 
@@ -4499,10 +4515,12 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
 }
 
 async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
+  const t0 = performance.now();
   const currentUser = localStorage.getItem('currentUser');
   if (!currentUser) return renderLogin();
 
   currentScreen = 'pedidos';
+  const thisRenderToken = ++pedidosRenderToken;
 
   // Verifica se está no modo preview de pedidos reais
   const isPreviewMode = Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA) && window.PEDIDOS_PREVIEW_AMOSTRA.length > 0;
@@ -4511,202 +4529,194 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
     const state = window.PedidosPreviewState;
 
-    // Hidrata os mappings da preview via DataClient/Supabase em memória
-    try {
-      await hidratarPedidosPreviewMappings(todosPreview);
-    } catch (errHidratar) {
-      console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings:', errHidratar);
-    }
-
-    // Se parâmetros foram passados diretamente pela chamada legada, sincroniza com o state
     if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
 
-    // Contadores Operacionais Principais (dinâmicos baseados no mapping real)
-    const countTodos = todosPreview.length; // 30
-    const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
-    const countPendentes = countTodos - countProntos;
-    const countEmSeparacao = 0;
-    const countSeparados = 0;
-    const countDivergencias = 0;
+    const renderDOM = () => {
+      const countTodos = todosPreview.length;
+      const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
+      const countPendentes = countTodos - countProntos;
+      const countEmSeparacao = 0;
+      const countSeparados = 0;
+      const countDivergencias = 0;
 
-    // Contadores por Canal para os botões de filtro
-    const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
-    const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+      const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
+      const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
+      const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
 
-    // Lista de contas distintas da amostra
-    const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
+      let listaExibicao = todosPreview;
+      if (state.operacional === 'prontos') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
+      } else if (state.operacional === 'pendentes') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
+      } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+        listaExibicao = [];
+      } else {
+        listaExibicao = todosPreview;
+      }
 
-    // Aplicação determinística dos filtros:
-    let listaExibicao = todosPreview;
+      if (state.marketplace === 'mercadolibre') {
+        listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
+      } else if (state.marketplace === 'shopee') {
+        listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
+      }
 
-    // 1. Filtro Operacional
-    if (state.operacional === 'prontos') {
-      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
-    } else if (state.operacional === 'pendentes') {
-      listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
-    } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
-      listaExibicao = [];
-    } else {
-      // 'todos'
-      listaExibicao = todosPreview;
-    }
+      if (state.conta && state.conta !== 'todas') {
+        listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
+      }
 
-    // 2. Filtro Secundário: Marketplace
-    if (state.marketplace === 'mercadolibre') {
-      listaExibicao = listaExibicao.filter(p => p.platform === 'MERCADOLIBRE');
-    } else if (state.marketplace === 'shopee') {
-      listaExibicao = listaExibicao.filter(p => p.platform === 'SHOPEE');
-    }
+      const termoBusca = String(state.busca || '').trim().toLowerCase();
+      if (termoBusca) {
+        listaExibicao = listaExibicao.filter(p => {
+          const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
+          const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
+          const itemsMatch = (p.itens || []).some(it =>
+            String(it.titulo || '').toLowerCase().includes(termoBusca) ||
+            String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
+            String(it.item_id || '').toLowerCase().includes(termoBusca) ||
+            String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
+          );
+          return orderMatch || accountMatch || itemsMatch;
+        });
+      }
 
-    // 3. Filtro Secundário: Conta
-    if (state.conta && state.conta !== 'todas') {
-      listaExibicao = listaExibicao.filter(p => p.account_name === state.conta);
-    }
+      app.innerHTML = `
+        <div class="dashboard-screen internal fade-in module-screen app-page-shell">
+          ${getTopBarHTML(currentUser, 'renderMenu()')}
+          ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
+          <main class="container ped-shell app-page-container">
+            <div class="app-breadcrumb">
+              <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+              <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+              <span class="app-breadcrumb-current">Pedidos</span>
+            </div>
 
-    // 4. Busca Textual (pedido, título, SKU, variação, conta)
-    const termoBusca = String(state.busca || '').trim().toLowerCase();
-    if (termoBusca) {
-      listaExibicao = listaExibicao.filter(p => {
-        const orderMatch = String(p.external_order_id || '').toLowerCase().includes(termoBusca);
-        const accountMatch = String(p.account_name || '').toLowerCase().includes(termoBusca);
-        const itemsMatch = (p.itens || []).some(it =>
-          String(it.titulo || '').toLowerCase().includes(termoBusca) ||
-          String(it.seller_sku || '').toLowerCase().includes(termoBusca) ||
-          String(it.item_id || '').toLowerCase().includes(termoBusca) ||
-          String(it.variacao_texto || '').toLowerCase().includes(termoBusca)
-        );
-        return orderMatch || accountMatch || itemsMatch;
-      });
-    }
-
-    app.innerHTML = `
-      <div class="dashboard-screen internal fade-in module-screen app-page-shell">
-        ${getTopBarHTML(currentUser, 'renderMenu()')}
-        ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
-        <main class="container ped-shell app-page-container">
-          <div class="app-breadcrumb">
-            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-            <span class="material-symbols-rounded">chevron_right</span>
-            <span class="app-breadcrumb-current">Gestão de Pedidos</span>
-          </div>
-
-          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
-            <div>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
-                <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
-                  <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
-                </span>
+            <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
+            <div class="pedidos-counters-grid">
+              <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
+                <div class="pedidos-counter-label">
+                  <span>Todos</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+                </div>
+                <div class="pedidos-counter-val">${countTodos}</div>
+                <span class="pedidos-counter-sub">Total consolidado</span>
               </div>
-              <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
-                Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
-              </p>
-            </div>
-          </header>
 
-          <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
-          <div class="pedidos-counters-grid">
-            <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
-              <div class="pedidos-counter-label">
-                <span>Todos</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+              <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
+                <div class="pedidos-counter-label" style="color:#b45309;">
+                  <span>Pendentes</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
+                <span class="pedidos-counter-sub">Aguardam mapping</span>
               </div>
-              <div class="pedidos-counter-val">${countTodos}</div>
-              <span class="pedidos-counter-sub">Total consolidado</span>
-            </div>
 
-            <div class="pedidos-counter-card card-pendentes ${state.operacional === 'pendentes' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('pendentes')">
-              <div class="pedidos-counter-label" style="color:#b45309;">
-                <span>Pendentes</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+              <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
+                <div class="pedidos-counter-label" style="color:#15803d;">
+                  <span>Prontos p/ Separação</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
+                <span class="pedidos-counter-sub">Prontos p/ envio</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
-              <span class="pedidos-counter-sub">Aguardam mapping</span>
-            </div>
 
-            <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
-              <div class="pedidos-counter-label" style="color:#15803d;">
-                <span>Prontos p/ Separação</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+              <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
+                <div class="pedidos-counter-label" style="color:#1d4ed8;">
+                  <span>Em Separação</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
+                <span class="pedidos-counter-sub">Picking em curso</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
-              <span class="pedidos-counter-sub">Prontos p/ envio</span>
-            </div>
 
-            <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
-              <div class="pedidos-counter-label" style="color:#1d4ed8;">
-                <span>Em Separação</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+              <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
+                <div class="pedidos-counter-label" style="color:#7e22ce;">
+                  <span>Separados</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
+                <span class="pedidos-counter-sub">Aguardam conferência</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
-              <span class="pedidos-counter-sub">Picking em curso</span>
-            </div>
 
-            <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
-              <div class="pedidos-counter-label" style="color:#7e22ce;">
-                <span>Separados</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
+              <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
+                <div class="pedidos-counter-label" style="color:#dc2626;">
+                  <span>Divergências</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+                </div>
+                <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
+                <span class="pedidos-counter-sub">Revisão necessária</span>
               </div>
-              <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
-              <span class="pedidos-counter-sub">Aguardam conferência</span>
             </div>
 
-            <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
-              <div class="pedidos-counter-label" style="color:#dc2626;">
-                <span>Divergências</span>
-                <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+            <!-- BARRA DE FILTROS SECUNDÁRIOS -->
+            <div class="pedidos-filters-bar">
+              <div class="pedidos-search-wrap">
+                <span class="material-symbols-rounded pedidos-search-icon">search</span>
+                <input type="text"
+                       class="pedidos-search-input"
+                       placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
+                       value="${escapeKitAttribute(state.busca)}"
+                       oninput="setPedidosBusca(this.value)">
               </div>
-              <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
-              <span class="pedidos-counter-sub">Revisão necessária</span>
-            </div>
-          </div>
 
-          <!-- BARRA DE FILTROS SECUNDÁRIOS -->
-          <div class="pedidos-filters-bar">
-            <div class="pedidos-search-wrap">
-              <span class="material-symbols-rounded pedidos-search-icon">search</span>
-              <input type="text"
-                     class="pedidos-search-input"
-                     placeholder="Buscar por ID do pedido, cliente, SKU ou título..."
-                     value="${escapeKitAttribute(state.busca)}"
-                     oninput="setPedidosBusca(this.value)">
-            </div>
-
-            <div class="pedidos-pills-wrap">
-              <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
-                Todos Canais (${todosPreview.length})
-              </button>
-              <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
-                Mercado Livre (${countML})
-              </button>
-              <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
-                Shopee (${countShopee})
-              </button>
-            </div>
-
-            <div style="min-width:200px;">
-              <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
-                <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
-                ${contasDisponiveis.map(c => `
-                  <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
-                `).join('')}
-              </select>
-            </div>
-          </div>
-
-          <!-- LISTA DE CARDS DE PEDIDOS -->
-          <div style="display:grid;gap:16px;">
-            ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
-              <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
-                <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
-                <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
-                <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
+              <div class="pedidos-pills-wrap">
+                <button type="button" class="pedidos-pill-btn ${state.marketplace === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('todos')">
+                  Todos Canais (${todosPreview.length})
+                </button>
+                <button type="button" class="pedidos-pill-btn pill-ml ${state.marketplace === 'mercadolibre' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('mercadolibre')">
+                  Mercado Livre (${countML})
+                </button>
+                <button type="button" class="pedidos-pill-btn pill-shopee ${state.marketplace === 'shopee' ? 'active' : ''}" onclick="setPedidosFiltroMarketplace('shopee')">
+                  Shopee (${countShopee})
+                </button>
               </div>
-            `}
-          </div>
-        </main>
-      </div>
-    `;
+
+              <div style="min-width:200px;">
+                <select class="app-select" onchange="setPedidosFiltroConta(this.value)" style="width:100%;height:38px;font-size:0.85rem;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:0 12px;">
+                  <option value="todas" ${state.conta === 'todas' ? 'selected' : ''}>Todas as Contas (${contasDisponiveis.length})</option>
+                  ${contasDisponiveis.map(c => `
+                    <option value="${escapeKitAttribute(c)}" ${state.conta === c ? 'selected' : ''}>${escapeKitAttribute(c)}</option>
+                  `).join('')}
+                </select>
+              </div>
+            </div>
+
+            <!-- LISTA DE CARDS DE PEDIDOS -->
+            <div id="pedidos-cards-container" style="display:grid;gap:16px;">
+              ${listaExibicao.length > 0 ? listaExibicao.map(renderPedidoCardHTML).join('') : `
+                <div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:48px 24px;text-align:center;color:#64748b;">
+                  <span class="material-symbols-rounded" style="font-size:48px;color:#94a3b8;margin-bottom:12px;">search_off</span>
+                  <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 6px;">Nenhum pedido encontrado</h3>
+                  <p style="font-size:0.88rem;margin:0;">Tente ajustar a busca ou alterar os filtros de marketplace e conta.</p>
+                </div>
+              `}
+            </div>
+          </main>
+        </div>
+      `;
+    };
+
+    // 1. RENDERIZA O SHELL E DADOS INICIAIS IMEDIATAMENTE NO DOM
+    renderDOM();
+    const t2 = performance.now();
+    console.info(`[PERF PEDIDOS] Primeiro DOM visível em ${(t2 - t0).toFixed(1)}ms`);
+
+    // 2. DISPARA HIDRATAÇÃO ASSÍNCRONA DE MAPPINGS EM SEGUNDO PLANO
+    (async () => {
+      const t3 = performance.now();
+      try {
+        await hidratarPedidosPreviewMappings(todosPreview);
+        const t4 = performance.now();
+        // Se ainda estiver na tela de pedidos e nesta execução, atualiza o DOM suavemente
+        if (currentScreen === 'pedidos' && pedidosRenderToken === thisRenderToken) {
+          renderDOM();
+          const t6 = performance.now();
+          console.info(`[PERF PEDIDOS] Hidratação e dados finais concluídos em ${(t6 - t0).toFixed(1)}ms (consultas levaram ${(t4 - t3).toFixed(1)}ms)`);
+        }
+      } catch (errHidratar) {
+        console.warn('[PEDIDOS PREVIEW] Falha ao hidratar mappings em background:', errHidratar);
+      }
+    })();
+
     return;
   }
 
@@ -4716,6 +4726,11 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
       <main class="container ped-shell app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Pedidos</span>
+        </div>
         <div class="pedidos-loading" style="text-align:center;padding:40px;color:#64748b;">
           <span class="material-symbols-rounded" style="font-size:36px;animation:spin 1s linear infinite;">sync</span>
           <p>Carregando pedidos do marketplace...</p>
@@ -4744,17 +4759,10 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
         ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
         <main class="container ped-shell app-page-container">
           <div class="app-breadcrumb">
-            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-            <span class="material-symbols-rounded">chevron_right</span>
-            <span class="app-breadcrumb-current">Pedidos & Identificação</span>
+            <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+            <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            <span class="app-breadcrumb-current">Pedidos</span>
           </div>
-
-          <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-            <div>
-              <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
-              <p style="color:#64748b;font-size:0.9rem;margin:4px 0 0;">Acompanhe a identificação dos anúncios e o snapshot congelado de equivalentes.</p>
-            </div>
-          </header>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
             <div onclick="renderPedidosScreen('todos')" style="background:#fff;border:2px solid ${filtroAba === 'todos' ? '#4f46e5' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
