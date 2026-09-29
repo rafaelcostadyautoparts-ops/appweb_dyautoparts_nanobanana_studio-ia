@@ -5543,6 +5543,22 @@ function renderComprasSubMenu() {
     }
   ];
 
+  const cardsHtml = `
+    <div class="standard-module-card-grid">
+      ${subItems.map(item => `
+        <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)}" onclick="${item.onclick}">
+          <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
+          <span class="standard-module-card-divider"></span>
+          <span class="standard-module-card-copy">
+            <strong>${item.label}</strong>
+            ${item.description ? `<small>${item.description}</small>` : ''}
+          </span>
+          <span class="material-symbols-rounded standard-module-card-chevron">chevron_right</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
   app.innerHTML = `
     <div class="dashboard-screen internal fade-in compras-submenu-screen compras-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -5553,7 +5569,7 @@ function renderComprasSubMenu() {
           <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
           <span class="app-breadcrumb-current">Compras</span>
         </div>
-        ${getStandardModuleCardsHTML(subItems)}
+        ${cardsHtml}
       </main>
     </div>
   `;
