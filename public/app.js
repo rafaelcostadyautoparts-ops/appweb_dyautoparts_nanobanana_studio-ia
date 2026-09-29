@@ -4059,7 +4059,11 @@ const menu3DIcons = {
  inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
  inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
  inventario_localizacao: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M18 20 H46 V44 H18 Z" stroke="#fff" stroke-width="2.8" fill="none" rx="2"/><path d="M18 28 H46 M18 36 H46 M28 20 V44 M38 20 V44" stroke="#fff" stroke-width="2.4" opacity="0.9"/><path d="M32 16 C27 16 23 20 23 25 C23 32 32 39 32 39 C32 39 41 32 41 25 C41 20 37 16 32 16 Z" fill="#fff" opacity="0.96"/><circle cx="32" cy="25" r="3" fill="#0F766E"/></svg>',
- inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>'
+ inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
+  compras_necessidade: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.5 7.2 4.15v8.7L12 20.5l-7.2-4.15v-8.7L12 3.5z"/><path d="m4.8 7.65 7.2 4.15 7.2-4.15"/><path d="M12 11.8v8.7"/></svg>',
+  compras_pedido: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>',
+  compras_cotacao: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>',
+  compras_fornecedores: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>'
 };
 
 
@@ -5504,81 +5508,81 @@ function getPlaceholderForm(fields) {
 }
 
 function renderComprasSubMenu() {
- const currentUser = localStorage.getItem('currentUser');
- const primaryCards = [
- {
- label: 'PEDIDO DE COMPRA',
- description: 'Crie e gerencie pedidos de compra para seus fornecedores.',
- icon: 'compras',
- onclick: 'renderPedidoCompraScreen()'
- },
- {
- label: 'COTACAO',
- description: 'Compare precos e condicoes entre fornecedores antes de comprar.',
- icon: 'pedido_compra',
- onclick: 'renderCotacaoComprasScreen()'
- },
- {
- label: 'FORNECEDORES',
- description: 'Cadastre e gerencie fornecedores e informacoes comerciais.',
- icon: 'fornecedores',
- onclick: 'renderFornecedoresScreen()'
- },
- {
- label: 'PEDIDOS EM TRANSPORTE',
- description: 'Acompanhe pedidos que ja foram despachados pelos fornecedores.',
- icon: 'transporte',
- onclick: 'renderPedidosTransporteScreen()'
- },
- {
- label: 'HISTORICO DE COMPRAS',
- description: 'Consulte historico de compras, precos e entradas de mercadorias.',
- icon: 'historico',
- onclick: 'renderHistoricoComprasScreen()'
- }
- ];
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
 
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal compras-screen module-screen standard-card-menu-screen compras-standard-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('compras')}
- <main class="container">
- <div class="standard-module-card-grid compras-standard-grid">
- ${primaryCards.map(card => `
- <button type="button" class="standard-module-card" onclick="${card.onclick}">
- <span class="standard-module-card-icon">${menu3DIcons[card.icon] || ''}</span>
- <span class="standard-module-card-copy">
- <strong>${card.label}</strong>
- <small>${card.description}</small>
- </span>
- </button>
- `).join('')}
- </div>
- </main>
- </div>
- `;
+  const subItems = [
+    {
+      id: 'compras_necessidade',
+      label: 'NECESSIDADE DE COMPRA',
+      description: 'Analise estoque, demanda e sugestões de reposição.',
+      icon: 'compras_necessidade',
+      onclick: 'renderNecessidadeCompraScreen()'
+    },
+    {
+      id: 'compras_cotacao',
+      label: 'COTAÇÃO / COMPRA',
+      description: 'Compare fornecedores, preços e condições e gere pedidos.',
+      icon: 'compras_cotacao',
+      onclick: 'renderCotacaoComprasScreen()'
+    },
+    {
+      id: 'compras_pedido_compra',
+      label: 'PEDIDOS DE COMPRA',
+      description: 'Acompanhe pedidos, recebimentos e pendências.',
+      icon: 'compras_pedido',
+      onclick: 'renderPedidoCompraScreen()'
+    },
+    {
+      id: 'compras_fornecedores',
+      label: 'FORNECEDORES',
+      description: 'Gerencie fornecedores, produtos, preços e condições comerciais.',
+      icon: 'compras_fornecedores',
+      onclick: 'renderFornecedoresScreen()'
+    }
+  ];
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in compras-submenu-screen compras-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('compras')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Compras</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
-
 function renderComprasShell(title, subtitle, contentHTML) {
- const currentUser = localStorage.getItem('currentUser');
- app.innerHTML = `
- <div class="dashboard-screen fade-in internal compras-screen module-screen">
- ${getTopBarHTML(currentUser, 'renderComprasSubMenu()')}
- ${getModuleSidebarHTML('compras')}
- <main class="container compras-workspace compras-detail-workspace">
- <header class="compras-header compras-detail-header">
- <div class="compras-header-icon">${menu3DIcons.compras || ''}</div>
- <div>
- <p class="compras-kicker">COMPRAS</p>
- <h1>${title}</h1>
- <span>${subtitle}</span>
- </div>
- </header>
- ${contentHTML}
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  app.innerHTML = `
+    <div class="dashboard-screen fade-in internal compras-screen module-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderComprasSubMenu()')}
+      ${getModuleSidebarHTML('compras', title)}
+      <main class="container compras-workspace compras-detail-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderComprasSubMenu()">Compras</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">${title}</span>
+        </div>
+        <header class="compras-header compras-detail-header">
+          <div class="compras-header-icon">${menu3DIcons.compras || ''}</div>
+          <div>
+            <p class="compras-kicker">COMPRAS</p>
+            <h1>${title}</h1>
+            <span>${subtitle}</span>
+          </div>
+        </header>
+        ${contentHTML}
+      </main>
+    </div>
+  `;
 }
 
 async function loadFornecedoresCompras() {
@@ -5698,51 +5702,39 @@ async function renderFornecedoresScreen() {
 }
 
 function renderPedidoCompraScreen() {
- renderComprasShell('PEDIDO DE COMPRA', 'Rascunho visual para montar pedidos de compra.', `
- <section class="compras-panel compras-order-panel">
- <div class="compras-form-grid">
- <label class="compras-field">
- <span>Fornecedor</span>
- <select aria-label="Selecionar fornecedor">
- <option>Selecionar fornecedor</option>
- </select>
- </label>
- <label class="compras-field">
- <span>Adicionar produtos</span>
- <input type="text" placeholder="Buscar produto por EAN, SKU ou nome">
- </label>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">add</span>
- Adicionar
- </button>
- </div>
- <div class="compras-list-placeholder">
- <span class="material-symbols-rounded">inventory_2</span>
- <strong>Lista de itens vazia</strong>
- <p>Os produtos adicionados ao pedido acao aqui.</p>
- </div>
- <div class="compras-summary-row">
- <span>Total</span>
- <strong>R$ 0,00</strong>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">check</span>
- Finalizar
- </button>
- </div>
- </section>
- `);
+  renderComprasShell('PEDIDOS DE COMPRA', 'Acompanhe pedidos, recebimentos e pendências.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">receipt_long</span>
+        <strong>Pedidos de Compra em preparação</strong>
+        <p>Este espaço será utilizado para montar, acompanhar e receber pedidos de compra vinculados aos fornecedores.</p>
+      </div>
+    </section>
+  `);
+}
+
+function renderNecessidadeCompraScreen() {
+  renderComprasShell('NECESSIDADE DE COMPRA', 'Analise estoque, demanda e sugestões de reposição.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">inventory_2</span>
+        <strong>Necessidade de Compra em preparação</strong>
+        <p>Este espaço analisará estoque atual, demanda de vendas e sugestões automáticas de reposição.</p>
+      </div>
+    </section>
+  `);
 }
 
 function renderCotacaoComprasScreen() {
- renderComprasShell('COTACAO', 'Comparacao de fornecedores preparada para fase futura.', `
- <section class="compras-panel">
- <div class="compras-empty-state">
- <span class="material-symbols-rounded">request_quote</span>
- <strong>Cotacoes em preparacao</strong>
- <p>Este espaco ficara reservado para comparar fornecedores, precos, prazos e condicoes.</p>
- </div>
- </section>
- `);
+  renderComprasShell('COTAÇÃO / COMPRA', 'Compare fornecedores, preços e condições e gere pedidos.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">request_quote</span>
+        <strong>Cotações e Compras em preparação</strong>
+        <p>Este espaço ficará reservado para comparar fornecedores, preços, prazos e condições comerciais.</p>
+      </div>
+    </section>
+  `);
 }
 
 let orcamentoClienteState = { numero: '', emissao: '', validade: '', itens: [], desconto: 0, freteResponsavel: 'cliente', freteValor: 0 };

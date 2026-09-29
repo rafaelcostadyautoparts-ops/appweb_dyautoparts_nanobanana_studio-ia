@@ -77555,3 +77555,40 @@ html body:not(.login-active) #app > .dashboard-screen.conference-workflow-screen
   color: #0f172a;
   font-weight: 800;
 }
+
+/* ==========================================================================
+   BREADCRUMB & SHELL COMPRAS (100% ESCOPADO)
+   ========================================================================== */
+
+#app .compras-screen .app-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+#app .compras-screen .app-breadcrumb .app-breadcrumb-parent {
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  outline: none;
+}
+
+#app .compras-screen .app-breadcrumb .app-breadcrumb-parent:hover,
+#app .compras-screen .app-breadcrumb .app-breadcrumb-parent:focus-visible {
+  color: #0f172a;
+  text-decoration: underline;
+}
+
+#app .compras-screen .app-breadcrumb .material-symbols-rounded {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+#app .compras-screen .app-breadcrumb .app-breadcrumb-current {
+  color: #0f172a;
+  font-weight: 800;
+}
