@@ -3756,6 +3756,7 @@ const DataClient = (function () {
         reprocessarIdentificacaoPedidoTransacional,
         enviarPedidoParaSeparacaoTransacional,
         biparItemSeparacaoEquivalente,
+        resolveCanalFromLogisticType,
 
         // PRODUTO MESTRE (BASE SECUNDARIA - SOMENTE LEITURA)
         fetchProdutoMestreByIdInterno,
@@ -4165,10 +4166,49 @@ const DataClient = (function () {
         };
     }
 
-    async function saveMercadoLivrePedidoTransacional({ accountId = 1, externalOrderId, statusMercadolivre = 'paid', dateCreated = new Date().toISOString(), totalAmount = 0, currencyId = 'BRL', itens = [] }) {
+    function resolveCanalFromLogisticType(logisticType, canalIdExplicit = null) {
+        if (canalIdExplicit) {
+            return { canal_id: canalIdExplicit, canal_nome: null };
+        }
+        if (!logisticType) return { canal_id: null, canal_nome: null };
+        const lt = String(logisticType).toLowerCase().trim();
+        switch (lt) {
+            case 'self_service':
+                return { canal_id: 'canais_envio_i', canal_nome: 'Flex' };
+            case 'xd_drop_off':
+                return { canal_id: 'canais_envio_viii', canal_nome: 'Mercado Livre Agência' };
+            case 'cross_docking':
+                return { canal_id: 'canais_envio_iii', canal_nome: 'Mercado Livre Coleta' };
+            case 'turbo':
+                return { canal_id: 'canais_envio_vi', canal_nome: 'Ultra Rápido / Turbo' };
+            case 'me1':
+            case 'custom':
+            case 'correios':
+                return { canal_id: 'canais_envio_v', canal_nome: 'Correios' };
+            case 'fulfillment':
+                return { canal_id: null, canal_nome: 'Mercado Livre Full (Fulfillment)' };
+            default:
+                return { canal_id: null, canal_nome: null };
+        }
+    }
+
+    async function saveMercadoLivrePedidoTransacional({
+        accountId = 1,
+        externalOrderId,
+        statusMercadolivre = 'paid',
+        dateCreated = new Date().toISOString(),
+        totalAmount = 0,
+        currencyId = 'BRL',
+        logisticType = null,
+        canalId = null,
+        shippingId = null,
+        itens = []
+    }) {
         if (!externalOrderId) throw new Error('external_order_id e obrigatorio.');
         const client = window.supabaseClient;
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const resolvedCanal = resolveCanalFromLogisticType(logisticType, canalId);
 
         let todosIdentificados = true;
         const itensProcessados = await Promise.all(itens.map(async (item, idx) => {
@@ -4208,14 +4248,19 @@ const DataClient = (function () {
 
         let pedidoId = pedExistente?.id;
         if (pedidoId) {
+            const updatePayload = {
+                status_mercadolivre: statusMercadolivre,
+                status_identificacao: statusIdentificacao,
+                total_amount: totalAmount,
+                atualizado_em: new Date().toISOString()
+            };
+            if (shippingId) updatePayload.shipping_id = shippingId;
+            if (logisticType !== undefined) updatePayload.logistic_type = logisticType || null;
+            if (resolvedCanal.canal_id !== undefined) updatePayload.canal_id = resolvedCanal.canal_id || null;
+
             const { error: errUpdPed } = await client
                 .from('mercadolivre_pedidos')
-                .update({
-                    status_mercadolivre: statusMercadolivre,
-                    status_identificacao: statusIdentificacao,
-                    total_amount: totalAmount,
-                    atualizado_em: new Date().toISOString()
-                })
+                .update(updatePayload)
                 .eq('id', pedidoId);
             if (errUpdPed) throw errUpdPed;
 
@@ -4231,6 +4276,9 @@ const DataClient = (function () {
                     date_created: dateCreated,
                     total_amount: totalAmount,
                     currency_id: currencyId,
+                    shipping_id: shippingId || null,
+                    logistic_type: logisticType || null,
+                    canal_id: resolvedCanal.canal_id || null,
                     importado_em: new Date().toISOString(),
                     atualizado_em: new Date().toISOString()
                 }])
