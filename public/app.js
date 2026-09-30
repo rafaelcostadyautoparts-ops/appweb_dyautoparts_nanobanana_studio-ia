@@ -4976,10 +4976,10 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
 
     const renderDOM = () => {
       const countTodos = todosPreview.length;
-      const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao').length;
-      const countPendentes = countTodos - countProntos;
-      const countEmSeparacao = 0;
-      const countSeparados = 0;
+      const countEmSeparacao = todosPreview.filter(p => Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao').length;
+      const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao' && !p.separacao_id).length;
+      const countPendentes = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id).length;
+      const countSeparados = todosPreview.filter(p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado').length;
       const countDivergencias = 0;
 
       const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
@@ -4988,10 +4988,14 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
 
       let listaExibicao = todosPreview;
       if (state.operacional === 'prontos') {
-        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao');
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao' && !p.separacao_id);
       } else if (state.operacional === 'pendentes') {
-        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao');
-      } else if (state.operacional === 'em_separacao' || state.operacional === 'separados' || state.operacional === 'divergencias') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id);
+      } else if (state.operacional === 'em_separacao') {
+        listaExibicao = todosPreview.filter(p => Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao');
+      } else if (state.operacional === 'separados') {
+        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado');
+      } else if (state.operacional === 'divergencias') {
         listaExibicao = [];
       } else {
         listaExibicao = todosPreview;
@@ -5350,14 +5354,14 @@ function renderPedidoCardHTML(ped) {
 
         <!-- RODAPÉ DO CARD -->
         <div class="pedidos-card-footer">
-          <span class="pedidos-card-total">Total: ${formatFinanceiroMoney(ped.amount || 0)}</span>
+          <span class="pedidos-card-total">Total: ${formatFinanceiroMoney(ped.total_amount ?? ped.amount ?? 0)}</span>
           <div style="display:flex;align-items:center;gap:8px;">
             <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:7px 14px;font-size:0.83rem;cursor:pointer;">
               Ver detalhes (${totalItens})
             </button>
             ${isOperacionalReal ? (
               hasSeparacao ? `
-                <button type="button" class="app-center-modal-primary" onclick="showToast('Separação ${escapeKitAttribute(ped.separacao_id)} já vinculada ao pedido.', 'info')" style="padding:7px 14px;font-size:0.83rem;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
+                <button type="button" class="app-center-modal-primary" onclick="abrirSeparacaoPedidoAtivo('${escapeKitAttribute(ped.separacao_id)}', '${escapeKitAttribute(ped.external_order_id)}')" style="padding:7px 14px;font-size:0.83rem;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
                   Ver separação (${escapeKitAttribute(ped.separacao_id)})
                 </button>
               ` : isPronto ? `
@@ -5428,14 +5432,14 @@ function renderPedidoCardHTML(ped) {
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f1f5f9;padding-top:12px;flex-wrap:wrap;gap:10px;">
-        <span style="font-weight:700;color:#0f172a;">Total: ${formatFinanceiroMoney(ped.total_amount || 0)}</span>
+        <span style="font-weight:700;color:#0f172a;">Total: ${formatFinanceiroMoney(ped.total_amount ?? ped.amount ?? 0)}</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;">
             Ver detalhes
           </button>
 
           ${hasSeparacao ? `
-            <button type="button" class="app-center-modal-primary" onclick="showToast('Separação ${escapeKitAttribute(ped.separacao_id)} já vinculada ao pedido.', 'info')" style="padding:6px 14px;font-size:0.85rem;background:#2563eb;">
+            <button type="button" class="app-center-modal-primary" onclick="abrirSeparacaoPedidoAtivo('${escapeKitAttribute(ped.separacao_id)}', '${escapeKitAttribute(ped.external_order_id)}')  " style="padding:6px 14px;font-size:0.85rem;background:#2563eb;">
               Ver separação (${escapeKitAttribute(ped.separacao_id)})
             </button>
           ` : isPronto ? `
@@ -20415,119 +20419,165 @@ function getDraftPickSessionsFromCache() {
 }
 
 function hydratePickItemsFromSavedSession(sessionId) {
- const savedItems = (appData.separacao_itens || [])
- .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId));
+  const savedItems = (appData.separacao_itens || [])
+    .filter(item => String(item.separacao_id || item.codigo_separacao || '') === String(sessionId));
 
- return savedItems.map(item => {
- const productId = item.id_interno || item.col_a || item.col_A || '';
- const product = (appData.products || []).find(p => String(p.id_interno || p.col_a || p.col_A || '') === String(productId)) || {};
- const qty = Number(item.qtd_separada || item.quantidade || item.qty || item.qtd_solicitada || 1) || 1;
- return {
- ...product,
- ...item,
- id_interno: productId,
- ean: item.ean || product.ean || '',
- descricao_base: product.descricao_base || item.descricao || item.descricao_base || '',
- descricao_completa: product.descricao_completa || item.descricao || item.descricao_completa || '',
- qty,
- _sync_qtd_separada: qty,
- scanTime: item.pick_resume_last_scan_time || (item.atualizado_em ? formatTimeBR(item.atualizado_em) : formatTimeBR())
- };
- });
+  return savedItems.map(item => {
+    const det = item.detalhes_operacionais?.[0] || {};
+    const sku = det.skus_aceitos?.[0] || {};
+    const productId = sku.id_interno || item.id_interno || item.col_a || item.col_A || '';
+    const product = (appData.products || []).find(p => String(p.id_interno || p.id || p.col_a || p.col_A || '') === String(productId)) || {};
+
+    const qtdSeparada = item.qtd_separada !== undefined && item.qtd_separada !== null ? Number(item.qtd_separada) : 0;
+    const qtdSolicitada = Number(item.qtd_solicitada || item.quantidade || item.qty || 1);
+
+    const idInterno = sku.id_interno || product.id_interno || productId;
+    const ean = item.ean || sku.ean || product.ean || '';
+    const descricao = sku.descricao_completa || product.descricao_completa || product.descricao_base || item.descricao || '';
+    const localizacao = sku.localizacao_estoque || product.localizacao_estoque || '';
+    const imagem = sku.url_imagem || product.url_imagem || getPickProductImage(product) || '';
+
+    return {
+      ...product,
+      ...item,
+      id_interno: idInterno,
+      ean: ean,
+      descricao_base: descricao,
+      descricao_completa: descricao,
+      localizacao_estoque: localizacao,
+      url_imagem: imagem,
+      image_path: imagem,
+      qty: qtdSeparada,
+      qtd_separada: qtdSeparada,
+      qtd_solicitada: qtdSolicitada,
+      _sync_qtd_separada: qtdSeparada,
+      detalhes_operacionais: item.detalhes_operacionais || [det],
+      scanTime: item.pick_resume_last_scan_time || (item.atualizado_em ? formatTimeBR(item.atualizado_em) : formatTimeBR())
+    };
+  });
 }
 
 async function resumePickingDraftFromServer(sessionId) {
- const session = (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
- if (!session) {
- const localDraft = getLocalDraftPickSession(sessionId) || getDraftPickSession();
- if (String(localDraft?.sessionId || '') === String(sessionId || '')) {
- const safeSessionId = getSafePickSessionId(localDraft.sessionId, localDraft.channelLabel);
- currentSessionItems = localDraft.items || [];
- restorePickPackageState(currentSessionItems, localDraft);
- currentPickingContext = {
- sessionId: safeSessionId,
- channelId: localDraft.channelId,
- channelLabel: localDraft.channelLabel,
- channelColor: localDraft.channelColor,
- executionId: localDraft.executionId || generateExecutionId(),
- createdAt: localDraft.createdAt || getDataHoraBrasil(),
- isFastMode: isPickingFastModeSource(localDraft),
- modo_rapido: isPickingFastModeSource(localDraft),
- total_pacotes_montados: getAutomaticPickPackageCount(currentSessionItems),
- totalPacotesMontados: getAutomaticPickPackageCount(currentSessionItems)
- };
- beginPickResumeCheckpoint(currentSessionItems);
- saveDraftPickSession({ ...localDraft, sessionId: safeSessionId });
- renderPickingScreen(safeSessionId, localDraft.channelId, localDraft.channelLabel, localDraft.channelColor);
- warnIfDraftPickWasNotSynced(localDraft);
- return;
- }
- showToast('Separacao nao encontrada para retomar.', 'warning');
- return;
- }
+  try {
+    const [sepData, prodData] = await Promise.all([
+      DataClient.loadModule('separacao', true),
+      DataClient.loadModule('produtos', false)
+    ]);
+    if (sepData) {
+      appData.separacao = sepData.separacao || appData.separacao || [];
+      appData.separacao_itens = sepData.separacao_itens || appData.separacao_itens || [];
+    }
+    if (prodData) {
+      appData.products = prodData.products || appData.products || [];
+      appData.estoque = prodData.estoque || appData.estoque || [];
+    }
+  } catch (error) {
+    console.warn('[SEP] Falha ao carregar separacoes/produtos para retomar:', error);
+  }
 
- const channelLabel = session.canal_nome || session.canal || session.col_c || '';
- const channelId = session.canal_id || channelLabel || '';
- const channelColor = getChannelConfig(channelLabel).color || 'pdv';
+  const session = (appData.separacao || []).find(row => String(row.separacao_id || row.id || row.col_a || '') === String(sessionId));
+  if (!session) {
+    const localDraft = getLocalDraftPickSession(sessionId) || getDraftPickSession();
+    if (String(localDraft?.sessionId || '') === String(sessionId || '')) {
+      const safeSessionId = getSafePickSessionId(localDraft.sessionId, localDraft.channelLabel);
+      currentSessionItems = localDraft.items || [];
+      restorePickPackageState(currentSessionItems, localDraft);
+      currentPickingContext = {
+        sessionId: safeSessionId,
+        channelId: localDraft.channelId,
+        channelLabel: localDraft.channelLabel,
+        channelColor: localDraft.channelColor,
+        executionId: localDraft.executionId || generateExecutionId(),
+        createdAt: localDraft.createdAt || getDataHoraBrasil(),
+        isFastMode: isPickingFastModeSource(localDraft),
+        modo_rapido: isPickingFastModeSource(localDraft),
+        total_pacotes_montados: getAutomaticPickPackageCount(currentSessionItems),
+        totalPacotesMontados: getAutomaticPickPackageCount(currentSessionItems)
+      };
+      beginPickResumeCheckpoint(currentSessionItems);
+      saveDraftPickSession({ ...localDraft, sessionId: safeSessionId });
+      renderPickingScreen(safeSessionId, localDraft.channelId, localDraft.channelLabel, localDraft.channelColor);
+      warnIfDraftPickWasNotSynced(localDraft);
+      return;
+    }
+    showToast('Separacao nao encontrada para retomar.', 'warning');
+    return;
+  }
 
- try {
- const productData = await DataClient.loadModule('produtos');
- if (productData) {
- appData.products = productData.products || appData.products || [];
- appData.estoque = productData.estoque || appData.estoque || [];
- }
- } catch (error) {
- console.warn('[SEP] Falha ao carregar produtos para retomar rascunho:', error);
- }
+  const channelLabel = session.canal_nome || session.canal || session.col_c || '';
+  const channelId = session.canal_id || channelLabel || '';
+  const channelColor = getChannelConfig(channelLabel).color || 'pdv';
 
- const items = hydratePickItemsFromSavedSession(sessionId);
- let cloudPackages = [];
- try {
-  cloudPackages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
- } catch (error) {
-  console.warn('[SEP] Pacotes compartilhados nao carregados:', error.message || error);
- }
+  const items = hydratePickItemsFromSavedSession(sessionId);
+  let cloudPackages = [];
+  try {
+    cloudPackages = await DataClient.listarPacotesSeparacaoSupabase(sessionId);
+  } catch (error) {
+    console.warn('[SEP] Pacotes compartilhados nao carregados:', error.message || error);
+  }
 
- currentSessionItems = items;
- if (!restorePickPackagesFromCloud(currentSessionItems, cloudPackages)) {
-  restorePickPackageState(currentSessionItems, session);
- }
- const automaticPackageCount = getAutomaticPickPackageCount(currentSessionItems);
- currentPickingContext = {
- sessionId,
- channelId,
- channelLabel,
- channelColor,
- executionId: generateExecutionId(),
- createdAt: session.criado_em || session.data_separacao || getDataHoraBrasil(),
- isFastMode: isPickingFastModeSource(session),
- modo_rapido: isPickingFastModeSource(session),
- total_pacotes_montados: automaticPackageCount,
- totalPacotesMontados: automaticPackageCount
- };
- beginPickResumeCheckpoint(currentSessionItems);
- saveDraftPickSession({
- sessionId,
- channelId,
- channelLabel,
- channelColor,
- items,
- status: PICK_STATUS_DRAFT,
- operatorId: localStorage.getItem('currentUser'),
- createdAt: currentPickingContext.createdAt,
- executionId: currentPickingContext.executionId,
- isFastMode: isPickingFastModeSource(session),
- modo_rapido: isPickingFastModeSource(session),
- total_pacotes_montados: automaticPackageCount,
- totalPacotesMontados: automaticPackageCount,
- saveStatus: 'synced'
- });
+  currentSessionItems = items;
+  if (!restorePickPackagesFromCloud(currentSessionItems, cloudPackages)) {
+    restorePickPackageState(currentSessionItems, session);
+  }
+  const automaticPackageCount = getAutomaticPickPackageCount(currentSessionItems);
 
- renderPickingScreen(sessionId, channelId, channelLabel, channelColor);
- schedulePickPackagesCloudSync(0);
- if (!items.length) {
- showToast('Separacao retomada sem itens carregados. Confira antes de finalizar.', 'warning');
- }
+  // Reconcilia dados do pedido ativo se houver
+  const todosPedidos = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+  const ped = todosPedidos.find(p =>
+    String(p.separacao_id || '').trim() === String(sessionId).trim() ||
+    String(p.external_order_id || '').trim() === String(session.pedido_referencia || '').trim()
+  ) || {};
+
+  const activeOrder = (session.pedido_referencia || ped.external_order_id) ? {
+    external_order_id: session.pedido_referencia || ped.external_order_id || sessionId,
+    separacao_id: sessionId,
+    account_name: ped.account_name || 'PRISCILA YANAGIHARA SHIMIZU',
+    canal_nome: channelLabel,
+    canal_id: channelId,
+    shipping_id: ped.shipping_id || '',
+    items_count: items.length,
+    total_solicitado: items.reduce((s, i) => s + Number(i.qtd_solicitada || 1), 0),
+    total_separado: items.reduce((s, i) => s + Number(i.qtd_separada || 0), 0)
+  } : null;
+
+  currentPickingContext = {
+    sessionId,
+    channelId,
+    channelLabel,
+    channelColor,
+    executionId: generateExecutionId(),
+    createdAt: session.criado_em || session.data_separacao || getDataHoraBrasil(),
+    isFastMode: isPickingFastModeSource(session),
+    modo_rapido: isPickingFastModeSource(session),
+    total_pacotes_montados: automaticPackageCount,
+    totalPacotesMontados: automaticPackageCount,
+    activeOrder
+  };
+  beginPickResumeCheckpoint(currentSessionItems);
+  saveDraftPickSession({
+    sessionId,
+    channelId,
+    channelLabel,
+    channelColor,
+    items,
+    status: PICK_STATUS_DRAFT,
+    operatorId: localStorage.getItem('currentUser'),
+    createdAt: currentPickingContext.createdAt,
+    executionId: currentPickingContext.executionId,
+    isFastMode: isPickingFastModeSource(session),
+    modo_rapido: isPickingFastModeSource(session),
+    total_pacotes_montados: automaticPackageCount,
+    totalPacotesMontados: automaticPackageCount,
+    saveStatus: 'synced',
+    activeOrder
+  });
+
+  renderPickingScreen(sessionId, channelId, channelLabel, channelColor);
+  schedulePickPackagesCloudSync(0);
+  if (!items.length) {
+    showToast('Separacao retomada sem itens carregados. Confira antes de finalizar.', 'warning');
+  }
 }
 
 async function confirmDiscardSavedPickingDraft(sessionId) {
@@ -22916,66 +22966,354 @@ async function persistPickingFinal(sessionId) {
  }
 }
 
+async function handleIdentificarPedidoScan(scannedCode) {
+  const code = String(scannedCode || '').trim();
+  if (!code) return;
+
+  let cleanId = code;
+  if (code.includes('shipping_id=') || code.includes('order_id=')) {
+    try {
+      const urlParams = new URLSearchParams(code.includes('?') ? code.split('?')[1] : code);
+      cleanId = urlParams.get('order_id') || urlParams.get('shipping_id') || urlParams.get('id') || code;
+    } catch (e) {
+      cleanId = code;
+    }
+  }
+
+  const todosPedidos = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+  let found = todosPedidos.find(p =>
+    String(p.external_order_id || '').trim() === cleanId ||
+    String(p.shipping_id || '').trim() === cleanId ||
+    String(p.separacao_id || '').trim() === cleanId ||
+    String(p.id || '').trim() === cleanId
+  );
+
+  if (!found && Array.isArray(appData.separacao)) {
+    const sep = appData.separacao.find(s =>
+      String(s.pedido_referencia || '').trim() === cleanId ||
+      String(s.separacao_id || '').trim() === cleanId
+    );
+    if (sep) {
+      found = {
+        external_order_id: sep.pedido_referencia,
+        separacao_id: sep.separacao_id,
+        canal_nome: sep.canal_nome,
+        canal_id: sep.canal_id
+      };
+    }
+  }
+
+  if (found) {
+    showToast(`Pedido #${found.external_order_id} localizado com sucesso!`, 'success');
+    await abrirSeparacaoPedidoAtivo(found.separacao_id || `SEP-PED-${found.id}`, found.external_order_id);
+  } else {
+    console.info('[IDENTIFICAR PEDIDO] Código lido não vinculado:', cleanId);
+    showToast(`Identificador lido: "${cleanId.length > 25 ? cleanId.slice(0, 25) + '...' : cleanId}". Nenhum pedido correspondente encontrado.`, 'warning');
+  }
+}
+
+async function abrirSeparacaoPedidoAtivo(separacaoId, externalOrderId) {
+  try {
+    const [sepData, prodData] = await Promise.all([
+      DataClient.loadModule('separacao', true),
+      DataClient.loadModule('produtos', false)
+    ]);
+    if (sepData) {
+      appData.separacao = sepData.separacao || appData.separacao || [];
+      appData.separacao_itens = sepData.separacao_itens || appData.separacao_itens || [];
+    }
+    if (prodData) {
+      appData.products = prodData.products || appData.products || [];
+      appData.estoque = prodData.estoque || appData.estoque || [];
+    }
+  } catch (err) {
+    console.warn('[SEP] Erro ao carregar dados para abrir separacao do pedido ativo:', err);
+  }
+
+  const session = (appData.separacao || []).find(s =>
+    String(s.separacao_id || '').trim() === String(separacaoId).trim() ||
+    (externalOrderId && String(s.pedido_referencia || '').trim() === String(externalOrderId).trim())
+  );
+
+  const todosPedidos = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+  const ped = todosPedidos.find(p =>
+    String(p.external_order_id || '').trim() === String(externalOrderId || session?.pedido_referencia).trim() ||
+    String(p.separacao_id || '').trim() === String(separacaoId).trim()
+  ) || {};
+
+  const accountName = ped.account_name || 'PRISCILA YANAGIHARA SHIMIZU';
+  const canalNome = session?.canal_nome || ped.canal_nome || 'Mercado Livre Agência';
+  const canalId = session?.canal_id || ped.canal_id || 'canais_envio_viii';
+  const channelColor = getChannelConfig(canalNome).color || 'ml-agencia';
+  const orderId = externalOrderId || session?.pedido_referencia || ped.external_order_id || '2000018356039444';
+  const safeSessionId = session?.separacao_id || separacaoId || 'SEP-PED-90';
+
+  const rawItems = (appData.separacao_itens || []).filter(i =>
+    String(i.separacao_id || '').trim() === String(safeSessionId).trim()
+  );
+
+  const items = rawItems.map(it => {
+    const det = it.detalhes_operacionais?.[0] || {};
+    const sku = det.skus_aceitos?.[0] || {};
+    const prod = (appData.products || []).find(p => String(p.id_interno || p.id) === String(sku.id_interno || it.id_interno)) || {};
+
+    const idInterno = sku.id_interno || prod.id_interno || 'DY-000.468';
+    const ean = it.ean || sku.ean || prod.ean || '7896498550317';
+    const descricao = sku.descricao_completa || prod.descricao_completa || prod.descricao_base || it.descricao || 'Odorizante Automotivo New Fresh Car Lavanda Luxcar';
+    const localizacao = sku.localizacao_estoque || prod.localizacao_estoque || '3.5.B';
+    const imagem = sku.url_imagem || prod.url_imagem || getPickProductImage(prod) || '';
+    const qtdSolicitada = Number(it.qtd_solicitada || 4);
+    const qtdSeparada = Number(it.qtd_separada || 0);
+
+    return {
+      ...prod,
+      ...it,
+      id_interno: idInterno,
+      ean: ean,
+      descricao_completa: descricao,
+      descricao_base: descricao,
+      localizacao_estoque: localizacao,
+      url_imagem: imagem,
+      image_path: imagem,
+      qtd_solicitada: qtdSolicitada,
+      qtd_separada: qtdSeparada,
+      qty: qtdSeparada,
+      _sync_qtd_separada: qtdSeparada,
+      detalhes_operacionais: it.detalhes_operacionais || [det]
+    };
+  });
+
+  currentSessionItems = items;
+
+  currentPickingContext = {
+    sessionId: safeSessionId,
+    channelId: canalId,
+    channelLabel: canalNome,
+    channelColor: channelColor,
+    executionId: generateExecutionId(),
+    createdAt: session?.criado_em || getDataHoraBrasil(),
+    isFastMode: false,
+    modo_rapido: false,
+    total_pacotes_montados: 1,
+    totalPacotesMontados: 1,
+    activeOrder: {
+      external_order_id: orderId,
+      separacao_id: safeSessionId,
+      account_name: accountName,
+      canal_nome: canalNome,
+      canal_id: canalId,
+      shipping_id: ped.shipping_id || '47966360665',
+      items_count: items.length,
+      total_solicitado: items.reduce((s, i) => s + i.qtd_solicitada, 0),
+      total_separado: items.reduce((s, i) => s + i.qtd_separada, 0)
+    }
+  };
+
+  renderPickingScreen(safeSessionId, canalId, canalNome, channelColor);
+}
+
+async function renderPickChannelOrders(channelId, channelLabel, channelColor) {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  try {
+    const [sepData, prodData] = await Promise.all([
+      DataClient.loadModule('separacao', true),
+      DataClient.loadModule('produtos', false)
+    ]);
+    if (sepData) {
+      appData.separacao = sepData.separacao || appData.separacao || [];
+      appData.separacao_itens = sepData.separacao_itens || appData.separacao_itens || [];
+    }
+    if (prodData) {
+      appData.products = prodData.products || appData.products || [];
+      appData.estoque = prodData.estoque || appData.estoque || [];
+    }
+  } catch (err) {
+    console.warn('[SEP] Erro ao carregar dados do canal:', err);
+  }
+
+  const normTargetLabel = normalizeOperationalLabel(channelLabel);
+  const normTargetId = String(channelId || '').trim();
+
+  const sessionsNoCanal = (appData.separacao || []).filter(s => {
+    if (s.finalizado_em || s.cancelado_em) return false;
+    const sCanalId = String(s.canal_id || '').trim();
+    const sCanalNome = normalizeOperationalLabel(s.canal_nome || s.canal || '');
+    return (normTargetId && sCanalId === normTargetId) ||
+           (normTargetLabel && sCanalNome === normTargetLabel) ||
+           (!normTargetId && !normTargetLabel);
+  });
+
+  const todosPedidos = window.PEDIDOS_PREVIEW_AMOSTRA || [];
+
+  const pedidosDoCanal = sessionsNoCanal.map(session => {
+    const pedRef = String(session.pedido_referencia || '').trim();
+    const sepId = String(session.separacao_id || '').trim();
+    const pedObj = todosPedidos.find(p =>
+      String(p.external_order_id || '').trim() === pedRef ||
+      String(p.separacao_id || '').trim() === sepId
+    ) || {};
+
+    const rawItens = (appData.separacao_itens || []).filter(i =>
+      String(i.separacao_id || '').trim() === sepId
+    );
+
+    const accountName = pedObj.account_name || 'PRISCILA YANAGIHARA SHIMIZU';
+
+    return {
+      separacao_id: sepId,
+      external_order_id: pedRef || pedObj.external_order_id || sepId,
+      account_name: accountName,
+      canal_nome: session.canal_nome || channelLabel,
+      canal_id: session.canal_id || channelId,
+      shipping_id: pedObj.shipping_id || '',
+      status: session.status || 'em_separacao',
+      rawItens: rawItens,
+      total_solicitado: rawItens.reduce((sum, i) => sum + Number(i.qtd_solicitada || 1), 0),
+      total_separado: rawItens.reduce((sum, i) => sum + Number(i.qtd_separada || 0), 0)
+    };
+  });
+
+  const contasMap = new Map();
+  for (const ped of pedidosDoCanal) {
+    const acc = ped.account_name || 'Conta Padrão';
+    if (!contasMap.has(acc)) contasMap.set(acc, []);
+    contasMap.get(acc).push(ped);
+  }
+
+  const contasArray = Array.from(contasMap.entries()).map(([conta, peds]) => ({
+    conta,
+    pedidos: peds
+  }));
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in picking-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderPickMenu()')}
+      ${getModuleSidebarHTML('pick', `SEPARAÇÃO • ${channelLabel}`)}
+
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderPickMenu()">Separação</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">${escapeKitAttribute(channelLabel)}</span>
+        </div>
+
+        <!-- PAINEL IDENTIFICAR PEDIDO (QR / SCANNER / DIGITAÇÃO) -->
+        <section class="pick-scan-panel" style="margin-bottom: 24px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="material-symbols-rounded" style="color:#2563eb; font-size:24px;">qr_code_scanner</span>
+              <h2 style="font-size:1.1rem; font-weight:700; color:#0f172a; margin:0;">IDENTIFICAR PEDIDO</h2>
+            </div>
+            <span style="font-size:0.8rem; color:#64748b; font-weight:600;">Canal: <b>${escapeKitAttribute(channelLabel)}</b></span>
+          </div>
+
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div class="pick-scan-field" style="flex:1;">
+              <span class="material-symbols-rounded">search</span>
+              <input type="text" id="pick-channel-order-scan" class="product-search-input"
+                     placeholder="Bipe a etiqueta, QR Code, Pedido (#2000018356039444), Shipping ou Separação..."
+                     onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleIdentificarPedidoScan(this.value); }"
+                     autocomplete="off">
+              <button class="pick-scanner-btn" onclick="startPickCameraScanner(handleIdentificarPedidoScan)" title="Ler QR Code com a câmera" type="button">
+                <span class="material-symbols-rounded">qr_code_scanner</span>
+              </button>
+            </div>
+            <button type="button" class="app-center-modal-primary"
+                    onclick="handleIdentificarPedidoScan(document.getElementById('pick-channel-order-scan')?.value)"
+                    style="padding:10px 20px; font-weight:700; background:#2563eb; color:#fff; border:none; border-radius:8px; cursor:pointer;">
+              LOCALIZAR
+            </button>
+          </div>
+        </section>
+
+        <!-- HIERARQUIA: CANAL → CONTA → PEDIDOS -->
+        <section>
+          <div style="margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.05em; margin: 0;">
+              FILA OPERACIONAL POR CONTA (${contasArray.length} conta${contasArray.length === 1 ? '' : 's'})
+            </h3>
+            <span style="font-size: 0.85rem; color: #64748b;">${pedidosDoCanal.length} pedido(s) aguardando separação</span>
+          </div>
+
+          ${contasArray.length === 0 ? `
+            <div style="background:#fff; border:1px dashed #cbd5e1; border-radius:12px; padding:40px; text-align:center; color:#64748b;">
+              <span class="material-symbols-rounded" style="font-size:48px; color:#94a3b8; margin-bottom:8px;">inbox</span>
+              <h4 style="font-size:1.05rem; font-weight:700; color:#334155; margin:0 0 4px;">Nenhum pedido pendente neste canal</h4>
+              <p style="font-size:0.85rem; margin:0;">Envie pedidos identificados na tela de Pedidos para iniciar a separação.</p>
+            </div>
+          ` : `
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              ${contasArray.map(({ conta, pedidos }) => `
+                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+                  <!-- CABEÇALHO DA CONTA -->
+                  <div style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="material-symbols-rounded" style="color:#475569; font-size:20px;">account_circle</span>
+                      <strong style="color:#0f172a; font-size:0.95rem;">CONTA: ${escapeKitAttribute(conta)}</strong>
+                    </div>
+                    <span style="background:#e2e8f0; color:#334155; font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:12px;">
+                      ${pedidos.length} pedido(s)
+                    </span>
+                  </div>
+
+                  <!-- LISTA DE PEDIDOS DA CONTA -->
+                  <div style="padding:16px; display:grid; gap:12px;">
+                    ${pedidos.map(p => `
+                      <div style="border:1px solid #e2e8f0; border-radius:8px; padding:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#fafafa;">
+                        <div>
+                          <div style="display:flex; align-items:center; gap:8px;">
+                            <strong style="font-size:1rem; color:#0f172a;">Pedido #${escapeKitAttribute(p.external_order_id)}</strong>
+                            <span style="background:#dbeafe; color:#1d4ed8; font-size:0.75rem; font-weight:700; padding:2px 6px; border-radius:4px;">
+                              ${escapeKitAttribute(p.separacao_id)}
+                            </span>
+                          </div>
+                          <div style="font-size:0.82rem; color:#64748b; margin-top:4px;">
+                            ${p.rawItens.length} item(ns) • Solicitado: <b>${p.total_solicitado} un.</b> • Separado: <b>${p.total_separado} un.</b>
+                          </div>
+                        </div>
+
+                        <button type="button" class="app-center-modal-primary"
+                                onclick="abrirSeparacaoPedidoAtivo('${escapeKitAttribute(p.separacao_id)}', '${escapeKitAttribute(p.external_order_id)}')"
+                                style="padding:8px 16px; font-size:0.85rem; background:#16a34a; color:#fff; border:none; border-radius:6px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                          <span class="material-symbols-rounded" style="font-size:16px;">play_arrow</span>
+                          SEPARAR PEDIDO
+                        </button>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </section>
+      </main>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    const input = document.getElementById('pick-channel-order-scan');
+    if (input) input.focus();
+  });
+}
+
 async function startPickingSession(channelId, channelLabel, channelColor, selectedMode = null) {
- if (!String(channelLabel || '').trim()) {
- await showAppModal({
- type: 'error',
- title: 'Canal da separacao nao identificado',
- message: 'Escolha um canal antes de iniciar a separacao.',
- confirmText: 'Entendi'
- });
- settlePickScannerInput(80);
- return;
- }
+  if (!String(channelLabel || '').trim()) {
+    await showAppModal({
+      type: 'error',
+      title: 'Canal da separacao nao identificado',
+      message: 'Escolha um canal antes de iniciar a separacao.',
+      confirmText: 'Entendi'
+    });
+    settlePickScannerInput(80);
+    return;
+  }
 
- const storedMode = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('dy_pick_mode')) || null;
- const effectiveMode = ['fast', 'normal'].includes(selectedMode)
- ? selectedMode
- : (['fast', 'normal'].includes(pendingPickModeChoice)
- ? pendingPickModeChoice
- : (['fast', 'normal'].includes(storedMode) ? storedMode : null));
-
- const pickMode = effectiveMode || await showPickModeChoiceModal();
- if (!pickMode) return;
-
- pendingPickModeChoice = pickMode;
- try {
- sessionStorage.setItem('dy_pick_mode', pickMode);
- } catch (e) {}
- const isFastMode = pickMode === 'fast';
-
- pickRemovalModeActive = false;
- lastPickScanAction = 'add';
- clearPickSearchSuggestions();
- 
- console.log('[SEP] canal selecionado', { channelId, channelLabel, channelColor });
- console.log(`[PICKING DEBUG] abriu nova bipagem sem retomar rascunho automaticamente`);
- // O codigo oficial sera reservado atomicamente somente no primeiro bip valido.
- 
- // Define contexto temporario sem gravar uma separacao vazia.
- currentPickingContext = {
- channelId, 
- channelLabel, 
- channelColor,
- sessionId: '',
- executionId: generateExecutionId(),
- createdAt: getDataHoraBrasil(),
- isFastMode,
- modo_rapido: isFastMode,
- total_pacotes_montados: 0,
- totalPacotesMontados: 0
- };
- 
- currentSessionItems = [];
- activePickKitId = '';
- activePickKitScanCount = 0;
- currentPickSession = null;
- localStorage.removeItem(PICK_CURRENT_DRAFT_STORAGE_KEY);
- pickKitSelection.clear();
- beginPickResumeCheckpoint(currentSessionItems);
- clearPickSearchSuggestions();
- lastPickScanAction = 'add';
- renderPickingScreen(currentPickingContext.sessionId, channelId, channelLabel, channelColor);
+  return renderPickChannelOrders(channelId, channelLabel, channelColor);
 }
 
 function getPickOperatorInitials(name) {
@@ -23465,8 +23803,10 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  isFastMode: isPickingFastModeSource(currentPickingContext) || isPickingFastModeSource(draft),
  modo_rapido: isPickingFastModeSource(currentPickingContext) || isPickingFastModeSource(draft),
  total_pacotes_montados: packageCount,
- totalPacotesMontados: packageCount
+ totalPacotesMontados: packageCount,
+ activeOrder: currentPickingContext?.activeOrder || null
  };
+ const activeOrder = currentPickingContext?.activeOrder || null;
  const channelIcon = getChannelConfig(channelLabel).svgIcon || menu3DIcons?.[channelId] || '<span class="material-symbols-rounded">inventory_2</span>';
  const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
  const operatorInitials = getPickOperatorInitials(currentUser);
@@ -23494,6 +23834,54 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  <span><strong>${escapeKitAttribute(currentUser || '-')}</strong></span>
  </div>
  </header>
+
+ ${activeOrder ? `
+   <section class="pick-active-order-banner" style="background: linear-gradient(135deg, #0f172a, #1e293b); border: 2px solid #3b82f6; border-radius: 12px; padding: 16px; margin: 12px 16px 0 16px; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; margin-bottom:12px;">
+       <div style="display:flex; align-items:center; gap:8px;">
+         <span class="material-symbols-rounded" style="color:#60a5fa; font-size:22px;">verified</span>
+         <span style="font-weight:800; color:#93c5fd; font-size:0.85rem; letter-spacing:0.05em; text-transform:uppercase;">PEDIDO ATIVO</span>
+         <strong style="font-size:1.15rem; color:#fff;">#${escapeKitAttribute(activeOrder.external_order_id)}</strong>
+       </div>
+       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+         <span style="background:rgba(59,130,246,0.2); color:#bfdbfe; font-size:0.78rem; font-weight:700; padding:4px 10px; border-radius:6px; border:1px solid rgba(59,130,246,0.3);">
+           ${escapeKitAttribute(activeOrder.canal_nome || channelLabel)}
+         </span>
+         <span style="background:rgba(255,255,255,0.1); color:#e2e8f0; font-size:0.78rem; font-weight:600; padding:4px 10px; border-radius:6px;">
+           Conta: ${escapeKitAttribute(activeOrder.account_name)}
+         </span>
+         <span style="background:rgba(255,255,255,0.05); color:#94a3b8; font-size:0.75rem; padding:4px 8px; border-radius:6px;">
+           ${escapeKitAttribute(activeOrder.separacao_id || sessionId)}
+         </span>
+       </div>
+     </div>
+
+     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+       <div>
+         <small style="color:#94a3b8; font-size:0.75rem; text-transform:uppercase; font-weight:700; display:block;">Item Esperado no Pedido:</small>
+         <span style="font-size:0.95rem; font-weight:700; color:#f8fafc;">
+           ${currentSessionItems[0] ? escapeKitAttribute(currentSessionItems[0].id_interno) + ' — ' + escapeKitAttribute(currentSessionItems[0].descricao_completa || currentSessionItems[0].descricao || '') : 'DY-000.468'}
+         </span>
+         ${currentSessionItems[0]?.localizacao_estoque ? `
+           <small style="color:#60a5fa; font-size:0.8rem; font-weight:600; display:block; margin-top:2px;">
+             Localização Estoque: <b>${escapeKitAttribute(currentSessionItems[0].localizacao_estoque)}</b>
+           </small>
+         ` : ''}
+       </div>
+       <div id="pick-active-order-status-badge">
+         ${(currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada || 0) >= Number(it.qtd_solicitada || 1))) ? `
+           <span style="background:#16a34a; color:#fff; font-weight:800; font-size:0.85rem; padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:6px;">
+             <span class="material-symbols-rounded" style="font-size:18px;">check_circle</span> PEDIDO COMPLETO
+           </span>
+         ` : `
+           <span style="background:rgba(234,179,8,0.2); color:#fef08a; font-weight:700; font-size:0.82rem; padding:6px 14px; border-radius:20px; border:1px solid rgba(234,179,8,0.3); display:inline-flex; align-items:center; gap:6px;">
+             <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada) || 0), 0)} / ${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0)} un.)
+           </span>
+         `}
+       </div>
+     </div>
+   </section>
+ ` : ''}
 
  <section class="pick-scan-panel">
  <div class="pick-scan-row">
@@ -24259,13 +24647,69 @@ async function addPickItem(scannedEan = null) {
  console.log('[SEP] codigo normalizado', ean);
  if (!ean) {
  settlePickScannerInput(80);
- showScanFeedback('error', 'C\u00f3digo inv\u00e1lido');
+ showScanFeedback('error', 'Código inválido');
  return;
  }
 
  if (pickRemovalModeActive) {
  await removePickItemByScan(ean, input);
  return;
+ }
+
+ // --- TRATAMENTO EXPERIMENTAL ORIENTADO POR PEDIDO ATIVO ---
+ if (currentPickingContext?.activeOrder) {
+   const activeItem = currentSessionItems.find(it => {
+     const eanMatch = normalizePickCode(it.ean) === ean;
+     const skuMatch = normalizePickCode(it.id_interno) === ean;
+     const idMatch = normalizePickCode(it.produto_id_interno) === ean;
+     const skuDet = (it.detalhes_operacionais?.[0]?.skus_aceitos || []).some(s =>
+       normalizePickCode(s.ean) === ean || normalizePickCode(s.id_interno) === ean
+     );
+     return eanMatch || skuMatch || idMatch || skuDet;
+   });
+
+   if (!activeItem) {
+     if (input) input.value = '';
+     showScanFeedback('error', 'Produto divergente do Pedido Ativo');
+     showToast(`DIVERGÊNCIA: O código "${ean}" não pertence ao Pedido Ativo #${currentPickingContext.activeOrder.external_order_id}.`, 'error');
+     showInputFeedback('pick-ean-input', 'error');
+     settlePickScannerInput(120);
+     return;
+   }
+
+   const currentQty = Number(activeItem.qtd_separada || activeItem.qty || 0);
+   const targetQty = Number(activeItem.qtd_solicitada || 1);
+
+   if (currentQty >= targetQty) {
+     if (input) input.value = '';
+     showScanFeedback('warning', 'Quantidade do item já atingida');
+     showToast(`ATENÇÃO: O item ${activeItem.id_interno} já atingiu a quantidade solicitada (${currentQty}/${targetQty} un.).`, 'warning');
+     showInputFeedback('pick-ean-input', 'warning');
+     settlePickScannerInput(120);
+     return;
+   }
+
+   // Incrementa quantidade separada do item ativo em memória
+   activeItem.qtd_separada = currentQty + 1;
+   activeItem.qty = activeItem.qtd_separada;
+   activeItem._sync_qtd_separada = activeItem.qtd_separada;
+   activeItem.scanTime = formatTimeBR();
+   lastScannedPickItemKey = getPickingProductId(activeItem);
+   lastPickScanAction = 'add';
+
+   if (input) input.value = '';
+   showScanFeedback('success', `Item bipado: ${activeItem.qtd_separada}/${targetQty}`);
+   showInputFeedback('pick-ean-input', 'success');
+   updatePickItemsList();
+
+   const isCompleted = currentSessionItems.every(i => Number(i.qtd_separada || 0) >= Number(i.qtd_solicitada || 1));
+   if (isCompleted) {
+     showToast(`🎉 PEDIDO #${currentPickingContext.activeOrder.external_order_id} COMPLETO (${activeItem.qtd_separada}/${targetQty} un.)!`, 'success');
+   } else {
+     showToast(`Item ${activeItem.id_interno} registrado: ${activeItem.qtd_separada}/${targetQty} un.`, 'info');
+   }
+   settlePickScannerInput(80);
+   return;
  }
 
  let product = await findProductForPicking(ean);
@@ -24693,6 +25137,25 @@ function updatePickItemsList() {
  return;
  }
 
+ const activeOrder = currentPickingContext?.activeOrder || null;
+ if (activeOrder) {
+   const badgeEl = document.getElementById('pick-active-order-status-badge');
+   if (badgeEl) {
+     const isCompleted = currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada || 0) >= Number(it.qtd_solicitada || 1));
+     const totalSep = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada) || 0), 0);
+     const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
+     badgeEl.innerHTML = isCompleted ? `
+       <span style="background:#16a34a; color:#fff; font-weight:800; font-size:0.85rem; padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:6px;">
+         <span class="material-symbols-rounded" style="font-size:18px;">check_circle</span> PEDIDO COMPLETO
+       </span>
+     ` : `
+       <span style="background:rgba(234,179,8,0.2); color:#fef08a; font-weight:700; font-size:0.82rem; padding:6px 14px; border-radius:20px; border:1px solid rgba(234,179,8,0.3); display:inline-flex; align-items:center; gap:6px;">
+         <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${totalSep} / ${totalSol} un.)
+       </span>
+     `;
+   }
+ }
+
  container.innerHTML = filteredItems.map(({ item, index }) => {
   const productKey = getPickingProductId(item) || `pick-item-${index}`;
   const isLastScanned = productKey === lastScannedPickItemKey;
@@ -24705,6 +25168,11 @@ function updatePickItemsList() {
   const lastScanTime = getPickLastScanTime(item);
   const packageSummary = getPickKitSummary(item);
   const selection = pickKitSelection.get(getPickSelectionKey(item));
+
+  const qtdSeparada = Number(item.qtd_separada !== undefined ? item.qtd_separada : (item.qty || 0));
+  const qtdSolicitada = Number(item.qtd_solicitada || 1);
+  const isItemComplete = qtdSeparada >= qtdSolicitada;
+
   return `
   <article class="pick-product-row separacao-item-card fade-in ${selection ? 'is-kit-selected' : ''} ${isLastScanned ? 'is-last-scanned' : ''} ${isLastRemoval ? 'is-last-removed' : ''} ${addedRecently ? 'recently-added' : ''} ${removedRecently ? 'recently-removed' : ''}">
   <div class="pick-product-main" data-label="Produto">
@@ -24712,18 +25180,23 @@ function updatePickItemsList() {
   ${getPickProductImage(item) ? `<img src="${escapeKitAttribute(getPickProductImage(item))}" alt="${escapeKitAttribute(getPickItemTitle(item))}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\'>inventory_2</span>'">` : `<span class="material-symbols-rounded">inventory_2</span>`}
   </div>
   <div class="pick-product-info">
-  <strong class="pick-product-title">${escapeKitAttribute(getPickItemTitle(item))}</strong>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <strong class="pick-product-title">${escapeKitAttribute(getPickItemTitle(item))}</strong>
+    ${activeOrder && isItemComplete ? `<span style="background:#dcfce7; color:#15803d; font-size:0.75rem; font-weight:800; padding:2px 8px; border-radius:12px;">CONCLUÍDO</span>` : ''}
+  </div>
   <div class="pick-product-meta">
   <span>SKU: <strong>${escapeKitAttribute(getPickItemSku(item))}</strong></span>
   <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(item))}</strong></span>
   <span class="pick-product-color" style="${getProductColorDotStyle(getPickItemColor(item))}">COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
+  ${item.localizacao_estoque ? `<span>LOC: <strong>${escapeKitAttribute(item.localizacao_estoque)}</strong></span>` : ''}
   ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openPickPackagesOverview()">${getPickItemPackageDetails(item).map(group => `${escapeKitAttribute(group.label)}: ${group.qty}`).join(' | ')}</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
   ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Último bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
   </div>
   </div>
   </div>
-  <div class="pick-product-qty" data-label="Quantidade bipada">
-  <span class="pick-qty-number">${Number(item.qty) || 0}</span>
+  <div class="pick-product-qty" data-label="Quantidade bipada" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+  <span class="pick-qty-number" style="${activeOrder && isItemComplete ? 'color:#16a34a;' : ''}">${qtdSeparada}${activeOrder ? ` / ${qtdSolicitada}` : ''}</span>
+  ${activeOrder ? `<small style="font-size:0.75rem; color:#64748b; font-weight:600;">unidades</small>` : ''}
   </div>
   <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
   <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
