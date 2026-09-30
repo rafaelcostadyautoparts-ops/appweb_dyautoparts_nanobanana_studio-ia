@@ -22449,7 +22449,8 @@ function isDraftPickSessionId(sessionId) {
 }
 
 function isValidOfficialPickSessionId(sessionId) {
-  return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(String(sessionId || '').trim());
+  const s = String(sessionId || '').trim();
+  return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(s) || /^SEP-PED-\d+$/i.test(s) || /^SEP-[A-Z0-9_-]+$/i.test(s);
 }
 
 function isValidPickSessionId(sessionId) {
@@ -22561,6 +22562,9 @@ async function ensureActivePickingContext() {
 }
 
 async function ensureOfficialPickSessionForFirstItem(product = {}) {
+  if (currentPickingContext?.activeOrder) {
+    return currentPickingContext;
+  }
   if (currentPickingContext?.sessionId && isValidPickSessionId(currentPickingContext.sessionId)) {
     return currentPickingContext;
   }
@@ -23079,6 +23083,7 @@ async function abrirSeparacaoPedidoAtivo(separacaoId, externalOrderId) {
       qtd_separada: qtdSeparada,
       qty: qtdSeparada,
       _sync_qtd_separada: qtdSeparada,
+      pick_package_assignments: Array(qtdSolicitada).fill('PKG-001'),
       detalhes_operacionais: it.detalhes_operacionais || [det]
     };
   });
@@ -23685,19 +23690,45 @@ function getConferenceDisplayedPackageCount(rows = currentPackSession?.conferenc
 }
 
 function updatePickSummaryUI() {
- const differentItems = countDifferentPickProducts(currentSessionItems);
- const totalQuantity = getPickTotalQuantity();
- const totalPackages = getCurrentPickPackageCount();
- const itemsEl = document.getElementById('pick-summary-items');
- const qtyEl = document.getElementById('pick-summary-qty');
- const packagesEl = document.getElementById('pick-summary-packages');
- const progressEl = document.getElementById('pick-summary-progress');
- const channelPackagesEl = document.getElementById('pick-summary-channel-packages');
- if (itemsEl) itemsEl.textContent = String(differentItems);
- if (qtyEl) qtyEl.textContent = String(totalQuantity);
- if (packagesEl) packagesEl.textContent = String(totalPackages);
- if (channelPackagesEl) channelPackagesEl.textContent = String(getPickChannelDailyPackageTotal());
- if (progressEl) progressEl.textContent = differentItems > 0 ? '100%' : '0%';
+  const isIntegratedOrder = Boolean(currentPickingContext?.activeOrder);
+  if (isIntegratedOrder) {
+    const packagesEl = document.getElementById('pick-summary-packages');
+    if (packagesEl) {
+      const totalSep = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0)) || 0), 0);
+      const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada || 1) || 0), 0);
+      packagesEl.textContent = `${totalSep} / ${totalSol}`;
+    }
+    const channelPackagesEl = document.getElementById('pick-summary-channel-packages');
+    if (channelPackagesEl) channelPackagesEl.textContent = String(getPickChannelDailyPackageTotal());
+
+    const finishBtn = document.querySelector('button[onclick^="finishPickingSession"]');
+    if (finishBtn) {
+      const isComplete = currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0)) >= Number(it.qtd_solicitada || 1));
+      finishBtn.disabled = !isComplete;
+      if (!isComplete) {
+        finishBtn.style.opacity = '0.5';
+        finishBtn.style.cursor = 'not-allowed';
+      } else {
+        finishBtn.style.opacity = '1';
+        finishBtn.style.cursor = 'pointer';
+      }
+    }
+    return;
+  }
+
+  const differentItems = countDifferentPickProducts(currentSessionItems);
+  const totalQuantity = getPickTotalQuantity();
+  const totalPackages = getCurrentPickPackageCount();
+  const itemsEl = document.getElementById('pick-summary-items');
+  const qtyEl = document.getElementById('pick-summary-qty');
+  const packagesEl = document.getElementById('pick-summary-packages');
+  const progressEl = document.getElementById('pick-summary-progress');
+  const channelPackagesEl = document.getElementById('pick-summary-channel-packages');
+  if (itemsEl) itemsEl.textContent = String(differentItems);
+  if (qtyEl) qtyEl.textContent = String(totalQuantity);
+  if (packagesEl) packagesEl.textContent = String(totalPackages);
+  if (channelPackagesEl) channelPackagesEl.textContent = String(getPickChannelDailyPackageTotal());
+  if (progressEl) progressEl.textContent = differentItems > 0 ? '100%' : '0%';
 }
 
 function focusPickManualInput() {
@@ -23978,7 +24009,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
          <span>TOTAL DO CANAL HOJE</span>
          <strong id="pick-summary-channel-packages">${getPickChannelDailyPackageTotal()}</strong>
        </div>
-       <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})" style="flex:1; max-width:280px;">
+       <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})" style="flex:1; max-width:280px; ${currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0)) >= Number(it.qtd_solicitada || 1)) ? '' : 'opacity:0.5; cursor:not-allowed;'}" ${currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0)) >= Number(it.qtd_solicitada || 1)) ? '' : 'disabled'}>
          <span class="material-symbols-rounded">check_circle</span>
          <span>FINALIZAR SEPARAÇÃO</span>
        </button>
@@ -25248,7 +25279,13 @@ function updatePickItemsList() {
   <span>EAN: <strong>${escapeKitAttribute(getPickItemEan(item))}</strong></span>
   <span class="pick-product-color" style="${getProductColorDotStyle(getPickItemColor(item))}">COR: <strong>${escapeKitAttribute(getPickItemColor(item))}</strong></span>
   ${item.localizacao_estoque ? `<span>LOC: <strong>${escapeKitAttribute(item.localizacao_estoque)}</strong></span>` : ''}
-  ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openPickPackagesOverview()">${getPickItemPackageDetails(item).map(group => `${escapeKitAttribute(group.label)}: ${group.qty}`).join(' | ')}</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
+  ${activeOrder ? `
+    <span class="pick-package-state is-kit" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-weight:700; padding:2px 8px; border-radius:6px; font-size:0.75rem; display:inline-flex; align-items:center; gap:4px;">
+      <span class="material-symbols-rounded" style="font-size:14px;">package_2</span> Pacote 1
+    </span>
+  ` : `
+    ${packageSummary.kitUnits ? `<button type="button" class="pick-package-state is-kit" onclick="event.stopPropagation(); openPickPackagesOverview()">${getPickItemPackageDetails(item).map(group => `${escapeKitAttribute(group.label)}: ${group.qty}`).join(' | ')}</button>` : ''}${packageSummary.standaloneUnits ? `<button type="button" class="pick-package-state is-standalone" onclick="event.stopPropagation(); togglePickItemSelection(${index}, 'standalone')">${packageSummary.standaloneUnits} avulso(s)</button>` : ''}
+  `}
   ${lastScanTime ? `<span class="pick-last-scan-time"><span class="material-symbols-rounded">schedule</span>Último bip: <strong>${escapeKitAttribute(lastScanTime)}</strong></span>` : ''}
   </div>
   </div>
