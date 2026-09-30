@@ -23807,6 +23807,7 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
  activeOrder: currentPickingContext?.activeOrder || null
  };
  const activeOrder = currentPickingContext?.activeOrder || null;
+ const isIntegratedOrder = Boolean(activeOrder);
  const channelIcon = getChannelConfig(channelLabel).svgIcon || menu3DIcons?.[channelId] || '<span class="material-symbols-rounded">inventory_2</span>';
  const createdAtLabel = formatPickCreatedAt(currentPickingContext.createdAt);
  const operatorInitials = getPickOperatorInitials(currentUser);
@@ -23933,47 +23934,85 @@ function renderPickingScreen(sessionId, channelId, channelLabel, channelColor) {
 
  <section class="pick-work-area">
  <div class="pick-list-panel">
- <div class="pick-list-header">
- <div class="pick-list-title-wrap">
- <h2>PRODUTOS SEPARADOS</h2>
- </div>
- <div class="pick-resume-filters pick-package-filters" role="group" aria-label="Filtrar produtos por pacote">
- <button type="button" data-pick-resume-filter="all" onclick="setPickResumeFilter('all')">TODOS <span id="pick-filter-all-count">0</span></button>
- <button type="button" data-pick-resume-filter="standalone" onclick="setPickResumeFilter('standalone')">AVULSOS <span id="pick-filter-standalone-count">0</span></button>
- <button type="button" data-pick-resume-filter="kits" onclick="setPickResumeFilter('kits')">AGRUPADOS <span id="pick-filter-kit-count">0</span></button>
- </div>
- </div>
+ ${isIntegratedOrder ? `
+   <div class="pick-list-header">
+     <div class="pick-list-title-wrap">
+       <h2 style="display:flex; align-items:center; gap:8px;">
+         <span class="material-symbols-rounded" style="color:#2563eb; font-size:20px;">fact_check</span>
+         PRODUTOS DO PEDIDO
+       </h2>
+     </div>
+     <div style="display:flex; align-items:center; gap:8px;">
+       <button type="button" class="pick-btn-secondary-discrete" onclick="openPickPackagesOverview()" style="font-size:0.75rem; color:#64748b; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Configuração secundária de volumes">
+         <span class="material-symbols-rounded" style="font-size:14px;">view_agenda</span>
+         DIVIDIR EM VOLUMES
+       </button>
+     </div>
+   </div>
+ ` : `
+   <div class="pick-list-header">
+     <div class="pick-list-title-wrap">
+       <h2>PRODUTOS SEPARADOS</h2>
+     </div>
+     <div class="pick-resume-filters pick-package-filters" role="group" aria-label="Filtrar produtos por pacote">
+       <button type="button" data-pick-resume-filter="all" onclick="setPickResumeFilter('all')">TODOS <span id="pick-filter-all-count">0</span></button>
+       <button type="button" data-pick-resume-filter="standalone" onclick="setPickResumeFilter('standalone')">AVULSOS <span id="pick-filter-standalone-count">0</span></button>
+       <button type="button" data-pick-resume-filter="kits" onclick="setPickResumeFilter('kits')">AGRUPADOS <span id="pick-filter-kit-count">0</span></button>
+     </div>
+   </div>
+ `}
  <div id="pick-kit-selection-bar" class="pick-kit-selection-bar hidden"></div>
  <div id="pick-items-list" class="pick-items-list"></div>
  </div>
 
- <aside class="pick-summary-panel pick-summary-single-line">
- <div class="pick-summary-line">
- <div class="pick-package-count-field">
- <span class="material-symbols-rounded">package_2</span>
- <span>NESTA SEPARACAO</span>
- <strong id="pick-summary-packages">${packageCount}</strong>
- </div>
- <div class="pick-package-count-field pick-channel-package-total">
- <span class="material-symbols-rounded">summarize</span>
- <span>TOTAL DO CANAL HOJE</span>
- <strong id="pick-summary-channel-packages">${getPickChannelDailyPackageTotal()}</strong>
- </div>
- <button id="pick-kit-toggle" class="pick-kit-toggle" type="button" onclick="openPickPackagesOverview()"><span class="material-symbols-rounded">inventory_2</span><span>AGRUPAMENTOS</span></button>
- <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
- <span class="material-symbols-rounded">remove_circle</span>
- <span id="pick-remove-scan-label">REMOVER</span>
- </button>
- <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
- <span class="material-symbols-rounded">pause_circle</span>
- <span>PAUSAR</span>
- </button>
- <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
- <span class="material-symbols-rounded">check_circle</span>
- <span>FINALIZAR</span>
- </button>
- </div>
- </aside>
+ ${isIntegratedOrder ? `
+   <aside class="pick-summary-panel pick-summary-single-line">
+     <div class="pick-summary-line">
+       <div class="pick-package-count-field">
+         <span class="material-symbols-rounded">checklist</span>
+         <span>PROGRESSO DO PEDIDO</span>
+         <strong id="pick-summary-packages">${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada) || 0), 0)} / ${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0)}</strong>
+       </div>
+       <div class="pick-package-count-field pick-channel-package-total">
+         <span class="material-symbols-rounded">summarize</span>
+         <span>TOTAL DO CANAL HOJE</span>
+         <strong id="pick-summary-channel-packages">${getPickChannelDailyPackageTotal()}</strong>
+       </div>
+       <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})" style="flex:1; max-width:280px;">
+         <span class="material-symbols-rounded">check_circle</span>
+         <span>FINALIZAR SEPARAÇÃO</span>
+       </button>
+     </div>
+   </aside>
+ ` : `
+   <aside class="pick-summary-panel pick-summary-single-line">
+     <div class="pick-summary-line">
+       <div class="pick-package-count-field">
+         <span class="material-symbols-rounded">package_2</span>
+         <span>NESTA SEPARACAO</span>
+         <strong id="pick-summary-packages">${packageCount}</strong>
+       </div>
+       <div class="pick-package-count-field pick-channel-package-total">
+         <span class="material-symbols-rounded">summarize</span>
+         <span>TOTAL DO CANAL HOJE</span>
+         <strong id="pick-summary-channel-packages">${getPickChannelDailyPackageTotal()}</strong>
+       </div>
+       <button id="pick-kit-toggle" class="pick-kit-toggle" type="button" onclick="openPickPackagesOverview()"><span class="material-symbols-rounded">inventory_2</span><span>AGRUPAMENTOS</span></button>
+       <button id="pick-remove-scan-toggle" class="pick-remove-scan-btn" type="button" onclick="togglePickRemovalMode()">
+         <span class="material-symbols-rounded">remove_circle</span>
+         <span id="pick-remove-scan-label">REMOVER</span>
+       </button>
+       <button class="pick-pause-btn" type="button" onclick="pausePickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+         <span class="material-symbols-rounded">pause_circle</span>
+         <span>PAUSAR</span>
+       </button>
+       <button class="pick-finish-btn" type="button" onclick="finishPickingSession(${quotePackInlineArg(sessionId)}, ${quotePackInlineArg(channelId)}, ${quotePackInlineArg(channelLabel)}, ${quotePackInlineArg(channelColor)})">
+         <span class="material-symbols-rounded">check_circle</span>
+         <span>FINALIZAR</span>
+       </button>
+     </div>
+   </aside>
+ `}
  </section>
 
  <footer class="pick-workflow-footer">
@@ -24702,6 +24741,26 @@ async function addPickItem(scannedEan = null) {
    showInputFeedback('pick-ean-input', 'success');
    updatePickItemsList();
 
+   const summaryPkgs = document.getElementById('pick-summary-packages');
+   if (summaryPkgs) {
+     const totalSep = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada) || 0), 0);
+     const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
+     summaryPkgs.textContent = `${totalSep} / ${totalSol}`;
+   }
+
+   // Autosave imediato do rascunho e sincronizacao no Supabase
+   try {
+     const draft = getCurrentPickDraftForUpdate('saving');
+     draft.activeOrder = currentPickingContext.activeOrder;
+     draft.items = currentSessionItems;
+     saveDraftPickSession(draft);
+     persistPickingDraftItem(draft, activeItem).catch(err => {
+       console.warn('[SEP AUTOSAVE] Erro na persistencia em segundo plano:', err);
+     });
+   } catch (saveErr) {
+     console.warn('[SEP AUTOSAVE] Falha ao atualizar rascunho local:', saveErr);
+   }
+
    const isCompleted = currentSessionItems.every(i => Number(i.qtd_separada || 0) >= Number(i.qtd_solicitada || 1));
    if (isCompleted) {
      showToast(`🎉 PEDIDO #${currentPickingContext.activeOrder.external_order_id} COMPLETO (${activeItem.qtd_separada}/${targetQty} un.)!`, 'success');
@@ -25198,10 +25257,12 @@ function updatePickItemsList() {
   <span class="pick-qty-number" style="${activeOrder && isItemComplete ? 'color:#16a34a;' : ''}">${qtdSeparada}${activeOrder ? ` / ${qtdSolicitada}` : ''}</span>
   ${activeOrder ? `<small style="font-size:0.75rem; color:#64748b; font-weight:600;">unidades</small>` : ''}
   </div>
+  ${!activeOrder ? `
   <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
   <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
   <span class="material-symbols-rounded">delete</span>
   </button>
+  ` : ''}
   </article>
   `}).join('');
 }
@@ -25332,6 +25393,30 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
  return;
  }
 
+ const activeOrder = currentPickingContext?.activeOrder || null;
+ if (activeOrder) {
+   const incompleteItems = currentSessionItems.filter(i => (Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0))) < Number(i.qtd_solicitada || 1));
+   if (incompleteItems.length > 0) {
+     await showAppModal({
+       type: 'warning',
+       title: 'Separação Incompleta',
+       message: `O pedido #${activeOrder.external_order_id} ainda possui itens pendentes de bipagem (${currentSessionItems.reduce((s, i) => s + Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0)), 0)} / ${currentSessionItems.reduce((s, i) => s + Number(i.qtd_solicitada || 1), 0)} un.). Conclua a separação de todos os itens antes de finalizar.`,
+       confirmText: 'Entendi'
+     });
+     return;
+   }
+
+   const confirmed = await showAppConfirm({
+     title: 'Finalizar Separação do Pedido',
+     message: `Pedido #${activeOrder.external_order_id} (${activeOrder.account_name})`,
+     detail: `Total de ${currentSessionItems.reduce((s, i) => s + Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0)), 0)} unidade(s) bipadas com sucesso. Deseja concluir a separação deste pedido?`,
+     confirmLabel: 'Sim, finalizar separação',
+     cancelLabel: 'Continuar separando'
+   });
+
+   if (!confirmed) return;
+ }
+
  const currentUser = localStorage.getItem('currentUser');
  const now = getDataHoraBrasil();
  const activeDraft = getScopedDraftPickSession(sessionId, channelId, channelLabel);
@@ -25343,18 +25428,18 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
  canal_id: channelId,
  canal_nome: channelLabel,
  data_separacao: formatDateBR(getDataBrasilISO()),
- status: 'em_separacao',
+ status: activeOrder ? 'aguardando_conferencia' : 'em_separacao',
  criado_por: currentUser,
  criado_em: now,
  finalizado_em: now,
  data_hora: now,
- origem_operacional: 'manual_nf',
- pedido_origem_id: '',
- marketplace_order_id: '',
+ origem_operacional: activeOrder ? 'pedido_integrado' : 'manual_nf',
+ pedido_origem_id: activeOrder?.order_id || activeOrder?.external_order_id || '',
+ marketplace_order_id: activeOrder?.external_order_id || '',
  total_produtos_separados: stats.total_produtos_separados,
  total_itens_separados: stats.total_itens_separados,
  total_pacotes_montados: stats.total_pacotes_montados,
- observacao: modoRapidoAtivo ? PICK_FAST_OBSERVATION : 'SEPARACAO MANUAL POR NF',
+ observacao: activeOrder ? `SEPARAÇÃO DO PEDIDO #${activeOrder.external_order_id}` : (modoRapidoAtivo ? PICK_FAST_OBSERVATION : 'SEPARACAO MANUAL POR NF'),
  isFastMode: modoRapidoAtivo,
  modo_rapido: modoRapidoAtivo
  };
