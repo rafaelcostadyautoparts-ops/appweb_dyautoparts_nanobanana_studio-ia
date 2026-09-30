@@ -21683,12 +21683,25 @@ function buildPickPackagesSyncPayload(items = currentSessionItems) {
  (items || []).forEach(item => {
   const productId = String(getPickingProductId(item) || '').trim();
   if (!productId) return;
+  const canonId = String(item.id_interno_canonico || '').trim();
+  const sepItemId = String(item.separacao_item_id || item.id || '').trim();
+  const ean = String(item.ean || '').trim();
   normalizePickPackageAssignments(item).forEach((groupId, unitIndex) => {
    const packageId = groupId || `AVL-${productId}-${String(unitIndex + 1).padStart(4, '0')}`;
    const type = groupId ? 'AGRUPADO' : 'AVULSO';
    if (!packages.has(packageId)) packages.set(packageId, { pacote_id: packageId, tipo: type, itens: new Map() });
    const row = packages.get(packageId);
-   row.itens.set(productId, (row.itens.get(productId) || 0) + 1);
+   const key = `${productId}:::${canonId}:::${sepItemId}:::${ean}`;
+   if (!row.itens.has(key)) {
+     row.itens.set(key, {
+       id_interno: productId,
+       ean: ean || null,
+       id_interno_canonico: canonId || null,
+       separacao_item_id: sepItemId || null,
+       quantidade: 0
+     });
+   }
+   row.itens.get(key).quantidade += 1;
   });
  });
  let groupedCounter = 0;
@@ -21698,7 +21711,7 @@ function buildPickPackagesSyncPayload(items = currentSessionItems) {
   const result = {
    pacote_id: row.pacote_id,
    tipo: row.tipo,
-   itens: [...row.itens.entries()].map(([id_interno, quantidade]) => ({ id_interno, quantidade }))
+   itens: [...row.itens.values()]
   };
   if (isAgrupado) {
    result.numero_pacote = groupedCounter;
@@ -22759,6 +22772,7 @@ function getPickItemMetaHTML(item) {
 async function persistPickingDraftItem(draft, item) {
  const sessionPayload = buildPickingSessionPayload(draft.sessionId, draft.channelId, draft.channelLabel, PICK_STATUS_DRAFT, draft.createdAt);
  const itemPayload = buildPickingItemPayload(item);
+ const canonId = String(item?.id_interno_canonico || itemPayload.id_interno || '').trim();
  if (String(itemPayload.id_interno || '').toUpperCase() === 'DY-000.000') {
   const legacyPayload = { session: sessionPayload, item: itemPayload, executionId: draft.executionId || draft.sessionId };
   if (!navigator.onLine) {
@@ -22773,9 +22787,10 @@ async function persistPickingDraftItem(draft, item) {
  const sessionOnlyPayload = { session: sessionPayload, executionId: draft.executionId || draft.sessionId };
  if (!delta) return { unchanged: true };
  const progressPayload = {
-  operationId: createProgressOperationId('separacao', draft.sessionId, itemPayload.id_interno),
-  flow: 'separacao', sessionId: draft.sessionId, idInterno: itemPayload.id_interno, delta,
-  usuario: localStorage.getItem('currentUser') || 'N/A', deviceId: getProgressDeviceId(), item: itemPayload
+  operationId: createProgressOperationId('separacao', draft.sessionId, canonId),
+  flow: 'separacao', sessionId: draft.sessionId, idInterno: canonId, delta,
+  usuario: localStorage.getItem('currentUser') || 'N/A', deviceId: getProgressDeviceId(),
+  item: { ...itemPayload, id_interno: canonId, sku_fisico: itemPayload.id_interno }
  };
  const confirmItemSync = () => {
   item._sync_qtd_separada = currentQty;
@@ -22784,7 +22799,7 @@ async function persistPickingDraftItem(draft, item) {
  if (!navigator.onLine) {
   await queueOperation('supabase_pick_draft', sessionOnlyPayload, { module: 'separacao', sessionId: draft.sessionId });
   await queueOperation('supabase_progress', progressPayload, { module: 'separacao', sessionId: draft.sessionId,
-   itemId: itemPayload.id_interno, queueKey: 'supabase_progress:' + progressPayload.operationId });
+   itemId: canonId, queueKey: 'supabase_progress:' + progressPayload.operationId });
   confirmItemSync();
   return { queued: true };
  }
@@ -22797,7 +22812,7 @@ async function persistPickingDraftItem(draft, item) {
   if (isRetryableConferenceSyncError(error)) {
    await queueOperation('supabase_pick_draft', sessionOnlyPayload, { module: 'separacao', sessionId: draft.sessionId, lastOnlineError: error.message || String(error) });
    await queueOperation('supabase_progress', progressPayload, { module: 'separacao', sessionId: draft.sessionId,
-    itemId: itemPayload.id_interno, queueKey: 'supabase_progress:' + progressPayload.operationId, lastOnlineError: error.message || String(error) });
+    itemId: canonId, queueKey: 'supabase_progress:' + progressPayload.operationId, lastOnlineError: error.message || String(error) });
    confirmItemSync();
    return { queued: true, error };
   }
@@ -23072,6 +23087,9 @@ async function abrirSeparacaoPedidoAtivo(separacaoId, externalOrderId) {
     return {
       ...prod,
       ...it,
+      id: it.id,
+      separacao_item_id: it.id,
+      id_interno_canonico: it.id_interno,
       id_interno: idInterno,
       ean: ean,
       descricao_completa: descricao,
