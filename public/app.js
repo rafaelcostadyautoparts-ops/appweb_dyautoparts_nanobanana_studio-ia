@@ -4398,7 +4398,11 @@ const menu3DIcons = {
  inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
  inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
  inventario_localizacao: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#0F766E"/><path d="M18 20 H46 V44 H18 Z" stroke="#fff" stroke-width="2.8" fill="none" rx="2"/><path d="M18 28 H46 M18 36 H46 M28 20 V44 M38 20 V44" stroke="#fff" stroke-width="2.4" opacity="0.9"/><path d="M32 16 C27 16 23 20 23 25 C23 32 32 39 32 39 C32 39 41 32 41 25 C41 20 37 16 32 16 Z" fill="#fff" opacity="0.96"/><circle cx="32" cy="25" r="3" fill="#0F766E"/></svg>',
- inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>'
+ inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#06B6D4"/><rect x="18" y="20" width="28" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="18" y="26" width="20" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="18" y="31" width="23" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="18" y="36" width="16" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/><path d="M32 42 L37 48 L46 37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
+ mov_historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
+ mov_transferencia: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+ mov_ajuste: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+ mov_relatorios: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
 };
 
 
@@ -4842,10 +4846,26 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
   // Resolve todas as contas em paralelo
   await Promise.all(uniqueSourceAccountIds.map(srcId => resolverAccountIdLocalParaPedido(srcId)));
 
-  // 2. Extrai IDs locais únicos para carregar mappings em paralelo
+  // 2. Extrai IDs locais únicos para carregar mappings e pedidos persistidos em paralelo
   const uniqueLocalAccountIds = Array.from(new Set(
     uniqueSourceAccountIds.map(srcId => contasResolvedMapCache.get(srcId)).filter(Boolean)
   ));
+
+  let pedidosPersistidos = [];
+  if (window.DataClient?.listMercadoLivrePedidos) {
+    try {
+      pedidosPersistidos = await window.DataClient.listMercadoLivrePedidos() || [];
+    } catch (errPeds) {
+      console.warn('[PEDIDOS PREVIEW] Erro ao carregar pedidos persistidos:', errPeds);
+    }
+  }
+
+  const pedidosPersistidosMap = new Map();
+  for (const pReal of pedidosPersistidos) {
+    if (pReal.external_order_id) {
+      pedidosPersistidosMap.set(String(pReal.external_order_id).trim(), pReal);
+    }
+  }
 
   await Promise.all(uniqueLocalAccountIds.map(async (accId) => {
     if (!mappingsPorConta.has(accId)) {
@@ -4859,8 +4879,31 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
     }
   }));
 
-  // 3. Aplica os mappings aos itens em memória
+  // 3. Aplica pedidos persistidos ou mappings aos itens em memória
   for (const ped of todosPreview) {
+    const extId = String(ped.external_order_id || '').trim();
+    const pedReal = pedidosPersistidosMap.get(extId);
+    if (pedReal) {
+      ped.preview = false;
+      ped.id = String(pedReal.id);
+      ped.db_id = pedReal.id;
+      ped.status_identificacao = pedReal.status_identificacao;
+      ped.status_identificacao_preview = pedReal.status_identificacao;
+      ped.status_mercadolivre = pedReal.status_mercadolivre || ped.status;
+      ped.separacao_id = pedReal.separacao_id || null;
+      ped.logistic_type = pedReal.logistic_type || null;
+      ped.canal_id = pedReal.canal_id || null;
+      ped.canal_nome = pedReal.canal_id === 'canais_envio_viii' ? 'Mercado Livre Agência' : (pedReal.canal_id === 'canais_envio_iii' ? 'Mercado Livre Coleta' : (pedReal.canal_id === 'canais_envio_i' ? 'Flex' : (pedReal.canal_id === 'canais_envio_v' ? 'Correios' : 'Mercado Livre')));
+      ped.mercadolivre_pedido_itens = pedReal.mercadolivre_pedido_itens || [];
+      ped.conta_resolvida = true;
+      if (Array.isArray(ped.itens)) {
+        ped.itens.forEach(it => {
+          it.mapping_status = 'IDENTIFICADO';
+        });
+      }
+      continue;
+    }
+
     if (ped.platform !== 'MERCADOLIBRE') {
       ped.status_identificacao_preview = 'pendente_identificacao';
       ped.conta_resolvida = false;
@@ -4985,24 +5028,10 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
           ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
           <main class="container ped-shell app-page-container">
             <div class="app-breadcrumb">
-              <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-              <span class="material-symbols-rounded">chevron_right</span>
-              <span class="app-breadcrumb-current">Gestão de Pedidos</span>
+              <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+              <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+              <span class="app-breadcrumb-current">Pedidos</span>
             </div>
-
-            <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
-              <div>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
-                  <span style="background:#e0e7ff;color:#3730a3;font-weight:800;font-size:0.75rem;padding:4px 10px;border-radius:20px;border:1px solid #c7d2fe;display:inline-flex;align-items:center;gap:4px;">
-                    <span class="material-symbols-rounded" style="font-size:15px;">visibility</span> PRÉVIA VISUAL (${todosPreview.length} PEDIDOS REAIS)
-                  </span>
-                </div>
-                <p style="color:#64748b;font-size:0.88rem;margin:6px 0 0;">
-                  Fluxo operacional da preparação de vendas: Identificação de anúncios, liberação para picking e conferência.
-                </p>
-              </div>
-            </header>
 
             <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
             <div class="pedidos-counters-grid">
@@ -5140,6 +5169,11 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
       <main class="container ped-shell app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Pedidos</span>
+        </div>
         <div class="pedidos-loading" style="text-align:center;padding:40px;color:#64748b;">
           <span class="material-symbols-rounded" style="font-size:36px;animation:spin 1s linear infinite;">sync</span>
           <p>Carregando pedidos do marketplace...</p>
@@ -5168,17 +5202,10 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
         ${getModuleSidebarHTML('pedidos', 'PEDIDOS')}
         <main class="container ped-shell app-page-container">
           <div class="app-breadcrumb">
-            <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-            <span class="material-symbols-rounded">chevron_right</span>
-            <span class="app-breadcrumb-current">Pedidos & Identificação</span>
+            <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+            <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            <span class="app-breadcrumb-current">Pedidos</span>
           </div>
-
-          <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-            <div>
-              <h1 style="font-size:1.6rem;font-weight:800;color:#0f172a;margin:0;">GESTÃO DE PEDIDOS</h1>
-              <p style="color:#64748b;font-size:0.9rem;margin:4px 0 0;">Acompanhe a identificação dos anúncios e o snapshot congelado de equivalentes.</p>
-            </div>
-          </header>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
             <div onclick="renderPedidosScreen('todos')" style="background:#fff;border:2px solid ${filtroAba === 'todos' ? '#4f46e5' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
@@ -5224,14 +5251,21 @@ function renderPedidoCardHTML(ped) {
     const identificadosCount = itens.filter(i => i.mapping_status === 'IDENTIFICADO').length;
     const pendentesCount = totalItens - identificadosCount;
 
+    const isOperacionalReal = !ped.preview;
+    const hasSeparacao = Boolean(ped.separacao_id);
+
     // Badges
     const badgePlatform = isML
       ? `<span class="badge-canal-ml">MERCADO LIVRE</span>`
       : `<span class="badge-canal-shopee">SHOPEE</span>`;
 
+    const badgeCanal = (ped.canal_nome)
+      ? `<span class="badge-canal-ml" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-weight:700;"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle;">local_shipping</span> ${escapeKitAttribute(ped.canal_nome)}</span>`
+      : '';
+
     const statusMarketplaceBadge = `
       <span class="badge-status-marketplace" title="Status retornado pelo marketplace">
-        <span class="material-symbols-rounded" style="font-size:14px;color:#64748b;">receipt_long</span> ${escapeKitAttribute(String(ped.status || '').toUpperCase())}
+        <span class="material-symbols-rounded" style="font-size:14px;color:#64748b;">receipt_long</span> ${escapeKitAttribute(String(ped.status || 'paid').toUpperCase())}
       </span>
     `;
 
@@ -5246,6 +5280,7 @@ function renderPedidoCardHTML(ped) {
           <div>
             <div class="pedidos-card-title-group">
               ${badgePlatform}
+              ${badgeCanal}
               <h3 class="pedidos-card-order-id">Pedido #${escapeKitAttribute(ped.external_order_id)}</h3>
               <span style="color:#475569;font-weight:600;font-size:0.82rem;background:#f1f5f9;padding:2px 8px;border-radius:4px;">Conta: <b>${escapeKitAttribute(ped.account_name)}</b></span>
             </div>
@@ -5320,13 +5355,30 @@ function renderPedidoCardHTML(ped) {
             <button type="button" class="app-center-modal-secondary" onclick="openModalDetalhesPedido('${ped.id}')" style="padding:7px 14px;font-size:0.83rem;cursor:pointer;">
               Ver detalhes (${totalItens})
             </button>
-            <button type="button"
-                    class="app-center-modal-secondary"
-                    disabled
-                    style="padding:7px 14px;font-size:0.83rem;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
-                    title="Envio para separação desabilitado na prévia de homologação.">
-              <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
-            </button>
+            ${isOperacionalReal ? (
+              hasSeparacao ? `
+                <button type="button" class="app-center-modal-primary" onclick="showToast('Separação ${escapeKitAttribute(ped.separacao_id)} já vinculada ao pedido.', 'info')" style="padding:7px 14px;font-size:0.83rem;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">
+                  Ver separação (${escapeKitAttribute(ped.separacao_id)})
+                </button>
+              ` : isPronto ? `
+                <button type="button"
+                        id="btn-enviar-sep-${ped.id}"
+                        class="app-center-modal-primary"
+                        onclick="enviarPedidoParaSeparacaoUI('${ped.id}')"
+                        style="padding:7px 14px;font-size:0.83rem;background:#16a34a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;"
+                        title="Enviar pedido operacional para separação">
+                  <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">send</span> ENVIAR PARA SEPARAÇÃO
+                </button>
+              ` : ''
+            ) : `
+              <button type="button"
+                      class="app-center-modal-secondary"
+                      disabled
+                      style="padding:7px 14px;font-size:0.83rem;opacity:0.5;cursor:not-allowed;color:#94a3b8;background:#f8fafc;border:1px dashed #cbd5e1;"
+                      title="Envio para separação desabilitado na prévia de homologação.">
+                <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">lock</span> ENVIAR PARA SEPARAÇÃO
+              </button>
+            `}
           </div>
         </div>
       </article>
@@ -5691,25 +5743,130 @@ async function openAnuncioMappingModalParaItem(itemId, variationId, pedidoId) {
 
 function renderMovimentacoesSubMenu() {
   const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
   const subItems = [
-    { id: 'estoque_atual', label: 'ESTOQUE ATUAL', icon: 'inventario', onclick: 'renderEstoqueAtual()', description: 'Consultar o saldo consolidado dos produtos e a distribuicao por local.' },
-    { id: 'historico_mov', label: 'MOVIMENTACOES', icon: 'historico', onclick: 'renderMovimentacoesHistory()', description: 'Consultar entradas, saidas, ajustes, transferencias e garantias registradas.' },
-    { id: 'planejamento_compras', label: 'PLANEJAMENTO DE COMPRAS', icon: 'pedido_compra', onclick: 'renderPlanejamentoCompras()', description: 'Identificar produtos criticos e calcular sugestao de reposicao do estoque.' },
-    { id: 'relatorio_saida_devolucao', label: 'REL. VENDAS / DEVOLUÇÕES', icon: 'historico', onclick: 'renderSaidaDevolucaoReport()', description: 'Comparar vendas, devoluções e tendências por período.' },
-    { id: 'transferencia', label: 'REPOSICAO ENTRE LOCAIS', icon: 'movimentacoes', onclick: 'renderTransferenciaScreen()', description: 'Mover produtos entre locais mantendo origem e destino atualizados.' },
-    { id: 'ajuste_estoque', label: 'AJUSTE DE ESTOQUE', icon: 'ajuste', onclick: 'renderAjusteEstoqueScreen()', description: 'Corrigir saldos de produtos por local com registro do motivo.' },
-    { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolucao ao fornecedor.' },
-    { id: 'devolucoes', label: 'DEVOLUCOES', icon: 'devolucoes', onclick: 'renderDevolucoesSubMenu()', description: 'Controlar retornos de marketplace e devolucoes para fornecedores.' }
+    {
+      id: 'mov_historico',
+      label: 'HISTÓRICO DE MOVIMENTAÇÕES',
+      icon: 'mov_historico',
+      onclick: 'renderMovimentacoesHistory()',
+      description: 'Consulte entradas, saídas, transferências, ajustes e demais alterações do estoque.'
+    },
+    {
+      id: 'mov_transferencia',
+      label: 'TRANSFERÊNCIA ENTRE LOCAIS',
+      icon: 'mov_transferencia',
+      onclick: 'renderTransferenciaScreen()',
+      description: 'Transfira produtos entre locais mantendo origem, destino e histórico.'
+    },
+    {
+      id: 'mov_ajuste',
+      label: 'AJUSTE DE ESTOQUE',
+      icon: 'mov_ajuste',
+      onclick: 'renderAjusteEstoqueScreen()',
+      description: 'Corrija diferenças de estoque com motivo, responsável e rastreabilidade.'
+    },
+    {
+      id: 'mov_relatorios',
+      label: 'RELATÓRIOS DE ESTOQUE',
+      icon: 'mov_relatorios',
+      onclick: 'renderRelatoriosEstoqueSubMenu()',
+      description: 'Analise movimentações, ajustes, transferências e divergências.'
+    }
   ];
+
   app.innerHTML = `
     <div class="dashboard-screen internal fade-in movimentos-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
       ${getModuleSidebarHTML('movimentos')}
       <main class="container app-page-container">
         <div class="app-breadcrumb">
-          <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
-          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
           <span class="app-breadcrumb-current">Movimentações</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>`;
+}
+
+function renderRelatoriosEstoqueSubMenu() {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const subItems = [
+    {
+      id: 'rel_mov_produto',
+      label: 'MOVIMENTAÇÕES POR PRODUTO',
+      icon: 'produtos',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Extrato detalhado de movimentações filtrado por produto específico.'
+    },
+    {
+      id: 'rel_mov_periodo',
+      label: 'MOVIMENTAÇÕES POR PERÍODO',
+      icon: 'historico',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Consolidação de movimentações por intervalo de datas.'
+    },
+    {
+      id: 'rel_mov_local',
+      label: 'MOVIMENTAÇÕES POR LOCAL',
+      icon: 'inventario_localizacao',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Entradas, saídas e transferências agrupadas por local físico.'
+    },
+    {
+      id: 'rel_entradas_saidas',
+      label: 'ENTRADAS E SAÍDAS',
+      icon: 'movimentacoes',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Balanço entre entradas (NF) e saídas operacionais do estoque.'
+    },
+    {
+      id: 'rel_transferencias',
+      label: 'TRANSFERÊNCIAS ENTRE LOCAIS',
+      icon: 'transferencia',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Histórico e fluxo de produtos transferidos entre locais.'
+    },
+    {
+      id: 'rel_ajustes',
+      label: 'AJUSTES DE ESTOQUE',
+      icon: 'ajuste',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Relatório de divergências, avarias, perdas e correções manuais.'
+    },
+    {
+      id: 'rel_divergencias_inv',
+      label: 'DIVERGÊNCIAS DE INVENTÁRIO',
+      icon: 'inventario_geral',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Diferenças apuradas entre contagens de inventário e saldo de sistema.'
+    },
+    {
+      id: 'rel_maior_movimentacao',
+      label: 'PRODUTOS COM MAIOR MOVIMENTAÇÃO',
+      icon: 'mov_relatorios',
+      onclick: "showToast('Relatório em desenvolvimento na próxima etapa.', 'info')",
+      description: 'Curva de giro e produtos mais movimentados no estoque.'
+    }
+  ];
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in movimentos-screen relatorios-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+      ${getModuleSidebarHTML('movimentos')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMovimentacoesSubMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMovimentacoesSubMenu()">Movimentações</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Relatórios de Estoque</span>
         </div>
         ${getStandardModuleCardsHTML(subItems)}
       </main>
@@ -6120,39 +6277,15 @@ async function renderFornecedoresScreen() {
 }
 
 function renderPedidoCompraScreen() {
- renderComprasShell('PEDIDO DE COMPRA', 'Rascunho visual para montar pedidos de compra.', `
- <section class="compras-panel compras-order-panel">
- <div class="compras-form-grid">
- <label class="compras-field">
- <span>Fornecedor</span>
- <select aria-label="Selecionar fornecedor">
- <option>Selecionar fornecedor</option>
- </select>
- </label>
- <label class="compras-field">
- <span>Adicionar produtos</span>
- <input type="text" placeholder="Buscar produto por EAN, SKU ou nome">
- </label>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">add</span>
- Adicionar
- </button>
- </div>
- <div class="compras-list-placeholder">
- <span class="material-symbols-rounded">inventory_2</span>
- <strong>Lista de itens vazia</strong>
- <p>Os produtos adicionados ao pedido acao aqui.</p>
- </div>
- <div class="compras-summary-row">
- <span>Total</span>
- <strong>R$ 0,00</strong>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">check</span>
- Finalizar
- </button>
- </div>
- </section>
- `);
+  renderComprasShell('PEDIDOS DE COMPRA', 'Acompanhe pedidos, recebimentos e pendências.', `
+    <section class="compras-panel">
+      <div class="compras-empty-state">
+        <span class="material-symbols-rounded">receipt_long</span>
+        <strong>Pedidos de Compra em preparação</strong>
+        <p>Este espaço será utilizado para montar, acompanhar e receber pedidos de compra vinculados aos fornecedores.</p>
+      </div>
+    </section>
+  `);
 }
 
 function renderNecessidadeCompraScreen() {
@@ -7301,50 +7434,62 @@ function filterMovimentacoes() {
  }
 }
 
-const MOV_HISTORY_FILTERS = [
- { id: 'todos', label: 'Todos' },
- { id: 'entrada_nf', label: 'Entrada NF' },
- { id: 'inventario', label: 'Inventario' },
- { id: 'transferencia', label: 'Transferencia' },
- { id: 'ajuste', label: 'Ajuste' },
- { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolu\u00e7\u00e3o ao fornecedor.' },
- { id: 'separacao', label: 'Separacao' },
- { id: 'conferencia', label: 'Conferencia' },
- { id: 'cancelamento', label: 'Cancelamentos' }
+const MOV_HISTORY_TYPE_FILTERS = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'entrada', label: 'Entradas' },
+  { id: 'saida', label: 'Saídas' },
+  { id: 'transferencia', label: 'Transferências' },
+  { id: 'ajuste', label: 'Ajustes' },
+  { id: 'estorno', label: 'Estornos' }
 ];
 
+const MOV_HISTORY_ORIGIN_FILTERS = [
+  { id: 'todas', label: 'Todas as Origens' },
+  { id: 'entrada_nf', label: 'Entrada NF' },
+  { id: 'venda_separacao', label: 'Separação / Venda' },
+  { id: 'inventario', label: 'Inventário' },
+  { id: 'devolucao', label: 'Devolução' },
+  { id: 'garantia', label: 'Garantia' },
+  { id: 'ajuste_manual', label: 'Ajuste Manual' },
+  { id: 'outra', label: 'Outra Origem' }
+];
+
+const MOV_HISTORY_FILTERS = MOV_HISTORY_TYPE_FILTERS;
+
 const MOV_HISTORY_PERIODS = [
- { id: 'hoje', label: 'Hoje' },
- { id: '7d', label: '7 dias' },
- { id: '30d', label: '30 dias' },
- { id: 'todos', label: 'Todo o historico' },
- { id: 'custom', label: 'Personalizado' }
+  { id: 'hoje', label: 'Hoje' },
+  { id: '7d', label: '7 dias' },
+  { id: '30d', label: '30 dias' },
+  { id: 'todos', label: 'Todo histórico' },
+  { id: 'custom', label: 'Personalizado' }
 ];
 
 const MOV_HISTORY_PAGE_SIZES = [10, 25, 50];
 const PRODUCT_MOVEMENT_FILTERS = [
- { id: 'todos', label: 'Todos' },
- { id: 'entrada', label: 'Entrada' },
- { id: 'saida', label: 'Saida' },
- { id: 'transferencia', label: 'Transferencia' },
- { id: 'ajuste', label: 'Ajuste' },
- { id: 'inventario', label: 'Inventario' },
- { id: 'garantia', label: 'ENVIAR PARA GARANTIA', icon: 'nf', onclick: 'renderGarantiaEnvioForm()', description: 'Separar produtos para garantia, troca ou devolu\u00e7\u00e3o ao fornecedor.' },
+  { id: 'todos', label: 'Todos' },
+  { id: 'entrada', label: 'Entrada' },
+  { id: 'saida', label: 'Saída' },
+  { id: 'transferencia', label: 'Transferência' },
+  { id: 'ajuste', label: 'Ajuste' },
+  { id: 'inventario', label: 'Inventário' },
+  { id: 'garantia', label: 'Garantia' }
 ];
 
 let movementHistoryState = {
- operations: [],
- loadedMovements: 0,
- loadedOperations: 0,
- filtered: [],
- filter: 'todos',
- period: '30d',
- customFrom: '',
- customTo: '',
- search: '',
- page: 1,
- pageSize: 10,
- expanded: new Set()
+  operations: [],
+  loadedMovements: 0,
+  loadedOperations: 0,
+  filtered: [],
+  typeFilter: 'todos',
+  originFilter: 'todas',
+  filter: 'todos',
+  period: '30d',
+  customFrom: '',
+  customTo: '',
+  search: '',
+  page: 1,
+  pageSize: 10,
+  expanded: new Set()
 };
 
 let productMovementState = {
@@ -7357,28 +7502,118 @@ let productMovementState = {
  error: ''
 };
 
+function formatMovHistoryDateParts(value) {
+  if (!value) return { date: '-', time: '-' };
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    const str = String(value);
+    return { date: str.slice(0, 10), time: str.slice(11, 16) || '-' };
+  }
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return {
+    date: `${day}/${month}/${year}`,
+    time: `${hours}:${minutes}`
+  };
+}
+
 function formatMovHistoryDate(value) {
- return formatDateTimeBR(value, { shortYear: true });
+  const parts = formatMovHistoryDateParts(value);
+  return parts.date !== '-' ? `${parts.date} às ${parts.time}` : '-';
 }
 
 function formatMovHistoryMoney(value) {
- const num = roundMoney(value);
- return num ? formatCurrency(num) : '-';
+  const num = roundMoney(value);
+  return num ? formatCurrency(num) : '-';
 }
 
 function getMovHistoryTypeConfig(type) {
- const map = {
- entrada_nf: { label: 'ENTRADA NF', icon: 'receipt_long', color: '#22c55e' },
- inventario: { label: 'Inao', icon: 'fact_check', color: '#38bdf8' },
- transferencia: { label: 'TRANSFERENCIA', icon: 'sync_alt', color: '#60a5fa' },
- ajuste: { label: 'Ajuste', icon: 'tune', color: '#f59e0b' },
- garantia: { label: 'Garantia', icon: 'shield', color: '#a78bfa' },
- separacao: { label: 'Separacao', icon: 'inventory_2', color: '#ef4444' },
- conferencia: { label: 'CONFERENCIA', icon: 'task_alt', color: '#14b8a6' },
- cancelamento: { label: 'CANCELAMENTO / ENTRADA', icon: 'undo', color: '#22c55e' },
- outro: { label: 'Movimento', icon: 'history', color: '#94a3b8' }
- };
- return map[type] || map.outro;
+  const map = {
+    entrada: {
+      label: 'ENTRADA',
+      badgeClass: 'badge-entrada',
+      sign: '+',
+      symbol: '+',
+      icon: 'add_circle',
+      color: '#16a34a',
+      bgTone: '#ecfdf5',
+      borderTone: '#a7f3d0'
+    },
+    saida: {
+      label: 'SAÍDA',
+      badgeClass: 'badge-saida',
+      sign: '−',
+      symbol: '−',
+      icon: 'remove_circle',
+      color: '#dc2626',
+      bgTone: '#fef2f2',
+      borderTone: '#fecaca'
+    },
+    transferencia: {
+      label: 'TRANSFERÊNCIA',
+      badgeClass: 'badge-transferencia',
+      sign: '⇄',
+      symbol: '⇄',
+      icon: 'sync_alt',
+      color: '#0284c7',
+      bgTone: '#f0f9ff',
+      borderTone: '#bae6fd'
+    },
+    ajuste: {
+      label: 'AJUSTE',
+      badgeClass: 'badge-ajuste',
+      sign: '±',
+      symbol: '±',
+      icon: 'tune',
+      color: '#d97706',
+      bgTone: '#fffbeb',
+      borderTone: '#fde68a'
+    },
+    estorno: {
+      label: 'ESTORNO',
+      badgeClass: 'badge-estorno',
+      sign: '↩',
+      symbol: '↩',
+      icon: 'undo',
+      color: '#7c3aed',
+      bgTone: '#f5f3ff',
+      borderTone: '#ddd6fe'
+    },
+    entrada_nf: {
+      label: 'ENTRADA',
+      badgeClass: 'badge-entrada',
+      sign: '+',
+      symbol: '+',
+      icon: 'receipt_long',
+      color: '#16a34a',
+      bgTone: '#ecfdf5',
+      borderTone: '#a7f3d0'
+    },
+    inventario: {
+      label: 'AJUSTE (INV)',
+      badgeClass: 'badge-ajuste',
+      sign: '±',
+      symbol: '±',
+      icon: 'fact_check',
+      color: '#d97706',
+      bgTone: '#fffbeb',
+      borderTone: '#fde68a'
+    },
+    outro: {
+      label: 'MOVIMENTO',
+      badgeClass: 'badge-outro',
+      sign: '•',
+      symbol: '•',
+      icon: 'history',
+      color: '#475569',
+      bgTone: '#f8fafc',
+      borderTone: '#e2e8f0'
+    }
+  };
+  return map[type] || map.outro;
 }
 
 function classifyProductMovement(mov = {}) {
@@ -7701,675 +7936,984 @@ async function fetchMovHistoryTable(table, select = '*', orderColumn = null, asc
 }
 
 function parseMovHistoryNF(value) {
- const text = String(value || '');
- return text.match(/\bNF\s*([0-9A-Za-z.-]+)/i)?.[1] || '';
+  const text = String(value || '');
+  return text.match(/\bNF\s*([0-9A-Za-z.-]+)/i)?.[1] || '';
 }
 
-function classifyMovHistoryMovement(mov = {}) {
- const tipo = String(mov.tipo || '').toUpperCase();
- const origem = String(mov.origem || '').toUpperCase();
- const obs = String(mov.observacao || '');
- const obsUpper = obs.toUpperCase();
- if (tipo.includes('ENTRADA_NF') || origem.includes('ENTRADA_NF') || parseMovHistoryNF(obs)) return 'entrada_nf';
- if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obsUpper.includes('CANCEL')) return 'cancelamento';
- if (tipo.includes('INVENT') || origem.includes('INVENT') || obsUpper.includes('INVENT')) return 'inventario';
- if (tipo.includes('TRANSFER') || origem.includes('TRANSFER')) return 'transferencia';
- if (tipo.includes('GARANT') || origem.includes('GARANT') || String(mov.local_destino || '').toUpperCase().includes('GARANT')) return 'garantia';
- if (tipo.includes('CONFER') || origem.includes('CONFER')) return 'conferencia';
- if (tipo.includes('SEPAR') || origem.includes('SEPAR')) return 'separacao';
- if (tipo.includes('AJUST') || origem.includes('AJUST')) return 'ajuste';
- return 'outro';
+function formatMovHistoryDateTime(dateStr) {
+  if (!dateStr) return { date: '-', time: '-' };
+  try {
+    const raw = getDataHoraBrasil(dateStr);
+    const cleaned = String(raw).replace(/\s*às\s*/i, ' ').trim();
+    const parts = cleaned.split(' ');
+    const date = parts[0] || '-';
+    let time = parts[1] ? parts[1].slice(0, 5) : '';
+    return { date, time: time || '-' };
+  } catch (e) {
+    const fallback = String(dateStr).slice(0, 10);
+    return { date: fallback || '-', time: '-' };
+  }
 }
 
-function buildMovHistoryMovementKey(mov) {
- const type = classifyMovHistoryMovement(mov);
- const nf = parseMovHistoryNF(mov.observacao);
- if (type === 'entrada_nf' && nf) return `entrada_nf:${nf}`;
-
- const obs = String(mov.observacao || '');
- const sessionId = obs.match(/\b((?:INV|SEP|CONF|TRF|AJU|GAR)[-_][A-Z0-9][-_A-Z0-9.]*)\b/i)?.[1];
- if (sessionId) return `${type}:${sessionId}`;
-
- const time = mov.data_hora ? getDataHoraBrasil(mov.data_hora).slice(0, 16) : mov.movimento_id;
- const route = `${mov.local_origem || ''}>${mov.local_destino || ''}`;
- return `${type}:${obs || route}:${mov.usuario || ''}:${time}`;
+function formatMovLocationRoute(type, localOrigem, localDestino) {
+  const orig = prettyLocal(localOrigem);
+  const dest = prettyLocal(localDestino);
+  if (type === 'entrada') {
+    return dest ? `→ ${dest}` : (orig ? `→ ${orig}` : '-');
+  }
+  if (type === 'saida') {
+    return orig ? `${orig} →` : (dest ? `${dest} →` : '-');
+  }
+  if (type === 'transferencia') {
+    if (orig && dest) return `${orig} → ${dest}`;
+    return orig || dest || '-';
+  }
+  if (type === 'estorno') {
+    return dest ? `→ ${dest}` : (orig ? `→ ${orig}` : '-');
+  }
+  if (type === 'ajuste') {
+    return orig || dest || 'TÉRREO';
+  }
+  return [orig, dest].filter(Boolean).join(' → ') || '-';
 }
 
-function buildMovHistoryFromMovements(movimentos = [], entradaNumbers = new Set(), operationalSeparationIds = new Set()) {
- const groups = new Map();
- movimentos.forEach(mov => {
- const type = classifyMovHistoryMovement(mov);
- const nf = parseMovHistoryNF(mov.observacao);
- if (type === 'entrada_nf' && nf && entradaNumbers.has(String(nf))) return;
- const sessionId = getMovHistorySessionIdFromText(`${mov.observacao || ''} ${mov.movimento_id || ''}`);
- if (type === 'separacao' && sessionId && operationalSeparationIds.has(String(sessionId).toUpperCase())) return;
- const key = buildMovHistoryMovementKey(mov);
- if (!groups.has(key)) {
- const config = getMovHistoryTypeConfig(type);
- const route = [prettyLocal(mov.local_origem), prettyLocal(mov.local_destino)].filter(Boolean).join('');
- groups.set(key, {
- id: key,
- type,
- typeLabel: config.label,
- identification: nf ? `NF ${nf}` : (mov.movimento_id || '-'),
- title: config.label,
- subtitle: nf ? `Origem: ${mov.origem || '-'}` : (route || mov.observacao || mov.origem || '-'),
- date: mov.data_hora || mov.created_at,
- user: mov.usuario || '-',
- supplier: '',
- productsCount: 0,
- quantityTotal: 0,
- valueTotal: 0,
- items: [],
- notes: [],
- raw: mov
- });
- }
- const op = groups.get(key);
- op.productsCount += 1;
- op.quantityTotal += parseDecimal(mov.quantidade);
- if (!op.date || new Date(mov.data_hora || 0) > new Date(op.date || 0)) op.date = mov.data_hora;
- if (mov.observacao && !op.notes.includes(mov.observacao)) op.notes.push(mov.observacao);
- op.items.push({
- idInterno: mov.id_interno || '-',
- descricao: mov.descricao || '',
- quantidade: parseDecimal(mov.quantidade),
- origem: mov.local_origem,
- destino: mov.local_destino,
- custo: 0,
- lote: '',
- observacao: mov.observacao
- });
- });
- return [...groups.values()];
+function classifyMovimentoReal(mov = {}) {
+  const tipo = String(mov.tipo || '').toUpperCase().trim();
+  const origem = String(mov.origem || '').toUpperCase().trim();
+  const obs = String(mov.observacao || '');
+  const obsUpper = obs.toUpperCase();
+  const localOrigem = String(mov.local_origem || '').trim();
+  const localDestino = String(mov.local_destino || '').trim();
+
+  // 1. Tipo Canônico
+  let type = 'ajuste';
+  if (tipo.includes('CANCEL') || origem.includes('CANCEL') || obsUpper.includes('CANCEL') || obsUpper.includes('ESTORNO') || tipo.includes('ESTORNO')) {
+    type = 'estorno';
+  } else if (tipo === 'TRANSFERENCIA' || tipo.includes('TRANSFER') || (localOrigem && localDestino && localOrigem !== localDestino)) {
+    type = 'transferencia';
+  } else if (tipo === 'ENTRADA' || tipo === 'ENTRADA_NF' || tipo.includes('ENTRADA') || (localDestino && !localOrigem)) {
+    type = 'entrada';
+  } else if (tipo === 'SAIDA' || tipo === 'BAIXA' || tipo.includes('SAIDA') || origem.includes('SEPARACAO') || origem.includes('CONFERENCIA') || origem.includes('PICK') || origem.includes('PACK') || (localOrigem && !localDestino)) {
+    type = 'saida';
+  } else if (tipo.includes('INVENT') || origem.includes('INVENT') || obsUpper.includes('INVENT')) {
+    type = 'ajuste';
+  } else if (tipo === 'AJUSTE' || tipo.includes('AJUST')) {
+    type = 'ajuste';
+  }
+
+  // 2. Origem / Processo
+  let origin = 'outra';
+  let originLabel = 'Outra Origem';
+  const nf = parseMovHistoryNF(obs);
+  if (nf || tipo === 'ENTRADA_NF' || origem === 'APP_COMPRAS' || obsUpper.includes('NF ')) {
+    origin = 'entrada_nf';
+    originLabel = 'Entrada NF';
+  } else if (obsUpper.includes('SEP-') || obsUpper.includes('CONF-') || origem === 'APP_SEPARACAO' || origem === 'APP_CONFERENCIA' || origem.includes('SEPARACAO') || origem.includes('CONFERENCIA')) {
+    origin = 'venda_separacao';
+    originLabel = 'Separação / Venda';
+  } else if (tipo.includes('INVENT') || origem.includes('INVENT') || obsUpper.includes('INVENT')) {
+    origin = 'inventario';
+    originLabel = 'Inventário';
+  } else if (tipo.includes('DEVOL') || origem.includes('DEVOL') || obsUpper.includes('DEVOL')) {
+    origin = 'devolucao';
+    originLabel = 'Devolução';
+  } else if (tipo.includes('GARANT') || origem.includes('GARANT') || obsUpper.includes('GARANT') || localDestino.toUpperCase().includes('GARANT') || localDestino.toUpperCase().includes('DEFEITO') || localOrigem.toUpperCase().includes('GARANT') || localOrigem.toUpperCase().includes('DEFEITO')) {
+    origin = 'garantia';
+    originLabel = 'Garantia';
+  } else if (type === 'estorno' || origem.includes('CANCEL')) {
+    origin = 'estorno_cancelamento';
+    originLabel = 'Cancelamento / Estorno';
+  } else if (type === 'transferencia' || origem === 'TRANSFERENCIA_MANUAL') {
+    origin = 'transferencia';
+    originLabel = 'Transferência entre Locais';
+  } else if (type === 'ajuste') {
+    origin = 'ajuste_manual';
+    originLabel = 'Ajuste Manual';
+  }
+
+  return { type, origin, originLabel };
 }
 
-function getMovHistorySessionIdFromText(value = '') {
- return String(value || '').match(/\b((?:SEP|CONF)[-_][A-Z0-9][-_A-Z0-9.]*)\b/i)?.[1] || '';
+function buildMovHistoryMovementKey(mov, classification) {
+  const { type, origin } = classification;
+  const nf = parseMovHistoryNF(mov.observacao);
+  if (origin === 'entrada_nf' && nf) {
+    return `entrada_nf:NF_${nf}`;
+  }
+
+  const obs = String(mov.observacao || '');
+  const sepMatch = obs.match(/\b(SEP[-_][A-Z0-9.\-_]+)\b/i)?.[1];
+  if (sepMatch) {
+    return `sep:${sepMatch.toUpperCase()}`;
+  }
+
+  const confMatch = obs.match(/\b(CONF[-_][A-Z0-9.\-_]+)\b/i)?.[1];
+  if (confMatch) {
+    return `conf:${confMatch.toUpperCase()}`;
+  }
+
+  const cancelMatch = obs.match(/\b(MOV-CANCEL[-_][A-Z0-9.\-_]+)\b/i)?.[1] || mov.movimento_id?.match(/^MOV-CANCEL[-_][A-Z0-9.\-_]+/i)?.[0];
+  if (cancelMatch) {
+    return `cancel:${cancelMatch.toUpperCase()}`;
+  }
+
+  const atomicKey = mov.movimento_id?.match(/^MOV-ATOMIC-([a-z0-9_\-]+):([^:]+)/i);
+  if (atomicKey) {
+    return `atomic:${atomicKey[1]}:${atomicKey[2]}`;
+  }
+
+  if (type === 'transferencia') {
+    const timeMin = mov.data_hora ? getDataHoraBrasil(mov.data_hora).slice(0, 16) : (mov.id || mov.movimento_id);
+    return `trf:${mov.local_origem}>${mov.local_destino}:${mov.usuario}:${timeMin}`;
+  }
+
+  if (type === 'ajuste') {
+    const timeMin = mov.data_hora ? getDataHoraBrasil(mov.data_hora).slice(0, 16) : (mov.id || mov.movimento_id);
+    return `ajuste:${obs || mov.id_interno}:${mov.usuario}:${timeMin}`;
+  }
+
+  return `mov:${mov.id || mov.movimento_id || Math.random()}`;
 }
 
-function getMovHistoryMovementSessionKeys(movimentos = []) {
- const keys = new Set();
- (movimentos || []).forEach(mov => {
- const type = classifyMovHistoryMovement(mov);
- if (type !== 'separacao' && type !== 'conferencia') return;
- const sessionId = getMovHistorySessionIdFromText(`${mov.observacao || ''} ${mov.movimento_id || ''}`);
- if (sessionId) keys.add(`${type}:${String(sessionId).toUpperCase()}`);
- });
- return keys;
-}
+function buildExtratoFromMovements(movimentos = [], entradasMap = new Map(), separacoesMap = new Map(), conferenciasMap = new Map(), productsMap = new Map(), estoqueMap = new Map()) {
+  const groups = new Map();
 
-function getMovHistorySeparationId(session = {}) {
- return String(getPackSeparationSessionId(session) || session.separacao_id || session.codigo_separacao || session.id || '').trim();
-}
+  (movimentos || []).forEach(mov => {
+    const classification = classifyMovimentoReal(mov);
+    const key = buildMovHistoryMovementKey(mov, classification);
+    const nf = parseMovHistoryNF(mov.observacao);
+    const obs = String(mov.observacao || '');
+    const cfg = getMovHistoryTypeConfig(classification.type);
 
-function getMovHistoryConferenceId(conf = {}) {
- return String(conf.conferencia_id || conf.id || conf.codigo_conferencia || '').trim();
-}
+    let docIdent = mov.movimento_id || '-';
+    let subtitle = classification.originLabel;
+    let supplierName = '';
+    let channelName = '';
 
-function getMovHistoryItemProductId(item = {}) {
- return String(item.id_interno || item.produto_id_interno || item.ean || item.sku || item.col_a || '').trim();
-}
+    if (classification.origin === 'entrada_nf') {
+      docIdent = nf ? `NF ${nf}` : (mov.movimento_id || '-');
+      const entradaInfo = nf ? entradasMap.get(String(nf)) : null;
+      if (entradaInfo) {
+        supplierName = entradaInfo.fornecedor_nome || entradaInfo.fornecedor_cnpj || '';
+        subtitle = supplierName ? `Entrada NF • ${supplierName}` : 'Entrada NF • Fornecedor';
+      } else {
+        subtitle = 'Entrada NF • Recebimento';
+      }
+    } else if (classification.origin === 'venda_separacao') {
+      const sepCode = obs.match(/\b(SEP[-_][A-Z0-9.\-_]+)\b/i)?.[1];
+      const confCode = obs.match(/\b(CONF[-_][A-Z0-9.\-_]+)\b/i)?.[1];
+      docIdent = sepCode || confCode || mov.movimento_id || '-';
+      const sepSession = sepCode ? separacoesMap.get(sepCode.toUpperCase()) : null;
+      if (sepSession) {
+        channelName = sepSession.canal_nome || sepSession.canal || sepSession.col_c || '';
+      }
+      subtitle = channelName ? `Expedição • ${channelName}` : 'Expedição • Pedidos';
+    } else if (classification.type === 'transferencia') {
+      docIdent = 'Transferência';
+      subtitle = `Transferência • ${formatMovLocationRoute('transferencia', mov.local_origem, mov.local_destino)}`;
+    } else if (classification.type === 'estorno') {
+      docIdent = obs.match(/\b(SEP[-_][A-Z0-9.\-_]+)\b/i)?.[1] || 'Cancelamento';
+      subtitle = 'Estorno • Retorno ao estoque';
+    } else if (classification.origin === 'inventario') {
+      docIdent = 'Inventário';
+      subtitle = 'Ajuste • Contagem de Inventário';
+    } else if (classification.type === 'ajuste') {
+      docIdent = 'Ajuste Manual';
+      subtitle = obs ? `Ajuste • ${obs}` : 'Ajuste • Correção de saldo';
+    }
 
-function getMovHistoryItemDescription(item = {}) {
- return item.descricao || item.descricao_produto || item.descricao_base || item.descricao_completa || item.nome || getMovHistoryItemProductId(item) || '-';
-}
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        type: classification.type,
+        origin: classification.origin,
+        originLabel: classification.originLabel,
+        typeConfig: cfg,
+        identification: docIdent,
+        title: cfg.label,
+        subtitle,
+        date: mov.data_hora || mov.created_at,
+        user: mov.usuario || '-',
+        supplier: supplierName,
+        channel: channelName,
+        localOrigem: mov.local_origem || '',
+        localDestino: mov.local_destino || '',
+        productsCount: 0,
+        quantityTotal: 0,
+        items: [],
+        notes: [],
+        raw: mov
+      });
+    }
 
-function getMovHistorySeparationItems(sessionId, separacaoItens = []) {
- return (separacaoItens || []).filter(item =>
- String(item.separacao_id || item.codigo_separacao || '') === String(sessionId)
- );
-}
+    const op = groups.get(key);
+    const qty = parseDecimal(mov.quantidade);
+    op.quantityTotal += qty;
+    if (mov.data_hora && (!op.date || new Date(mov.data_hora) > new Date(op.date))) {
+      op.date = mov.data_hora;
+    }
+    if (mov.observacao && !op.notes.includes(mov.observacao)) {
+      op.notes.push(mov.observacao);
+    }
+    if (mov.usuario && (!op.user || op.user === '-')) {
+      op.user = mov.usuario;
+    }
+    if (mov.local_origem && !op.localOrigem) op.localOrigem = mov.local_origem;
+    if (mov.local_destino && !op.localDestino) op.localDestino = mov.local_destino;
 
-function getMovHistoryConferenceItems(conferenceId, sessionId, conferenciaItens = []) {
- return (conferenciaItens || []).filter(item => {
- const itemConference = String(item.conferencia_id || item.codigo_conferencia || '');
- const itemSession = String(item.separacao_id || item.codigo_separacao || '');
- return (conferenceId && itemConference === String(conferenceId))
- || (sessionId && itemSession === String(sessionId));
- });
-}
+    const prodId = String(mov.id_interno || '').trim();
+    const productData = productsMap.get(prodId) || {};
+    const prodDesc = mov.descricao || productData.descricao_completa || productData.descricao_base || productData.descricao || prodId || 'Produto sem descrição';
+    const prodMarca = productData.marca || '';
+    const prodSku = productData.sku || '';
+    const prodEan = productData.ean || '';
+    const prodImg = productData.image_path || productData.url_imagem || '';
 
-function buildMovHistoryFromSeparacoes(separacoes = [], separacaoItens = [], movementSessionKeys = new Set()) {
- return (separacoes || []).map(session => {
- const sessionId = getMovHistorySeparationId(session);
- if (!sessionId) return null;
- const movementKey = `separacao:${sessionId.toUpperCase()}`;
- const items = getMovHistorySeparationItems(sessionId, separacaoItens);
- const channel = session.canal_nome || session.canal || session.col_c || '';
- const status = session.status || '-';
- const date = getSeparationCreatedAt(session);
- const user = session.criado_por || session.usuario || session.operador || session.col_e || '-';
- const packageCount = getPickPackageCountFrom(session);
- const quantityTotal = items.reduce((sum, item) => sum + parseDecimal(item.qtd_separada ?? item.quantidade ?? item.qty ?? item.qtd_solicitada), 0)
- || getSeparationItemTotal(session);
+    // Buscar saldo atual no local afetado
+    const targetLocal = mov.local_destino || mov.local_origem || 'TERREO';
+    const estoqueKey = `${prodId}:${targetLocal}`;
+    const saldoAtualLocal = estoqueMap.get(estoqueKey);
 
- return {
- id: `separacao_operacional:${sessionId}`,
- type: 'separacao',
- typeLabel: 'Separacao',
- identification: sessionId,
- title: 'Separacao',
- subtitle: `${channel || 'Canal nao informado'} | Status: ${status}${movementSessionKeys.has(movementKey) ? ' | com movimento de estoque' : ''}`,
- date,
- user,
- supplier: '',
- productsCount: items.length ? new Set(items.map(getMovHistoryItemProductId).filter(Boolean)).size : getSeparationProductTotal(session),
- quantityTotal,
- packageCount,
- valueTotal: 0,
- items: items.map(item => ({
- idInterno: getMovHistoryItemProductId(item) || '-',
- descricao: getMovHistoryItemDescription(item),
- quantidade: parseDecimal(item.qtd_separada ?? item.quantidade ?? item.qty ?? item.qtd_solicitada),
- origem: item.local_origem || item.local || '',
- destino: item.local_destino || '',
- custo: 0,
- lote: item.lote || '',
- observacao: item.observacao || item.status || ''
- })),
- notes: [
- `Status operacional: ${status}`,
- channel ? `Canal: ${channel}` : '',
- movementSessionKeys.has(movementKey) ? 'Tambem existe baixa registrada em movimentos.' : 'Sem baixa individual encontrada em movimentos.'
- ].filter(Boolean),
- raw: session,
- operational: {
- kind: 'separacao',
- sessionId,
- status,
- channel,
- packageCount
- }
- };
- }).filter(Boolean);
-}
+    op.items.push({
+      idInterno: prodId || '-',
+      descricao: prodDesc,
+      marca: prodMarca,
+      sku: prodSku,
+      ean: prodEan,
+      imagem: prodImg,
+      quantidade: qty,
+      origem: mov.local_origem || '',
+      destino: mov.local_destino || '',
+      saldoAtual: typeof saldoAtualLocal === 'number' ? saldoAtualLocal : null,
+      observacao: mov.observacao || ''
+    });
 
-function buildMovHistoryFromConferencias(conferencias = [], conferenciaItens = [], separacoes = [], movementSessionKeys = new Set()) {
- return (conferencias || []).map(conf => {
- const conferenceId = getMovHistoryConferenceId(conf);
- const sessionId = String(conf.separacao_id || conf.codigo_separacao || '').trim();
- const linkedSession = (separacoes || []).find(session => String(getMovHistorySeparationId(session)) === String(sessionId)) || {};
- const items = getMovHistoryConferenceItems(conferenceId, sessionId, conferenciaItens);
- const status = conf.status || conf.divergencia || '-';
- const channel = linkedSession.canal_nome || linkedSession.canal || linkedSession.col_c || conf.canal_nome || '';
- const date = conf.finalizado_em || conf.conferido_em || conf.atualizado_em || conf.criado_em || linkedSession.finalizado_em || linkedSession.atualizado_em;
- const user = conf.conferido_por || conf.usuario || conf.criado_por || '-';
- const movementKey = sessionId ? `conferencia:${sessionId.toUpperCase()}` : '';
- const packageCount = getPickPackageCountFrom(conf) || getPickPackageCountFrom(linkedSession);
- const quantityTotal = items.reduce((sum, item) => sum + parseDecimal(item.qtd_conferida ?? item.quantidade ?? item.qty), 0);
+    op.productsCount = new Set(op.items.map(it => it.idInterno).filter(Boolean)).size;
+  });
 
- return {
- id: `conferencia_operacional:${conferenceId || sessionId}`,
- type: 'conferencia',
- typeLabel: 'Conferencia',
- identification: conferenceId || (sessionId ? `CONF-${sessionId}` : '-'),
- title: 'Conferencia',
- subtitle: `${sessionId ? `Separacao ${sessionId}` : 'Sem separacao vinculada'} | Status: ${status}`,
- date,
- user,
- supplier: '',
- productsCount: items.length ? new Set(items.map(getMovHistoryItemProductId).filter(Boolean)).size : 0,
- quantityTotal,
- packageCount,
- valueTotal: 0,
- items: items.map(item => ({
- idInterno: getMovHistoryItemProductId(item) || '-',
- descricao: getMovHistoryItemDescription(item),
- quantidade: parseDecimal(item.qtd_conferida ?? item.quantidade ?? item.qty),
- origem: item.local_origem || '',
- destino: item.local_destino || '',
- custo: 0,
- lote: item.lote || '',
- observacao: item.divergencia || item.observacao || item.status || ''
- })),
- notes: [
- `Status operacional: ${status}`,
- sessionId ? `Separacao vinculada: ${sessionId}` : '',
- channel ? `Canal: ${channel}` : '',
- movementKey && movementSessionKeys.has(movementKey) ? 'Tambem existe baixa registrada em movimentos.' : ''
- ].filter(Boolean),
- raw: conf,
- operational: {
- kind: 'conferencia',
- conferenceId,
- sessionId,
- status,
- channel,
- packageCount
- }
- };
- }).filter(Boolean);
-}
+  // Finalizar identificação e subtítulos com dados estritamente reais (sem inventar texto)
+  groups.forEach(op => {
+    const pCount = op.productsCount || (op.items ? op.items.length : 1) || 1;
+    const prodWord = pCount === 1 ? '1 produto' : `${formatStockNumber(pCount)} produtos`;
 
-function buildMovHistoryFromEntradas(entradas = [], lotes = [], movimentos = []) {
- return (entradas || [])
- .filter(entrada => entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada')
- .map(entrada => {
- const itens = entrada.itens || [];
- const entradaLotes = lotes.filter(lote => String(lote.origem_id || '') === String(entrada.id));
- const entradaMovs = movimentos.filter(mov => String(mov.observacao || '').includes(`NF ${entrada.numero_nf}`));
- const date = entrada.atualizado_em || entrada.created_at || entrada.data_recebimento || entrada.data_emissao;
- const user = entradaMovs.find(mov => mov.usuario)?.usuario || entrada.criado_por || entrada.usuario || '-';
- return {
- id: `entrada_nf:${entrada.id}`,
- type: 'entrada_nf',
- typeLabel: 'Entrada NF',
- identification: `NF ${entrada.numero_nf || '-'}`,
- title: 'Entrada NF',
- subtitle: `Fornecedor: ${entrada.fornecedor_nome || entrada.fornecedor_cnpj || '-'}`,
- date,
- user,
- supplier: entrada.fornecedor_nome || entrada.fornecedor_cnpj || '',
- productsCount: itens.length,
- quantityTotal: itens.reduce((sum, item) => sum + parseDecimal(item.quantidade), 0),
- valueTotal: parseDecimal(entrada.valor_total),
- items: itens.map(item => {
- const itemId = item.id_interno || item.produto_id_interno || '';
- const lote = entradaLotes.find(l => String(l.id_interno) === String(itemId));
- return {
- idInterno: itemId || '-',
- descricao: item.descricao_produto_fornecedor || item.descricao_xml || itemId || '-',
- quantidade: parseDecimal(item.quantidade),
- origem: '',
- destino: lote?.local_estoque || 'terreo',
- custo: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
- total: parseDecimal(item.custo_real_total ?? item.valor_total),
- lote: lote ? `${lote.numero_nf || entrada.numero_nf} / ${formatStockNumber(lote.quantidade_atual)} un` : '',
- observacao: item.status_vinculo || ''
- };
- }),
- notes: entrada.chave_acesso ? [`Chave: ${entrada.chave_acesso}`] : [],
- finance: entrada.parcelas || [],
- lotes: entradaLotes,
- raw: entrada
- };
- });
+    if (op.type === 'entrada') {
+      op.subtitle = `Entrada NF • ${prodWord}${op.supplier ? ` • ${op.supplier}` : ''}`;
+    } else if (op.type === 'saida') {
+      op.subtitle = `Expedição • ${prodWord}${op.channel ? ` • ${op.channel}` : ''}`;
+    } else if (op.type === 'transferencia') {
+      op.subtitle = `Transferência • ${prodWord}`;
+    } else if (op.type === 'estorno') {
+      op.subtitle = `Estorno • ${prodWord}`;
+    } else if (op.origin === 'inventario') {
+      op.subtitle = `Ajuste • Contagem de Inventário • ${prodWord}`;
+    } else if (op.type === 'ajuste') {
+      const firstNote = (op.notes && op.notes[0]) ? String(op.notes[0]).replace(/\bAJUSTE[-_A-Z0-9]*\b/gi, '').trim() : '';
+      op.subtitle = `Ajuste manual • ${prodWord}${firstNote ? ` • ${firstNote}` : ''}`;
+    }
+  });
+
+  return [...groups.values()];
 }
 
 function getMovHistorySearchText(op) {
- return [
- op.typeLabel,
- op.identification,
- op.subtitle,
- op.user,
- op.supplier,
- ...(op.notes || []),
- ...(op.items || []).flatMap(item => [item.idInterno, item.descricao, item.observacao])
- ].join(' ').toLowerCase();
+  return [
+    op.typeConfig?.label || '',
+    op.originLabel || '',
+    op.identification || '',
+    op.subtitle || '',
+    op.user || '',
+    op.supplier || '',
+    op.channel || '',
+    ...(op.notes || []),
+    ...(op.items || []).flatMap(item => [item.idInterno, item.descricao, item.marca, item.sku, item.ean, item.observacao])
+  ].join(' ').toLowerCase();
 }
 
 function applyMovHistoryFilters() {
- const start = getMovHistoryPeriodStart(movementHistoryState.period);
- const search = String(movementHistoryState.search || '').trim().toLowerCase();
- let filtered = [...movementHistoryState.operations];
+  const start = getMovHistoryPeriodStart(movementHistoryState.period);
+  const search = String(movementHistoryState.search || '').trim().toLowerCase();
+  let filtered = [...movementHistoryState.operations];
 
- if (movementHistoryState.filter !== 'todos') {
- filtered = filtered.filter(op => op.type === movementHistoryState.filter);
- }
- if (movementHistoryState.period === 'custom' && (movementHistoryState.customFrom || movementHistoryState.customTo)) {
- const from = movementHistoryState.customFrom ? new Date(`${movementHistoryState.customFrom}T00:00:00`) : null;
- const to = movementHistoryState.customTo ? new Date(`${movementHistoryState.customTo}T23:59:59`) : null;
- filtered = filtered.filter(op => {
- const date = new Date(op.date || 0);
- if (Number.isNaN(date.getTime())) return false;
- if (from && date < from) return false;
- if (to && date > to) return false;
- return true;
- });
- } else if (start) {
- filtered = filtered.filter(op => {
- const date = new Date(op.date || 0);
- return !Number.isNaN(date.getTime()) && date >= start;
- });
- }
- if (search) {
- filtered = filtered.filter(op => getMovHistorySearchText(op).includes(search));
- }
+  // Filtro Nível 1: Tipo de Movimento
+  if (movementHistoryState.typeFilter && movementHistoryState.typeFilter !== 'todos') {
+    filtered = filtered.filter(op => op.type === movementHistoryState.typeFilter);
+  }
 
- filtered.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
- movementHistoryState.filtered = filtered;
- const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
- if (movementHistoryState.page > totalPages) movementHistoryState.page = totalPages;
+  // Filtro Nível 2: Origem / Processo
+  if (movementHistoryState.originFilter && movementHistoryState.originFilter !== 'todas') {
+    filtered = filtered.filter(op => op.origin === movementHistoryState.originFilter);
+  }
+
+  // Filtro Temporal
+  if (movementHistoryState.period === 'custom' && (movementHistoryState.customFrom || movementHistoryState.customTo)) {
+    const from = movementHistoryState.customFrom ? new Date(`${movementHistoryState.customFrom}T00:00:00`) : null;
+    const to = movementHistoryState.customTo ? new Date(`${movementHistoryState.customTo}T23:59:59`) : null;
+    filtered = filtered.filter(op => {
+      const date = new Date(op.date || 0);
+      if (Number.isNaN(date.getTime())) return false;
+      if (from && date < from) return false;
+      if (to && date > to) return false;
+      return true;
+    });
+  } else if (start) {
+    filtered = filtered.filter(op => {
+      const date = new Date(op.date || 0);
+      return !Number.isNaN(date.getTime()) && date >= start;
+    });
+  }
+
+  // Busca textual
+  if (search) {
+    filtered = filtered.filter(op => getMovHistorySearchText(op).includes(search));
+  }
+
+  // Ordenação decrescente por data/hora
+  filtered.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  movementHistoryState.filtered = filtered;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
+  if (movementHistoryState.page > totalPages) movementHistoryState.page = totalPages;
 }
 
 async function loadMovHistoryOperations() {
- if (!window.supabaseClient && window.supabaseClientReady) {
- await window.supabaseClientReady.catch(() => null);
- }
- const [movimentos, entradas, lotes, separacoes, separacaoItens, conferencias, conferenciaItens] = await Promise.all([
- DataClient.fetchMovimentosSupabase().catch(error => {
- console.warn('[MOV_HISTORY] movimentos indisponiveis', error);
- return [];
- }),
- loadHistoricoEntradasNF(true).catch(error => {
- console.warn('[MOV_HISTORY] entradas indisponiveis', error);
- return [];
- }),
- fetchMovHistoryTable('estoque_lotes', '*', 'criado_em', false),
- fetchMovHistoryTable('separacao', '*', 'criado_em', false),
- fetchMovHistoryTable('separacao_itens', '*', 'atualizado_em', false),
- fetchMovHistoryTable('conferencia', '*', 'conferido_em', false),
- fetchMovHistoryTable('conferencia_itens', '*', null, false)
- ]);
+  if (!window.supabaseClient && window.supabaseClientReady) {
+    await window.supabaseClientReady.catch(() => null);
+  }
 
- appData.separacao = separacoes || appData.separacao || [];
- appData.separacao_itens = separacaoItens || appData.separacao_itens || [];
- appData.conferencia = conferencias || appData.conferencia || [];
- appData.conferencia_itens = conferenciaItens || appData.conferencia_itens || [];
+  // 1. Carregar movimentações canônicas, entradas para metadados e produtos em cache
+  const [movimentos, entradas, separacoes, conferencias, estoqueAtual] = await Promise.all([
+    DataClient.fetchMovimentosSupabase().catch(error => {
+      console.warn('[MOV_HISTORY] movimentos indisponiveis', error);
+      return [];
+    }),
+    loadHistoricoEntradasNF(true).catch(error => {
+      console.warn('[MOV_HISTORY] entradas indisponiveis', error);
+      return [];
+    }),
+    fetchMovHistoryTable('separacao', 'separacao_id, canal, canal_nome, criado_por, status', 'criado_em', false),
+    fetchMovHistoryTable('conferencia', 'conferencia_id, separacao_id, conferido_por, status', 'conferido_em', false),
+    fetchMovHistoryTable('estoque_atual', 'id_interno, local, saldo_disponivel, saldo_total', null, false)
+  ]);
 
- const entradaNumbers = new Set((entradas || []).map(entrada => String(entrada.numero_nf || '')).filter(Boolean));
- const movementSessionKeys = getMovHistoryMovementSessionKeys(movimentos);
- const operationalSeparationIds = new Set((separacoes || []).map(getMovHistorySeparationId).filter(Boolean).map(id => String(id).toUpperCase()));
- const ops = [
- ...buildMovHistoryFromEntradas(entradas, lotes, movimentos),
- ...buildMovHistoryFromSeparacoes(separacoes, separacaoItens, movementSessionKeys),
- ...buildMovHistoryFromConferencias(conferencias, conferenciaItens, separacoes, movementSessionKeys),
- ...buildMovHistoryFromMovements(movimentos, entradaNumbers, operationalSeparationIds)
- ];
- movementHistoryState.operations = ops;
- movementHistoryState.loadedMovements = movimentos.length;
- movementHistoryState.loadedOperations = ops.length;
- applyMovHistoryFilters();
- return ops;
+  // 2. Mapeamentos em memória para enriquecimento rápido O(1)
+  const entradasMap = new Map();
+  (entradas || []).forEach(e => {
+    if (e.numero_nf) entradasMap.set(String(e.numero_nf), e);
+  });
+
+  const separacoesMap = new Map();
+  (separacoes || []).forEach(s => {
+    const sId = String(s.separacao_id || '').toUpperCase().trim();
+    if (sId) separacoesMap.set(sId, s);
+  });
+
+  const conferenciasMap = new Map();
+  (conferencias || []).forEach(c => {
+    const cId = String(c.conferencia_id || '').toUpperCase().trim();
+    if (cId) conferenciasMap.set(cId, c);
+  });
+
+  const productsMap = new Map();
+  const allProds = appData.products || appData.produtos || [];
+  allProds.forEach(p => {
+    const id = String(p.id_interno || p.col_A || '').trim();
+    if (id) productsMap.set(id, p);
+  });
+
+  const estoqueMap = new Map();
+  (estoqueAtual || []).forEach(est => {
+    const id = String(est.id_interno || '').trim();
+    const loc = String(est.local || '').trim();
+    if (id && loc) {
+      estoqueMap.set(`${id}:${loc}`, parseDecimal(est.saldo_total ?? est.saldo_disponivel ?? 0));
+    }
+  });
+
+  // 3. Construir lista canônica de extrato sem duplicações operacionais
+  const ops = buildExtratoFromMovements(movimentos, entradasMap, separacoesMap, conferenciasMap, productsMap, estoqueMap);
+
+  movementHistoryState.operations = ops;
+  movementHistoryState.loadedMovements = (movimentos || []).length;
+  movementHistoryState.loadedOperations = ops.length;
+  applyMovHistoryFilters();
+  return ops;
 }
 
-function getMovHistorySummary() {
- const ops = movementHistoryState.filtered || [];
- const count = type => ops.filter(op => op.type === type).length;
- const totalPackages = ops.reduce((sum, op) => sum + (Number(op.packageCount || 0) || 0), 0);
- return [
- { label: 'Pacotes', value: totalPackages, sub: 'volumes separados', icon: 'package_2', type: 'separacao' },
- { label: 'Total de operacoes', value: ops.length, sub: 'no periodo filtrado', icon: 'analytics', type: 'outro' },
- { label: 'Entrada NF', value: count('entrada_nf'), sub: 'notas finalizadas', icon: 'receipt_long', type: 'entrada_nf' },
- { label: 'Inaos', value: count('inventario'), sub: 'contagens e ajustes', icon: 'fact_check', type: 'inventario' },
- { label: 'TRANSFERENCIAs', value: count('transferencia'), sub: 'entre locais', icon: 'sync_alt', type: 'transferencia' },
- { label: 'Ajustes', value: count('ajuste'), sub: 'correcoes manuais', icon: 'tune', type: 'ajuste' },
- { label: 'Garantias', value: count('garantia'), sub: 'envios e retornos', icon: 'shield', type: 'garantia' },
- { label: 'Separacoes', value: count('separacao'), sub: 'processos e baixas', icon: 'inventory_2', type: 'separacao' },
- { label: 'CONFERENCIAs', value: count('conferencia'), sub: 'pack e validacao', icon: 'task_alt', type: 'conferencia' },
- { label: 'Cancelamentos', value: count('cancelamento'), sub: 'unidades devolvidas ao estoque', icon: 'undo', type: 'cancelamento' }
- ];
+function getMovHistorySummary(ops = []) {
+  let totalMovs = ops.length;
+  let totalEntradaQty = 0, countEntradas = 0;
+  let totalSaidaQty = 0, countSaidas = 0;
+  let totalTransferQty = 0, countTransfers = 0;
+  let totalAjusteQty = 0, countAjustes = 0;
+  let totalEstornoQty = 0, countEstornos = 0;
+
+  ops.forEach(op => {
+    const qty = Number(op.quantityTotal || 0);
+    if (op.type === 'entrada') {
+      totalEntradaQty += qty;
+      countEntradas += 1;
+    } else if (op.type === 'saida') {
+      totalSaidaQty += qty;
+      countSaidas += 1;
+    } else if (op.type === 'transferencia') {
+      totalTransferQty += qty;
+      countTransfers += 1;
+    } else if (op.type === 'ajuste') {
+      totalAjusteQty += qty;
+      countAjustes += 1;
+    } else if (op.type === 'estorno') {
+      totalEstornoQty += qty;
+      countEstornos += 1;
+    }
+  });
+
+  return [
+    {
+      id: 'movs',
+      label: 'MOVIMENTAÇÕES',
+      value: formatStockNumber(totalMovs),
+      sub: `${formatStockNumber(totalMovs)} lançamento${totalMovs === 1 ? '' : 's'} no período`,
+      icon: 'receipt_long',
+      tone: '#3b82f6',
+      badge: 'Total'
+    },
+    {
+      id: 'entradas',
+      label: 'ENTRADAS',
+      value: `+${formatStockNumber(totalEntradaQty)}`,
+      sub: `${countEntradas} entrada${countEntradas === 1 ? '' : 's'} (${formatStockNumber(totalEntradaQty)} un)`,
+      icon: 'add_circle',
+      tone: '#16a34a',
+      badge: '+ Entradas'
+    },
+    {
+      id: 'saidas',
+      label: 'SAÍDAS',
+      value: `−${formatStockNumber(totalSaidaQty)}`,
+      sub: `${countSaidas} baixa${countSaidas === 1 ? '' : 's'} (${formatStockNumber(totalSaidaQty)} un)`,
+      icon: 'remove_circle',
+      tone: '#dc2626',
+      badge: '− Saídas'
+    },
+    {
+      id: 'transferencias',
+      label: 'TRANSFERÊNCIAS',
+      value: `⇄${formatStockNumber(totalTransferQty)}`,
+      sub: `${countTransfers} movimentação${countTransfers === 1 ? '' : 'ões'} (${formatStockNumber(totalTransferQty)} un)`,
+      icon: 'sync_alt',
+      tone: '#0284c7',
+      badge: '⇄ Trocas'
+    },
+    {
+      id: 'ajustes',
+      label: 'AJUSTES',
+      value: `±${formatStockNumber(totalAjusteQty)}`,
+      sub: `${countAjustes} correção${countAjustes === 1 ? '' : 'ões'} manual/inv`,
+      icon: 'tune',
+      tone: '#d97706',
+      badge: '± Ajustes'
+    },
+    {
+      id: 'estornos',
+      label: 'ESTORNOS',
+      value: `↩${formatStockNumber(totalEstornoQty)}`,
+      sub: `${countEstornos} cancelamento${countEstornos === 1 ? '' : 's'} (${formatStockNumber(totalEstornoQty)} un)`,
+      icon: 'undo',
+      tone: '#7c3aed',
+      badge: '↩ Estornos'
+    }
+  ];
 }
 
 function renderMovHistoryShell(loading = false) {
- const filtered = movementHistoryState.filtered || [];
- const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
- const start = (movementHistoryState.page - 1) * movementHistoryState.pageSize;
- const pageItems = filtered.slice(start, start + movementHistoryState.pageSize);
+  const currentUser = localStorage.getItem('currentUser');
+  const filtered = movementHistoryState.filtered || [];
+  const totalPages = Math.max(1, Math.ceil(filtered.length / movementHistoryState.pageSize));
+  const start = (movementHistoryState.page - 1) * movementHistoryState.pageSize;
+  const pageItems = filtered.slice(start, start + movementHistoryState.pageSize);
+  const summaryCards = getMovHistorySummary(filtered);
 
- return `
- <div class="dashboard-screen internal fade-in mov-history-screen no-top-bar">
- <button type="button" class="mov-history-back back-button-standard" onclick="renderMovimentacoesSubMenu()" aria-label="Voltar">
- ${getBackButtonStandardIconHTML()}
- </button>
- <main class="mov-history-workspace">
- <header class="mov-history-header">
- <div class="mov-history-title-mark">
- <span class="material-symbols-rounded">history</span>
- </div>
- <div>
- <h1>HISTORICO DE MOVIMENTOS</h1>
- <p>Operacoes agrupadas por documento, origem ou processo. <strong>${formatStockNumber(movementHistoryState.loadedMovements)} movimentos e ${formatStockNumber(movementHistoryState.loadedOperations)} operacoes carregadas.</strong></p>
- </div>
- </header>
+  return `
+    <div class="dashboard-screen internal fade-in mov-history-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+      ${getModuleSidebarHTML('movimentos')}
 
- <section class="mov-history-controls">
- <div class="mov-history-tabs">
- ${MOV_HISTORY_FILTERS.map(item => `
- <button type="button" class="${movementHistoryState.filter === item.id ? 'active' : ''}" onclick="setMovHistoryFilter('${item.id}')">${item.label}</button>
- `).join('')}
- </div>
- <div class="mov-history-search">
- <span class="material-symbols-rounded">search</span>
- <input id="mov-history-search-input" value="${escapeKitAttribute(movementHistoryState.search)}" oninput="setMovHistorySearch(this.value)" placeholder="Buscar por NF, produto, separacao, fornecedor...">
- </div>
- <div class="mov-history-period">
- ${MOV_HISTORY_PERIODS.map(item => `
- <button type="button" class="${movementHistoryState.period === item.id ? 'active' : ''}" onclick="setMovHistoryPeriod('${item.id}')">${item.label}</button>
- `).join('')}
- ${movementHistoryState.period === 'custom' ? `
- <input type="date" value="${escapeKitAttribute(movementHistoryState.customFrom)}" onchange="setMovHistoryCustomPeriod('from', this.value)" aria-label="Data inicial">
- <input type="date" value="${escapeKitAttribute(movementHistoryState.customTo)}" onchange="setMovHistoryCustomPeriod('to', this.value)" aria-label="Data final">
- ` : ''}
- </div>
- </section>
+      <main class="container app-page-container mov-history-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMovimentacoesSubMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMovimentacoesSubMenu()">Movimentações</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Histórico de Movimentações</span>
+        </div>
 
- <section class="mov-history-summary">
- ${getMovHistorySummary().map(card => {
- const cfg = getMovHistoryTypeConfig(card.type);
- return `
- <article style="--tone:${cfg.color}">
- <span class="material-symbols-rounded">${card.icon}</span>
- <div>
- <strong>${card.value}</strong>
- <small>${card.label}</small>
- <em>${card.sub}</em>
- </div>
- </article>
- `;
- }).join('')}
- </section>
+        <header class="mov-history-header-card">
+          <div class="mov-history-header-copy">
+            <h1>HISTÓRICO DE MOVIMENTAÇÕES</h1>
+            <p>Acompanhe todas as entradas, saídas, transferências, ajustes e estornos do estoque.</p>
+          </div>
+          <div class="mov-history-header-stats">
+            <span><strong>${formatStockNumber(filtered.length)}</strong> lançamentos</span>
+            <small>${formatStockNumber(movementHistoryState.loadedMovements)} movimentos brutos</small>
+          </div>
+        </header>
 
- <section class="mov-history-list-panel">
- <div class="mov-history-table-head">
- <span>Operacao</span>
- <span>Identifica\u00e7\u00e3o</span>
- <span>Data/Hora</span>
- <span>Usao</span>
- <span>Produtos</span>
- <span>Qtde total</span>
- <span>Pacotes</span>
- <span>A\u00e7\u00f5es</span>
- </div>
- <div id="mov-history-list" class="mov-history-list">
- ${loading ? renderMovHistoryLoadingHTML() : renderMovHistoryRows(pageItems)}
- </div>
- ${!loading ? renderMovHistoryPagination(totalPages, filtered.length) : ''}
- </section>
- </main>
- ${getQuickActionsHTML(false)}
- </div>
- `;
+        <!-- CARDS DE RESUMO DO EXTRATO -->
+        <section class="mov-history-summary-grid">
+          ${summaryCards.map(card => `
+            <article class="mov-summary-card" style="--summary-tone:${card.tone}">
+              <div class="mov-summary-icon-box">
+                <span class="material-symbols-rounded">${card.icon}</span>
+              </div>
+              <div class="mov-summary-info">
+                <span class="mov-summary-label">${card.label}</span>
+                <strong class="mov-summary-value">${card.value}</strong>
+                <small class="mov-summary-sub">${card.sub}</small>
+              </div>
+            </article>
+          `).join('')}
+        </section>
+
+        <!-- CONTROLES E FILTROS EM DOIS NÍVEIS -->
+        <section class="mov-history-controls-panel">
+          <!-- Nível 1: Tipo de Movimento -->
+          <div class="mov-filter-level">
+            <span class="mov-filter-level-title">Tipo de Movimento:</span>
+            <div class="mov-filter-tabs" role="tablist">
+              ${MOV_HISTORY_TYPE_FILTERS.map(item => `
+                <button type="button" class="mov-filter-tab ${movementHistoryState.typeFilter === item.id ? 'active' : ''}" onclick="setMovHistoryTypeFilter('${item.id}')">
+                  ${item.label}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Nível 2: Origem / Processo + Período + Busca -->
+          <div class="mov-filter-secondary-row">
+            <div class="mov-origin-select-wrap">
+              <label for="mov-origin-filter">Origem / Processo:</label>
+              <select id="mov-origin-filter" class="mov-control-select" onchange="setMovHistoryOriginFilter(this.value)">
+                ${MOV_HISTORY_ORIGIN_FILTERS.map(item => `
+                  <option value="${item.id}" ${movementHistoryState.originFilter === item.id ? 'selected' : ''}>${item.label}</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div class="mov-period-wrap">
+              <label>Período:</label>
+              <div class="mov-period-buttons">
+                ${MOV_HISTORY_PERIODS.map(item => `
+                  <button type="button" class="mov-period-btn ${movementHistoryState.period === item.id ? 'active' : ''}" onclick="setMovHistoryPeriod('${item.id}')">
+                    ${item.label}
+                  </button>
+                `).join('')}
+                ${movementHistoryState.period === 'custom' ? `
+                  <div class="mov-custom-date-inputs">
+                    <input type="date" value="${escapeKitAttribute(movementHistoryState.customFrom)}" onchange="setMovHistoryCustomPeriod('from', this.value)" aria-label="Data inicial">
+                    <span>até</span>
+                    <input type="date" value="${escapeKitAttribute(movementHistoryState.customTo)}" onchange="setMovHistoryCustomPeriod('to', this.value)" aria-label="Data final">
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="mov-search-wrap">
+              <label for="mov-history-search-input">Buscar no Extrato:</label>
+              <div class="mov-search-input-box">
+                <span class="material-symbols-rounded">search</span>
+                <input id="mov-history-search-input" value="${escapeKitAttribute(movementHistoryState.search)}" oninput="setMovHistorySearch(this.value)" placeholder="Buscar por produto, ID, NF, separação, responsável...">
+                ${movementHistoryState.search ? `<button type="button" class="mov-clear-search-btn" onclick="setMovHistorySearch('')" aria-label="Limpar busca"><span class="material-symbols-rounded">close</span></button>` : ''}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TABELA PRINCIPAL DE EXTRATO -->
+        <section class="mov-extrato-panel">
+          <div class="mov-extrato-table-head">
+            <span class="col-mov">MOVIMENTO</span>
+            <span class="col-origem">ORIGEM / REFERÊNCIA</span>
+            <span class="col-data">DATA / HORA</span>
+            <span class="col-user">RESPONSÁVEL</span>
+            <span class="col-itens">ITENS</span>
+            <span class="col-qty">QUANTIDADE</span>
+            <span class="col-local">LOCALIZAÇÃO</span>
+            <span class="col-acoes">DETALHES</span>
+          </div>
+
+          <div id="mov-history-list" class="mov-extrato-list">
+            ${loading ? renderMovHistoryLoadingHTML() : renderMovHistoryRows(pageItems)}
+          </div>
+
+          ${!loading && filtered.length > 0 ? renderMovHistoryPagination(totalPages, filtered.length) : ''}
+        </section>
+      </main>
+    </div>
+  `;
 }
 
 function renderMovHistoryLoadingHTML() {
- return `
- <div class="mov-history-empty">
- <span class="material-symbols-rounded">sync</span>
- <strong>Carregando movimentos...</strong>
- </div>
- `;
+  return `
+    <div class="mov-history-empty">
+      <span class="material-symbols-rounded mov-spin">sync</span>
+      <strong>Carregando extrato de estoque...</strong>
+      <small>Sincronizando movimentações e produtos</small>
+    </div>
+  `;
 }
 
-function renderMovHistoryRows(items) {
- if (!items.length) {
-  return '<div class="mov-history-empty"><span class="material-symbols-rounded">history</span><strong>Nenhuma operacao encontrada</strong><small>Ajuste os filtros ou confira se ha movimentos gravados no Supabase.</small></div>';
- }
- return items.map(op => {
-  const cfg=getMovHistoryTypeConfig(op.type);
-  const expanded=movementHistoryState.expanded.has(op.id);
-  const viewLabel='Consultar '+String(cfg.label||'movimento');
-  return '<article class="mov-history-row '+(expanded?'expanded':'')+'" style="--tone:'+cfg.color+'">'
-   +'<div class="mov-history-row-main">'
-   +'<span class="mov-history-op"><span class="mov-history-type-icon material-symbols-rounded">'+cfg.icon+'</span><span><strong>'+escapeKitAttribute(cfg.label)+'</strong><small>'+escapeKitAttribute(op.subtitle||'-')+'</small></span></span>'
-   +'<span class="mov-history-id" data-label="Identificacao">'+escapeKitAttribute(op.identification||'-')+'</span>'
-   +'<span data-label="Data/Hora">'+formatMovHistoryDate(op.date)+'</span>'
-   +'<span data-label="Usuario">'+escapeKitAttribute(op.user||'-')+'</span>'
-   +'<span data-label="Produtos">'+formatStockNumber(op.productsCount||0)+'</span>'
-   +'<span data-label="Qtde total">'+formatStockNumber(op.quantityTotal||0)+'</span>'
-   +'<span data-label="Pacotes">'+formatStockNumber(op.packageCount||0)+'</span>'
-   +'<button type="button" class="mov-history-view-button" onclick="viewMovHistoryOperation('+quoteKitInlineArg(op.id)+')" aria-label="'+escapeKitAttribute(viewLabel)+'" title="Consultar"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg></button>'
-   +'</div>'+(expanded?renderMovHistoryDetails(op):'')+'</article>';
- }).join('');
-}
+function renderMovHistoryRows(items = []) {
+  if (!items.length) {
+    return `
+      <div class="mov-history-empty">
+        <span class="material-symbols-rounded">history</span>
+        <strong>Nenhuma movimentação encontrada</strong>
+        <small>Ajuste os filtros de tipo, origem ou período para visualizar os lançamentos.</small>
+      </div>
+    `;
+  }
 
-function viewMovHistoryOperation(operationId) {
- const op=(movementHistoryState.operations||[]).find(item=>String(item.id)===String(operationId));
- if(!op){showToast('Movimento nao encontrado.','warning');return;}
- const isFinalizedSeparation=op.operational?.kind==='separacao'&&isFinalizedSeparationForHistory(op.raw||{});
- const isFinishedConference=op.operational?.kind==='conferencia';
- if(isFinalizedSeparation||isFinishedConference){renderMovHistoryOperationalConsultation(operationId);return;}
- toggleMovHistoryOperation(operationId);
+  return items.map(op => {
+    const cfg = op.typeConfig || getMovHistoryTypeConfig(op.type);
+    const expanded = movementHistoryState.expanded.has(op.id);
+    const dateFormatted = formatMovHistoryDate(op.date);
+    const routeFormatted = formatMovLocationRoute(op.type, op.localOrigem, op.localDestino);
+
+    // Formatar quantidade com sinal explícito
+    let qtySign = '';
+    let qtyClass = 'qty-neutro';
+    if (op.type === 'entrada') {
+      qtySign = '+';
+      qtyClass = 'qty-positive';
+    } else if (op.type === 'saida') {
+      qtySign = '−';
+      qtyClass = 'qty-negative';
+    } else if (op.type === 'transferencia') {
+      qtySign = '⇄ ';
+      qtyClass = 'qty-transfer';
+    } else if (op.type === 'ajuste') {
+      qtySign = '± ';
+      qtyClass = 'qty-ajuste';
+    } else if (op.type === 'estorno') {
+      qtySign = '↩ ';
+      qtyClass = 'qty-estorno';
+    }
+
+    return `
+      <article class="mov-extrato-row ${expanded ? 'is-expanded' : ''}" style="--row-tone:${cfg.color}; --row-bg-tone:${cfg.bgTone}">
+        <div class="mov-extrato-row-main" onclick="toggleMovHistoryOperation('${escapeKitAttribute(op.id)}')">
+          <div class="col-mov">
+            <span class="mov-badge ${cfg.badgeClass}">
+              <span class="material-symbols-rounded">${cfg.icon}</span>
+              <strong>${cfg.label}</strong>
+            </span>
+          </div>
+
+          <div class="col-origem">
+            <strong class="mov-doc-ident">${escapeKitAttribute(op.identification || '-')}</strong>
+            <small class="mov-doc-sub">${escapeKitAttribute(op.subtitle || op.originLabel || '-')}</small>
+          </div>
+
+          <div class="col-data">
+            <span class="mov-date-text">${dateFormatted}</span>
+          </div>
+
+          <div class="col-user">
+            <span class="mov-user-badge">
+              <span class="material-symbols-rounded">person</span>
+              ${escapeKitAttribute(op.user || '-')}
+            </span>
+          </div>
+
+          <div class="col-itens">
+            <span class="mov-itens-count">${formatStockNumber(op.productsCount || op.items.length || 1)} produto${(op.productsCount || op.items.length) === 1 ? '' : 's'}</span>
+          </div>
+
+          <div class="col-qty">
+            <span class="mov-qty-badge ${qtyClass}">
+              <strong>${qtySign}${formatStockNumber(op.quantityTotal)}</strong>
+              <small>UN</small>
+            </span>
+          </div>
+
+          <div class="col-local">
+            <span class="mov-route-badge">${escapeKitAttribute(routeFormatted)}</span>
+          </div>
+
+          <div class="col-acoes" onclick="event.stopPropagation()">
+            <button type="button" class="mov-btn-detail ${expanded ? 'active' : ''}" onclick="toggleMovHistoryOperation('${escapeKitAttribute(op.id)}')" aria-label="Detalhes da movimentação" title="Ver detalhes">
+              <span class="material-symbols-rounded">${expanded ? 'expand_less' : 'visibility'}</span>
+            </button>
+          </div>
+        </div>
+
+        ${expanded ? renderMovHistoryDetails(op) : ''}
+      </article>
+    `;
+  }).join('');
 }
 
 function renderMovHistoryDetails(op) {
- return `
- <div class="mov-history-details">
- <div class="mov-history-detail-meta">
- ${op.supplier ? `<span><b>Fornecedor</b>${escapeKitAttribute(op.supplier)}</span>` : ''}
- ${op.packageCount ? `<span><b>Pacotes/volumes</b>${formatStockNumber(op.packageCount)}</span>` : ''}
- ${op.valueTotal ? `<span><b>Valor total</b>${formatMovHistoryMoney(op.valueTotal)}</span>` : ''}
- <span><b>Usao resaonsAvel</b>${escapeKitAttribute(op.user || '-')}</span>
- ${(op.notes || []).map(note => `<span><b>Observacao</b>${escapeKitAttribute(note)}</span>`).join('')}
- ${op.finance?.length ? `<span><b>Financeiro vinculado</b>${op.finance.length} parcela(s)</span>` : ''}
- </div>
- <div class="mov-history-items">
- ${(op.items || []).map(item => `
- <div class="mov-history-item">
- <div>
- <strong>${escapeKitAttribute(item.descricao || item.idInterno || '-')}</strong>
- <small>ID: ${escapeKitAttribute(item.idInterno || '-')}</small>
- </div>
- <span><b>Qtd</b>${formatStockNumber(item.quantidade || 0)}</span>
- <span><b>Origem/Destino</b>${escapeKitAttribute([prettyLocal(item.origem), prettyLocal(item.destino)].filter(Boolean).join(' ') || '-')}</span>
- <span><b>Custo real</b>${formatMovHistoryMoney(item.custo || item.total || 0)}</span>
- <span><b>Lote/FIFO</b>${escapeKitAttribute(item.lote || '-')}</span>
- </div>
- `).join('') || '<div class="mov-history-empty compact"><strong>Sem itens detalhados.</strong></div>'}
- </div>
- </div>
- `;
-}
+  const cfg = op.typeConfig || getMovHistoryTypeConfig(op.type);
+  const routeFormatted = formatMovLocationRoute(op.type, op.localOrigem, op.localDestino);
 
-function showMovHistoryOperationalSummary(operationId) {
- const op = (movementHistoryState.operations || []).find(item => String(item.id) === String(operationId));
- if (!op?.operational) {
- showToast('Operacao operacional nao encontrada.', 'warning');
- return;
- }
+  // Determinar Rastreabilidade baseada em dados reais
+  let rastreabilidadeSteps = [];
+  if (op.origin === 'entrada_nf') {
+    rastreabilidadeSteps = [
+      { label: 'Nota Fiscal Recebida', desc: op.identification, icon: 'receipt' },
+      { label: 'Conferência de Lote', desc: op.supplier ? `Fornecedor: ${op.supplier}` : 'Entrada validada', icon: 'fact_check' },
+      { label: 'Entrada no Estoque', desc: `Alocado em ${prettyLocal(op.localDestino || 'TÉRREO')}`, icon: 'inventory_2' }
+    ];
+  } else if (op.origin === 'venda_separacao') {
+    rastreabilidadeSteps = [
+      { label: 'Separação de Pedido', desc: op.identification, icon: 'inventory_2' },
+      { label: 'Conferência & Pack', desc: op.channel ? `Canal: ${op.channel}` : 'Conferência finalizada', icon: 'task_alt' },
+      { label: 'Baixa Física de Estoque', desc: `Retirado de ${prettyLocal(op.localOrigem || 'TÉRREO')}`, icon: 'output' }
+    ];
+  } else if (op.type === 'transferencia') {
+    rastreabilidadeSteps = [
+      { label: 'Origem Física', desc: prettyLocal(op.localOrigem || 'TÉRREO'), icon: 'warehouse' },
+      { label: 'Transferência entre Locais', desc: `${formatStockNumber(op.quantityTotal)} UN movimentadas`, icon: 'sync_alt' },
+      { label: 'Destino Físico', desc: prettyLocal(op.localDestino || '1º ANDAR'), icon: 'move_to_inbox' }
+    ];
+  } else if (op.type === 'estorno') {
+    rastreabilidadeSteps = [
+      { label: 'Movimentação Original', desc: op.identification, icon: 'history' },
+      { label: 'Cancelamento / Devolução', desc: op.subtitle, icon: 'cancel' },
+      { label: 'Retorno ao Estoque', desc: `Devolvido para ${prettyLocal(op.localDestino || op.localOrigem || 'TÉRREO')}`, icon: 'undo' }
+    ];
+  } else {
+    rastreabilidadeSteps = [
+      { label: 'Lançamento de Ajuste', desc: op.originLabel, icon: 'tune' },
+      { label: 'Motivo / Divergência', desc: op.notes[0] || 'Correção manual', icon: 'description' },
+      { label: 'Saldo Atualizado', desc: `Local: ${prettyLocal(op.localDestino || op.localOrigem || 'TÉRREO')}`, icon: 'check_circle' }
+    ];
+  }
 
- const details = [
- `Tipo: ${op.typeLabel || getMovHistoryTypeConfig(op.type).label}`,
- `Identificacao: ${op.identification || '-'}`,
- `Status: ${op.operational.status || '-'}`,
- op.operational.channel ? `Canal: ${op.operational.channel}` : '',
- op.operational.sessionId ? `Separacao: ${op.operational.sessionId}` : '',
- op.operational.conferenceId ? `Conferencia: ${op.operational.conferenceId}` : '',
- `Produtos diferentes: ${formatStockNumber(op.productsCount || 0)}`,
- `Quantidade total: ${formatStockNumber(op.quantityTotal || 0)}`,
- `Pacotes/volumes: ${formatStockNumber(op.packageCount || 0)}`,
- `Responsavel: ${op.user || '-'}`,
- `Data/Hora: ${formatMovHistoryDate(op.date)}`
- ].filter(Boolean).join('');
+  return `
+    <div class="mov-detail-drawer fade-in">
+      <!-- BLOCO 1 & 2: RESUMO + MOVIMENTAÇÃO & ROTA -->
+      <div class="mov-detail-grid-top">
+        <!-- BLOCO 1 — RESUMO DA MOVIMENTAÇÃO -->
+        <div class="mov-detail-card">
+          <div class="mov-detail-card-head">
+            <span class="material-symbols-rounded">info</span>
+            <h3>RESUMO DA MOVIMENTAÇÃO</h3>
+          </div>
+          <div class="mov-detail-meta-list">
+            <div class="mov-meta-row">
+              <span>Tipo de Movimento:</span>
+              <strong class="mov-badge-sm ${cfg.badgeClass}">${cfg.label}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Origem / Processo:</span>
+              <strong>${escapeKitAttribute(op.originLabel || '-')}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Documento / Ref:</span>
+              <strong>${escapeKitAttribute(op.identification || '-')}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Data e Hora:</span>
+              <strong>${formatMovHistoryDate(op.date)}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Responsável:</span>
+              <strong>${escapeKitAttribute(op.user || '-')}</strong>
+            </div>
+          </div>
+        </div>
 
- showAppAlert({
- type: 'info',
- title: 'Resumo operacional',
- message: details,
- buttonLabel: 'OK'
- });
-}
+        <!-- BLOCO 2 — MOVIMENTAÇÃO & ROTA -->
+        <div class="mov-detail-card">
+          <div class="mov-detail-card-head">
+            <span class="material-symbols-rounded">sync_alt</span>
+            <h3>MOVIMENTAÇÃO & LOCALIZAÇÃO</h3>
+          </div>
+          <div class="mov-detail-meta-list">
+            <div class="mov-meta-row">
+              <span>Quantidade Total:</span>
+              <strong style="color:${cfg.color}; font-size:1.05rem;">${formatStockNumber(op.quantityTotal)} UN</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Local de Origem:</span>
+              <strong>${escapeKitAttribute(prettyLocal(op.localOrigem) || '—')}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Local de Destino:</span>
+              <strong>${escapeKitAttribute(prettyLocal(op.localDestino) || '—')}</strong>
+            </div>
+            <div class="mov-meta-row">
+              <span>Rota / Fluxo:</span>
+              <strong class="mov-route-badge">${escapeKitAttribute(routeFormatted)}</strong>
+            </div>
+            ${op.notes.length ? `
+              <div class="mov-meta-row full-width">
+                <span>Observação / Motivo:</span>
+                <p class="mov-detail-note">${escapeKitAttribute(op.notes.join(' | '))}</p>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
 
-function renderMovHistoryOperationalConsultation(operationId) {
- const op=(movementHistoryState.operations||[]).find(item=>String(item.id)===String(operationId));
- if(!op?.operational){showToast('Operacao finalizada nao encontrada.','warning');return;}
- const isConference=op.operational.kind==='conferencia';
- const title=isConference?'CONFERENCIA':'SEPARACAO (PICK)';
- const productsTitle=isConference?'PRODUTOS CONFERIDOS':'PRODUTOS SEPARADOS';
- const channel=op.operational.channel||'CANAL NAO INFORMADO';
- const items=op.items||[];
- const status=normalizeOperationalLabel(op.operational.status||'FINALIZADA').includes('CANCEL')?'CANCELADA':'FINALIZADA';
- const rows=items.length?items.map(item=>{const detail=[prettyLocal(item.origem),prettyLocal(item.destino)].filter(Boolean).join(' ')||item.observacao||(isConference?'Conferencia concluida':'Separacao concluida');return '<article><span class="mov-operation-consult-product-icon material-symbols-rounded">inventory_2</span><div class="mov-operation-consult-product-copy"><strong>'+escapeKitAttribute(item.descricao||item.idInterno||'Produto')+'</strong><span><b>ID:</b> '+escapeKitAttribute(item.idInterno||'-')+'</span><small>'+escapeKitAttribute(detail)+'</small></div><b class="mov-operation-consult-qty">'+formatStockNumber(item.quantidade||0)+'</b></article>';}).join(''):'<div class="mov-operation-consult-empty"><span class="material-symbols-rounded">inventory_2</span><strong>Nenhum item detalhado foi gravado nesta operacao.</strong></div>';
- document.body.classList.remove('menu-active');
- app.innerHTML='<div class="dashboard-screen internal fade-in mov-operation-consult-screen '+(isConference?'is-conference':'is-separation')+'"><main class="mov-operation-consult-shell">'
- +'<header class="mov-operation-consult-header"><button type="button" onclick="renderMovimentacoesHistory()" aria-label="Voltar">'+getBackButtonStandardIconHTML()+'</button><div><h1>'+title+' <span>&bull; '+escapeKitAttribute(channel)+'</span></h1><small>'+escapeKitAttribute(op.identification||'-')+'</small></div><aside><strong>'+status+'</strong><span>SOMENTE CONSULTA</span></aside></header>'
- +'<section class="mov-operation-consult-lockbar"><span class="material-symbols-rounded">search</span><div><strong>Operacao finalizada</strong><small>Leitura e alteracoes desativadas</small></div><span class="material-symbols-rounded">lock</span></section>'
- +'<section class="mov-operation-consult-products"><header><h2>'+productsTitle+'</h2><div><span>PRODUTOS <b>'+formatStockNumber(op.productsCount||items.length||0)+'</b></span><span>UNIDADES <b>'+formatStockNumber(op.quantityTotal||0)+'</b></span><span>PACOTES <b>'+formatStockNumber(op.packageCount||0)+'</b></span></div></header><div class="mov-operation-consult-list">'+rows+'</div></section>'
- +'</main></div>';
+      <!-- BLOCO 3 — PRODUTOS ENVOLVIDOS -->
+      <div class="mov-detail-card mov-detail-card-products">
+        <div class="mov-detail-card-head">
+          <span class="material-symbols-rounded">inventory_2</span>
+          <h3>PRODUTOS ENVOLVIDOS (${op.items.length})</h3>
+        </div>
+        <div class="mov-detail-products-list">
+          ${op.items.map(item => `
+            <article class="mov-detail-product-row">
+              <div class="mov-prod-img-box">
+                ${item.imagem ? `<img src="${formatImageUrl(item.imagem)}" alt="${escapeKitAttribute(item.descricao)}">` : '<span class="material-symbols-rounded">inventory_2</span>'}
+              </div>
+              <div class="mov-prod-info">
+                <strong class="mov-prod-title">${escapeKitAttribute(item.descricao)}</strong>
+                <div class="mov-prod-chips">
+                  <span><b>ID:</b> ${escapeKitAttribute(item.idInterno)}</span>
+                  ${item.marca ? `<span><b>Marca:</b> ${escapeKitAttribute(item.marca)}</span>` : ''}
+                  ${item.sku ? `<span><b>SKU:</b> ${escapeKitAttribute(item.sku)}</span>` : ''}
+                  ${item.ean ? `<span><b>EAN:</b> ${escapeKitAttribute(item.ean)}</span>` : ''}
+                </div>
+              </div>
+              <div class="mov-prod-quantities">
+                <div class="mov-prod-qty-item">
+                  <small>Movimentado</small>
+                  <strong style="color:${cfg.color};">${formatStockNumber(item.quantidade)} UN</strong>
+                </div>
+                ${item.saldoAtual !== null ? `
+                  <div class="mov-prod-qty-item current-stock">
+                    <small>SALDO ATUAL</small>
+                    <strong>${formatStockNumber(item.saldoAtual)} UN</strong>
+                  </div>
+                ` : ''}
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- BLOCO 4 — RASTREABILIDADE -->
+      <div class="mov-detail-card mov-detail-card-timeline">
+        <div class="mov-detail-card-head">
+          <span class="material-symbols-rounded">account_tree</span>
+          <h3>RASTREABILIDADE DO PROCESSO</h3>
+        </div>
+        <div class="mov-trace-timeline">
+          ${rastreabilidadeSteps.map((step, idx) => `
+            <div class="mov-trace-step">
+              <div class="mov-trace-marker">
+                <span class="material-symbols-rounded">${step.icon}</span>
+              </div>
+              <div class="mov-trace-content">
+                <strong>${step.label}</strong>
+                <small>${escapeKitAttribute(step.desc)}</small>
+              </div>
+              ${idx < rastreabilidadeSteps.length - 1 ? `<div class="mov-trace-line"></div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderMovHistoryPagination(totalPages, totalItems) {
- return `
- <footer class="mov-history-pagination">
- <span>${formatStockNumber(totalItems)} operacao(Aes)</span>
- <label>
- Itens por pAgina
- <select onchange="setMovHistoryPageSize(this.value)">
- ${MOV_HISTORY_PAGE_SIZES.map(size => `<option value="${size}" ${movementHistoryState.pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
- </select>
- </label>
- <div>
- <button type="button" onclick="setMovHistoryPage(${movementHistoryState.page - 1})" ${movementHistoryState.page <= 1 ? 'disabled' : ''}>
- <span class="material-symbols-rounded">chevron_left</span>
- </button>
- <strong>${movementHistoryState.page} / ${totalPages}</strong>
- <button type="button" onclick="setMovHistoryPage(${movementHistoryState.page + 1})" ${movementHistoryState.page >= totalPages ? 'disabled' : ''}>
- <span class="material-symbols-rounded">chevron_right</span>
- </button>
- </div>
- </footer>
- `;
+  return `
+    <footer class="mov-history-pagination">
+      <span>Exibindo <strong>${formatStockNumber(totalItems)}</strong> movimentações</span>
+      <label class="mov-page-size-label">
+        Linhas por página:
+        <select onchange="setMovHistoryPageSize(this.value)">
+          ${MOV_HISTORY_PAGE_SIZES.map(size => `<option value="${size}" ${movementHistoryState.pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+        </select>
+      </label>
+      <div class="mov-page-nav">
+        <button type="button" class="mov-page-btn" onclick="setMovHistoryPage(${movementHistoryState.page - 1})" ${movementHistoryState.page <= 1 ? 'disabled' : ''} aria-label="Página anterior">
+          <span class="material-symbols-rounded">chevron_left</span>
+        </button>
+        <span class="mov-page-indicator">Página <strong>${movementHistoryState.page}</strong> de <strong>${totalPages}</strong></span>
+        <button type="button" class="mov-page-btn" onclick="setMovHistoryPage(${movementHistoryState.page + 1})" ${movementHistoryState.page >= totalPages ? 'disabled' : ''} aria-label="Próxima página">
+          <span class="material-symbols-rounded">chevron_right</span>
+        </button>
+      </div>
+    </footer>
+  `;
 }
 
 function refreshMovHistoryScreen() {
- const activeId = document.activeElement?.id || '';
- const searchCursor = document.getElementById('mov-history-search-input')?.selectionStart ?? null;
- applyMovHistoryFilters();
- app.innerHTML = renderMovHistoryShell(false);
- if (activeId === 'mov-history-search-input') {
- requestAnimationFrame(() => {
- const input = document.getElementById('mov-history-search-input');
- if (!input) return;
- input.focus();
- const pos = searchCursor ?? input.value.length;
- input.setSelectionRange(pos, pos);
- });
- }
+  const activeId = document.activeElement?.id || '';
+  const searchCursor = document.getElementById('mov-history-search-input')?.selectionStart ?? null;
+  applyMovHistoryFilters();
+  app.innerHTML = renderMovHistoryShell(false);
+  if (activeId === 'mov-history-search-input') {
+    requestAnimationFrame(() => {
+      const input = document.getElementById('mov-history-search-input');
+      if (!input) return;
+      input.focus();
+      const pos = searchCursor ?? input.value.length;
+      input.setSelectionRange(pos, pos);
+    });
+  }
+}
+
+function setMovHistoryTypeFilter(filter) {
+  movementHistoryState.typeFilter = filter;
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
+}
+
+function setMovHistoryOriginFilter(origin) {
+  movementHistoryState.originFilter = origin;
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
 }
 
 function setMovHistoryFilter(filter) {
- movementHistoryState.filter = filter;
- movementHistoryState.page = 1;
- refreshMovHistoryScreen();
+  setMovHistoryTypeFilter(filter);
 }
 
 function setMovHistorySearch(value) {
- movementHistoryState.search = value;
- movementHistoryState.page = 1;
- refreshMovHistoryScreen();
+  movementHistoryState.search = value;
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
 }
 
 function setMovHistoryPeriod(period) {
- movementHistoryState.period = period;
- movementHistoryState.page = 1;
- refreshMovHistoryScreen();
+  movementHistoryState.period = period;
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
 }
 
 function setMovHistoryCustomPeriod(bound, value) {
- if (bound === 'from') movementHistoryState.customFrom = value;
- if (bound === 'to') movementHistoryState.customTo = value;
- movementHistoryState.period = 'custom';
- movementHistoryState.page = 1;
- refreshMovHistoryScreen();
+  if (bound === 'from') movementHistoryState.customFrom = value;
+  if (bound === 'to') movementHistoryState.customTo = value;
+  movementHistoryState.period = 'custom';
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
 }
 
 function setMovHistoryPage(page) {
- const totalPages = Math.max(1, Math.ceil((movementHistoryState.filtered || []).length / movementHistoryState.pageSize));
- movementHistoryState.page = Math.min(Math.max(1, page), totalPages);
- refreshMovHistoryScreen();
+  const totalPages = Math.max(1, Math.ceil((movementHistoryState.filtered || []).length / movementHistoryState.pageSize));
+  movementHistoryState.page = Math.min(Math.max(1, page), totalPages);
+  refreshMovHistoryScreen();
 }
 
 function setMovHistoryPageSize(value) {
- movementHistoryState.pageSize = Number(value) || 10;
- movementHistoryState.page = 1;
- refreshMovHistoryScreen();
+  movementHistoryState.pageSize = Number(value) || 10;
+  movementHistoryState.page = 1;
+  refreshMovHistoryScreen();
 }
 
 function toggleMovHistoryOperation(id) {
- if (movementHistoryState.expanded.has(id)) movementHistoryState.expanded.delete(id);
- else movementHistoryState.expanded.add(id);
- refreshMovHistoryScreen();
+  if (movementHistoryState.expanded.has(id)) {
+    movementHistoryState.expanded.delete(id);
+  } else {
+    movementHistoryState.expanded.add(id);
+  }
+  refreshMovHistoryScreen();
 }
 
 function openNovaMovimentacaoModal() {
@@ -9325,13 +9869,80 @@ function renderTransferenciaForm() {
  
  <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
  <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
- <button class="btn-action" style="flex: 2; justify-content: center;" onclick="sio('TRANSFER)">Confirmar</button>
+ <button class="btn-action" style="flex: 2; justify-content: center;" onclick="saveNovaMovimentacao('TRANSFERENCIA')">Confirmar Transferência</button>
  </div>
  </div>
  </main>
  </div>
  `;
 }
+
+function renderAjusteEstoqueForm() {
+ const currentUser = localStorage.getItem('currentUser');
+ const locals = [
+ { value: 'TERREO', label: 'T\u00c9RREO' },
+ { value: 'MOSTRUARIO', label: 'MOSTRU\u00c1RIO' },
+ { value: 'PRIMEIRO_ANDAR', label: '1\u00ba ANDAR' },
+ { value: 'DEFEITO', label: 'DEFEITO' },
+ { value: 'EM_GARANTIA', label: 'EM GARANTIA' },
+ { value: 'EM_TRANSPORTE', label: 'EM TRANSPORTE' },
+ { value: 'FULL_ML', label: 'FULL ML' }
+ ];
+
+ app.innerHTML = `
+ <div class="dashboard-screen fade-in internal">
+ ${getTopBarHTML(currentUser, 'renderMovimentacoesSubMenu()')}
+ <main class="container">
+ <div class="sub-menu-header">
+ <h2 style="font-size: 1.2rem; font-weight: 700;">AJUSTE DE ESTOQUE</h2>
+ </div>
+ <div class="form-grid" style="background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05);">
+ <div class="input-group full-width">
+ <label>Produto (EAN ou ID)</label>
+ <div style="display: flex; gap: 12px;">
+ <input type="text" id="mov-search" class="input-field" style="flex: 1;" placeholder="Bipe ou digite..." oninput="searchProductForMov()">
+ </div>
+ <div id="mov-search-results" style="margin-top: 8px; max-height: 150px; overflow-y: auto;"></div>
+ </div>
+ <div id="mov-selected-info" class="hidden full-width" style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--warning, #f59e0b);"></div>
+
+ <div class="input-group">
+ <label>Tipo de Ajuste</label>
+ <select id="mov-tipo-ajuste" class="input-field">
+ <option value="positivo">Entrada / Acréscimo (+)</option>
+ <option value="negativo">Saída / Redução (-)</option>
+ </select>
+ </div>
+
+ <div class="input-group">
+ <label>Local de Estoque</label>
+ <select id="mov-local" class="input-field">
+ ${locals.map(local => `<option value="${local.value}">${local.label}</option>`).join('')}
+ </select>
+ </div>
+
+ <div class="input-group">
+ <label>Quantidade do Ajuste</label>
+ <input type="number" id="mov-qty" class="input-field" placeholder="0" min="1">
+ </div>
+
+ <div class="input-group full-width">
+ <label>Motivo / Justificativa do Ajuste</label>
+ <input type="text" id="mov-obs" class="input-field" placeholder="Descreva o motivo da divergência...">
+ </div>
+
+ <div style="display: flex; gap: 16px; margin-top: 24px; width: 100%;">
+ <button class="btn-action btn-secondary" style="flex: 1; justify-content: center;" onclick="renderMovimentacoesSubMenu()">Cancelar</button>
+ <button class="btn-action" style="flex: 2; justify-content: center; background: var(--warning, #f59e0b) !important;" onclick="saveNovaMovimentacao('AJUSTE')">Registrar Ajuste</button>
+ </div>
+ </div>
+ </main>
+ </div>
+ `;
+}
+
+window.renderTransferenciaScreen = renderTransferenciaForm;
+window.renderAjusteEstoqueScreen = renderAjusteEstoqueForm;
 
 function renderDefeitoForm() {
 
