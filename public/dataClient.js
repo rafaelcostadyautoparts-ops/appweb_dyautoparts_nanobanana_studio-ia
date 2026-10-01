@@ -4399,7 +4399,12 @@ const DataClient = (function () {
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
 
         const cleanCode = String(codigoOuEan).trim().toUpperCase();
-        const finalLocalOrigem = localOrigem ? String(localOrigem).trim().toUpperCase() : 'TERREO';
+        let rawLocal = localOrigem ? String(localOrigem).trim().toUpperCase() : 'TÉRREO';
+        if (rawLocal === 'TERREO') rawLocal = 'TÉRREO';
+        if (rawLocal === '1ANDAR' || rawLocal === 'PRIMEIRO_ANDAR' || rawLocal === '1º ANDAR' || rawLocal === '1ºANDAR') {
+            rawLocal = '1º ANDAR';
+        }
+        const finalLocalOrigem = rawLocal;
 
         const { data: prodData, error: errProd } = await client
             .from('produtos')
@@ -4433,7 +4438,13 @@ const DataClient = (function () {
             throw new Error(`REJEITADO: O produto "${prodFisico.id_interno}" (${prodFisico.marca || 'Sem Marca'}) não pertence aos SKUs equivalentes autorizados no snapshot deste pedido!`);
         }
 
-        const novaQtd = (Number(itemData.qtd_separada) || 0) + 1;
+        const currentQtdSeparada = Number(itemData.qtd_separada) || 0;
+        const qtdSolicitada = Number(itemData.qtd_solicitada) || 0;
+        if (currentQtdSeparada >= qtdSolicitada) {
+            throw new Error(`EXCESSO: O item "${itemData.descricao || itemData.id_interno}" já atingiu a quantidade esperada de ${qtdSolicitada} unidade(s).`);
+        }
+
+        const novaQtd = currentQtdSeparada + 1;
         const bipagensFisicas = Array.isArray(detalhesObj.bipagens_fisicas) ? detalhesObj.bipagens_fisicas : [];
         bipagensFisicas.push({
             produto_id: prodFisico.id,

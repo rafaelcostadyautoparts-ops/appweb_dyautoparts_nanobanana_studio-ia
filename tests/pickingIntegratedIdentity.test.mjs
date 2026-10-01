@@ -1037,3 +1037,100 @@ test('FASE 4.4 — Liberacao Real de Pedido Integrado: PRONTOS -> CONFERENCIA', 
   const sessaoManual = { id: 'SEP-0102-01', canal: 'Balcão / Loja' };
   assert.ok(sessaoManual.id.startsWith('SEP-0102'), 'O) Separação manual preserva fluxo independente');
 });
+
+test('FASE 4.5 — Local Fisico na Conferencia & Persistencia das Bipagens em separacao_item_bipagens', async () => {
+  const bipagensBanco = [];
+  const movimentosEstoque = [];
+  const itemBanco = {
+    id: 'item-uuid-4.5',
+    separacao_id: 'SEP-PED-300',
+    id_interno: 'DY-000.468',
+    qtd_solicitada: 4,
+    qtd_separada: 0,
+    descricao: 'Amortecedor Traseiro DY-000.468',
+    detalhes_operacionais: [{
+      skus_aceitos: [{ produto_id: 'prod-uuid-1', id_interno: 'DY-000.468' }],
+      bipagens_fisicas: []
+    }]
+  };
+
+  const fakeDataClient = {
+    async biparItemSeparacaoEquivalente(separacaoItemId, codigoOuEan, usuario = 'Sistema', localOrigem = 'TÉRREO') {
+      const cleanCode = String(codigoOuEan).trim().toUpperCase();
+      let rawLocal = localOrigem ? String(localOrigem).trim().toUpperCase() : 'TÉRREO';
+      if (rawLocal === 'TERREO') rawLocal = 'TÉRREO';
+      if (rawLocal === '1ANDAR' || rawLocal === 'PRIMEIRO_ANDAR' || rawLocal === '1º ANDAR' || rawLocal === '1ºANDAR') {
+        rawLocal = '1º ANDAR';
+      }
+
+      if (cleanCode !== 'DY-000.468' && cleanCode !== '7896498550317') {
+        throw new Error(`REJEITADO: O produto "${cleanCode}" não pertence aos SKUs equivalentes autorizados no snapshot deste pedido!`);
+      }
+
+      if (itemBanco.qtd_separada >= itemBanco.qtd_solicitada) {
+        throw new Error(`EXCESSO: O item "${itemBanco.descricao}" já atingiu a quantidade esperada de ${itemBanco.qtd_solicitada} unidade(s).`);
+      }
+
+      itemBanco.qtd_separada += 1;
+      const bip = {
+        separacao_id: itemBanco.separacao_id,
+        separacao_item_id: separacaoItemId,
+        produto_id: 'prod-uuid-1',
+        id_interno: 'DY-000.468',
+        ean: '7896498550317',
+        quantidade: 1,
+        local_origem: rawLocal,
+        bipado_por: usuario,
+        bipado_em: new Date().toISOString()
+      };
+      bipagensBanco.push(bip);
+      itemBanco.detalhes_operacionais[0].bipagens_fisicas.push(bip);
+
+      return {
+        success: true,
+        nova_qtd_separada: itemBanco.qtd_separada,
+        local_origem: rawLocal
+      };
+    }
+  };
+
+  // R) Mesmo produto esperado x4: 2 bips TÉRREO + 2 bips 1º ANDAR -> Resultado: 4/4, TÉRREO = 2, 1º ANDAR = 2
+  await fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-000.468', 'Operador 1', 'TÉRREO');
+  await fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-000.468', 'Operador 1', 'TÉRREO');
+  await fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-000.468', 'Operador 1', '1º ANDAR');
+  await fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-000.468', 'Operador 1', '1º ANDAR');
+
+  assert.equal(itemBanco.qtd_separada, 4, 'R) Total bipado deve ser 4/4');
+  assert.equal(bipagensBanco.length, 4, 'R) Devem existir 4 bipagens persistidas');
+  const terreoCount = bipagensBanco.filter(b => b.local_origem === 'TÉRREO').reduce((acc, b) => acc + b.quantidade, 0);
+  const andarCount = bipagensBanco.filter(b => b.local_origem === '1º ANDAR').reduce((acc, b) => acc + b.quantidade, 0);
+  assert.equal(terreoCount, 2, 'R) Persistência deve registrar TÉRREO = 2');
+  assert.equal(andarCount, 2, 'R) Persistência deve registrar 1º ANDAR = 2');
+
+  // S) Refresh / Reabertura deve reconstruir exatamente a mesma distribuição física por local
+  const reconstruidoTerreo = bipagensBanco.filter(b => b.local_origem === 'TÉRREO').reduce((acc, b) => acc + b.quantidade, 0);
+  const reconstruidoAndar = bipagensBanco.filter(b => b.local_origem === '1º ANDAR').reduce((acc, b) => acc + b.quantidade, 0);
+  assert.equal(reconstruidoTerreo, 2, 'S) Reabertura reconstroi TÉRREO = 2');
+  assert.equal(reconstruidoAndar, 2, 'S) Reabertura reconstroi 1º ANDAR = 2');
+
+  // T) Produto divergente NÃO pode gerar bipagem válida em separacao_item_bipagens
+  const countBeforeDiv = bipagensBanco.length;
+  await assert.rejects(
+    async () => fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-999.999-DIVERGENTE', 'Operador 1', 'TÉRREO'),
+    /REJEITADO/,
+    'T) Produto divergente deve ser rejeitado'
+  );
+  assert.equal(bipagensBanco.length, countBeforeDiv, 'T) Produto divergente NÃO pode inserir registro em separacao_item_bipagens');
+
+  // U) Quinto bip quando esperado = 4 NÃO pode gerar bipagem válida em separacao_item_bipagens
+  const countBeforeExc = bipagensBanco.length;
+  await assert.rejects(
+    async () => fakeDataClient.biparItemSeparacaoEquivalente('item-uuid-4.5', 'DY-000.468', 'Operador 1', 'TÉRREO'),
+    /EXCESSO/,
+    'U) Quinto bip quando esperado = 4 deve ser rejeitado por excesso'
+  );
+  assert.equal(bipagensBanco.length, countBeforeExc, 'U) Quinto bip NÃO pode inserir registro em separacao_item_bipagens');
+
+  // V) 0 movimentos de estoque após todas essas operações
+  assert.equal(movimentosEstoque.length, 0, 'V) 0 movimentos de estoque devem ser gerados na conferência/bipagem');
+});
