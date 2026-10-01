@@ -1524,7 +1524,8 @@ const DataClient = (function () {
     }
 
     function isValidOfficialPickingSessionId(sessionId) {
-        return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(String(sessionId || '').trim());
+        const s = String(sessionId || '').trim();
+        return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(s) || /^SEP-PED-\d+$/i.test(s);
     }
 
     function isValidPickingSessionId(sessionId) {
@@ -3654,6 +3655,7 @@ const DataClient = (function () {
         listarPacotesSeparacaoSupabase,
         sincronizarPacotesSeparacaoSupabase,
         aplicarOperacaoProgressoSupabase,
+        atualizarStatusPedidoSeparadoSupabase,
         alocarNumeroSeparacaoDefinitivaSupabase,
         finalizarSeparacaoRapidaAtomicaSupabase,
         autorizarCorrecaoAgrupamentoFinalizadoSupabase,
@@ -4335,6 +4337,29 @@ const DataClient = (function () {
             .eq('id', pedidoId);
 
         return await getMercadoLivrePedidoById(pedidoId);
+    }
+
+    async function atualizarStatusPedidoSeparadoSupabase(pedidoRef, novoStatus = 'separado') {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+        if (!pedidoRef) return null;
+        const sRef = String(pedidoRef).trim();
+        let query = client.from('mercadolivre_pedidos').update({
+            status_identificacao: novoStatus,
+            atualizado_em: new Date().toISOString()
+        });
+        if (/^\d+$/.test(sRef)) {
+            query = query.or(`id.eq.${Number(sRef)},external_order_id.eq.${sRef}`);
+        } else {
+            query = query.or(`separacao_id.eq.${sRef},external_order_id.eq.${sRef}`);
+        }
+        const { data, error } = await query.select();
+        if (error) {
+            console.warn('[DATACLIENT] Erro ao atualizar status_identificacao do pedido:', error);
+            return null;
+        }
+        invalidateCache('separacao');
+        return data;
     }
 
     async function enviarPedidoParaSeparacaoTransacional(pedidoId, usuario = 'Sistema') {

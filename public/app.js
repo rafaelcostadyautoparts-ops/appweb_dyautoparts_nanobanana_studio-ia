@@ -4975,11 +4975,12 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
 
     const renderDOM = () => {
+      const isPedSeparado = p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado' || p.status_identificacao === 'aguardando_conferencia';
       const countTodos = todosPreview.length;
-      const countEmSeparacao = todosPreview.filter(p => Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao').length;
+      const countEmSeparacao = todosPreview.filter(p => !isPedSeparado(p) && (Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao')).length;
       const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao' && !p.separacao_id).length;
       const countPendentes = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id).length;
-      const countSeparados = todosPreview.filter(p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado').length;
+      const countSeparados = todosPreview.filter(p => isPedSeparado(p)).length;
       const countDivergencias = 0;
 
       const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
@@ -4992,9 +4993,9 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
       } else if (state.operacional === 'pendentes') {
         listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id);
       } else if (state.operacional === 'em_separacao') {
-        listaExibicao = todosPreview.filter(p => Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao');
+        listaExibicao = todosPreview.filter(p => !isPedSeparado(p) && (Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao'));
       } else if (state.operacional === 'separados') {
-        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado');
+        listaExibicao = todosPreview.filter(p => isPedSeparado(p));
       } else if (state.operacional === 'divergencias') {
         listaExibicao = [];
       } else {
@@ -21477,9 +21478,12 @@ function normalizePickPackageAssignments(item = {}) {
   ? item.qty
   : (item.qtd_separada !== undefined && item.qtd_separada !== null ? item.qtd_separada : (item.quantidade ?? 0));
  const qty = Math.max(0, Math.floor(Number(rawQty || 0)));
+ const activeContext = typeof currentPickingContext !== 'undefined' ? currentPickingContext : null;
+ const isIntegratedOrder = Boolean(activeContext?.activeOrder || item.activeOrder || item.isIntegratedOrder);
  const values = Array.isArray(item.pick_package_assignments) ? item.pick_package_assignments.slice(0, qty) : [];
- while (values.length < qty) values.push(null);
- item.pick_package_assignments = values.map(value => value ? String(value) : null);
+ const defaultAssignment = isIntegratedOrder ? 'PKG-001' : null;
+ while (values.length < qty) values.push(defaultAssignment);
+ item.pick_package_assignments = values.map(value => value ? String(value) : (isIntegratedOrder ? 'PKG-001' : null));
  return item.pick_package_assignments;
 }
 
@@ -22463,7 +22467,7 @@ function isDraftPickSessionId(sessionId) {
 
 function isValidOfficialPickSessionId(sessionId) {
   const s = String(sessionId || '').trim();
-  return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(s) || /^SEP-PED-\d+$/i.test(s) || /^SEP-[A-Z0-9_-]+$/i.test(s);
+  return /^SEP-[A-Z0-9]+-\d{4}-\d{2,}$/i.test(s) || /^SEP-PED-\d+$/i.test(s);
 }
 
 function isValidPickSessionId(sessionId) {
@@ -22769,7 +22773,20 @@ function getPickItemMetaHTML(item) {
  `;
 }
 
-async function persistPickingDraftItem(draft, item) {
+let pickingPersistQueue = Promise.resolve();
+
+function queuePickingPersist(draft, item) {
+  const itemSnapshot = { ...item };
+  const nextTask = pickingPersistQueue
+    .catch(() => {})
+    .then(async () => {
+      return await persistPickingDraftItem(draft, itemSnapshot, item);
+    });
+  pickingPersistQueue = nextTask;
+  return nextTask;
+}
+
+async function persistPickingDraftItem(draft, item, targetItem = item) {
  const sessionPayload = buildPickingSessionPayload(draft.sessionId, draft.channelId, draft.channelLabel, PICK_STATUS_DRAFT, draft.createdAt);
  const itemPayload = buildPickingItemPayload(item);
  const canonId = String(item?.id_interno_canonico || itemPayload.id_interno || '').trim();
@@ -22782,8 +22799,13 @@ async function persistPickingDraftItem(draft, item) {
   return DataClient.savePickingDraftSupabase(legacyPayload);
  }
  const currentQty = Math.max(0, Number(itemPayload.qtd_separada || 0));
- const baselineQty = Math.max(0, Number(item._sync_qtd_separada || 0));
+ const baselineQty = Math.max(0, Number(targetItem._sync_qtd_separada || 0));
  const delta = currentQty - baselineQty;
+  console.log('[PICK-PERSIST] baseline:', baselineQty);
+  console.log('[PICK-PERSIST] delta:', delta);
+  console.log('[PICK-PERSIST] canonicalId:', canonId);
+  console.log('[PICK-PERSIST] physicalSku:', itemPayload.id_interno);
+  console.log('[PICK-PERSIST] separacaoItemId:', item.separacao_item_id || item.id);
  const sessionOnlyPayload = { session: sessionPayload, executionId: draft.executionId || draft.sessionId };
  if (!delta) return { unchanged: true };
  const progressPayload = {
@@ -22793,6 +22815,7 @@ async function persistPickingDraftItem(draft, item) {
   item: { ...itemPayload, id_interno: canonId, sku_fisico: itemPayload.id_interno }
  };
  const confirmItemSync = () => {
+  targetItem._sync_qtd_separada = currentQty;
   item._sync_qtd_separada = currentQty;
   saveDraftPickSession({ ...draft, items: currentSessionItems });
  };
@@ -22805,7 +22828,9 @@ async function persistPickingDraftItem(draft, item) {
  }
  try {
   await withTimeout(DataClient.savePickingDraftSupabase(sessionOnlyPayload), 15000, 'salvar sessao de separacao');
-  const result = await sendOrQueueProgressOperation(progressPayload);
+  console.log('[PICK-PERSIST] calling DataClient');
+   const result = await sendOrQueueProgressOperation(progressPayload);
+   console.log('[PICK-PERSIST] DataClient result:', result);
   confirmItemSync();
   return result;
  } catch (error) {
@@ -23179,7 +23204,8 @@ async function renderPickChannelOrders(channelId, channelLabel, channelColor) {
       String(p.separacao_id || '').trim() === sepId
     ) || {};
 
-    const rawItens = (appData.separacao_itens || []).filter(i =>
+    console.log('[PICK-LOAD] qtd_separada:', (appData.separacao_itens || []).map(i => ({ id: i.id_interno, qtd_separada: i.qtd_separada })));
+  const rawItens = (appData.separacao_itens || []).filter(i =>
       String(i.separacao_id || '').trim() === sepId
     );
 
@@ -24777,10 +24803,11 @@ async function addPickItem(scannedEan = null) {
      return;
    }
 
+   const previousQty = currentQty;
    // Incrementa quantidade separada do item ativo em memória
    activeItem.qtd_separada = currentQty + 1;
+    console.log('[PICK-BIP] currentQty:', activeItem.qtd_separada);
    activeItem.qty = activeItem.qtd_separada;
-   activeItem._sync_qtd_separada = activeItem.qtd_separada;
    activeItem.scanTime = formatTimeBR();
    lastScannedPickItemKey = getPickingProductId(activeItem);
    lastPickScanAction = 'add';
@@ -24797,17 +24824,22 @@ async function addPickItem(scannedEan = null) {
      summaryPkgs.textContent = `${totalSep} / ${totalSol}`;
    }
 
-   // Autosave imediato do rascunho e sincronizacao no Supabase
+   // Autosave serializado e aguardado da persistencia no Supabase
    try {
      const draft = getCurrentPickDraftForUpdate('saving');
      draft.activeOrder = currentPickingContext.activeOrder;
      draft.items = currentSessionItems;
      saveDraftPickSession(draft);
-     persistPickingDraftItem(draft, activeItem).catch(err => {
-       console.warn('[SEP AUTOSAVE] Erro na persistencia em segundo plano:', err);
-     });
+     await queuePickingPersist(draft, activeItem);
    } catch (saveErr) {
-     console.warn('[SEP AUTOSAVE] Falha ao atualizar rascunho local:', saveErr);
+     console.error('[PICK-PERSIST ERROR] erro completo:', saveErr);
+     activeItem.qtd_separada = previousQty;
+     activeItem.qty = previousQty;
+     updatePickItemsList();
+     showScanFeedback('error', 'Falha ao salvar leitura');
+     showToast('Não foi possível salvar a leitura. Tente novamente.', 'error');
+     settlePickScannerInput(80);
+     throw saveErr;
    }
 
    const isCompleted = currentSessionItems.every(i => Number(i.qtd_separada || 0) >= Number(i.qtd_solicitada || 1));
@@ -26034,7 +26066,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
         sessionId,
         channelId,
         channelLabel,
-        PICK_STATUS_READY_FOR_PACK,
+        PICK_STATUS_FINISHED,
         draft.createdAt || currentPickSession?.pickingData?.criado_em || now
       ),
       finalizado_em: now
@@ -26104,6 +26136,13 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
     }
     const finalResult = await persistPickingFinal(sessionId, draftPersistenceQueued);
 
+    const activeOrderForStatus = currentPickingContext?.activeOrder || null;
+    if (activeOrderForStatus && typeof DataClient !== 'undefined' && DataClient.atualizarStatusPedidoSeparadoSupabase) {
+      DataClient.atualizarStatusPedidoSeparadoSupabase(activeOrderForStatus.order_id || activeOrderForStatus.external_order_id || sessionId, 'separado').catch(err => {
+        console.warn('[SEPARACAO] Erro ao atualizar status do pedido:', err);
+      });
+    }
+
     if (!appData.separacao) appData.separacao = [];
     const localSession = {
       ...pickingData,
@@ -26112,7 +26151,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
       total_produtos_separados: stats.total_produtos_separados,
       total_itens_separados: stats.total_itens_separados,
       total_pacotes_montados: stats.total_pacotes_montados,
-      status: PICK_STATUS_READY_FOR_PACK
+      status: PICK_STATUS_FINISHED
     };
     const existingIndex = appData.separacao.findIndex(s => (s.separacao_id || s.col_a) === sessionId);
     if (existingIndex >= 0) appData.separacao[existingIndex] = { ...appData.separacao[existingIndex], ...localSession };
@@ -26125,7 +26164,7 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
       ...currentPickSession,
       id: sessionId,
       pickingData: localSession,
-      status: PICK_STATUS_READY_FOR_PACK
+      status: PICK_STATUS_FINISHED
     });
     setActivePickSessions(activeSessions);
 

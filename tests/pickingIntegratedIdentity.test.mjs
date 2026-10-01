@@ -13,6 +13,15 @@ function getFunctionSource(name) {
   return node.getText(ast);
 }
 
+function getVariableDeclarationSource(name) {
+  const statement = ast.statements.find(n =>
+    ts.isVariableStatement(n) &&
+    n.declarationList.declarations.some(d => d.name?.text === name)
+  );
+  assert.ok(statement, `Variavel ${name} nao encontrada no AST`);
+  return statement.getText(ast);
+}
+
 function createTestEnv(overrides = {}) {
   const queuedOps = [];
   const progressCalls = [];
@@ -23,6 +32,7 @@ function createTestEnv(overrides = {}) {
     navigator: { onLine: true },
     localStorage: { getItem: () => 'Operador Teste' },
     PICK_STATUS_DRAFT: 'em_separacao',
+    currentPickingContext: null,
     currentSessionItems: [],
     getPickingProductId: (item) => item?.id_interno || '',
     normalizePickPackageAssignments: (item) => {
@@ -210,3 +220,206 @@ test('persistPickingDraftItem em fluxo manual usa id_interno como chave canonica
   assert.equal(call.item.sku_fisico, 'DY-000.123');
 });
 
+test('persistPickingDraftItem suporta sequencia incremental de bips (0 -> 1 -> 2 -> 3 -> 4) com avanco de delta e baseline', async () => {
+  const env = createTestEnv();
+  const fnCode = getFunctionSource('persistPickingDraftItem');
+  vm.runInContext(fnCode, env);
+
+  const draft = { sessionId: 'SEP-PED-90' };
+  const item = {
+    id: '2227e126-2747-4ce4-b42c-e3dc84482e32',
+    separacao_item_id: '2227e126-2747-4ce4-b42c-e3dc84482e32',
+    id_interno_canonico: 'PROD-a2789f2f-c4f6-43da-96da-e6db7411c2c7',
+    id_interno: 'DY-000.468',
+    ean: '7896498550317',
+    qtd_solicitada: 4,
+    qtd_separada: 0,
+    _sync_qtd_separada: 0
+  };
+
+  // 1º bip: 0 -> 1
+  item.qtd_separada = 1;
+  const res1 = await env.persistPickingDraftItem(draft, item);
+  assert.equal(res1.ok, true);
+  assert.equal(env._testRecords.progressCalls.length, 1);
+  assert.equal(env._testRecords.progressCalls[0].delta, 1);
+  assert.equal(item._sync_qtd_separada, 1);
+
+  // 2º bip: 1 -> 2
+  item.qtd_separada = 2;
+  const res2 = await env.persistPickingDraftItem(draft, item);
+  assert.equal(res2.ok, true);
+  assert.equal(env._testRecords.progressCalls.length, 2);
+  assert.equal(env._testRecords.progressCalls[1].delta, 1);
+  assert.equal(item._sync_qtd_separada, 2);
+
+  // 3º bip: 2 -> 3
+  item.qtd_separada = 3;
+  const res3 = await env.persistPickingDraftItem(draft, item);
+  assert.equal(res3.ok, true);
+  assert.equal(env._testRecords.progressCalls.length, 3);
+  assert.equal(env._testRecords.progressCalls[2].delta, 1);
+  assert.equal(item._sync_qtd_separada, 3);
+
+  // 4º bip: 3 -> 4
+  item.qtd_separada = 4;
+  const res4 = await env.persistPickingDraftItem(draft, item);
+  assert.equal(res4.ok, true);
+  assert.equal(env._testRecords.progressCalls.length, 4);
+  assert.equal(env._testRecords.progressCalls[3].delta, 1);
+  assert.equal(item._sync_qtd_separada, 4);
+});
+
+test('persistPickingDraftItem nao avanca baseline se ocorrer erro online nao-recuperavel', async () => {
+  const env = createTestEnv({
+    isRetryableConferenceSyncError: () => false,
+    sendOrQueueProgressOperation: async () => {
+      throw new Error('Falha fatal de permissao no banco');
+    }
+  });
+  const fnCode = getFunctionSource('persistPickingDraftItem');
+  vm.runInContext(fnCode, env);
+
+  const draft = { sessionId: 'SEP-PED-90' };
+  const item = {
+    id_interno_canonico: 'PROD-a2789f2f-c4f6-43da-96da-e6db7411c2c7',
+    id_interno: 'DY-000.468',
+    qtd_separada: 1,
+    _sync_qtd_separada: 0
+  };
+
+  await assert.rejects(
+    async () => { await env.persistPickingDraftItem(draft, item); },
+    /Falha fatal de permissao no banco/
+  );
+
+  assert.equal(item._sync_qtd_separada, 0, 'Baseline nao pode ser atualizado em erro fatal');
+});
+
+test('queuePickingPersist serializa bips rapidos (0 -> 1 -> 2 -> 3 -> 4) sem perda ou duplicacao', async () => {
+  const env = createTestEnv();
+  const queueDecl = getVariableDeclarationSource('pickingPersistQueue');
+  const queueFnCode = getFunctionSource('queuePickingPersist');
+  const persistFnCode = getFunctionSource('persistPickingDraftItem');
+
+  vm.runInContext(queueDecl, env);
+  vm.runInContext(persistFnCode, env);
+  vm.runInContext(queueFnCode, env);
+
+  const draft = { sessionId: 'SEP-PED-90' };
+  const item = {
+    id: '2227e126-2747-4ce4-b42c-e3dc84482e32',
+    id_interno_canonico: 'PROD-a2789f2f-c4f6-43da-96da-e6db7411c2c7',
+    id_interno: 'DY-000.468',
+    qtd_solicitada: 4,
+    qtd_separada: 0,
+    _sync_qtd_separada: 0
+  };
+
+  // Simula 4 bips disparados muito rapidamente antes de cada chamada terminar
+  item.qtd_separada = 1;
+  const p1 = env.queuePickingPersist(draft, item);
+
+  item.qtd_separada = 2;
+  const p2 = env.queuePickingPersist(draft, item);
+
+  item.qtd_separada = 3;
+  const p3 = env.queuePickingPersist(draft, item);
+
+  item.qtd_separada = 4;
+  const p4 = env.queuePickingPersist(draft, item);
+
+  await Promise.all([p1, p2, p3, p4]);
+
+  assert.equal(env._testRecords.progressCalls.length, 4, 'Deve registrar exatamente 4 operacoes de progresso');
+  assert.equal(env._testRecords.progressCalls[0].delta, 1);
+  assert.equal(env._testRecords.progressCalls[1].delta, 1);
+  assert.equal(env._testRecords.progressCalls[2].delta, 1);
+  assert.equal(env._testRecords.progressCalls[3].delta, 1);
+  assert.equal(item._sync_qtd_separada, 4, 'Baseline final deve ser 4');
+});
+
+test('isValidOfficialPickSessionId e isValidOfficialPickingSessionId reconhecem SEP-PED-N e legados, rejeitando invalidos', () => {
+  const env = createTestEnv();
+  const fnApp = getFunctionSource('isValidOfficialPickSessionId');
+  vm.runInContext(fnApp, env);
+
+  const dcSource = fs.readFileSync('public/dataClient.js', 'utf8');
+  const match = dcSource.match(/function isValidOfficialPickingSessionId\(sessionId\)[\s\S]*?\n    \}/);
+  assert.ok(match, 'isValidOfficialPickingSessionId nao encontrada no dataClient.js');
+  vm.runInContext(match[0], env);
+
+  // ACEITAR
+  const validos = ['SEP-PED-90', 'SEP-PED-1', 'SEP-CORREIOS-2409-01'];
+  for (const id of validos) {
+    assert.equal(env.isValidOfficialPickSessionId(id), true, `app.js deveria aceitar ${id}`);
+    assert.equal(env.isValidOfficialPickingSessionId(id), true, `dataClient.js deveria aceitar ${id}`);
+  }
+
+  // REJEITAR
+  const invalidos = ['SEP-PED-', 'SEP-PED-ABC', 'SEP-PED-90-EXTRA', 'SEP-QUALQUER-COISA', ''];
+  for (const id of invalidos) {
+    assert.equal(env.isValidOfficialPickSessionId(id), false, `app.js deveria rejeitar ${id}`);
+    assert.equal(env.isValidOfficialPickingSessionId(id), false, `dataClient.js deveria rejeitar ${id}`);
+  }
+});
+
+test('Pedido Integrado 1 produto x 4 unidades gera 1 unico pacote PKG-001 com 4 unidades', () => {
+  const env = createTestEnv();
+  const fnNorm = getFunctionSource('normalizePickPackageAssignments');
+  const fnPkgs = getFunctionSource('buildPickPackagesSyncPayload');
+  vm.runInContext(fnNorm, env);
+  vm.runInContext(fnPkgs, env);
+
+  const items = [
+    {
+      id_interno: 'DY-000.468',
+      qtd_separada: 4,
+      isIntegratedOrder: true
+    }
+  ];
+
+  const packages = env.buildPickPackagesSyncPayload(items);
+  assert.equal(packages.length, 1, 'Deve gerar exatamente 1 pacote');
+  assert.equal(packages[0].pacote_id, 'PKG-001');
+  assert.equal(packages[0].tipo, 'AGRUPADO');
+  assert.equal(packages[0].itens.length, 1);
+  assert.equal(packages[0].itens[0].quantidade, 4);
+});
+
+test('Pedido Integrado multiproduto (A x 2, B x 3) sem divisao gera 1 unico pacote contendo 5 unidades', () => {
+  const env = createTestEnv();
+  const fnNorm = getFunctionSource('normalizePickPackageAssignments');
+  const fnPkgs = getFunctionSource('buildPickPackagesSyncPayload');
+  vm.runInContext(fnNorm, env);
+  vm.runInContext(fnPkgs, env);
+
+  const items = [
+    { id_interno: 'PROD-A', qtd_separada: 2, isIntegratedOrder: true },
+    { id_interno: 'PROD-B', qtd_separada: 3, isIntegratedOrder: true }
+  ];
+
+  const packages = env.buildPickPackagesSyncPayload(items);
+  assert.equal(packages.length, 1, 'Deve gerar exatamente 1 pacote para todo o pedido');
+  assert.equal(packages[0].pacote_id, 'PKG-001');
+  assert.equal(packages[0].itens.length, 2);
+  const totalUnits = packages[0].itens.reduce((s, i) => s + i.quantidade, 0);
+  assert.equal(totalUnits, 5, 'Total de unidades no pacote deve ser 5');
+});
+
+test('modo manual sem activeOrder preserva geracao de avulsos quando assignments sao nulos', () => {
+  const env = createTestEnv();
+  const fnNorm = getFunctionSource('normalizePickPackageAssignments');
+  const fnPkgs = getFunctionSource('buildPickPackagesSyncPayload');
+  vm.runInContext(fnNorm, env);
+  vm.runInContext(fnPkgs, env);
+
+  const items = [
+    { id_interno: 'DY-000.123', qtd_separada: 2 }
+  ];
+
+  const packages = env.buildPickPackagesSyncPayload(items);
+  assert.equal(packages.length, 2, 'No modo manual sem atribuicao previa deve gerar 2 pacotes avulsos');
+  assert.equal(packages[0].tipo, 'AVULSO');
+  assert.equal(packages[1].tipo, 'AVULSO');
+});
