@@ -39,7 +39,9 @@
         }
 
 /* PADRÃO GLOBAL DE PÁGINAS — CLASSES REUTILIZÁVEIS */
-.app-page-shell {
+.app-page-shell,
+.dashboard-screen {
+  position: relative !important;
   min-height: 100vh;
   width: 100%;
   background: #f7f8fb;
@@ -77125,8 +77127,8 @@ html[data-theme="dark"].app-environment-homologation .finalized-separations-scre
 .pedidos-counter-card.card-todos.active { border-color: #4f46e5 !important; }
 .pedidos-counter-card.card-pendentes.active { border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.12) !important; }
 .pedidos-counter-card.card-prontos.active { border-color: #16a34a !important; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12) !important; }
-.pedidos-counter-card.card-em-separacao.active { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important; }
-.pedidos-counter-card.card-separados.active { border-color: #7c3aed !important; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12) !important; }
+.pedidos-counter-card.card-conferencia.active, .pedidos-counter-card.card-em-separacao.active { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important; }
+.pedidos-counter-card.card-conferidos.active, .pedidos-counter-card.card-separados.active { border-color: #7c3aed !important; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12) !important; }
 .pedidos-counter-card.card-divergencias.active { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12) !important; }
 
 .pedidos-counter-label {
@@ -79907,7 +79909,12 @@ html body:not(.login-active) #app > :is(
   .entrada-nf-screen.standard-card-menu-screen,
   .emissao-nf-submenu-screen,
   .financeiro-submenu-screen,
-  .financeiro-screen.standard-card-menu-screen
+  .financeiro-screen.standard-card-menu-screen,
+  .movimentos-screen,
+  .movimentos-submenu-screen,
+  .movimentos-screen.standard-card-menu-screen,
+  .relatorios-screen,
+  .relatorios-screen.standard-card-menu-screen
 ) .standard-module-card-grid {
   width: 100% !important;
   max-width: 1080px !important;
@@ -79939,7 +79946,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card,
 #app .dashboard-screen.product-submenu-screen .standard-module-card,
 .dashboard-screen.produtos-submenu-screen .standard-module-card,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card,
+.dashboard-screen.movimentos-screen .standard-module-card,
+#app .dashboard-screen.movimentos-screen .standard-module-card,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card,
+.dashboard-screen.relatorios-screen .standard-module-card,
+#app .dashboard-screen.relatorios-screen .standard-module-card {
   position: relative !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -79977,7 +79990,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card:hover,
 #app .dashboard-screen.product-submenu-screen .standard-module-card:hover,
 .dashboard-screen.produtos-submenu-screen .standard-module-card:hover,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card:hover {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card:hover,
+.dashboard-screen.movimentos-screen .standard-module-card:hover,
+#app .dashboard-screen.movimentos-screen .standard-module-card:hover,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card:hover,
+.dashboard-screen.relatorios-screen .standard-module-card:hover,
+#app .dashboard-screen.relatorios-screen .standard-module-card:hover {
   transform: translateY(-2px) !important;
   background: #f1f3f5 !important;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
@@ -79997,7 +80016,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-icon,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-icon,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-icon,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon,
+.dashboard-screen.movimentos-screen .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon,
+.dashboard-screen.relatorios-screen .standard-module-card-icon,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon {
   width: 50px !important;
   height: 50px !important;
   min-width: 50px !important;
@@ -80041,7 +80066,19 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-icon img,
 #app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon img {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.movimentos-screen .standard-module-card-icon svg,
+.dashboard-screen.movimentos-screen .standard-module-card-icon img,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon img,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg,
+.dashboard-screen.relatorios-screen .standard-module-card-icon img,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon svg,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon img {
   display: block !important;
   object-fit: contain !important;
 }
@@ -80060,7 +80097,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-icon svg *,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-icon svg *,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg *,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg * {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon svg * {
   stroke-width: 1.5px !important;
   stroke-linecap: round !important;
   stroke-linejoin: round !important;
@@ -80486,6 +80529,111 @@ html body:not(.login-active) #app > :is(
   stroke: #64748b !important;
 }
 
+/* ========================================================
+   CORES E ÍCONES: MOVIMENTAÇÕES
+   ======================================================== */
+
+/* 1. HISTÓRICO DE MOVIMENTAÇÕES: Relógio / Consulta (Roxo / Lilás pastel suave) */
+.dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon,
+.dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon {
+  background: #f3e8ff !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon svg,
+.dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon svg {
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
+  max-width: 21px !important;
+  max-height: 21px !important;
+  color: #9333ea !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_historico .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-historico_mov .standard-module-card-icon svg * {
+  stroke: #9333ea !important;
+}
+
+/* 2. TRANSFERÊNCIA ENTRE LOCAIS: Setas Opostas (Azul Celeste pastel suave) */
+.dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon,
+.dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon {
+  background: #e0f2fe !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon svg,
+.dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon svg {
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
+  max-width: 21px !important;
+  max-height: 21px !important;
+  color: #0284c7 !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_transferencia .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-transferencia .standard-module-card-icon svg * {
+  stroke: #0284c7 !important;
+}
+
+/* 3. AJUSTE DE ESTOQUE: Sliders / Ajuste (Vermelho / Rosa pastel suave) */
+.dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon,
+.dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon {
+  background: #fff1f2 !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon svg,
+.dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon svg {
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
+  max-width: 21px !important;
+  max-height: 21px !important;
+  color: #e11d48 !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_ajuste .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-ajuste_estoque .standard-module-card-icon svg * {
+  stroke: #e11d48 !important;
+}
+
+/* 4. RELATÓRIOS DE ESTOQUE: Gráficos / Analytics (Azul-petróleo / Ciano pastel suave) */
+.dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon,
+.dashboard-screen.relatorios-screen .standard-module-card-icon {
+  background: #ecfeff !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon svg,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg {
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
+  max-width: 21px !important;
+  max-height: 21px !important;
+  color: #0891b2 !important;
+}
+.dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-mov_relatorios .standard-module-card-icon svg *,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg * {
+  stroke: #0891b2 !important;
+}
+
 /* Separador vertical sutil entre ícone e texto */
 .dashboard-screen.nf-submenu-screen .standard-module-card-divider,
 #app .dashboard-screen.nf-submenu-screen .standard-module-card-divider,
@@ -80500,7 +80648,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-divider,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-divider,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-divider,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-divider {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-divider,
+.dashboard-screen.movimentos-screen .standard-module-card-divider,
+#app .dashboard-screen.movimentos-screen .standard-module-card-divider,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-divider,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-divider,
+.dashboard-screen.relatorios-screen .standard-module-card-divider,
+#app .dashboard-screen.relatorios-screen .standard-module-card-divider {
   display: block !important;
   width: 1px !important;
   height: 54px !important;
@@ -80525,7 +80679,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-copy,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-copy,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-copy,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy,
+.dashboard-screen.movimentos-screen .standard-module-card-copy,
+#app .dashboard-screen.movimentos-screen .standard-module-card-copy,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-copy,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-copy,
+.dashboard-screen.relatorios-screen .standard-module-card-copy,
+#app .dashboard-screen.relatorios-screen .standard-module-card-copy {
   display: flex !important;
   flex-direction: column !important;
   align-items: flex-start !important;
@@ -80549,7 +80709,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-copy strong,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-copy strong,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-copy strong,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy strong {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy strong,
+.dashboard-screen.movimentos-screen .standard-module-card-copy strong,
+#app .dashboard-screen.movimentos-screen .standard-module-card-copy strong,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-copy strong,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-copy strong,
+.dashboard-screen.relatorios-screen .standard-module-card-copy strong,
+#app .dashboard-screen.relatorios-screen .standard-module-card-copy strong {
   color: #1e1b4b !important;
   font-family: 'Fjalla One', 'DY Fjalla', var(--app-font-family, sans-serif) !important;
   font-size: 18px !important;
@@ -80573,7 +80739,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-copy small,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-copy small,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-copy small,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy small {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-copy small,
+.dashboard-screen.movimentos-screen .standard-module-card-copy small,
+#app .dashboard-screen.movimentos-screen .standard-module-card-copy small,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-copy small,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-copy small,
+.dashboard-screen.relatorios-screen .standard-module-card-copy small,
+#app .dashboard-screen.relatorios-screen .standard-module-card-copy small {
   color: #64748b !important;
   font-size: 13.5px !important;
   line-height: 1.35 !important;
@@ -80595,7 +80767,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card-chevron,
 #app .dashboard-screen.product-submenu-screen .standard-module-card-chevron,
 .dashboard-screen.produtos-submenu-screen .standard-module-card-chevron,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card-chevron {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-chevron,
+.dashboard-screen.movimentos-screen .standard-module-card-chevron,
+#app .dashboard-screen.movimentos-screen .standard-module-card-chevron,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-chevron,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-chevron,
+.dashboard-screen.relatorios-screen .standard-module-card-chevron,
+#app .dashboard-screen.relatorios-screen .standard-module-card-chevron {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -80619,7 +80797,13 @@ html body:not(.login-active) #app > :is(
 .dashboard-screen.product-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
 #app .dashboard-screen.product-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
 .dashboard-screen.produtos-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
-#app .dashboard-screen.produtos-submenu-screen .standard-module-card:hover .standard-module-card-chevron {
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
+.dashboard-screen.movimentos-screen .standard-module-card:hover .standard-module-card-chevron,
+#app .dashboard-screen.movimentos-screen .standard-module-card:hover .standard-module-card-chevron,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
+.dashboard-screen.relatorios-screen .standard-module-card:hover .standard-module-card-chevron,
+#app .dashboard-screen.relatorios-screen .standard-module-card:hover .standard-module-card-chevron {
   color: #64748b !important;
   transform: translateX(2px) !important;
 }
@@ -80632,7 +80816,32 @@ html body:not(.login-active) #app > :is(
   .dashboard-screen.financeiro-submenu-screen .standard-module-card-grid,
   #app .dashboard-screen.financeiro-submenu-screen .standard-module-card-grid,
   .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
-  #app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid {
+  #app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
+  .dashboard-screen.movimentos-screen .standard-module-card-grid,
+  #app .dashboard-screen.movimentos-screen .standard-module-card-grid,
+  .dashboard-screen.movimentos-submenu-screen .standard-module-card-grid,
+  #app .dashboard-screen.movimentos-submenu-screen .standard-module-card-grid,
+  .dashboard-screen.relatorios-screen .standard-module-card-grid,
+  #app .dashboard-screen.relatorios-screen .standard-module-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    max-width: 520px !important;
+  }
+
+  .dashboard-screen.nf-submenu-screen .standard-module-card,
+  #app .dashboard-screen.nf-submenu-screen .standard-module-card,
+  .dashboard-screen.compras-submenu-screen .standard-module-card,
+  #app .dashboard-screen.compras-submenu-screen .standard-module-card,
+  .dashboard-screen.financeiro-submenu-screen .standard-module-card,
+  #app .dashboard-screen.financeiro-submenu-screen .standard-module-card,
+  .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+  #app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+  .dashboard-screen.movimentos-screen .standard-module-card,
+  #app .dashboard-screen.movimentos-screen .standard-module-card,
+  .dashboard-screen.movimentos-submenu-screen .standard-module-card,
+  #app .dashboard-screen.movimentos-submenu-screen .standard-module-card,
+  .dashboard-screen.relatorios-screen .standard-module-card,
+  #app .dashboard-screen.relatorios-screen .standard-module-card {
     grid-template-columns: 1fr !important;
     gap: 14px !important;
     max-width: 520px !important;
@@ -81685,7 +81894,8 @@ tr.sd-subheaders th {
    ======================================================== */
 .app-breadcrumb,
 #app .app-breadcrumb,
-#app main.container .app-breadcrumb {
+#app main.container .app-breadcrumb,
+#app .dashboard-screen .app-breadcrumb {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: flex-start !important;
@@ -81715,7 +81925,62 @@ tr.sd-subheaders th {
 @media (max-width: 768px) {
   .app-breadcrumb,
   #app .app-breadcrumb,
-  #app main.container .app-breadcrumb {
+  #app main.container .app-breadcrumb,
+  #app .dashboard-screen .app-breadcrumb {
+    left: 16px !important;
+    max-width: calc(100vw - 32px) !important;
+  }
+}
+
+/* Ajuste de padding-top das cascas operacionais para dar espaço ao breadcrumb em Y = 90px */
+html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.app-page-shell:not(.menu-screen) > main.container.ped-shell.app-page-container,
+html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen.app-page-shell:not(.menu-screen) > main.container.an-shell.app-page-container,
+html body:not(.login-active) #app main.container.ped-shell,
+html body:not(.login-active) #app main.container.an-shell {
+  padding-top: 126px !important;
+}
+
+@media (max-width: 700px) {
+  html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.app-page-shell:not(.menu-screen) > main.container.ped-shell.app-page-container,
+  html body:not(.login-active) #app > .dashboard-screen.internal.module-screen.an-screen.app-page-shell:not(.menu-screen) > main.container.an-shell.app-page-container,
+  html body:not(.login-active) #app main.container.ped-shell,
+  html body:not(.login-active) #app main.container.an-shell {
+    padding-top: 112px !important;
+  }
+}
+
+/* Breadcrumb específico para telas operacionais com fluxo de página (Pedidos, Anúncios) */
+#app main.ped-shell .app-breadcrumb,
+#app main.an-shell .app-breadcrumb {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  position: absolute !important;
+  top: 90px !important;
+  left: 35px !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  max-width: calc(100vw - 70px) !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  line-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  z-index: 50 !important;
+  pointer-events: auto !important;
+}
+
+@media (max-width: 768px) {
+  #app main.ped-shell .app-breadcrumb,
+  #app main.an-shell .app-breadcrumb {
     left: 16px !important;
     max-width: calc(100vw - 32px) !important;
   }
@@ -82042,5 +82307,1016 @@ tr.sd-subheaders th {
 
   .operations-dashboard-screen .dashboard-channel-bar-bg {
     max-width: none !important;
+  }
+}
+
+/* ===================================================
+   HISTÓRICO / EXTRATO DE MOVIMENTAÇÕES DE ESTOQUE
+   =================================================== */
+
+.mov-history-screen {
+  background: #f8fafc;
+  min-height: 100vh;
+  color: #1e293b;
+}
+
+.mov-history-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Header */
+.mov-history-header-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.mov-history-header-copy h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px 0;
+}
+
+.mov-history-header-copy p {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.mov-history-header-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.mov-history-header-stats span {
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.mov-history-header-stats strong {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.mov-history-header-stats small {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+/* Summary Grid */
+.mov-history-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+
+.mov-summary-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.mov-summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--summary-tone, #3b82f6);
+}
+
+.mov-summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.mov-summary-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--summary-tone, #3b82f6) 12%, transparent);
+  color: var(--summary-tone, #3b82f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mov-summary-icon-box .material-symbols-rounded {
+  font-size: 24px;
+}
+
+.mov-summary-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mov-summary-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mov-summary-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.mov-summary-sub {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Controles e Filtros */
+.mov-history-controls-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.mov-filter-level {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mov-filter-level-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.mov-filter-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mov-filter-tab {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mov-filter-tab:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.mov-filter-tab.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+.mov-filter-secondary-row {
+  display: grid;
+  grid-template-columns: 260px 1fr 1.2fr;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.mov-origin-select-wrap,
+.mov-period-wrap,
+.mov-search-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mov-origin-select-wrap label,
+.mov-period-wrap label,
+.mov-search-wrap label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mov-control-select {
+  height: 42px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+}
+
+.mov-control-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.mov-period-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mov-period-btn {
+  height: 42px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mov-period-btn:hover {
+  background: #e2e8f0;
+}
+
+.mov-period-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.mov-custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mov-custom-date-inputs input[type="date"] {
+  height: 42px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+}
+
+.mov-custom-date-inputs span {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.mov-search-input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mov-search-input-box .material-symbols-rounded {
+  position: absolute;
+  left: 12px;
+  color: #94a3b8;
+  font-size: 20px;
+  pointer-events: none;
+}
+
+.mov-search-input-box input {
+  width: 100%;
+  height: 42px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 38px 0 38px;
+  font-size: 0.88rem;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mov-search-input-box input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.mov-clear-search-btn {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: #94a3b8;
+  border-radius: 50%;
+}
+
+.mov-clear-search-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+/* Painel de Extrato */
+.mov-extrato-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mov-extrato-table-head {
+  display: grid;
+  grid-template-columns: 140px 1.4fr 150px 140px 100px 120px 1.4fr 60px;
+  gap: 12px;
+  padding: 14px 20px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  align-items: center;
+}
+
+.mov-extrato-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.mov-extrato-row {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.mov-extrato-row:last-child {
+  border-bottom: none;
+}
+
+.mov-extrato-row:hover {
+  background-color: #f8fafc;
+}
+
+.mov-extrato-row.is-expanded {
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.mov-extrato-row-main {
+  display: grid;
+  grid-template-columns: 140px 1.4fr 150px 140px 100px 120px 1.4fr 60px;
+  gap: 12px;
+  padding: 16px 20px;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Badges e Células */
+.mov-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.mov-badge .material-symbols-rounded {
+  font-size: 16px;
+}
+
+.mov-badge.badge-entrada {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.mov-badge.badge-saida {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.mov-badge.badge-transferencia {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #bae6fd;
+}
+
+.mov-badge.badge-ajuste {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.mov-badge.badge-estorno {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border-color: #e9d5ff;
+}
+
+.mov-badge-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.mov-doc-ident {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mov-doc-sub {
+  display: block;
+  font-size: 0.76rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.mov-date-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mov-user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.mov-user-badge .material-symbols-rounded {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+.mov-itens-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.mov-qty-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.mov-qty-badge small {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.qty-positive {
+  color: #16a34a;
+}
+
+.qty-negative {
+  color: #dc2626;
+}
+
+.qty-transfer {
+  color: #0284c7;
+}
+
+.qty-ajuste {
+  color: #d97706;
+}
+
+.qty-estorno {
+  color: #7c3aed;
+}
+
+.qty-neutro {
+  color: #475569;
+}
+
+.mov-route-badge {
+  display: inline-block;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mov-btn-detail {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mov-btn-detail:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.mov-btn-detail.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+/* Drawer de Detalhes */
+.mov-detail-drawer {
+  padding: 16px 20px 24px;
+  background: #f8fafc;
+  border-top: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mov-detail-grid-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.mov-detail-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.mov-detail-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mov-detail-card-head .material-symbols-rounded {
+  font-size: 18px;
+  color: #64748b;
+}
+
+.mov-detail-card-head h3 {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.mov-detail-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mov-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  gap: 8px;
+}
+
+.mov-meta-row.full-width {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.mov-meta-row span {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.mov-meta-row strong {
+  color: #0f172a;
+  font-weight: 700;
+  text-align: right;
+}
+
+.mov-detail-note {
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: #334155;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Produtos Envolvidos */
+.mov-detail-card-products {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mov-detail-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mov-detail-product-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.mov-prod-img-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mov-prod-img-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mov-prod-img-box .material-symbols-rounded {
+  font-size: 24px;
+  color: #94a3b8;
+}
+
+.mov-prod-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mov-prod-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mov-prod-chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.mov-prod-chips span b {
+  color: #475569;
+}
+
+.mov-prod-quantities {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.mov-prod-qty-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.mov-prod-qty-item small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.mov-prod-qty-item strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.mov-prod-qty-item.current-stock {
+  padding-left: 12px;
+  border-left: 1px solid #cbd5e1;
+}
+
+.mov-prod-qty-item.current-stock strong {
+  color: #2563eb;
+}
+
+/* Rastreabilidade */
+.mov-trace-timeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  gap: 8px;
+}
+
+.mov-trace-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  flex: 1;
+}
+
+.mov-trace-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #eff6ff;
+  border: 2px solid #3b82f6;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mov-trace-marker .material-symbols-rounded {
+  font-size: 18px;
+}
+
+.mov-trace-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mov-trace-content strong {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.mov-trace-content small {
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mov-trace-line {
+  flex: 1;
+  height: 2px;
+  background: #cbd5e1;
+  margin: 0 12px;
+}
+
+/* Paginação */
+.mov-history-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.mov-page-size-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mov-page-size-label select {
+  height: 32px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+}
+
+.mov-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mov-page-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.mov-page-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.mov-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mov-page-indicator strong {
+  color: #0f172a;
+}
+
+.mov-history-empty {
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.mov-history-empty .material-symbols-rounded {
+  font-size: 40px;
+  color: #94a3b8;
+}
+
+.mov-history-empty strong {
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.mov-history-empty small {
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.mov-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Responsividade Mobile & Tablet */
+@media (max-width: 1200px) {
+  .mov-history-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .mov-filter-secondary-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mov-search-wrap {
+    grid-column: 1 / -1;
+  }
+
+  .mov-extrato-table-head,
+  .mov-extrato-row-main {
+    grid-template-columns: 120px 1.2fr 130px 120px 90px 100px 1.2fr 50px;
+  }
+}
+
+@media (max-width: 860px) {
+  .mov-history-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mov-detail-grid-top {
+    grid-template-columns: 1fr;
+  }
+
+  .mov-extrato-table-head {
+    display: none;
+  }
+
+  .mov-extrato-row-main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .mov-extrato-row-main .col-mov,
+  .mov-extrato-row-main .col-origem,
+  .mov-extrato-row-main .col-data,
+  .mov-extrato-row-main .col-user,
+  .mov-extrato-row-main .col-itens,
+  .mov-extrato-row-main .col-qty,
+  .mov-extrato-row-main .col-local,
+  .mov-extrato-row-main .col-acoes {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .mov-extrato-row-main .col-origem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mov-trace-timeline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .mov-trace-line {
+    display: none;
   }
 }

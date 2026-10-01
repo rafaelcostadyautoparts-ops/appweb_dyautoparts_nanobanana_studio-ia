@@ -815,3 +815,160 @@ test('M) KPIs operacionais: SEPARADOS conta exatamente 1 para o piloto deduplica
   assert.equal(countSeparados, 1, 'SEPARADOS deve contar exatamente 1 ocorrência para o piloto');
   assert.equal(countPendentes, 1, 'PENDENTES deve contar 1 (Geladeira)');
 });
+
+test('N) isSeparationPendingConferenceSession reconhece separacao finalizada com conferencia ativa', () => {
+  const env = createTestEnv({
+    appData: {
+      conferencia: [
+        { id: 'CONF-SEP-PED-90', separacao_id: 'SEP-PED-90', status: 'em_conferencia' }
+      ]
+    },
+    PICK_STATUS_FINISHED: 'finalizada',
+    PICK_STATUS_READY_FOR_PACK: 'aguardando',
+    PACK_STATUS_CONCLUDED: 'concluida',
+    PACK_STATUS_CANCELLED: 'cancelada',
+    getPackSeparationSessionId: (s) => s?.id || '',
+    getPackSeparationUniqueId: (s) => s?.id || ''
+  });
+
+  const helpers = [
+    getFunctionSource('isPickingFastModeSource'),
+    getFunctionSource('getConferenceSessionId'),
+    getFunctionSource('isPendingConferenceRow'),
+    getFunctionSource('hasPendingConferenceForSession'),
+    getFunctionSource('isIntegratedSeparation'),
+    getFunctionSource('isSessionPendingConferenceForUser'),
+    getFunctionSource('isSeparationPendingConferenceSession')
+  ].join('\n');
+
+  vm.runInContext(helpers, env);
+
+  // 1. Sessao piloto SEP-PED-90 com status 'finalizada' e conferencia em_conferencia
+  const sessaoPiloto = { id: 'SEP-PED-90', status: 'finalizada' };
+  assert.equal(env.isSeparationPendingConferenceSession(sessaoPiloto), true, 'SEP-PED-90 finalizada deve ser reconhecida como pendente de conferência');
+
+  // 2. Sessao com conferência já concluída
+  env.appData.conferencia[0].status = 'concluida';
+  assert.equal(env.isSeparationPendingConferenceSession(sessaoPiloto), false, 'Conferência concluída não deve ser pendente');
+
+  // 3. Sessao cancelada
+  const sessaoCancelada = { id: 'SEP-PED-90', status: 'cancelada' };
+  assert.equal(env.isSeparationPendingConferenceSession(sessaoCancelada), false, 'Separação cancelada não deve ser pendente');
+});
+
+test('O) findConferenceSessionByBarcode localiza sessao por shipping_id, external_order_id, separacao_id, conferencia_id e pacote_id', () => {
+  const env = createTestEnv({
+    appData: {
+      separacao: [
+        { id: 'SEP-PED-90', status: 'finalizada', canal: 'Mercado Livre - Agência', pedido_id: 90, total_itens_separados: 4, total_pacotes_montados: 1 }
+      ],
+      mercadolivre_pedidos: [
+        { id: 90, db_id: 90, external_order_id: '2000018356039444', shipping_id: '47966360665', separacao_id: 'SEP-PED-90', status_identificacao: 'separado' }
+      ],
+      conferencia: [
+        { id: 'CONF-SEP-PED-90', conferencia_id: 'CONF-SEP-PED-90', separacao_id: 'SEP-PED-90', status: 'em_conferencia' }
+      ],
+      separacao_pacotes: [
+        { id: 'PKG-001', pacote_id: 'PKG-001', separacao_id: 'SEP-PED-90', status: 'ATIVO' }
+      ]
+    },
+    PICK_STATUS_FINISHED: 'finalizada',
+    PICK_STATUS_READY_FOR_PACK: 'aguardando',
+    PACK_STATUS_CONCLUDED: 'concluida',
+    PACK_STATUS_CANCELLED: 'cancelada',
+    getPackSeparationSessionId: (s) => s?.id || '',
+    getPackSeparationUniqueId: (s) => s?.id || ''
+  });
+
+  const helpers = [
+    getFunctionSource('isPickingFastModeSource'),
+    getFunctionSource('getConferenceSessionId'),
+    getFunctionSource('isPendingConferenceRow'),
+    getFunctionSource('hasPendingConferenceForSession'),
+    getFunctionSource('isIntegratedSeparation'),
+    getFunctionSource('isSessionPendingConferenceForUser'),
+    getFunctionSource('isSeparationPendingConferenceSession'),
+    getFunctionSource('findConferenceSessionByBarcode')
+  ].join('\n');
+
+  vm.runInContext(helpers, env);
+
+  // 1. Busca por shipping_id da etiqueta física
+  const matchShipping = env.findConferenceSessionByBarcode('47966360665');
+  assert.ok(matchShipping, 'Deve encontrar por shipping_id');
+  assert.equal(matchShipping.matchType, 'shipping_id');
+  assert.equal(matchShipping.session.id, 'SEP-PED-90');
+
+  // 2. Busca por external_order_id (Pedido ML)
+  const matchOrder = env.findConferenceSessionByBarcode('2000018356039444');
+  assert.ok(matchOrder, 'Deve encontrar por external_order_id');
+  assert.equal(matchOrder.matchType, 'external_order_id');
+  assert.equal(matchOrder.session.id, 'SEP-PED-90');
+
+  // 3. Busca por separacao_id
+  const matchSep = env.findConferenceSessionByBarcode('SEP-PED-90');
+  assert.ok(matchSep, 'Deve encontrar por separacao_id');
+  assert.equal(matchSep.matchType, 'separacao_id');
+
+  // 4. Busca por conferencia_id
+  const matchConf = env.findConferenceSessionByBarcode('CONF-SEP-PED-90');
+  assert.ok(matchConf, 'Deve encontrar por conferencia_id');
+  assert.equal(matchConf.matchType, 'conferencia_id');
+
+  // 5. Busca por pacote_id
+  const matchPkg = env.findConferenceSessionByBarcode('PKG-001');
+  assert.ok(matchPkg, 'Deve encontrar por pacote_id');
+  assert.equal(matchPkg.matchType, 'pacote_id');
+
+  // 6. Código inexistente
+  const matchNone = env.findConferenceSessionByBarcode('9999999999999');
+  assert.equal(matchNone, null, 'Código inexistente deve retornar null');
+});
+
+test('FASE 4.3 — Classificacao visual dos pedidos na nova esteira (5 cards)', () => {
+  const env = createTestEnv();
+  const fnCode = getFunctionSource('obterEstagioOperacionalPedido');
+  const fnConsolidar = getFunctionSource('consolidarPedidosPreviewColecao');
+  vm.runInContext(fnCode + '\n' + fnConsolidar, env);
+
+  // A) Pedido sem mapping completo -> PENDENTES
+  const pedSemMapping = { id: '101', status_identificacao_preview: 'pendente_identificacao', separacao_id: null };
+  assert.equal(env.obterEstagioOperacionalPedido(pedSemMapping), 'pendentes', 'A) Pedido sem mapping deve ser PENDENTES');
+
+  // B) Pedido 100% mapeado ainda não liberado -> PRONTOS
+  const pedMapeado = { id: '102', status_identificacao_preview: 'pronto_separacao', separacao_id: null };
+  assert.equal(env.obterEstagioOperacionalPedido(pedMapeado), 'prontos', 'B) Pedido 100% mapeado deve ser PRONTOS');
+
+  // C) Pedido com conferência pendente/em andamento -> CONFERÊNCIA
+  const pedConferenciaAndamento = { id: '103', status_identificacao_preview: 'pronto_separacao', separacao_id: 'SEP-PED-103', conferencia_status: 'em_conferencia' };
+  assert.equal(env.obterEstagioOperacionalPedido(pedConferenciaAndamento), 'conferencia', 'C) Pedido em conferência deve ser CONFERÊNCIA');
+
+  // D) Pedido com conferência concluída -> CONFERIDOS
+  const pedConferido = { id: '104', status_identificacao: 'conferido', conferencia_status: 'conferido', separacao_id: 'SEP-PED-104' };
+  assert.equal(env.obterEstagioOperacionalPedido(pedConferido), 'conferidos', 'D) Pedido conferido deve ser CONFERIDOS');
+
+  // E) Mutuamente exclusivo (não contado simultaneamente em dois estágios)
+  const colecao = [pedSemMapping, pedMapeado, pedConferenciaAndamento, pedConferido];
+  const pendentes = colecao.filter(p => env.obterEstagioOperacionalPedido(p) === 'pendentes').length;
+  const prontos = colecao.filter(p => env.obterEstagioOperacionalPedido(p) === 'prontos').length;
+  const conferencia = colecao.filter(p => env.obterEstagioOperacionalPedido(p) === 'conferencia').length;
+  const conferidos = colecao.filter(p => env.obterEstagioOperacionalPedido(p) === 'conferidos').length;
+  assert.equal(pendentes + prontos + conferencia + conferidos, colecao.length, 'E) Soma das categorias deve ser igual ao total de pedidos (mutuamente exclusivos)');
+
+  // F) Piloto ID 90 (com CONF-SEP-PED-90 em andamento) -> CONFERÊNCIA
+  const piloto90 = { id: '90', db_id: 90, external_order_id: '2000018356039444', separacao_id: 'SEP-PED-90', conferencia_status: 'em_conferencia' };
+  assert.equal(env.obterEstagioOperacionalPedido(piloto90), 'conferencia', 'F) Piloto ID 90 deve ser classificado em CONFERÊNCIA');
+
+  // G) Pedido Geladeira não mapeado (#2000018404096496) -> PENDENTES
+  const geladeira = { id: 'preview_1_2000018404096496', external_order_id: '2000018404096496', status_identificacao_preview: 'pendente_identificacao' };
+  assert.equal(env.obterEstagioOperacionalPedido(geladeira), 'pendentes', 'G) Geladeira não mapeada deve ser PENDENTES');
+
+  // H) TODOS permanece deduplicado
+  const previewList = [
+    { id: 'preview_3_2000018356039444', platform: 'MERCADOLIBRE', external_order_id: '2000018356039444', status_identificacao_preview: 'pendente_identificacao' },
+    { id: '90', db_id: 90, platform: 'MERCADOLIBRE', external_order_id: '2000018356039444', separacao_id: 'SEP-PED-90', conferencia_status: 'em_conferencia' },
+    geladeira
+  ];
+  const consolidado = env.consolidarPedidosPreviewColecao(previewList);
+  assert.equal(consolidado.length, 2, 'H) Coleção consolidada deve ter 2 pedidos únicos');
+});

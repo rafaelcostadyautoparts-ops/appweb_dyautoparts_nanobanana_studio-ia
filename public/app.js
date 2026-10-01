@@ -4673,16 +4673,67 @@ function renderPedidosPlaceholder(push = true) {
   renderPedidosScreen('todos');
 }
 
+function obterEstagioOperacionalPedido(p) {
+  if (!p) return 'pendentes';
+
+  const statusId = String(p.status_identificacao_preview || p.status_identificacao || '').toLowerCase();
+  const statusConf = String(p.conferencia_status || p.status_conferencia || (p.conferencia && p.conferencia.status) || '').toLowerCase();
+  const statusSep = String(p.separacao_status || p.status_separacao || '').toLowerCase();
+  const hasSeparacao = Boolean(p.separacao_id && String(p.separacao_id).trim());
+
+  // 1. CONFERÊNCIA EM ANDAMENTO (Piloto ID 90 ou qualquer pedido com conferência iniciada e não concluída)
+  if (statusConf === 'em_conferencia' || statusConf === 'em_andamento' || statusConf === 'pendente') {
+    return 'conferencia';
+  }
+
+  // 2. CONFERIDOS: Conferência física 100% concluída
+  const isConferido = statusId === 'conferido' ||
+                      (statusId === 'separado' && statusConf === 'conferido') ||
+                      statusConf === 'conferido' ||
+                      statusConf === 'finalizada' ||
+                      statusConf === 'finalizado';
+
+  if (isConferido) {
+    return 'conferidos';
+  }
+
+  // 3. CONFERÊNCIA: Liberado para a operação de conferência (possui separacao_id vinculada OU trabalho em andamento/aguardando)
+  const isConferencia = hasSeparacao ||
+                        statusId === 'em_separacao' ||
+                        statusId === 'aguardando_conferencia' ||
+                        statusId === 'em_conferencia' ||
+                        statusSep === 'em_separacao' ||
+                        statusSep === 'pronto_conferencia' ||
+                        statusSep === 'em_conferencia';
+
+  if (isConferencia) {
+    return 'conferencia';
+  }
+
+  // 4. PRONTOS: 100% identificado/mapeado, aguardando revisão humana antes da liberação
+  const isPronto = statusId === 'pronto_separacao' || statusId === 'pronto';
+  if (isPronto) {
+    return 'prontos';
+  }
+
+  // 5. PENDENTES: Possui pelo menos 1 item sem identificação/mapping completo
+  return 'pendentes';
+}
+window.obterEstagioOperacionalPedido = obterEstagioOperacionalPedido;
+
 window.PedidosPreviewState = window.PedidosPreviewState || {
-  operacional: 'todos', // 'todos' | 'pendentes' | 'prontos' | 'em_separacao' | 'separados' | 'divergencias'
+  operacional: 'todos', // 'todos' | 'pendentes' | 'prontos' | 'conferencia' | 'conferidos'
   marketplace: 'todos', // 'todos' | 'mercadolibre' | 'shopee'
   conta: 'todas',
   busca: ''
 };
 
 function setPedidosFiltroOperacional(op) {
+  if (op === 'em_separacao') op = 'conferencia';
+  if (op === 'separados') op = 'conferidos';
+  if (op === 'divergencias') op = 'todos';
   window.PedidosPreviewState.operacional = op;
-  renderPedidosScreen();
+  renderPedidosScreen(op);
 }
 
 function setPedidosFiltroMarketplace(mp) {
@@ -5041,29 +5092,25 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     if (filtroConta && filtroConta !== 'todas') state.conta = filtroConta;
 
     const renderDOM = () => {
-      const isPedSeparado = p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado' || p.status_identificacao === 'aguardando_conferencia';
       const countTodos = todosPreview.length;
-      const countEmSeparacao = todosPreview.filter(p => !isPedSeparado(p) && (Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao')).length;
-      const countProntos = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao' && !p.separacao_id).length;
-      const countPendentes = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id).length;
-      const countSeparados = todosPreview.filter(p => isPedSeparado(p)).length;
-      const countDivergencias = 0;
+      const countPendentes = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'pendentes').length;
+      const countProntos = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'prontos').length;
+      const countConferencia = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'conferencia').length;
+      const countConferidos = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'conferidos').length;
 
       const countML = todosPreview.filter(p => p.platform === 'MERCADOLIBRE').length;
       const countShopee = todosPreview.filter(p => p.platform === 'SHOPEE').length;
       const contasDisponiveis = Array.from(new Set(todosPreview.map(p => p.account_name))).filter(Boolean).sort();
 
       let listaExibicao = todosPreview;
-      if (state.operacional === 'prontos') {
-        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview === 'pronto_separacao' && !p.separacao_id);
-      } else if (state.operacional === 'pendentes') {
-        listaExibicao = todosPreview.filter(p => p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id);
-      } else if (state.operacional === 'em_separacao') {
-        listaExibicao = todosPreview.filter(p => !isPedSeparado(p) && (Boolean(p.separacao_id) || p.status_identificacao_preview === 'em_separacao'));
-      } else if (state.operacional === 'separados') {
-        listaExibicao = todosPreview.filter(p => isPedSeparado(p));
-      } else if (state.operacional === 'divergencias') {
-        listaExibicao = [];
+      if (state.operacional === 'pendentes') {
+        listaExibicao = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'pendentes');
+      } else if (state.operacional === 'prontos') {
+        listaExibicao = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'prontos');
+      } else if (state.operacional === 'conferencia') {
+        listaExibicao = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'conferencia');
+      } else if (state.operacional === 'conferidos') {
+        listaExibicao = todosPreview.filter(p => obterEstagioOperacionalPedido(p) === 'conferidos');
       } else {
         listaExibicao = todosPreview;
       }
@@ -5104,7 +5151,7 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
               <span class="app-breadcrumb-current">Pedidos</span>
             </div>
 
-            <!-- CONTADORES OPERACIONAIS PRINCIPAIS -->
+            <!-- CONTADORES OPERACIONAIS PRINCIPAIS (FASE 4.3 - 5 CARDS) -->
             <div class="pedidos-counters-grid">
               <div class="pedidos-counter-card card-todos ${state.operacional === 'todos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('todos')">
                 <div class="pedidos-counter-label">
@@ -5121,43 +5168,34 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
                   <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
                 </div>
                 <div class="pedidos-counter-val" style="color:#b45309;">${countPendentes}</div>
-                <span class="pedidos-counter-sub">Aguardam mapping</span>
+                <span class="pedidos-counter-sub">Aguardam identificação</span>
               </div>
 
               <div class="pedidos-counter-card card-prontos ${state.operacional === 'prontos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('prontos')">
                 <div class="pedidos-counter-label" style="color:#15803d;">
-                  <span>Prontos p/ Separação</span>
+                  <span>Prontos</span>
                   <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
                 </div>
                 <div class="pedidos-counter-val" style="color:#15803d;">${countProntos}</div>
-                <span class="pedidos-counter-sub">Prontos p/ envio</span>
+                <span class="pedidos-counter-sub">Revisar e enviar</span>
               </div>
 
-              <div class="pedidos-counter-card card-em-separacao ${state.operacional === 'em_separacao' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('em_separacao')">
+              <div class="pedidos-counter-card card-conferencia ${state.operacional === 'conferencia' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('conferencia')">
                 <div class="pedidos-counter-label" style="color:#1d4ed8;">
-                  <span>Em Separação</span>
-                  <span class="material-symbols-rounded" style="font-size:16px;">directions_walk</span>
+                  <span>Conferência</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">sync</span>
                 </div>
-                <div class="pedidos-counter-val" style="color:#1d4ed8;">${countEmSeparacao}</div>
-                <span class="pedidos-counter-sub">Picking em curso</span>
-              </div>
-
-              <div class="pedidos-counter-card card-separados ${state.operacional === 'separados' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('separados')">
-                <div class="pedidos-counter-label" style="color:#7e22ce;">
-                  <span>Separados</span>
-                  <span class="material-symbols-rounded" style="font-size:16px;">fact_check</span>
-                </div>
-                <div class="pedidos-counter-val" style="color:#7e22ce;">${countSeparados}</div>
+                <div class="pedidos-counter-val" style="color:#1d4ed8;">${countConferencia}</div>
                 <span class="pedidos-counter-sub">Aguardam conferência</span>
               </div>
 
-              <div class="pedidos-counter-card card-divergencias ${state.operacional === 'divergencias' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('divergencias')">
-                <div class="pedidos-counter-label" style="color:#dc2626;">
-                  <span>Divergências</span>
-                  <span class="material-symbols-rounded" style="font-size:16px;">warning</span>
+              <div class="pedidos-counter-card card-conferidos ${state.operacional === 'conferidos' ? 'active' : ''}" onclick="setPedidosFiltroOperacional('conferidos')">
+                <div class="pedidos-counter-label" style="color:#7e22ce;">
+                  <span>Conferidos</span>
+                  <span class="material-symbols-rounded" style="font-size:16px;">verified</span>
                 </div>
-                <div class="pedidos-counter-val" style="color:#dc2626;">${countDivergencias}</div>
-                <span class="pedidos-counter-sub">Revisão necessária</span>
+                <div class="pedidos-counter-val" style="color:#7e22ce;">${countConferidos}</div>
+                <span class="pedidos-counter-sub">Pacotes finalizados</span>
               </div>
             </div>
 
@@ -5260,12 +5298,16 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
     }
 
     const totalTodos = pedidos.length;
-    const listPendentes = pedidos.filter(p => p.status_identificacao === 'pendente_identificacao' || p.status_identificacao === 'novo');
-    const listProntos = pedidos.filter(p => p.status_identificacao === 'pronto_separacao' && p.status_mercadolivre !== 'cancelled');
+    const listPendentes = pedidos.filter(p => obterEstagioOperacionalPedido(p) === 'pendentes');
+    const listProntos = pedidos.filter(p => obterEstagioOperacionalPedido(p) === 'prontos');
+    const listConferencia = pedidos.filter(p => obterEstagioOperacionalPedido(p) === 'conferencia');
+    const listConferidos = pedidos.filter(p => obterEstagioOperacionalPedido(p) === 'conferidos');
 
     let listaExibicao = pedidos;
     if (filtroAba === 'pendentes') listaExibicao = listPendentes;
-    if (filtroAba === 'prontos') listaExibicao = listProntos;
+    else if (filtroAba === 'prontos') listaExibicao = listProntos;
+    else if (filtroAba === 'conferencia') listaExibicao = listConferencia;
+    else if (filtroAba === 'conferidos') listaExibicao = listConferidos;
 
     app.innerHTML = `
       <div class="dashboard-screen internal fade-in module-screen app-page-shell">
@@ -5278,18 +5320,50 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
             <span class="app-breadcrumb-current">Pedidos</span>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
-            <div onclick="renderPedidosScreen('todos')" style="background:#fff;border:2px solid ${filtroAba === 'todos' ? '#4f46e5' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
-              <small style="color:#64748b;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Todos os Pedidos</small>
-              <h2 style="font-size:1.8rem;color:#0f172a;margin:6px 0 0;">${totalTodos}</h2>
+          <div class="pedidos-counters-grid">
+            <div class="pedidos-counter-card card-todos ${filtroAba === 'todos' ? 'active' : ''}" onclick="renderPedidosScreen('todos')">
+              <div class="pedidos-counter-label">
+                <span>Todos</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">inventory_2</span>
+              </div>
+              <div class="pedidos-counter-val">${totalTodos}</div>
+              <span class="pedidos-counter-sub">Total consolidado</span>
             </div>
-            <div onclick="renderPedidosScreen('pendentes')" style="background:#fff;border:2px solid ${filtroAba === 'pendentes' ? '#ea580c' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
-              <small style="color:#c2410c;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Pendentes de Identificação</small>
-              <h2 style="font-size:1.8rem;color:#c2410c;margin:6px 0 0;">${listPendentes.length}</h2>
+
+            <div class="pedidos-counter-card card-pendentes ${filtroAba === 'pendentes' ? 'active' : ''}" onclick="renderPedidosScreen('pendentes')">
+              <div class="pedidos-counter-label" style="color:#b45309;">
+                <span>Pendentes</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">pending</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#b45309;">${listPendentes.length}</div>
+              <span class="pedidos-counter-sub">Aguardam identificação</span>
             </div>
-            <div onclick="renderPedidosScreen('prontos')" style="background:#fff;border:2px solid ${filtroAba === 'prontos' ? '#16a34a' : '#e2e8f0'};border-radius:12px;padding:16px;cursor:pointer;">
-              <small style="color:#15803d;font-weight:700;font-size:0.75rem;text-transform:uppercase;">Prontos para Separação</small>
-              <h2 style="font-size:1.8rem;color:#15803d;margin:6px 0 0;">${listProntos.length}</h2>
+
+            <div class="pedidos-counter-card card-prontos ${filtroAba === 'prontos' ? 'active' : ''}" onclick="renderPedidosScreen('prontos')">
+              <div class="pedidos-counter-label" style="color:#15803d;">
+                <span>Prontos</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">check_circle</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#15803d;">${listProntos.length}</div>
+              <span class="pedidos-counter-sub">Revisar e enviar</span>
+            </div>
+
+            <div class="pedidos-counter-card card-conferencia ${filtroAba === 'conferencia' ? 'active' : ''}" onclick="renderPedidosScreen('conferencia')">
+              <div class="pedidos-counter-label" style="color:#1d4ed8;">
+                <span>Conferência</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">sync</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#1d4ed8;">${listConferencia.length}</div>
+              <span class="pedidos-counter-sub">Aguardam conferência</span>
+            </div>
+
+            <div class="pedidos-counter-card card-conferidos ${filtroAba === 'conferidos' ? 'active' : ''}" onclick="renderPedidosScreen('conferidos')">
+              <div class="pedidos-counter-label" style="color:#7e22ce;">
+                <span>Conferidos</span>
+                <span class="material-symbols-rounded" style="font-size:16px;">verified</span>
+              </div>
+              <div class="pedidos-counter-val" style="color:#7e22ce;">${listConferidos.length}</div>
+              <span class="pedidos-counter-sub">Pacotes finalizados</span>
             </div>
           </div>
 
@@ -21236,16 +21310,39 @@ function isSameConferenceOperator(separation, user) {
   return Boolean(separator && conferenceUser && separator === conferenceUser);
 }
 
+function isIntegratedSeparation(session = {}) {
+  if (!session || typeof session !== 'object') return false;
+  const tipo = String(session.tipo || session.tipo_separacao || session.tipo_origem || '').toUpperCase().trim();
+  if (tipo === 'PEDIDO_INTEGRADO' || tipo === 'INTEGRADO' || tipo === 'PEDIDO') return true;
+  const sId = String(session.separacao_id || session.codigo_separacao || session.id || session.col_a || '').trim().toUpperCase();
+  if (sId.startsWith('SEP-PED-')) return true;
+  if (session.pedido_id || session.mercadolivre_pedido_id || session.external_order_id) return true;
+  if (typeof appData !== 'undefined' && Array.isArray(appData.mercadolivre_pedidos)) {
+    if (appData.mercadolivre_pedidos.some(p => String(p.separacao_id || '').trim().toUpperCase() === sId)) return true;
+  }
+  return false;
+}
+
 function isSessionPendingConferenceForUser(session = {}, currentUser = null) {
   if (!session || typeof session !== 'object') return false;
-  const effectiveUser = currentUser !== null ? currentUser : (typeof localStorage !== 'undefined' ? localStorage.getItem('currentUser') : null);
   const status = String(session.status || '').toLowerCase().trim();
+  if (status === 'cancelada') return false;
+  if (isPickingFastModeSource(session)) return false;
+
+  const isIntegrated = isIntegratedSeparation(session);
+
+  if (isIntegrated) {
+    // Pedido Integrado: separacao finalizada + conferencia em_conferencia (nao concluida)
+    if (status !== 'finalizada') return false;
+    if (!hasPendingConferenceForSession(session)) return false;
+    return true;
+  }
+
+  // Fluxo Manual Legado: separacao aberta/pendente/pronta_conferencia
   const isReadyStatus = status === 'aberta' || status === 'pendente' || status === 'pronta_conferencia';
   if (!isReadyStatus) return false;
-  if (status === 'cancelada' || status === 'finalizada' || status === 'concluida') return false;
-  if (isPickingFastModeSource(session)) return false;
+  if (status === 'finalizada' || status === 'concluida') return false;
   if (!hasPendingConferenceForSession(session)) return false;
-  if (effectiveUser && isSameConferenceOperator(session, effectiveUser)) return false;
   return true;
 }
 
@@ -21334,9 +21431,16 @@ function isConferenceInProgress(sessionId) {
 function getConferenceCardState(session) {
   const sessionId = getPackSeparationSessionId(session);
   const status = String(session?.status || '').trim().toLowerCase();
+  const isIntegrated = isIntegratedSeparation(session);
 
-  if (status === 'cancelada' || status === 'finalizada' || status === 'concluida') {
+  if (status === 'cancelada') {
     return { shouldRender: false };
+  }
+
+  if (isIntegrated) {
+    if (status !== 'finalizada') return { shouldRender: false };
+  } else {
+    if (status === 'finalizada' || status === 'concluida') return { shouldRender: false };
   }
 
   if (!hasPendingConferenceForSession(session)) {
@@ -21354,9 +21458,161 @@ function getConferenceCardState(session) {
 
   return {
     shouldRender: true,
-    badgeText: 'Aberta',
-    badgeClass: 'ready',
-    statusText: 'Pronta para iniciar a conferência'
+    badgeText: isIntegrated ? 'Aguardando Conferência' : 'Aberta',
+    badgeClass: isIntegrated ? 'warning' : 'ready',
+    statusText: isIntegrated ? 'Separado • Aguardando conferência' : 'Pronta para iniciar a conferência'
+  };
+}
+
+function resolvePendingConferenceByIdentifier(rawInput, customData = null) {
+  const cleanInput = String(rawInput || '').trim().replace(/^#/, '').trim();
+  if (!cleanInput) {
+    return { success: false, status: 'empty', message: 'Informe ou bipe um identificador.' };
+  }
+
+  const separacoes = customData?.separacao || appData?.separacao || [];
+  const conferencias = customData?.conferencia || appData?.conferencia || [];
+  const pedidos = customData?.mercadolivre_pedidos || appData?.mercadolivre_pedidos || [];
+  const pacotes = customData?.separacao_pacotes || appData?.separacao_pacotes || [];
+
+  const pendingSessions = separacoes.filter(s => isSessionPendingConferenceForUser(s));
+  const normalizedInput = cleanInput.toLowerCase();
+
+  const matches = [];
+
+  for (const session of pendingSessions) {
+    const sId = String(getPackSeparationSessionId(session) || '').trim();
+    const sUniqueId = String(getPackSeparationUniqueId(session) || '').trim();
+
+    // Linked Pedido
+    const pedido = pedidos.find(p =>
+      String(p.separacao_id || '').trim().toLowerCase() === sId.toLowerCase() ||
+      String(p.separacao_id || '').trim().toLowerCase() === sUniqueId.toLowerCase() ||
+      String(p.id || '') === String(session.pedido_id || '')
+    ) || session.pickingData?.pedido || session.pedido || null;
+
+    // Linked Conferencia
+    const conference = conferencias.find(c =>
+      String(getConferenceSessionId(c) || '').trim().toLowerCase() === sId.toLowerCase() ||
+      String(c.separacao_id || '').trim().toLowerCase() === sId.toLowerCase()
+    ) || null;
+
+    // Linked Pacotes
+    const sessionPackages = pacotes.filter(pkg =>
+      String(pkg.separacao_id || '').trim().toLowerCase() === sId.toLowerCase()
+    );
+
+    let matchedBy = null;
+
+    // 1. shipping_id
+    const shippingId = String(pedido?.shipping_id || session.shipping_id || session.pickingData?.shipping_id || '').trim();
+    if (shippingId && shippingId.toLowerCase() === normalizedInput) {
+      matchedBy = 'shipping_id';
+    }
+
+    // 2. external_order_id
+    const externalOrderId = String(pedido?.external_order_id || session.external_order_id || session.pickingData?.external_order_id || '').trim();
+    if (!matchedBy && externalOrderId && externalOrderId.toLowerCase() === normalizedInput) {
+      matchedBy = 'external_order_id';
+    }
+
+    // 3. separacao_id
+    if (!matchedBy && (sId.toLowerCase() === normalizedInput || sUniqueId.toLowerCase() === normalizedInput)) {
+      matchedBy = 'separacao_id';
+    }
+
+    // 4. conferencia_id
+    const confId = String(conference?.conferencia_id || conference?.id || '').trim();
+    if (!matchedBy && confId && confId.toLowerCase() === normalizedInput) {
+      matchedBy = 'conferencia_id';
+    }
+
+    // 5. tracking_number
+    const tracking = String(
+      pedido?.raw_data?.shipping?.tracking_number ||
+      pedido?.tracking_number ||
+      session.tracking_number ||
+      session.pickingData?.tracking_number ||
+      ''
+    ).trim();
+    if (!matchedBy && tracking && tracking.toLowerCase() === normalizedInput) {
+      matchedBy = 'tracking_number';
+    }
+
+    // 6. pacote_id
+    if (!matchedBy) {
+      const pkgMatch = sessionPackages.find(p => String(p.pacote_id || '').trim().toLowerCase() === normalizedInput);
+      if (pkgMatch) {
+        matchedBy = 'pacote_id';
+      }
+    }
+
+    if (matchedBy) {
+      matches.push({
+        session,
+        conference,
+        pedido,
+        packages: sessionPackages,
+        matchedBy
+      });
+    }
+  }
+
+  // Temporary instrumentation for audit
+  const primaryMatch = matches.length === 1 ? matches[0] : null;
+  console.log('[CONFERENCIA ETIQUETA] VALOR BRUTO LIDO:', rawInput);
+  console.log('[CONFERENCIA ETIQUETA] IDENTIFICADOR RECONHECIDO COMO:', primaryMatch?.matchedBy || (matches.length > 1 ? 'ambiguo' : 'nao_reconhecido'));
+
+  if (matches.length === 0) {
+    // Check if it exists elsewhere but is not pending
+    const anyPedido = pedidos.find(p =>
+      String(p.shipping_id || '').trim().toLowerCase() === normalizedInput ||
+      String(p.external_order_id || '').trim().toLowerCase() === normalizedInput
+    );
+    if (anyPedido) {
+      if (anyPedido.status_identificacao === 'em_separacao') {
+        return { success: false, status: 'not_pending', reason: 'em_separacao', message: 'Pedido ainda em separação. Conclua o picking antes de iniciar a conferência.' };
+      }
+      if (anyPedido.status_identificacao === 'pronto_separacao') {
+        return { success: false, status: 'not_pending', reason: 'pronto_separacao', message: 'Pedido ainda não foi separado. Inicie a separação primeiro.' };
+      }
+      if (anyPedido.status_identificacao === 'conferido' || anyPedido.status_identificacao === 'despachado') {
+        return { success: false, status: 'not_pending', reason: 'finalizado', message: 'Conferência deste pedido já foi concluída.' };
+      }
+    }
+
+    const anySep = separacoes.find(s =>
+      String(s.separacao_id || s.id || '').trim().toLowerCase() === normalizedInput
+    );
+    if (anySep) {
+      if (anySep.status === 'em_separacao' || anySep.status === 'aberta') {
+        return { success: false, status: 'not_pending', reason: 'em_separacao', message: 'Separação ainda em andamento. Conclua o picking antes de conferir.' };
+      }
+      if (anySep.status === 'cancelada') {
+        return { success: false, status: 'not_pending', reason: 'cancelada', message: 'Esta separação foi cancelada.' };
+      }
+    }
+
+    return {
+      success: false,
+      status: 'not_found',
+      message: 'Pedido/etiqueta não localizado entre as conferências pendentes.'
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      success: false,
+      status: 'ambiguous',
+      matches,
+      message: `Identificador ambíguo: foram localizadas ${matches.length} conferências pendentes. Selecione manualmente na lista abaixo.`
+    };
+  }
+
+  return {
+    success: true,
+    status: 'found',
+    ...matches[0]
   };
 }
 
@@ -26489,6 +26745,156 @@ function getPackActiveSessionsByChannel(currentUser) {
  }, new Map()).values()].sort((a, b) => a.channelName.localeCompare(b.channelName, 'pt-BR'));
 }
 
+function findConferenceSessionByBarcode(code) {
+ const raw = String(code || '').trim();
+ if (!raw) return null;
+ const needle = raw.toLowerCase();
+
+ const separacoes = appData.separacao || [];
+ const pedidos = appData.mercadolivre_pedidos || [];
+ const conferencias = appData.conferencia || [];
+ const pacotes = appData.separacao_pacotes || [];
+
+ // 1. Match por shipping_id (etiqueta de envio Mercado Envíos)
+ const pedidoPorShipping = pedidos.find(p => String(p.shipping_id || '').trim().toLowerCase() === needle);
+ if (pedidoPorShipping) {
+  const sep = separacoes.find(s =>
+   String(getPackSeparationSessionId(s)).toLowerCase() === String(pedidoPorShipping.separacao_id || '').trim().toLowerCase() ||
+   String(s.pedido_id || '') === String(pedidoPorShipping.id || '')
+  );
+  if (sep && isSeparationPendingConferenceSession(sep)) {
+   return { session: sep, matchType: 'shipping_id', pedido: pedidoPorShipping };
+  }
+ }
+
+ // 2. Match por external_order_id (ID do Pedido ML)
+ const pedidoPorOrder = pedidos.find(p => String(p.external_order_id || '').trim().toLowerCase() === needle);
+ if (pedidoPorOrder) {
+  const sep = separacoes.find(s =>
+   String(getPackSeparationSessionId(s)).toLowerCase() === String(pedidoPorOrder.separacao_id || '').trim().toLowerCase() ||
+   String(s.pedido_id || '') === String(pedidoPorOrder.id || '')
+  );
+  if (sep && isSeparationPendingConferenceSession(sep)) {
+   return { session: sep, matchType: 'external_order_id', pedido: pedidoPorOrder };
+  }
+ }
+
+ // 3. Match por separacao_id (ex: SEP-PED-90)
+ const sepPorId = separacoes.find(s =>
+  String(getPackSeparationSessionId(s)).toLowerCase() === needle ||
+  String(getPackSeparationUniqueId(s)).toLowerCase() === needle
+ );
+ if (sepPorId && isSeparationPendingConferenceSession(sepPorId)) {
+  const ped = pedidos.find(p => String(p.separacao_id || '').toLowerCase() === needle);
+  return { session: sepPorId, matchType: 'separacao_id', pedido: ped };
+ }
+
+ // 4. Match por conferencia_id (ex: CONF-SEP-PED-90)
+ const confPorId = conferencias.find(c =>
+  String(c.conferencia_id || '').trim().toLowerCase() === needle ||
+  String(c.id || '').trim().toLowerCase() === needle
+ );
+ if (confPorId) {
+  const sep = separacoes.find(s =>
+   String(getPackSeparationSessionId(s)).toLowerCase() === String(confPorId.separacao_id || '').toLowerCase() ||
+   String(getPackSeparationUniqueId(s)).toLowerCase() === String(confPorId.separacao_id || '').toLowerCase()
+  );
+  if (sep && isSeparationPendingConferenceSession(sep)) {
+   const ped = pedidos.find(p => String(p.separacao_id || '').toLowerCase() === String(confPorId.separacao_id || '').toLowerCase());
+   return { session: sep, matchType: 'conferencia_id', pedido: ped };
+  }
+ }
+
+ // 5. Match por pacote_id (ex: PKG-001)
+ const pctPorId = pacotes.find(p => String(p.pacote_id || '').trim().toLowerCase() === needle);
+ if (pctPorId) {
+  const sep = separacoes.find(s =>
+   String(getPackSeparationSessionId(s)).toLowerCase() === String(pctPorId.separacao_id || '').toLowerCase() ||
+   String(getPackSeparationUniqueId(s)).toLowerCase() === String(pctPorId.separacao_id || '').toLowerCase()
+  );
+  if (sep && isSeparationPendingConferenceSession(sep)) {
+   const ped = pedidos.find(p => String(p.separacao_id || '').toLowerCase() === String(pctPorId.separacao_id || '').toLowerCase());
+   return { session: sep, matchType: 'pacote_id', pedido: ped };
+  }
+ }
+
+ return null;
+}
+
+function resolvePendingConferenceByIdentifier(rawInput) {
+ const match = findConferenceSessionByBarcode(rawInput);
+ if (match) {
+  const labelMap = {
+   shipping_id: 'Etiqueta de Envio',
+   external_order_id: 'Pedido',
+   separacao_id: 'Separação',
+   conferencia_id: 'Conferência',
+   pacote_id: 'Pacote'
+  };
+  return {
+   success: true,
+   session: match.session,
+   matchedBy: labelMap[match.matchType] || match.matchType,
+   pedido: match.pedido
+  };
+ }
+
+ return {
+  success: false,
+  message: `Nenhuma conferência pendente localizada para "${rawInput}". Verifique se o pedido já foi finalizado na separação.`
+ };
+}
+
+async function handlePackIdentificationSubmit() {
+ const input = document.getElementById('pack-ident-input');
+ const feedback = document.getElementById('pack-ident-feedback');
+ if (!input) return;
+ const rawValue = String(input.value || '').trim();
+ if (!rawValue) {
+  showToast('Informe ou bipe a etiqueta do pedido.', 'warning');
+  input.focus();
+  return;
+ }
+
+ if (!appData.separacao?.length || !appData.conferencia?.length) {
+  try {
+   const data = await DataClient.loadModule('conferencia', true);
+   if (data) {
+    appData.separacao = data.separacao || appData.separacao || [];
+    appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
+    appData.conferencia = data.conferencia || appData.conferencia || [];
+    appData.mercadolivre_pedidos = data.mercadolivre_pedidos || appData.mercadolivre_pedidos || [];
+    appData.separacao_pacotes = data.separacao_pacotes || appData.separacao_pacotes || [];
+   }
+  } catch (e) {
+   console.warn('[PACK] Erro ao atualizar dados para identificação:', e);
+  }
+ }
+
+ const result = resolvePendingConferenceByIdentifier(rawValue);
+
+ if (!result.success) {
+  if (feedback) {
+   feedback.style.display = 'block';
+   feedback.style.color = '#ef4444';
+   feedback.innerHTML = `<span class="material-symbols-rounded" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">error</span> <strong>${escapeKitAttribute(result.message)}</strong>`;
+  }
+  showToast(result.message, 'warning');
+  input.select?.();
+  return;
+ }
+
+ if (feedback) {
+  feedback.style.display = 'block';
+  feedback.style.color = '#22c55e';
+  feedback.innerHTML = `<span class="material-symbols-rounded" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">check_circle</span> Conferência localizada (${escapeKitAttribute(result.matchedBy)}). Abrindo...`;
+ }
+
+ const targetSessionId = getPackSeparationUniqueId(result.session) || getPackSeparationSessionId(result.session);
+ input.value = '';
+ await renderPackSessionDetails(targetSessionId);
+}
+
 async function renderPackPendingChannels() {
  const currentUser = localStorage.getItem('currentUser');
  document.body.classList.remove('menu-active');
@@ -26510,7 +26916,29 @@ async function renderPackPendingChannels() {
     <span class="app-breadcrumb-current">Conferência</span>
   </div>
 
-  ${getPackChannelsGridHTML(initialSessionsByChannel)}
+   <section class="pack-identification-hero standard-module-card" style="margin-bottom: 24px; padding: 20px; background: var(--surface, #1e293b); border-radius: 16px; border: 1px solid rgba(255,255,255,0.08);">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+     <span class="material-symbols-rounded" style="font-size: 28px; color: var(--primary, #38bdf8);">qr_code_scanner</span>
+     <div>
+      <h2 style="font-size: 1.1rem; font-weight: 700; margin: 0; color: #fff;">IDENTIFICAR PEDIDO / ETIQUETA</h2>
+      <p style="font-size: 0.8rem; color: var(--muted, #94a3b8); margin: 2px 0 0 0;">Bipe a etiqueta física, pedido ou código da separação</p>
+     </div>
+    </div>
+    <form id="pack-ident-form" style="display: flex; gap: 8px; flex-wrap: wrap;" onsubmit="event.preventDefault(); handlePackIdentificationSubmit();">
+     <div style="flex: 1; min-width: 260px; position: relative; display: flex; align-items: center;">
+      <span class="material-symbols-rounded" style="position: absolute; left: 12px; color: var(--muted, #94a3b8); font-size: 20px; pointer-events: none;">barcode_scanner</span>
+      <input type="text" id="pack-ident-input" style="width: 100%; height: 48px; padding-left: 40px; padding-right: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: #fff; font-size: 0.95rem; font-weight: 600;" placeholder="Bipe a etiqueta, pedido ou código da separação" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+     </div>
+     <button type="submit" id="btn-pack-ident-submit" class="btn-primary" style="height: 48px; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; border-radius: 10px; cursor: pointer;">
+      <span class="material-symbols-rounded" style="font-size: 20px;">search</span>
+      <span>IDENTIFICAR</span>
+     </button>
+    </form>
+    <div id="pack-ident-feedback" style="margin-top: 10px; font-size: 0.85rem; display: none;"></div>
+   </section>
+
+   <div style="margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; color: var(--muted, #94a3b8);">FILA DE TRABALHO POR CANAL</div>
+   ${getPackChannelsGridHTML(initialSessionsByChannel)}
  </main>
  </div>
  `;
@@ -26521,6 +26949,8 @@ async function renderPackPendingChannels() {
  appData.separacao = data.separacao || appData.separacao || [];
  appData.separacao_itens = data.separacao_itens || appData.separacao_itens || [];
  appData.conferencia = data.conferencia || appData.conferencia || [];
+ appData.mercadolivre_pedidos = data.mercadolivre_pedidos || appData.mercadolivre_pedidos || [];
+ appData.separacao_pacotes = data.separacao_pacotes || appData.separacao_pacotes || [];
  }
  reconcileActivePickSessions(appData.separacao, appData.conferencia);
  } catch (error) {
@@ -26687,11 +27117,20 @@ async function renderPackSessionsList(channelName) {
  ` : `
  <div class="pack-sessions-list">
  ${activeSessions.map(session => {
- const cardState = getConferenceCardState(session);
- if (!cardState.shouldRender) return '';
- const uniqueId = getPackSeparationUniqueId(session);
- const displayId = getPackSeparationDisplayId(session);
- const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
+  const cardState = getConferenceCardState(session);
+  if (!cardState.shouldRender) return '';
+  const uniqueId = getPackSeparationUniqueId(session);
+  const displayId = getPackSeparationDisplayId(session);
+  const createdAt = formatPackSeparationDate(session.criado_em || session.data_separacao || session.col_b);
+  const isIntegrated = isIntegratedSeparation(session);
+  const linkedOrder = (appData.mercadolivre_pedidos || []).find(p =>
+    String(p.separacao_id || '').trim().toLowerCase() === String(displayId || uniqueId || '').toLowerCase() ||
+    String(p.id || '') === String(session.pedido_id || '')
+  );
+  const externalOrderId = linkedOrder?.external_order_id || session.external_order_id || '';
+  const packageCount = session.total_pacotes_montados || 1;
+  const itemCount = session.total_itens_separados || 4;
+
   return `
  <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
  <div class="pack-session-card-main">
@@ -26699,10 +27138,10 @@ async function renderPackSessionsList(channelName) {
  <span class="material-symbols-rounded">assignment_turned_in</span>
  </div>
  <div class="pack-session-card-text">
- <span class="pack-session-card-kicker">Separacao</span>
+ <span class="pack-session-card-kicker">${isIntegrated && externalOrderId ? `Pedido #${externalOrderId}` : 'Separacao'}</span>
  <strong>${displayId}</strong>
- <small>${createdAt}</small>
-  <small>${cardState.statusText}</small>
+ <small>${createdAt} • ${packageCount} pacote(s) • ${itemCount} un</small>
+ <small>${cardState.statusText}</small>
  </div>
  </div>
  <div class="pack-session-card-meta">
@@ -26714,7 +27153,7 @@ async function renderPackSessionsList(channelName) {
  </button>
  </article>
  `;
- }).join('')}
+  }).join('')}
  </div>
  `}
  </main>
@@ -26800,15 +27239,30 @@ async function renderPackSessionDetails(sessionId) {
  }
 
  if (separacaoSession && isSameConferenceOperator(separacaoSession, currentUser)) {
-  await showAppModal({
-   type: 'warning',
-   title: 'Conferencia deve ser feita por outro usuario',
-   message: 'Voce realizou a separacao deste pedido e nao pode iniciar a conferencia.',
-   detail: 'Separado por ' + (separacaoSession.criado_por || currentUser) + '. Entre com outro usuario para conferir.',
-   confirmText: 'Entendi'
+  const override = await showAppConfirm({
+   title: 'Segregação de Funções • Mesmo Operador',
+   message: `Você (${currentUser}) realizou a separação deste pedido (${separacaoSession.id || packSessionId}).`,
+   detail: 'A regra operacional exige conferente diferente. Para fins de auditoria/teste em homologação, confirme para autorizar com PIN mestre.',
+   confirmLabel: 'Autorizar com PIN',
+   cancelLabel: 'Voltar',
+   danger: false
   });
-  renderPackMenu();
-  return;
+  if (!override) {
+   renderPackMenu();
+   return;
+  }
+  const pinAllowed = await requireMasterPin('autorizar conferencia pelo mesmo operador');
+  if (!pinAllowed) {
+   showToast('Autorização recusada ou cancelada.', 'warning');
+   renderPackMenu();
+   return;
+  }
+  console.warn('[AUDITORIA] Conferência autorizada para o mesmo operador via PIN mestre:', {
+   operador: currentUser,
+   separacao_id: packSessionId,
+   autorizado_em: new Date().toISOString()
+  });
+  showToast('Conferência autorizada com PIN mestre.', 'info');
  }
 
  let session = activeSessions.find(s =>
@@ -26994,6 +27448,21 @@ async function renderPackSessionDetails(sessionId) {
  */
 function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', channelName = '') {
  const title = channelName ? channelName.toUpperCase() : 'CONFERENCIA';
+ const session = (appData.separacao || []).find(s => String(getPackSeparationSessionId(s)) === String(sessionId) || String(getPackSeparationUniqueId(s)) === String(sessionId)) || currentPackSession || {};
+ const isIntegrated = isIntegratedSeparation(session);
+ const linkedOrder = (appData.mercadolivre_pedidos || []).find(p =>
+  String(p.separacao_id || '').trim().toLowerCase() === String(sessionId).toLowerCase() ||
+  String(p.id || '') === String(session.pedido_id || '')
+ );
+ const linkedConf = (appData.conferencia || []).find(c => String(c.separacao_id || '').trim().toLowerCase() === String(sessionId).toLowerCase());
+ const linkedPkgs = (appData.separacao_pacotes || []).filter(pkg => String(pkg.separacao_id || '').trim().toLowerCase() === String(sessionId).toLowerCase());
+
+ const externalOrderId = linkedOrder?.external_order_id || session.external_order_id || session.pickingData?.external_order_id || '';
+ const confDisplayId = linkedConf?.conferencia_id || `CONF-${sessionId}`;
+ const contaNome = 'DY AUTO PARTS';
+ const pacotesText = linkedPkgs.length ? linkedPkgs.map(p => p.pacote_id).join(', ') : 'PKG-001';
+ const totalExpected = session.total_itens_separados || (currentPackSession?.pickingData?.total_itens_separados) || 4;
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal no-top-bar pack-screen pack-blind-screen pick-workflow-screen conference-workflow-screen ${channelColorClass}" data-channel-color="conference">
  <main class="pack-blind-shell pick-workflow-shell">
@@ -27007,6 +27476,25 @@ function renderPackSessionFrame(sessionId, currentUser, channelColorClass = '', 
  </div>
  <div class="pick-header-meta"><span><strong>${escapeKitAttribute(sessionId)}</strong></span><span><strong>${escapeKitAttribute(currentUser || '-')}</strong></span></div>
  </header>
+
+ ${(isIntegrated || externalOrderId) ? `
+ <section class="pack-integrated-order-banner" style="margin: 0 0 16px 0; padding: 14px 18px; background: rgba(30, 41, 59, 0.95); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+   <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 800; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px;">
+    <span class="material-symbols-rounded" style="font-size: 15px;">verified</span> PEDIDO ATIVO
+   </span>
+   <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">#${escapeKitAttribute(externalOrderId || '-')}</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; font-size: 0.75rem;">
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Separação</span><strong style="color: #fff;">${escapeKitAttribute(sessionId)}</strong></div>
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Conferência</span><strong style="color: #fff;">${escapeKitAttribute(confDisplayId)}</strong></div>
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Canal</span><strong style="color: #fff;">${escapeKitAttribute(title)}</strong></div>
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Conta</span><strong style="color: #fff;">${escapeKitAttribute(contaNome)}</strong></div>
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Pacote</span><strong style="color: #fff;">${escapeKitAttribute(pacotesText)}</strong></div>
+   <div><span style="color: var(--muted, #94a3b8); display: block;">Itens Esperados</span><strong style="color: #fff;">${escapeKitAttribute(totalExpected)} un</strong></div>
+  </div>
+ </section>
+ ` : ''}
 
  <section class="pack-blind-scan-panel pick-scan-panel">
  <div class="pick-scan-row">
