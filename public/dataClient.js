@@ -2155,7 +2155,7 @@ const DataClient = (function () {
         }
 
         const updatePayload = {
-            status: payload.status || 'aberta',
+            status: payload.status || 'finalizada',
             atualizado_em: now,
             finalizado_em: now,
             total_produtos_separados: Number(payload.total_produtos_separados || 0),

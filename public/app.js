@@ -22976,7 +22976,7 @@ async function persistPickingFinal(sessionId) {
  const stats = getPickingOperationalStats(currentPickSession?.items || currentSessionItems);
  const payload = {
  sessionId,
- status: PICK_STATUS_READY_FOR_PACK,
+ status: PICK_STATUS_FINISHED,
  total_produtos_separados: stats.total_produtos_separados,
  total_itens_separados: stats.total_itens_separados,
  total_pacotes_montados: stats.total_pacotes_montados,
@@ -25279,20 +25279,26 @@ function updatePickItemsList() {
 
  const activeOrder = currentPickingContext?.activeOrder || null;
  if (activeOrder) {
+   const isCompleted = currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0)) >= Number(it.qtd_solicitada || 1));
+   const totalSep = currentSessionItems.reduce((s, i) => s + (Number(it => it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0))(i)), 0);
+   const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
    const badgeEl = document.getElementById('pick-active-order-status-badge');
    if (badgeEl) {
-     const isCompleted = currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada || 0) >= Number(it.qtd_solicitada || 1));
-     const totalSep = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada) || 0), 0);
-     const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
      badgeEl.innerHTML = isCompleted ? `
        <span style="background:#16a34a; color:#fff; font-weight:800; font-size:0.85rem; padding:6px 14px; border-radius:20px; display:inline-flex; align-items:center; gap:6px;">
          <span class="material-symbols-rounded" style="font-size:18px;">check_circle</span> PEDIDO COMPLETO
        </span>
      ` : `
        <span style="background:rgba(234,179,8,0.2); color:#fef08a; font-weight:700; font-size:0.82rem; padding:6px 14px; border-radius:20px; border:1px solid rgba(234,179,8,0.3); display:inline-flex; align-items:center; gap:6px;">
-         <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${totalSep} / ${totalSol} un.)
+         <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0))), 0)} / ${totalSol} un.)
        </span>
      `;
+   }
+   const finishBtn = document.querySelector('.pick-summary-line .pick-finish-btn');
+   if (finishBtn) {
+     finishBtn.disabled = !isCompleted;
+     finishBtn.style.opacity = isCompleted ? '1' : '0.5';
+     finishBtn.style.cursor = isCompleted ? 'pointer' : 'not-allowed';
    }
  }
 
@@ -25344,12 +25350,25 @@ function updatePickItemsList() {
   <span class="pick-qty-number" style="${activeOrder && isItemComplete ? 'color:#16a34a;' : ''}">${qtdSeparada}${activeOrder ? ` / ${qtdSolicitada}` : ''}</span>
   ${activeOrder ? `<small style="font-size:0.75rem; color:#64748b; font-weight:600;">unidades</small>` : ''}
   </div>
-  ${!activeOrder ? `
+  ${activeOrder ? `
+  <div class="pick-item-actions-integrated" style="display:flex; align-items:center; justify-content:center; padding: 0 8px;">
+    <button
+      type="button"
+      class="pick-btn-remove-unit"
+      style="background:${qtdSeparada > 0 ? '#f8fafc' : '#f1f5f9'}; border:1px solid ${qtdSeparada > 0 ? '#cbd5e1' : '#e2e8f0'}; color:${qtdSeparada > 0 ? '#334155' : '#94a3b8'}; padding:6px 12px; border-radius:8px; font-size:0.75rem; font-weight:700; display:inline-flex; align-items:center; gap:4px; cursor:${qtdSeparada > 0 ? 'pointer' : 'not-allowed'}; opacity:${qtdSeparada > 0 ? '1' : '0.45'}; transition:all 0.15s ease;"
+      ${qtdSeparada === 0 ? 'disabled' : ''}
+      onclick="event.stopPropagation(); removerUnidadePedidoIntegrado(${index})"
+      title="${qtdSeparada > 0 ? 'Desfazer 1 unidade bipada deste produto' : 'Nenhuma unidade bipada para remover'}"
+    >
+      <span class="material-symbols-rounded" style="font-size:15px;">remove</span> REMOVER 1
+    </button>
+  </div>
+  ` : `
   <button class="pick-item-select ${selection ? 'is-selected' : ''}" onclick="event.stopPropagation(); ${packageSummary.standaloneUnits ? `togglePickItemSelection(${index}, 'standalone')` : 'openPickPackagesOverview()'}" type="button" aria-label="${packageSummary.standaloneUnits ? 'Selecionar unidades para agrupar' : 'Ver agrupamento'}"><span>AGP</span></button>
   <button class="pick-product-delete" onclick="event.stopPropagation(); removePickItem(${index})" type="button" aria-label="Excluir produto da separacao">
   <span class="material-symbols-rounded">delete</span>
   </button>
-  ` : ''}
+  `}
   </article>
   `}).join('');
 }
@@ -25357,6 +25376,66 @@ function updatePickItemsList() {
 function togglePickItemExpanded(productKey) {
  expandedPickItemKey = expandedPickItemKey === productKey ? null : productKey;
  updatePickItemsList();
+}
+
+async function removerUnidadePedidoIntegrado(index) {
+  const activeItem = currentSessionItems[index];
+  if (!activeItem) return;
+
+  const currentQty = Number(activeItem.qtd_separada !== undefined ? activeItem.qtd_separada : (activeItem.qty || 0));
+  if (currentQty <= 0) {
+    showToast('Nenhuma unidade bipada para remover.', 'warning');
+    return;
+  }
+
+  const previousQty = currentQty;
+  const newQty = currentQty - 1;
+
+  activeItem.qtd_separada = newQty;
+  activeItem.qty = newQty;
+  normalizePickPackageAssignments(activeItem);
+
+  if (activeItem.detalhes_operacionais && activeItem.detalhes_operacionais[0]) {
+    const det = activeItem.detalhes_operacionais[0];
+    if (!Array.isArray(det.bipagens_fisicas)) det.bipagens_fisicas = [];
+    det.bipagens_fisicas.push({
+      produto_id: det.produto_id || activeItem.produto_id || null,
+      id_interno: activeItem.id_interno,
+      ean: activeItem.ean,
+      tipo_operacao: 'remocao_unidade',
+      delta: -1,
+      qtd_restante: newQty,
+      removido_por: localStorage.getItem('currentUser') || 'N/A',
+      removido_em: new Date().toISOString()
+    });
+  }
+
+  lastScannedPickItemKey = getPickingProductId(activeItem);
+  lastPickScanAction = 'remove';
+  updatePickItemsList();
+
+  const summaryPkgs = document.getElementById('pick-summary-packages');
+  if (summaryPkgs) {
+    const totalSep = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0))), 0);
+    const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
+    summaryPkgs.textContent = `${totalSep} / ${totalSol}`;
+  }
+
+  try {
+    const draft = getCurrentPickDraftForUpdate('saving');
+    draft.activeOrder = currentPickingContext?.activeOrder;
+    draft.items = currentSessionItems;
+    saveDraftPickSession(draft);
+    await queuePickingPersist(draft, activeItem);
+    showToast(`Unidade de ${activeItem.id_interno} removida (${newQty}/${Number(activeItem.qtd_solicitada || 1)} un.)`, 'info');
+  } catch (saveErr) {
+    console.error('[PICK-REMOVE ERROR] Falha ao salvar remoção:', saveErr);
+    activeItem.qtd_separada = previousQty;
+    activeItem.qty = previousQty;
+    normalizePickPackageAssignments(activeItem);
+    updatePickItemsList();
+    showToast('Não foi possível registrar a remoção no servidor. Tente novamente.', 'error');
+  }
 }
 
 async function removePickItem(index) {
@@ -25515,7 +25594,7 @@ async function finishPickingSession(sessionId, channelId, channelLabel, channelC
  canal_id: channelId,
  canal_nome: channelLabel,
  data_separacao: formatDateBR(getDataBrasilISO()),
- status: activeOrder ? 'aguardando_conferencia' : 'em_separacao',
+ status: PICK_STATUS_FINISHED,
  criado_por: currentUser,
  criado_em: now,
  finalizado_em: now,
@@ -26138,9 +26217,28 @@ async function savePickResultFinal(sessionId, channelId, channelLabel, channelCo
 
     const activeOrderForStatus = currentPickingContext?.activeOrder || null;
     if (activeOrderForStatus && typeof DataClient !== 'undefined' && DataClient.atualizarStatusPedidoSeparadoSupabase) {
-      DataClient.atualizarStatusPedidoSeparadoSupabase(activeOrderForStatus.order_id || activeOrderForStatus.external_order_id || sessionId, 'separado').catch(err => {
-        console.warn('[SEPARACAO] Erro ao atualizar status do pedido:', err);
-      });
+      try {
+        const orderRef = activeOrderForStatus.order_id || activeOrderForStatus.external_order_id || activeOrderForStatus.id || sessionId;
+        const statusRes = await DataClient.atualizarStatusPedidoSeparadoSupabase(orderRef, 'separado');
+        if (!statusRes) {
+          console.warn('[SEPARACAO] Atualizacao de status_identificacao nao retornou registro para:', orderRef);
+        }
+        activeOrderForStatus.status_identificacao = 'separado';
+        activeOrderForStatus.status_identificacao_preview = 'separado';
+        if (Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA)) {
+          const pedPreview = window.PEDIDOS_PREVIEW_AMOSTRA.find(p =>
+            String(p.external_order_id) === String(activeOrderForStatus.external_order_id) ||
+            String(p.id) === String(activeOrderForStatus.id) ||
+            String(p.db_id) === String(activeOrderForStatus.db_id)
+          );
+          if (pedPreview) {
+            pedPreview.status_identificacao = 'separado';
+            pedPreview.status_identificacao_preview = 'separado';
+          }
+        }
+      } catch (err) {
+        console.error('[SEPARACAO] Erro ao atualizar status do pedido para separado:', err);
+      }
     }
 
     if (!appData.separacao) appData.separacao = [];

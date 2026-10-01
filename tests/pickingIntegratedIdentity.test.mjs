@@ -60,8 +60,13 @@ function createTestEnv(overrides = {}) {
     },
     sendOrQueueProgressOperation: async (payload) => {
       progressCalls.push(payload);
+      if (typeof context.DataClient?.aplicarOperacaoProgressoSupabase === 'function') {
+        return context.DataClient.aplicarOperacaoProgressoSupabase(payload);
+      }
       return { ok: true, synced: true };
     },
+    countDifferentPickProducts: (items) => (items || []).length,
+    window: { PEDIDOS_PREVIEW_AMOSTRA: [] },
     isRetryableConferenceSyncError: (err) => true,
     _testRecords: { queuedOps, progressCalls, savedDrafts },
     ...overrides
@@ -422,4 +427,204 @@ test('modo manual sem activeOrder preserva geracao de avulsos quando assignments
   assert.equal(packages.length, 2, 'No modo manual sem atribuicao previa deve gerar 2 pacotes avulsos');
   assert.equal(packages[0].tipo, 'AVULSO');
   assert.equal(packages[1].tipo, 'AVULSO');
+});
+
+// ==========================================
+// TESTES FASE 3.9: STATUS FINAL + REMOVER 1
+// ==========================================
+
+test('A) persistPickingFinal persiste separacao com status PICK_STATUS_FINISHED (finalizada)', async () => {
+  const env = createTestEnv();
+  const fnGenId = getFunctionSource('generateExecutionId');
+  const fnPersist = getFunctionSource('persistPickingFinal');
+  env.PICK_STATUS_FINISHED = 'finalizada';
+  env.getPickingOperationalStats = () => ({ total_produtos_separados: 1, total_itens_separados: 4, total_pacotes_montados: 1 });
+  env.currentPickSession = { items: [{ id_interno: 'DY-000.468', qtd_separada: 4 }] };
+  let finalizedPayload = null;
+  env.DataClient.finalizePickingDraftSupabase = async (payload) => {
+    finalizedPayload = payload;
+    return { ok: true };
+  };
+
+  vm.runInContext(fnGenId, env);
+  vm.runInContext(fnPersist, env);
+
+  await env.persistPickingFinal('SEP-PED-90');
+  assert.ok(finalizedPayload, 'Deve ter chamado finalizePickingDraftSupabase');
+  assert.equal(finalizedPayload.status, 'finalizada', 'Status persistido deve ser finalizada');
+  assert.equal(finalizedPayload.total_itens_separados, 4);
+  assert.equal(finalizedPayload.total_produtos_separados, 1);
+});
+
+test('B) savePickResultFinal atualiza pedido integrado para status_identificacao = separado', async () => {
+  const env = createTestEnv();
+  let statusAtualizado = null;
+  let pedidoRefAtualizado = null;
+
+  env.currentPickingContext = {
+    sessionId: 'SEP-PED-90',
+    activeOrder: {
+      id: 90,
+      external_order_id: '2000018356039444',
+      account_name: 'Minha Conta',
+      status_identificacao: 'pronto_separacao'
+    }
+  };
+  env.currentPickSession = {
+    id: 'SEP-PED-90',
+    channel: 'Mercado Livre Agência',
+    items: [{ id_interno: 'DY-000.468', qtd_separada: 4, qtd_solicitada: 4 }]
+  };
+  env.DataClient.atualizarStatusPedidoSeparadoSupabase = async (ref, status) => {
+    pedidoRefAtualizado = ref;
+    statusAtualizado = status;
+    return [{ id: 90, status_identificacao: status }];
+  };
+  env.isFinalizing = false;
+  env.showToast = () => {};
+  env.showAppModal = async () => {};
+  env.clearTimeout = () => {};
+  env.ensureProdutosLoaded = async () => {};
+  env.getDataHoraBrasil = () => '2026-10-01 10:00:00';
+  env.getScopedDraftPickSession = () => ({ sessionId: 'SEP-PED-90' });
+  env.getActivePickingFastMode = () => false;
+  env.generateExecutionId = () => 'exec-1';
+  env.sanitizePickSessionIdForChannel = (id) => id;
+  env.assertValidPickSessionForPersist = () => {};
+  env.isDraftPickSessionId = () => false;
+  env.getPickingOperationalStats = () => ({ total_produtos_separados: 1, total_itens_separados: 4, total_pacotes_montados: 1 });
+  env.persistPickingDraftItemsBatch = async () => ({ ok: true });
+  env.flushPickingItemsBeforeFinalization = async () => ({ queued: false });
+  env.runOperationalWrite = async (k, fn) => fn();
+  env.getQueuedOperations = async () => [];
+  env.markQueuedOperation = async () => {};
+  env.performPickPackagesCloudSync = async () => ({ queued: false });
+  env.buildFastPickingFinalRows = () => [];
+  env.createPickingConferenceWithoutStock = async () => ({ ok: true });
+  env.persistPickingFinal = async () => ({ success: true });
+  env.clearFinishedPickingDraftState = async () => {};
+  env.renderMenu = () => {};
+  env.appData = { separacao: [] };
+  env.rememberPickPackageTotal = () => {};
+  env.saveOperationalCatalog = async () => {};
+  env.console = { warn() {}, log() {}, error() {}, info() {} };
+  env.pickPackageCloudSyncTimer = null;
+  env.buildPickingSessionPayload = () => ({});
+  env.currentPickSession.pickingData = { criado_em: 'agora', canal_nome: 'Mercado Livre Agência' };
+  env.getActivePickSessions = () => [];
+  env.setActivePickSessions = () => {};
+  env.formatPickPackageAverage = () => '4.0';
+  env.PICK_STATUS_FINISHED = 'finalizada';
+  env.PICK_STATUS_DRAFT = 'em_separacao';
+  env.PICK_MANUAL_OBSERVATION = 'SEPARACAO MANUAL';
+
+  const fnSaveFinal = getFunctionSource('savePickResultFinal');
+  vm.runInContext(fnSaveFinal, env);
+
+  await env.savePickResultFinal('SEP-PED-90', 'canais_envio_viii', 'Mercado Livre Agência', '#3b82f6');
+  assert.equal(statusAtualizado, 'separado', 'Deve chamar atualizarStatusPedidoSeparadoSupabase com separado');
+  assert.equal(env.currentPickingContext.activeOrder.status_identificacao, 'separado');
+});
+
+test('D, E, F, G, H, I) REMOVER 1: 4/4 -> 3/4 (delta -1, bloqueia finalizacao, PKG-001 preservado, novo bip -> 4/4)', async () => {
+  const env = createTestEnv();
+  const progressDeltas = [];
+
+  env.currentPickingContext = {
+    sessionId: 'SEP-PED-90',
+    activeOrder: {
+      id: 90,
+      external_order_id: '2000018356039444'
+    }
+  };
+
+  const activeItem = {
+    id: 'item-84',
+    id_interno: 'PROD-a2789f2f',
+    id_interno_canonico: 'PROD-a2789f2f',
+    ean: '7896498550317',
+    qtd_solicitada: 4,
+    qtd_separada: 4,
+    _sync_qtd_separada: 4,
+    pick_package_assignments: ['PKG-001', 'PKG-001', 'PKG-001', 'PKG-001'],
+    isIntegratedOrder: true,
+    detalhes_operacionais: [{
+      bipagens_fisicas: [
+        { id_interno: 'DY-000.468', delta: 1 },
+        { id_interno: 'DY-000.468', delta: 1 },
+        { id_interno: 'DY-000.468', delta: 1 },
+        { id_interno: 'DY-000.468', delta: 1 }
+      ]
+    }]
+  };
+
+  env.currentSessionItems = [activeItem];
+  env.document = {
+    getElementById: () => ({ innerHTML: '', textContent: '' }),
+    querySelector: () => ({ disabled: false, style: {} })
+  };
+  env.updatePickItemsList = () => {};
+  env.getCurrentPickDraftForUpdate = () => ({ sessionId: 'SEP-PED-90' });
+  env.showToast = () => {};
+  env.queuePickingPersist = async (draft, item) => {
+    return env.persistPickingDraftItem(draft, item);
+  };
+  env.DataClient.aplicarOperacaoProgressoSupabase = async (payload) => {
+    progressDeltas.push(payload.delta);
+    return { ok: true };
+  };
+
+  const fnNorm = getFunctionSource('normalizePickPackageAssignments');
+  const fnPersistItem = getFunctionSource('persistPickingDraftItem');
+  const fnRemover = getFunctionSource('removerUnidadePedidoIntegrado');
+  const fnPkgs = getFunctionSource('buildPickPackagesSyncPayload');
+
+  vm.runInContext(fnNorm, env);
+  vm.runInContext(fnPersistItem, env);
+  vm.runInContext(fnRemover, env);
+  vm.runInContext(fnPkgs, env);
+
+  // 1. Estado inicial: 4/4
+  assert.equal(activeItem.qtd_separada, 4);
+
+  // 2. Executa REMOVER 1 (4 -> 3)
+  await env.removerUnidadePedidoIntegrado(0);
+  assert.equal(activeItem.qtd_separada, 3, '4/4 -> REMOVER 1 deve resultar em 3/4');
+  assert.equal(progressDeltas[progressDeltas.length - 1], -1, 'Persistência incremental deve enviar delta: -1');
+
+  // 3. Verifica auditoria em detalhes_operacionais
+  const bips = activeItem.detalhes_operacionais[0].bipagens_fisicas;
+  assert.equal(bips.length, 5, 'Log de bipagens deve registrar o evento de remocao sem apagar os anteriores');
+  assert.equal(bips[4].tipo_operacao, 'remocao_unidade');
+  assert.equal(bips[4].delta, -1);
+  assert.equal(bips[4].qtd_restante, 3);
+
+  // 4. Verifica que pacote PKG-001 permanece único e válido com 3 unidades
+  const pkgsAposRemover = env.buildPickPackagesSyncPayload(env.currentSessionItems);
+  assert.equal(pkgsAposRemover.length, 1, 'Deve continuar gerando exatamente 1 pacote');
+  assert.equal(pkgsAposRemover[0].pacote_id, 'PKG-001');
+  assert.equal(pkgsAposRemover[0].itens[0].quantidade, 3, 'Pacote PKG-001 deve conter 3 unidades');
+
+  // 5. Verifica que 3/4 é incompleto (bloqueia finalização)
+  const isIncomplete = env.currentSessionItems.some(i => i.qtd_separada < i.qtd_solicitada);
+  assert.ok(isIncomplete, '3/4 un. deve ser considerado incompleto e bloquear finalizacao');
+
+  // 6. Novo bip adiciona 1 un. (3 -> 4)
+  activeItem.qtd_separada = 4;
+  activeItem.qty = 4;
+  await env.persistPickingDraftItem({ sessionId: 'SEP-PED-90' }, activeItem);
+  assert.equal(progressDeltas[progressDeltas.length - 1], 1, 'Novo bip deve enviar delta: +1');
+  assert.equal(activeItem.qtd_separada, 4);
+
+  const isCompleteNow = env.currentSessionItems.every(i => i.qtd_separada >= i.qtd_solicitada);
+  assert.ok(isCompleteNow, '4/4 un. deve ser considerado completo e habilitar finalizacao');
+
+  // 7. Teste de limite: remoção em 0/4 não permitida
+  activeItem.qtd_separada = 0;
+  activeItem.qty = 0;
+  let toastMsg = '';
+  env.showToast = (msg) => { toastMsg = msg; };
+  await env.removerUnidadePedidoIntegrado(0);
+  assert.equal(activeItem.qtd_separada, 0, 'Nao deve permitir valor negativo abaixo de zero');
+  assert.ok(toastMsg.includes('Nenhuma unidade'), 'Deve alertar que nao ha unidade a remover');
 });
