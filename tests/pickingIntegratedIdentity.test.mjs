@@ -628,3 +628,190 @@ test('D, E, F, G, H, I) REMOVER 1: 4/4 -> 3/4 (delta -1, bloqueia finalizacao, P
   assert.equal(activeItem.qtd_separada, 0, 'Nao deve permitir valor negativo abaixo de zero');
   assert.ok(toastMsg.includes('Nenhuma unidade'), 'Deve alertar que nao ha unidade a remover');
 });
+
+test('K) updatePickItemsList: calcula totalSep sem TypeError e gera card completo com REMOVER 1', () => {
+  const env = createTestEnv();
+  const fnUpdate = getFunctionSource('updatePickItemsList');
+
+  let containerHTML = '';
+  let badgeHTML = '';
+  let finishBtnDisabled = false;
+  let finishBtnOpacity = '';
+
+  env.document = {
+    getElementById: (id) => {
+      if (id === 'pick-items-list') return { set innerHTML(val) { containerHTML = val; }, get innerHTML() { return containerHTML; } };
+      if (id === 'pick-active-order-status-badge') return { set innerHTML(val) { badgeHTML = val; }, get innerHTML() { return badgeHTML; } };
+      return { textContent: '' };
+    },
+    querySelectorAll: () => [],
+    querySelector: (sel) => {
+      if (sel.includes('pick-finish-btn')) {
+        return {
+          style: { opacity: '', cursor: '' },
+          set disabled(val) { finishBtnDisabled = val; },
+          get disabled() { return finishBtnDisabled; }
+        };
+      }
+      return null;
+    }
+  };
+
+  env.currentPickingContext = {
+    activeOrder: {
+      order_id: '90',
+      external_order_id: '2000018356039444',
+      account_name: 'PRISCILA YANAGIHARA SHIMIZU'
+    }
+  };
+
+  const itemPilot = {
+    id_interno: 'PROD-a2789f2f-c4f6-43da-96da-e6db7411c2c7',
+    ean: '7896498550317',
+    descricao: 'Odorizante Automotivo New Fresh Car Lavanda Luxcar',
+    qtd_solicitada: 4,
+    qtd_separada: 3,
+    localizacao_estoque: 'A-01-02',
+    detalhes_operacionais: [{
+      skus_aceitos: [{ id_interno: 'DY-000.468', ean: '7896498550317' }]
+    }]
+  };
+
+  env.currentSessionItems = [itemPilot];
+  env.getPickResumeFilteredItems = () => [{ item: itemPilot, index: 0 }];
+  env.updatePickSummaryUI = () => {};
+  env.getPickItemsTotal = (items) => (items || []).reduce((s, i) => s + (i.qtd_separada || 0), 0);
+  env.getPickStandaloneUnits = () => 0;
+  env.getPickGroupedUnits = () => 3;
+  env.updatePickKitSelectionBar = () => {};
+  env.pickResumeFilter = 'all';
+  env.lastScannedPickItemKey = null;
+  env.lastPickScanAction = null;
+  env.getPickResumeQty = () => 3;
+  env.getPickResumeBaselineQty = () => 0;
+  env.formatPickResumeRecency = () => '';
+  env.getPickLastScanTime = () => '10:30';
+  env.getPickKitSummary = () => ({ kitUnits: 3, standaloneUnits: 0 });
+  env.pickKitSelection = new Map();
+  env.getPickSelectionKey = (it) => it.id_interno;
+  env.getPickProductImage = () => '';
+  env.getPickItemTitle = (it) => it.descricao;
+  env.getPickItemSku = () => 'DY-000.468';
+  env.getPickItemEan = (it) => it.ean;
+  env.getPickItemColor = () => 'Lavanda';
+  env.getProductColorDotStyle = () => '';
+  env.escapeKitAttribute = (s) => String(s || '');
+
+  vm.runInContext(fnUpdate, env);
+
+  // 1. Não lança erro e executa até o final
+  assert.doesNotThrow(() => env.updatePickItemsList());
+
+  // 2. Card HTML foi gerado com todos os dados esperados
+  assert.ok(containerHTML.includes('pick-product-row'), 'Card deve ter classe pick-product-row');
+  assert.ok(containerHTML.includes('Odorizante Automotivo New Fresh Car Lavanda Luxcar'), 'Card deve conter título do produto');
+  assert.ok(containerHTML.includes('DY-000.468'), 'Card deve conter SKU aceito');
+  assert.ok(containerHTML.includes('7896498550317'), 'Card deve conter EAN');
+  assert.ok(containerHTML.includes('Pacote 1'), 'Card deve conter badge Pacote 1');
+  assert.ok(containerHTML.includes('3 / 4'), 'Card deve exibir quantidade 3 / 4');
+
+  // 3. Botão REMOVER 1 está presente e habilitado para 3/4
+  assert.ok(containerHTML.includes('REMOVER 1'), 'Botão REMOVER 1 deve estar presente no card');
+  assert.ok(containerHTML.includes('removerUnidadePedidoIntegrado(0)'), 'Botão deve ter onclick para removerUnidadePedidoIntegrado');
+  assert.ok(!containerHTML.includes('disabled') || containerHTML.includes('pick-btn-remove-unit'), 'Botão deve estar ativo para qtd > 0');
+
+  // 4. Badge EM SEPARAÇÃO (3 / 4 un.)
+  assert.ok(badgeHTML.includes('EM SEPARAÇÃO (3 / 4 un.)'), 'Badge deve exibir contagem total correta de 3 / 4');
+
+  // 5. Quando completa 4/4 -> CONCLUÍDO e PEDIDO COMPLETO
+  itemPilot.qtd_separada = 4;
+  env.updatePickItemsList();
+  assert.ok(containerHTML.includes('CONCLUÍDO'), 'Card deve exibir badge CONCLUÍDO quando 4/4');
+  assert.ok(badgeHTML.includes('PEDIDO COMPLETO'), 'Badge principal deve exibir PEDIDO COMPLETO quando 4/4');
+});
+
+test('L) consolidarPedidosPreviewColecao: deduplica preview + operacional preservando dados do Supabase', () => {
+  const env = createTestEnv();
+  const fnConsolidar = getFunctionSource('consolidarPedidosPreviewColecao');
+  vm.runInContext(fnConsolidar, env);
+
+  // Cenário: Pedido 90 existe como preview estático e como registro persistido finalizado
+  const previewOriginal = {
+    id: 'preview_3_2000018356039444',
+    preview: true,
+    platform: 'MERCADOLIBRE',
+    external_order_id: '2000018356039444',
+    account_name: 'PRISCILA YANAGIHARA SHIMIZU',
+    amount: 119.6,
+    status: 'paid',
+    sale_date: '09/09/2026 00:13',
+    itens: [{ titulo: 'Perfume Aromatizante Amarok', quantidade: 4 }]
+  };
+
+  const operacionalSupabase = {
+    id: '90',
+    db_id: 90,
+    preview: false,
+    platform: 'MERCADOLIBRE',
+    external_order_id: '2000018356039444',
+    status_identificacao: 'separado',
+    status_identificacao_preview: 'separado',
+    separacao_id: 'SEP-PED-90',
+    logistic_type: 'xd_drop_off',
+    canal_id: 'canais_envio_viii'
+  };
+
+  const geladeira = {
+    id: 'preview_1_2000018404096496',
+    preview: true,
+    platform: 'MERCADOLIBRE',
+    external_order_id: '2000018404096496',
+    account_name: 'DANIEL YANAGIHARA',
+    status_identificacao_preview: 'pendente_identificacao',
+    itens: [{ titulo: 'Geladeira Brastemp', quantidade: 1 }]
+  };
+
+  const listaComDuplicidade = [previewOriginal, geladeira, operacionalSupabase];
+
+  const consolidada = env.consolidarPedidosPreviewColecao(listaComDuplicidade);
+
+  // 1. Deduplica: 3 itens -> 2 pedidos únicos
+  assert.equal(consolidada.length, 2, 'Colecao com duplicata de 1 pedido deve consolidar em 2 pedidos únicos');
+
+  // 2. Pedido 90 consolidado
+  const ped90 = consolidada.find(p => p.external_order_id === '2000018356039444');
+  assert.ok(ped90, 'Pedido 90 deve existir na colecao consolidada');
+  assert.equal(ped90.status_identificacao, 'separado', 'Status operacional mais recente (separado) deve prevalecer');
+  assert.equal(ped90.status_identificacao_preview, 'separado');
+  assert.equal(ped90.separacao_id, 'SEP-PED-90', 'separacao_id deve ser preservada');
+  assert.equal(ped90.account_name, 'PRISCILA YANAGIHARA SHIMIZU', 'Dados do preview útil devem ser preservados');
+  assert.equal(ped90.amount, 119.6);
+
+  // 3. Geladeira preservada como pendente
+  const g = consolidada.find(p => p.external_order_id === '2000018404096496');
+  assert.ok(g, 'Geladeira deve existir');
+  assert.equal(g.status_identificacao_preview, 'pendente_identificacao');
+});
+
+test('M) KPIs operacionais: SEPARADOS conta exatamente 1 para o piloto deduplicado', () => {
+  const env = createTestEnv();
+  const fnConsolidar = getFunctionSource('consolidarPedidosPreviewColecao');
+  vm.runInContext(fnConsolidar, env);
+
+  const previewList = [
+    { id: 'preview_3_2000018356039444', platform: 'MERCADOLIBRE', external_order_id: '2000018356039444', status_identificacao_preview: 'pendente_identificacao' },
+    { id: '90', db_id: 90, platform: 'MERCADOLIBRE', external_order_id: '2000018356039444', status_identificacao: 'separado', status_identificacao_preview: 'separado', separacao_id: 'SEP-PED-90' },
+    { id: 'preview_1_2000018404096496', platform: 'MERCADOLIBRE', external_order_id: '2000018404096496', status_identificacao_preview: 'pendente_identificacao' }
+  ];
+
+  const colecao = env.consolidarPedidosPreviewColecao(previewList);
+
+  const isPedSeparado = p => p.status_identificacao_preview === 'separado' || p.status_identificacao === 'separado' || p.status_identificacao === 'aguardando_conferencia';
+  const countTodos = colecao.length;
+  const countSeparados = colecao.filter(p => isPedSeparado(p)).length;
+  const countPendentes = colecao.filter(p => !isPedSeparado(p) && p.status_identificacao_preview !== 'pronto_separacao' && !p.separacao_id).length;
+
+  assert.equal(countTodos, 2, 'Total de pedidos únicos deve ser 2');
+  assert.equal(countSeparados, 1, 'SEPARADOS deve contar exatamente 1 ocorrência para o piloto');
+  assert.equal(countPendentes, 1, 'PENDENTES deve contar 1 (Geladeira)');
+});

@@ -4834,6 +4834,67 @@ async function resolverAccountIdLocalParaPedido(sourceAccountId) {
 
 let pedidosRenderToken = 0;
 
+function consolidarPedidosPreviewColecao(pedidosList) {
+  if (!Array.isArray(pedidosList)) return [];
+
+  const map = new Map();
+
+  for (const ped of pedidosList) {
+    if (!ped) continue;
+
+    const platform = String(ped.platform || 'MERCADOLIBRE').toUpperCase();
+    const extId = String(ped.external_order_id || '').trim();
+    const dbId = ped.db_id || (Number.isFinite(Number(ped.id)) && Number(ped.id) > 0 ? Number(ped.id) : null);
+
+    let key = '';
+    if (extId) {
+      key = `${platform}:${extId}`;
+    } else if (dbId) {
+      key = `DB:${dbId}`;
+    } else {
+      key = `${platform}:${String(ped.id || '').trim()}`;
+    }
+
+    if (!map.has(key)) {
+      map.set(key, { ...ped });
+    } else {
+      const existing = map.get(key);
+      const isCurrentOperational = !ped.preview || Boolean(ped.db_id) || Boolean(ped.separacao_id) || ped.status_identificacao === 'separado';
+      const isExistingOperational = !existing.preview || Boolean(existing.db_id) || Boolean(existing.separacao_id) || existing.status_identificacao === 'separado';
+
+      if (isCurrentOperational && !isExistingOperational) {
+        map.set(key, {
+          ...existing,
+          ...ped,
+          id: String(ped.id || existing.id),
+          db_id: ped.db_id || existing.db_id,
+          status_identificacao: ped.status_identificacao || existing.status_identificacao,
+          status_identificacao_preview: ped.status_identificacao_preview || ped.status_identificacao || existing.status_identificacao_preview,
+          separacao_id: ped.separacao_id !== undefined ? ped.separacao_id : existing.separacao_id,
+          preview: false
+        });
+      } else {
+        const statusId = ped.status_identificacao || existing.status_identificacao;
+        const statusPrev = ped.status_identificacao_preview || existing.status_identificacao_preview || statusId;
+        const sepId = ped.separacao_id !== undefined ? ped.separacao_id : existing.separacao_id;
+        map.set(key, {
+          ...ped,
+          ...existing,
+          id: String(existing.id || ped.id),
+          db_id: existing.db_id || ped.db_id,
+          status_identificacao: statusId,
+          status_identificacao_preview: statusPrev,
+          separacao_id: sepId,
+          preview: existing.preview === false || ped.preview === false ? false : Boolean(existing.preview)
+        });
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+window.consolidarPedidosPreviewColecao = consolidarPedidosPreviewColecao;
+
 async function hidratarPedidosPreviewMappings(todosPreview) {
   if (!Array.isArray(todosPreview) || !window.DataClient?.listMercadoLivreItemMappings) return;
 
@@ -4955,6 +5016,10 @@ async function hidratarPedidosPreviewMappings(todosPreview) {
 
     ped.status_identificacao_preview = todosItensIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
   }
+
+  if (Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA)) {
+    window.PEDIDOS_PREVIEW_AMOSTRA = consolidarPedidosPreviewColecao(window.PEDIDOS_PREVIEW_AMOSTRA);
+  }
 }
 
 async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
@@ -4969,6 +5034,7 @@ async function renderPedidosScreen(filtroAba = 'todos', filtroConta = 'todas') {
   const isPreviewMode = Array.isArray(window.PEDIDOS_PREVIEW_AMOSTRA) && window.PEDIDOS_PREVIEW_AMOSTRA.length > 0;
 
   if (isPreviewMode) {
+    window.PEDIDOS_PREVIEW_AMOSTRA = consolidarPedidosPreviewColecao(window.PEDIDOS_PREVIEW_AMOSTRA);
     const todosPreview = window.PEDIDOS_PREVIEW_AMOSTRA;
     const state = window.PedidosPreviewState;
 
@@ -25280,7 +25346,7 @@ function updatePickItemsList() {
  const activeOrder = currentPickingContext?.activeOrder || null;
  if (activeOrder) {
    const isCompleted = currentSessionItems.length > 0 && currentSessionItems.every(it => Number(it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0)) >= Number(it.qtd_solicitada || 1));
-   const totalSep = currentSessionItems.reduce((s, i) => s + (Number(it => it.qtd_separada !== undefined ? it.qtd_separada : (it.qty || 0))(i)), 0);
+   const totalSep = currentSessionItems.reduce((s, i) => s + Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0)), 0);
    const totalSol = currentSessionItems.reduce((s, i) => s + (Number(i.qtd_solicitada) || 1), 0);
    const badgeEl = document.getElementById('pick-active-order-status-badge');
    if (badgeEl) {
@@ -25290,7 +25356,7 @@ function updatePickItemsList() {
        </span>
      ` : `
        <span style="background:rgba(234,179,8,0.2); color:#fef08a; font-weight:700; font-size:0.82rem; padding:6px 14px; border-radius:20px; border:1px solid rgba(234,179,8,0.3); display:inline-flex; align-items:center; gap:6px;">
-         <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${currentSessionItems.reduce((s, i) => s + (Number(i.qtd_separada !== undefined ? i.qtd_separada : (i.qty || 0))), 0)} / ${totalSol} un.)
+         <span class="material-symbols-rounded" style="font-size:18px;">directions_walk</span> EM SEPARAÇÃO (${totalSep} / ${totalSol} un.)
        </span>
      `;
    }
