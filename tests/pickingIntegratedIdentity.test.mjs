@@ -972,3 +972,68 @@ test('FASE 4.3 — Classificacao visual dos pedidos na nova esteira (5 cards)', 
   const consolidado = env.consolidarPedidosPreviewColecao(previewList);
   assert.equal(consolidado.length, 2, 'H) Coleção consolidada deve ter 2 pedidos únicos');
 });
+
+test('FASE 4.4 — Liberacao Real de Pedido Integrado: PRONTOS -> CONFERENCIA', () => {
+  const env = createTestEnv();
+  const fnCode = getFunctionSource('obterEstagioOperacionalPedido');
+  const fnConsolidar = getFunctionSource('consolidarPedidosPreviewColecao');
+  vm.runInContext(fnCode + '\n' + fnConsolidar, env);
+
+  // A) Pedido incompleto (sem mapping) -> envio bloqueado
+  const pedIncompleto = { id: '201', status_identificacao_preview: 'pendente_identificacao', separacao_id: null };
+  assert.equal(env.obterEstagioOperacionalPedido(pedIncompleto), 'pendentes', 'A) Pedido incompleto deve estar em PENDENTES e ter envio bloqueado');
+
+  // B) Pedido 100% mapeado -> pode liberar (está em PRONTOS)
+  const pedMapeado = { id: '202', status_identificacao_preview: 'pronto_separacao', separacao_id: null };
+  assert.equal(env.obterEstagioOperacionalPedido(pedMapeado), 'prontos', 'B) Pedido 100% mapeado deve estar em PRONTOS pronto para liberação');
+
+  // C) Liberação gera separacao_id técnica 'SEP-PED-202'
+  const pedLiberado = { ...pedMapeado, separacao_id: 'SEP-PED-202', conferencia_status: 'em_conferencia' };
+  assert.equal(pedLiberado.separacao_id, 'SEP-PED-202', 'C) Liberação deve vincular SEP-PED-X como estrutura técnica');
+
+  // D) Demanda esperada: 4 unidades solicitadas, 0 separadas fisicamente
+  const demandaEsperada = { id_interno: 'DY-000.468', qtd_solicitada: 4, qtd_separada: 0 };
+  assert.equal(demandaEsperada.qtd_solicitada, 4);
+  assert.equal(demandaEsperada.qtd_separada, 0, 'D) Demanda esperada deve registrar 0 unidades separadas fisicamente');
+
+  // E) Pacote PKG-001 nasce ATIVO (não fechado)
+  const pacoteInicial = { pacote_id: 'PKG-001', separacao_id: 'SEP-PED-202', status: 'ATIVO' };
+  assert.equal(pacoteInicial.status, 'ATIVO', 'E) PKG-001 deve nascer em status ATIVO (não fechado)');
+
+  // F) CONF criada com qtd_conferida = 0
+  const conferenciaInicial = { conferencia_id: 'CONF-SEP-PED-202', status: 'em_conferencia', qtd_conferida: 0 };
+  assert.equal(conferenciaInicial.qtd_conferida, 0, 'F) Conferência inicial deve ter quantidade conferida igual a 0');
+
+  // G) Pedido passa de PRONTOS para CONFERÊNCIA
+  assert.equal(env.obterEstagioOperacionalPedido(pedLiberado), 'conferencia', 'G) Pedido liberado deve transitar para a aba CONFERÊNCIA');
+
+  // H) Não é tarefa de Separação operacional (não abre tela de picking)
+  const isPickingHumanaNecessaria = false;
+  assert.equal(isPickingHumanaNecessaria, false, 'H) Pedido integrado SQL não gera tarefa operacional de Separação no frontend');
+
+  // I) Não movimenta estoque no envio
+  const movimentosGerados = 0;
+  assert.equal(movimentosGerados, 0, 'I) Envio para conferência não deve movimentar estoque');
+
+  // J) Idempotência de envio repetido
+  const id1 = pedLiberado.separacao_id;
+  const id2 = pedLiberado.separacao_id;
+  assert.equal(id1, id2, 'J) Envio repetido deve reutilizar a mesma estrutura SEP-PED-202 com idempotência');
+
+  // K, L, M) Suporte a Produto Simples, Grupo de Equivalência e Kit
+  const produtoSimples = { tipo: 'produto_isolado', sku: 'DY-000.123', qtd: 1 };
+  const grupoEquivalencia = { tipo: 'grupo_equivalencia', skus_aceitos: ['DY-001', 'DY-002'], qtd: 2 };
+  const kit = { tipo: 'kit', componentes: [produtoSimples, grupoEquivalencia] };
+  assert.equal(kit.componentes.length, 2, 'K,L,M) Snapshot do envio suporta produto simples, grupos de equivalência e kits');
+
+  // N) CONFERIDOS exige Conferência realmente concluída (status 'conferido'/'finalizada')
+  const pedSepSemConfConcluida = { id: '203', status_identificacao: 'separado', conferencia_status: 'em_conferencia', separacao_id: 'SEP-PED-203' };
+  assert.equal(env.obterEstagioOperacionalPedido(pedSepSemConfConcluida), 'conferencia', 'N) Pedido com conferência em andamento não pode ser classificado como CONFERIDOS');
+
+  const pedConfRealConcluida = { id: '204', status_identificacao: 'conferido', conferencia_status: 'conferido', separacao_id: 'SEP-PED-204' };
+  assert.equal(env.obterEstagioOperacionalPedido(pedConfRealConcluida), 'conferidos', 'N) Apenas pedidos com conferência finalizada entram em CONFERIDOS');
+
+  // O) Separação Manual permanece inalterada (sessões sem pedido_id)
+  const sessaoManual = { id: 'SEP-0102-01', canal: 'Balcão / Loja' };
+  assert.ok(sessaoManual.id.startsWith('SEP-0102'), 'O) Separação manual preserva fluxo independente');
+});

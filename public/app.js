@@ -5509,10 +5509,10 @@ function renderPedidoCardHTML(ped) {
                 <button type="button"
                         id="btn-enviar-sep-${ped.id}"
                         class="app-center-modal-primary"
-                        onclick="enviarPedidoParaSeparacaoUI('${ped.id}')"
+                        onclick="enviarPedidoParaConferenciaUI('${ped.id}')"
                         style="padding:7px 14px;font-size:0.83rem;background:#16a34a;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;"
-                        title="Enviar pedido operacional para separação">
-                  <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">send</span> ENVIAR PARA SEPARAÇÃO
+                        title="Enviar pedido para a esteira de conferência">
+                  <span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">send</span> ENVIAR PARA CONFERÊNCIA
                 </button>
               ` : ''
             ) : `
@@ -5584,8 +5584,8 @@ function renderPedidoCardHTML(ped) {
               Ver separação (${escapeKitAttribute(ped.separacao_id)})
             </button>
           ` : isPronto ? `
-            <button type="button" id="btn-enviar-sep-${ped.id}" class="app-center-modal-primary" onclick="enviarPedidoParaSeparacaoUI('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;background:#16a34a;">
-              <span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação
+            <button type="button" id="btn-enviar-sep-${ped.id}" class="app-center-modal-primary" onclick="enviarPedidoParaConferenciaUI('${ped.id}')" style="padding:6px 14px;font-size:0.85rem;background:#16a34a;">
+              <span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para conferência
             </button>
           ` : ''}
         </div>
@@ -5594,7 +5594,7 @@ function renderPedidoCardHTML(ped) {
   `;
 }
 
-async function enviarPedidoParaSeparacaoUI(pedidoId) {
+async function enviarPedidoParaConferenciaUI(pedidoId) {
   const btn = document.getElementById(`btn-enviar-sep-${pedidoId}`);
   if (btn) {
     if (btn.disabled) return;
@@ -5604,24 +5604,28 @@ async function enviarPedidoParaSeparacaoUI(pedidoId) {
 
   try {
     const usuario = localStorage.getItem('currentUser') || 'Sistema';
-    if (!window.DataClient?.enviarPedidoParaSeparacaoTransacional) {
-      throw new Error('Função DataClient.enviarPedidoParaSeparacaoTransacional não está disponível.');
+    const sendFn = window.DataClient?.enviarPedidoParaConferenciaTransacional || window.DataClient?.enviarPedidoParaSeparacaoTransacional;
+
+    if (!sendFn) {
+      throw new Error('Função DataClient.enviarPedidoParaConferenciaTransacional não está disponível.');
     }
 
-    const res = await window.DataClient.enviarPedidoParaSeparacaoTransacional(pedidoId, usuario);
-    if (res && res.separacao_id) {
-      showToast(`Pedido enviado para Separação (${res.separacao_id}) com sucesso!`, 'success');
+    const res = await sendFn(pedidoId, usuario);
+    if (res && (res.separacao_id || res.conferencia_id)) {
+      showToast(`Pedido liberado para Conferência (${res.conferencia_id || res.separacao_id}) com sucesso!`, 'success');
     }
-    renderPedidosScreen();
+    renderPedidosScreen('conferencia');
   } catch (err) {
-    console.error('[PEDIDOS] Erro ao enviar para separacao:', err);
-    showToast(err.message || 'Erro ao enviar pedido para separação', 'error');
+    console.error('[PEDIDOS] Erro ao enviar para conferência:', err);
+    showToast(err.message || 'Erro ao enviar pedido para conferência', 'error');
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:16px;vertical-align:middle;">send</span> Enviar para separação';
+      btn.innerHTML = '<span class="material-symbols-rounded" style="font-size:15px;vertical-align:middle;">send</span> ENVIAR PARA CONFERÊNCIA';
     }
   }
 }
+window.enviarPedidoParaConferenciaUI = enviarPedidoParaConferenciaUI;
+window.enviarPedidoParaSeparacaoUI = enviarPedidoParaConferenciaUI;
 
 function renderModalDetalhesPedidoPreview(ped) {
   const isML = ped.platform === 'MERCADOLIBRE';

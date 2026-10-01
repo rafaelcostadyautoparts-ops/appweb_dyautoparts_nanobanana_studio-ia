@@ -29,7 +29,7 @@ const DataClient = (function () {
             cacheKey: 'separacao'
         },
         conferencia: {
-            tables: ['separacao', 'separacao_itens', 'conferencia_itens', 'conferencia'],
+            tables: ['separacao', 'separacao_itens', 'conferencia_itens', 'conferencia', 'mercadolivre_pedidos', 'separacao_pacotes'],
             cacheKey: 'conferencia'
         },
         movimentos: {
@@ -770,6 +770,19 @@ const DataClient = (function () {
                 return lotes.flatMap(lote => lote.itens || []);
             }
 
+            if (tableName === 'mercadolivre_pedidos') {
+                console.log(`[DATA] mercadolivre_pedidos -> Supabase`);
+                return await listMercadoLivrePedidos();
+            }
+
+            if (tableName === 'separacao_pacotes') {
+                console.log(`[DATA] separacao_pacotes -> Supabase`);
+                const client = window.supabaseClient;
+                if (!client) return [];
+                const { data } = await client.from('separacao_pacotes').select('*').eq('status', 'ATIVO');
+                return data || [];
+            }
+
             // Fallback apenas para tabelas operacionais legadas ou auxiliares
             console.log(`[DATA] Google Sheets -> ${tableName}`);
             const data = await fetchSheetData(tableName);
@@ -1413,7 +1426,7 @@ const DataClient = (function () {
             .from('separacao')
             .select('*')
             .eq('canal_nome', channelName)
-            .eq('status', 'aberta')
+            .in('status', ['aberta', 'pendente', 'pronta_conferencia', 'finalizada'])
             .order('criado_em', { ascending: false });
 
         if (error) {
@@ -1426,7 +1439,7 @@ const DataClient = (function () {
                 .from('separacao')
                 .select('*')
                 .eq('canal_id', channelName)
-                .eq('status', 'aberta')
+                .in('status', ['aberta', 'pendente', 'pronta_conferencia', 'finalizada'])
                 .order('criado_em', { ascending: false });
 
             if (fallback.error) {
@@ -3757,6 +3770,7 @@ const DataClient = (function () {
         saveMercadoLivrePedidoTransacional,
         reprocessarIdentificacaoPedidoTransacional,
         enviarPedidoParaSeparacaoTransacional,
+        enviarPedidoParaConferenciaTransacional: enviarPedidoParaSeparacaoTransacional,
         biparItemSeparacaoEquivalente,
         resolveCanalFromLogisticType,
 
