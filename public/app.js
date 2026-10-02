@@ -21336,8 +21336,8 @@ function isSessionPendingConferenceForUser(session = {}, currentUser = null) {
   const isIntegrated = isIntegratedSeparation(session);
 
   if (isIntegrated) {
-    // Pedido Integrado: separacao finalizada + conferencia em_conferencia (nao concluida)
-    if (status !== 'finalizada') return false;
+    // Pedido Integrado: separacao finalizada/pronto_conferencia + conferencia em_conferencia (nao concluida)
+    if (status !== 'finalizada' && status !== 'pronto_conferencia') return false;
     if (!hasPendingConferenceForSession(session)) return false;
     return true;
   }
@@ -21552,12 +21552,20 @@ function resolvePendingConferenceByIdentifier(rawInput, customData = null) {
     }
 
     if (matchedBy) {
+      const labelMap = {
+        shipping_id: 'Etiqueta de Envio',
+        external_order_id: 'Pedido',
+        separacao_id: 'Separação',
+        conferencia_id: 'Conferência',
+        pacote_id: 'Pacote',
+        tracking_number: 'Rastreio'
+      };
       matches.push({
         session,
         conference,
         pedido,
         packages: sessionPackages,
-        matchedBy
+        matchedBy: labelMap[matchedBy] || matchedBy
       });
     }
   }
@@ -24593,18 +24601,28 @@ function pickItemMatchesCode(item, cleanCode) {
  const code = normalizePickCode(cleanCode);
  if (!code) return false;
  const possibleCodes = [
- getPickingProductId(item),
+  getPickingProductId(item),
   item?.id_interno,
   item?.produto_id_interno,
   item?.codigo_interno,
- item?.col_a,
- item?.col_A,
- item?.ean,
- item?.codigo_barras,
- item?.sku_fornecedor,
- item?.sku
+  item?.col_a,
+  item?.col_A,
+  item?.ean,
+  item?.codigo_barras,
+  item?.sku_fornecedor,
+  item?.sku
  ];
- return possibleCodes.some(value => normalizePickCode(value) === code);
+ const directMatch = possibleCodes.some(value => normalizePickCode(value) === code);
+ if (directMatch) return true;
+
+ const skusAceitos = item?.detalhes_operacionais?.[0]?.skus_aceitos || item?.skus_aceitos || item?.skus_validos_snapshot || [];
+ if (Array.isArray(skusAceitos) && skusAceitos.length > 0) {
+  return skusAceitos.some(s => {
+   const skuCode = normalizePickCode(s?.ean || s?.sku || s?.id_interno || s?.produto_id || s?.id);
+   return skuCode === code;
+  });
+ }
+ return false;
 }
 
 function getPickSuggestionCode(product) {
@@ -26823,30 +26841,6 @@ function findConferenceSessionByBarcode(code) {
  }
 
  return null;
-}
-
-function resolvePendingConferenceByIdentifier(rawInput) {
- const match = findConferenceSessionByBarcode(rawInput);
- if (match) {
-  const labelMap = {
-   shipping_id: 'Etiqueta de Envio',
-   external_order_id: 'Pedido',
-   separacao_id: 'Separação',
-   conferencia_id: 'Conferência',
-   pacote_id: 'Pacote'
-  };
-  return {
-   success: true,
-   session: match.session,
-   matchedBy: labelMap[match.matchType] || match.matchType,
-   pedido: match.pedido
-  };
- }
-
- return {
-  success: false,
-  message: `Nenhuma conferência pendente localizada para "${rawInput}". Verifique se o pedido já foi finalizado na separação.`
- };
 }
 
 async function handlePackIdentificationSubmit() {

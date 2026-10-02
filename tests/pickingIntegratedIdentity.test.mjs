@@ -1134,3 +1134,86 @@ test('FASE 4.5 — Local Fisico na Conferencia & Persistencia das Bipagens em se
   // V) 0 movimentos de estoque após todas essas operações
   assert.equal(movimentosEstoque.length, 0, 'V) 0 movimentos de estoque devem ser gerados na conferência/bipagem');
 });
+
+test('FASE 4.5B — Tela inicial e filas da Conferencia (Design + Filas por Canal + Duas Formas de Entrada)', async () => {
+  const mockSeparacoes = [
+    { id: 'SEP-PED-401', separacao_id: 'SEP-PED-401', canal_nome: 'Mercado Livre', status: 'pronto_conferencia', criado_por: 'Sistema' },
+    { id: 'SEP-PED-402', separacao_id: 'SEP-PED-402', canal_nome: 'Shopee', status: 'pronto_conferencia', criado_por: 'Sistema' },
+    { id: 'SEP-PED-403', separacao_id: 'SEP-PED-403', canal_nome: 'Mercado Livre', status: 'pronto_conferencia', criado_por: 'Sistema' }
+  ];
+  const mockPedidos = [
+    { id: '401', external_order_id: '200000401', shipping_id: 'SHIP-401', separacao_id: 'SEP-PED-401' },
+    { id: '402', external_order_id: '200000402', shipping_id: 'SHIP-402', separacao_id: 'SEP-PED-402' },
+    { id: '403', external_order_id: '200000403', shipping_id: 'SEP-PED-403' }
+  ];
+  const mockConferencias = [
+    { conferencia_id: 'CONF-SEP-PED-401', separacao_id: 'SEP-PED-401', status: 'em_conferencia' }
+  ];
+  const mockPacotes = [
+    { pacote_id: 'PKG-001', separacao_id: 'SEP-PED-401', status: 'ATIVO' }
+  ];
+
+  const env = createTestEnv({
+    appData: {
+      separacao: mockSeparacoes,
+      mercadolivre_pedidos: mockPedidos,
+      conferencia: mockConferencias,
+      separacao_pacotes: mockPacotes
+    },
+    getPackSeparationSessionId: (s) => s?.separacao_id || s?.id || '',
+    getPackSeparationUniqueId: (s) => s?.separacao_id || s?.id || ''
+  });
+
+  const helpers = [
+    getVariableDeclarationSource('channel3DIcons'),
+    getFunctionSource('getChannelConfig'),
+    getFunctionSource('quotePackInlineArg'),
+    getFunctionSource('escapeKitAttribute'),
+    getFunctionSource('normalizeOperationalLabel'),
+    getFunctionSource('isPickingFastModeSource'),
+    getFunctionSource('getConferenceSessionId'),
+    getFunctionSource('isPendingConferenceRow'),
+    getFunctionSource('hasPendingConferenceForSession'),
+    getFunctionSource('isIntegratedSeparation'),
+    getFunctionSource('isSessionPendingConferenceForUser'),
+    getFunctionSource('isSeparationPendingConferenceSession'),
+    getFunctionSource('getPackActiveSessionsByChannel'),
+    getFunctionSource('getPackChannelsGridHTML'),
+    getFunctionSource('findConferenceSessionByBarcode'),
+    getFunctionSource('resolvePendingConferenceByIdentifier')
+  ].join('\n');
+
+  vm.runInContext(helpers, env);
+
+  // 1. Validar agrupamento de filas por canais
+  const channels = env.getPackActiveSessionsByChannel('Operador Teste');
+  assert.ok(Array.isArray(channels), 'Deve retornar array de grupos por canal');
+  assert.equal(channels.length, 2, 'Deve agrupar em 2 canais: Mercado Livre e Shopee');
+
+  const mlGroup = channels.find(c => c.channelName === 'Mercado Livre');
+  assert.equal(mlGroup?.sessions.length, 2, 'Mercado Livre deve conter 2 sessoes pendentes de conferencia');
+
+  const shopeeGroup = channels.find(c => c.channelName === 'Shopee');
+  assert.equal(shopeeGroup?.sessions.length, 1, 'Shopee deve conter 1 sessao pendente de conferencia');
+
+  // 2. Forma 1: Direct Scan resolve por shipping_id, external_order_id, separacao_id e pacote_id
+  const matchShipping = env.resolvePendingConferenceByIdentifier('SHIP-401');
+  assert.ok(matchShipping.success, 'Bipagem por shipping_id deve ser localizada');
+  assert.equal(matchShipping.matchedBy, 'Etiqueta de Envio', 'Descricao do match deve ser Etiqueta de Envio');
+
+  const matchOrder = env.resolvePendingConferenceByIdentifier('200000402');
+  assert.ok(matchOrder.success, 'Bipagem por external_order_id deve ser localizada');
+  assert.equal(matchOrder.matchedBy, 'Pedido', 'Descricao do match deve ser Pedido');
+
+  const matchSep = env.resolvePendingConferenceByIdentifier('SEP-PED-403');
+  assert.ok(matchSep.success, 'Bipagem por separacao_id deve ser localizada');
+  assert.equal(matchSep.matchedBy, 'Separação', 'Descricao do match deve ser Separação');
+
+  // 3. Forma 2: Grid de Canais em HTML
+  const gridHTML = env.getPackChannelsGridHTML(channels);
+  assert.ok(gridHTML.includes('Mercado Livre'), 'HTML do grid deve renderizar canal Mercado Livre');
+  assert.ok(gridHTML.includes('Shopee'), 'HTML do grid deve renderizar canal Shopee');
+
+  const emptyGridHTML = env.getPackChannelsGridHTML([]);
+  assert.ok(emptyGridHTML.includes('Nenhuma separacao pendente'), 'Grid sem pendencias deve renderizar mensagem amigavel');
+});
