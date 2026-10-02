@@ -21333,21 +21333,27 @@ function isSessionPendingConferenceForUser(session = {}, currentUser = null) {
   if (status === 'cancelada') return false;
   if (isPickingFastModeSource(session)) return false;
 
+  const sessionId = getPackSeparationSessionId(session);
+  const sessionConferences = (appData?.conferencia || []).filter(conf => getConferenceSessionId(conf) === sessionId);
+  const finishedConfStatuses = new Set(['conferido', 'finalizada', 'finalizado', 'concluida', 'concluido', 'cancelada', 'cancelado']);
+  const hasFinishedConference = sessionConferences.some(conf => finishedConfStatuses.has(String(conf.status || '').trim().toLowerCase()));
+  if (hasFinishedConference) return false;
+
+  const activeConference = sessionConferences.find(conf => isPendingConferenceRow(conf));
   const isIntegrated = isIntegratedSeparation(session);
 
   if (isIntegrated) {
-    // Pedido Integrado: separacao finalizada/pronto_conferencia + conferencia em_conferencia (nao concluida)
-    if (status !== 'finalizada' && status !== 'pronto_conferencia') return false;
-    if (!hasPendingConferenceForSession(session)) return false;
-    return true;
+    if (activeConference) return true;
+    if (status === 'pronto_conferencia') return true;
+    return false;
   }
 
-  // Fluxo Manual Legado: separacao aberta/pendente/pronta_conferencia
+  if (activeConference) return true;
+
   const isReadyStatus = status === 'aberta' || status === 'pendente' || status === 'pronta_conferencia';
-  if (!isReadyStatus) return false;
-  if (status === 'finalizada' || status === 'concluida') return false;
-  if (!hasPendingConferenceForSession(session)) return false;
-  return true;
+  if (isReadyStatus) return true;
+
+  return false;
 }
 
 function isSeparationPendingConferenceSession(session = {}, currentUser = null) {
@@ -21433,38 +21439,42 @@ function isConferenceInProgress(sessionId) {
 }
 
 function getConferenceCardState(session) {
+  if (!session || typeof session !== 'object') {
+    return { shouldRender: false };
+  }
+
+  const isPending = isSessionPendingConferenceForUser(session);
+  if (!isPending) {
+    return { shouldRender: false };
+  }
+
   const sessionId = getPackSeparationSessionId(session);
-  const status = String(session?.status || '').trim().toLowerCase();
   const isIntegrated = isIntegratedSeparation(session);
+  const inProgress = isConferenceInProgress(sessionId);
 
-  if (status === 'cancelada') {
-    return { shouldRender: false };
-  }
+  if (inProgress) {
+    const conf = (appData?.conferencia || []).find(c => getConferenceSessionId(c) === sessionId && isPendingConferenceRow(c));
+    const activeSessions = getActivePickSessions();
+    const localSession = activeSessions.find(s => String(s.id) === sessionId);
+    const checked = localSession ? getConferenceProgressQuantity(localSession) : Number(conf?.qtd_conferida || 0);
+    const total = Number(session.total_itens_separados || conf?.total_itens || 4);
+    const progressText = (total > 0) ? ` ${checked}/${total}` : '';
 
-  if (isIntegrated) {
-    if (status !== 'finalizada') return { shouldRender: false };
-  } else {
-    if (status === 'finalizada' || status === 'concluida') return { shouldRender: false };
-  }
-
-  if (!hasPendingConferenceForSession(session)) {
-    return { shouldRender: false };
-  }
-
-  if (isConferenceInProgress(sessionId)) {
     return {
       shouldRender: true,
-      badgeText: 'Em andamento',
+      badgeText: `EM CONFERÊNCIA${progressText}`,
       badgeClass: 'active',
-      statusText: 'Conferência em andamento'
+      statusText: 'Conferência em andamento',
+      actionText: 'CONTINUAR'
     };
   }
 
   return {
     shouldRender: true,
-    badgeText: isIntegrated ? 'Aguardando Conferência' : 'Aberta',
+    badgeText: isIntegrated ? 'AGUARDANDO CONFERÊNCIA' : 'ABERTA',
     badgeClass: isIntegrated ? 'warning' : 'ready',
-    statusText: isIntegrated ? 'Separado • Aguardando conferência' : 'Pronta para iniciar a conferência'
+    statusText: isIntegrated ? 'Separado • Aguardando conferência' : 'Pronta para iniciar a conferência',
+    actionText: isIntegrated ? 'INICIAR CONFERÊNCIA' : 'CONFERIR'
   };
 }
 
@@ -27129,6 +27139,14 @@ async function renderPackSessionsList(channelName) {
   const packageCount = session.total_pacotes_montados || 1;
   const itemCount = session.total_itens_separados || 4;
 
+  const hasExternal = isIntegrated && Boolean(externalOrderId);
+  const mainTitle = hasExternal ? `PEDIDO #${externalOrderId}` : displayId;
+  const kickerTitle = hasExternal ? String(session.canal_nome || linkedOrder?.account || 'Mercado Livre') : 'Separação';
+  const subInfoText = hasExternal
+    ? `${displayId} • ${createdAt} • ${packageCount} pacote(s) • ${itemCount} un`
+    : `${createdAt} • ${packageCount} pacote(s) • ${itemCount} un`;
+  const actionTextLabel = cardState.actionText || 'Conferir';
+
   return `
  <article class="pack-session-card" onclick="renderPackSessionDetails(${quotePackInlineArg(uniqueId)})">
  <div class="pack-session-card-main">
@@ -27136,18 +27154,18 @@ async function renderPackSessionsList(channelName) {
  <span class="material-symbols-rounded">assignment_turned_in</span>
  </div>
  <div class="pack-session-card-text">
- <span class="pack-session-card-kicker">${isIntegrated && externalOrderId ? `Pedido #${externalOrderId}` : 'Separacao'}</span>
- <strong>${displayId}</strong>
- <small>${createdAt} • ${packageCount} pacote(s) • ${itemCount} un</small>
- <small>${cardState.statusText}</small>
+ <span class="pack-session-card-kicker">${escapeKitAttribute(kickerTitle)}</span>
+ <strong>${escapeKitAttribute(mainTitle)}</strong>
+ <small>${escapeKitAttribute(subInfoText)}</small>
+ <small>${escapeKitAttribute(cardState.statusText)}</small>
  </div>
  </div>
  <div class="pack-session-card-meta">
  <div class="pack-session-pill ${cardState.badgeClass}">${cardState.badgeText}</div>
  </div>
- <button class="pack-session-action" onclick="event.stopPropagation(); renderPackSessionDetails(${quotePackInlineArg(uniqueId)})" title="Conferir">
+ <button class="pack-session-action" onclick="event.stopPropagation(); renderPackSessionDetails(${quotePackInlineArg(uniqueId)})" title="${escapeKitAttribute(actionTextLabel)}">
  <span class="material-symbols-rounded">fact_check</span>
- <span>Conferir</span>
+ <span>${escapeKitAttribute(actionTextLabel)}</span>
  </button>
  </article>
  `;

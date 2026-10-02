@@ -30,7 +30,12 @@ function createTestEnv(overrides = {}) {
   const context = {
     console: { warn() {}, log() {}, error() {}, info() {} },
     navigator: { onLine: true },
-    localStorage: { getItem: () => 'Operador Teste' },
+    localStorage: {
+      _store: {},
+      getItem(k) { return this._store[k] ?? (k === 'currentUser' ? 'Operador Teste' : null); },
+      setItem(k, v) { this._store[k] = String(v); },
+      removeItem(k) { delete this._store[k]; }
+    },
     PICK_STATUS_DRAFT: 'em_separacao',
     currentPickingContext: null,
     currentSessionItems: [],
@@ -1216,4 +1221,93 @@ test('FASE 4.5B — Tela inicial e filas da Conferencia (Design + Filas por Cana
 
   const emptyGridHTML = env.getPackChannelsGridHTML([]);
   assert.ok(emptyGridHTML.includes('Nenhuma separacao pendente'), 'Grid sem pendencias deve renderizar mensagem amigavel');
+});
+
+test('FASE 4.5C — Consolidar Fila Operacional da Conferencia', async () => {
+  const mockSeparacoes = [
+    { id: 'SEP-PED-89', separacao_id: 'SEP-PED-89', canal_nome: 'Mercado Livre', status: 'finalizada', pedido_id: 89 },
+    { id: 'SEP-PED-86', separacao_id: 'SEP-PED-86', canal_nome: 'Mercado Livre', status: 'finalizada', pedido_id: 86 },
+    { id: 'SEP-PED-68', separacao_id: 'SEP-PED-68', canal_nome: 'Mercado Livre', status: 'finalizada', pedido_id: 68 },
+    { id: 'SEP-PED-90', separacao_id: 'SEP-PED-90', canal_nome: 'Mercado Livre Agência', status: 'finalizada', pedido_id: 90, total_itens_separados: 4, total_pacotes_montados: 1 },
+    { id: 'SEP-MANUAL-01', separacao_id: 'SEP-MANUAL-01', canal_nome: 'Balcão / Loja', status: 'pronta_conferencia', total_itens_separados: 2 }
+  ];
+  const mockPedidos = [
+    { id: 90, db_id: 90, external_order_id: '2000018356039444', shipping_id: '47966360665', separacao_id: 'SEP-PED-90', status_identificacao: 'separado' }
+  ];
+  const mockConferencias = [
+    { conferencia_id: 'CONF-SEP-PED-90', separacao_id: 'SEP-PED-90', status: 'em_conferencia', qtd_conferida: 1, total_itens: 4 }
+  ];
+  const mockPacotes = [
+    { pacote_id: 'PKG-001', separacao_id: 'SEP-PED-90', status: 'ATIVO' }
+  ];
+
+  const env = createTestEnv({
+    appData: {
+      separacao: mockSeparacoes,
+      mercadolivre_pedidos: mockPedidos,
+      conferencia: mockConferencias,
+      separacao_pacotes: mockPacotes
+    },
+    getPackSeparationSessionId: (s) => s?.separacao_id || s?.id || '',
+    getPackSeparationUniqueId: (s) => s?.separacao_id || s?.id || ''
+  });
+
+  const helpers = [
+    getVariableDeclarationSource('channel3DIcons'),
+    getFunctionSource('getChannelConfig'),
+    getFunctionSource('quotePackInlineArg'),
+    getFunctionSource('escapeKitAttribute'),
+    getFunctionSource('normalizeOperationalLabel'),
+    getFunctionSource('isPickingFastModeSource'),
+    getFunctionSource('getConferenceSessionId'),
+    getFunctionSource('isPendingConferenceRow'),
+    getFunctionSource('hasPendingConferenceForSession'),
+    getFunctionSource('isIntegratedSeparation'),
+    getFunctionSource('isSessionPendingConferenceForUser'),
+    getFunctionSource('isSeparationPendingConferenceSession'),
+    getFunctionSource('isConferenceInProgress'),
+    getFunctionSource('getActivePickSessions'),
+    getFunctionSource('getConferenceProgressQuantity'),
+    getFunctionSource('getConferenceCardState'),
+    getFunctionSource('getPackActiveSessionsByChannel'),
+    getFunctionSource('getPackChannelsGridHTML'),
+    getFunctionSource('findConferenceSessionByBarcode')
+  ].join('\n');
+
+  vm.runInContext(helpers, env);
+
+  // 1. Registros historicos sem conferencia (SEP-PED-89, 86, 68) NAO contaminam a fila ativa
+  assert.equal(env.isSeparationPendingConferenceSession(mockSeparacoes[0]), false, 'SEP-PED-89 nao deve ser pendente');
+  assert.equal(env.isSeparationPendingConferenceSession(mockSeparacoes[1]), false, 'SEP-PED-86 nao deve ser pendente');
+  assert.equal(env.isSeparationPendingConferenceSession(mockSeparacoes[2]), false, 'SEP-PED-68 nao deve ser pendente');
+
+  // 2. Piloto ID 90 continua ativo
+  assert.equal(env.isSeparationPendingConferenceSession(mockSeparacoes[3]), true, 'SEP-PED-90 (Piloto) deve continuar pendente na fila ativa');
+
+  // 3. Canais: Mercado Livre vs Mercado Livre Agencia sao distintos e contador = colecao
+  const channels = env.getPackActiveSessionsByChannel('Operador Teste');
+  const mlAgenciaGroup = channels.find(c => c.channelName === 'Mercado Livre Agência');
+  const mlGroup = channels.find(c => c.channelName === 'Mercado Livre');
+  assert.ok(mlAgenciaGroup, 'Canal Mercado Livre Agência deve existir');
+  assert.equal(mlAgenciaGroup.sessions.length, 1, 'Contador de Mercado Livre Agência deve ser 1 (apenas o Piloto 90)');
+  assert.equal(mlGroup, undefined, 'Canal Mercado Livre nao deve ter sessoes ativas pois 89, 86, 68 foram filtrados');
+
+  // 4. Identidade principal do piloto: PEDIDO #2000018356039444 (e nao SEP-PED-90)
+  const cardState90 = env.getConferenceCardState(mockSeparacoes[3]);
+  assert.equal(cardState90.shouldRender, true);
+  assert.equal(cardState90.badgeText.includes('EM CONFERÊNCIA'), true, 'Estado visual deve ser EM CONFERÊNCIA');
+  assert.equal(cardState90.actionText, 'CONTINUAR', 'Acao deve ser CONTINUAR para conferencia em andamento');
+
+  // 5. Estado visual para pedido aguardando conferencia (novo integrado)
+  const novoIntegrado = { id: 'SEP-PED-91', separacao_id: 'SEP-PED-91', canal_nome: 'Shopee', status: 'pronto_conferencia', total_itens_separados: 2 };
+  env.appData.separacao.push(novoIntegrado);
+  const cardState91 = env.getConferenceCardState(novoIntegrado);
+  assert.equal(cardState91.badgeText, 'AGUARDANDO CONFERÊNCIA', 'Estado visual deve ser AGUARDANDO CONFERÊNCIA');
+  assert.equal(cardState91.actionText, 'INICIAR CONFERÊNCIA', 'Acao deve ser INICIAR CONFERÊNCIA');
+
+  // 6. Fluxo manual preservado (SEP-MANUAL-01)
+  assert.equal(env.isSeparationPendingConferenceSession(mockSeparacoes[4]), true, 'Fluxo manual deve ser preservado');
+  const cardStateManual = env.getConferenceCardState(mockSeparacoes[4]);
+  assert.equal(cardStateManual.badgeText, 'ABERTA', 'Manual deve manter badge ABERTA');
+  assert.equal(cardStateManual.actionText, 'CONFERIR', 'Manual deve manter acao CONFERIR');
 });
