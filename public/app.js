@@ -11132,11 +11132,18 @@ function renderInventarioSubMenu() {
  
  const currentUser = localStorage.getItem('currentUser');
  const subItems = [
- { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
- { id: 'inv_geral', label: 'INVENT\u00c1RIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergencias de estoque.' },
- { id: 'inv_parcial', label: 'INVENT\u00c1RIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventarioParcialMenu()", description: 'Contar uma selecao especifica de produtos, marcas, locais ou localizacoes fisicas.' },
- { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventarios abertos, fechados e anulados.' }
+ { id: 'inv_inicial', label: 'INVENTÁRIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
+ { id: 'inv_geral', label: 'INVENTÁRIO GERAL', icon: 'inventario_geral', onclick: 'startInventarioGeral()', description: 'Conferir todos os produtos e ajustar divergencias de estoque.' },
+ { id: 'inv_parcial', label: 'INVENTÁRIO PARCIAL', icon: 'inventario_parcial', onclick: "renderInventarioParcialMenu()", description: 'Contar uma selecao especifica de produtos, marcas, locais ou localizacoes fisicas.' },
+ { id: 'historico_inv', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventarios abertos, fechados e anulados.' }
  ];
+
+ const inventoryIcons = {
+   inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="dy-icon dy-icon-module"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M9 12h6"></path><path d="M9 16h4"></path></svg>',
+   inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="dy-icon dy-icon-module"><path d="m9 11 3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+   inventario_parcial: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="dy-icon dy-icon-module"><path d="M11 6h9"></path><path d="M11 12h9"></path><path d="M11 18h9"></path><circle cx="5" cy="6" r="2"></circle><circle cx="5" cy="12" r="2"></circle><path d="m3 17 2 2 4-4"></path></svg>',
+   historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="dy-icon dy-icon-module"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 15"></polyline></svg>'
+ };
 
  const activeInv = appData.currentInventory && !['FECHADO', 'ANULADO'].includes(appData.currentInventory.status) ? appData.currentInventory : null;
  let ongoingHTML = '';
@@ -11188,6 +11195,22 @@ function renderInventarioSubMenu() {
  `;
  }
 
+ const cardsHTML = `
+ <div class="standard-module-card-grid">
+ ${subItems.map(item => `
+ <button type="button" class="standard-module-card standard-module-card-${item.id} ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
+ <span class="standard-module-card-icon">${inventoryIcons[item.icon] || menu3DIcons[item.icon] || ''}</span>
+ <span class="standard-module-card-divider"></span>
+ <span class="standard-module-card-copy">
+ <strong>${item.label}</strong>
+ ${item.description ? `<small>${item.description}</small>` : ''}
+ </span>
+ <span class="material-symbols-rounded standard-module-card-chevron notranslate icon-fallback-ready" translate="no" data-icon-name="chevron_right"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dy-icon dy-icon-action"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+ </button>
+ `).join('')}
+ </div>
+ `;
+
  app.innerHTML = `
  <div class="dashboard-screen fade-in internal inventory-screen inventario-submenu-screen module-screen standard-card-menu-screen app-page-shell">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -11199,7 +11222,7 @@ function renderInventarioSubMenu() {
  <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
  <span class="app-breadcrumb-current">Inventário</span>
  </div>
- ${getStandardModuleCardsHTML(subItems)}
+ ${cardsHTML}
  ${ongoingHTML}
  </main>
  </div>
