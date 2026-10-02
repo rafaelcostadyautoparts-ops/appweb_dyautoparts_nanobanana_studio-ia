@@ -77874,3 +77874,242 @@ html body:not(.login-active) #app > .dashboard-screen.compras-submenu-screen .st
     gap: 12px !important;
   }
 }
+
+/* ========================================================
+   SUBMENU: EMISSÃO NF (Grid Padronizado e Cards 152px)
+   ======================================================== */
+
+html body:not(.login-active) #app > .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid {
+  width: 100% !important;
+  max-width: 1080px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin-inline: auto !important;
+  margin-block: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 22px 24px !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* Card Principal (152px compacto) */
+html body:not(.login-active) #app > .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 152px !important;
+  min-height: 152px !important;
+  max-height: 152px !important;
+  margin: 0 !important;
+  padding: 20px 24px !important;
+  border-radius: 6px !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #f7f7f8 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 16px !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease !important;
+}
+
+html body:not(.login-active) #app > .dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Quadrado do Ícone (46x46) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  max-width: 46px !important;
+  max-height: 46px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg {
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
+  max-width: 21px !important;
+  max-height: 21px !important;
+  display: block !important;
+}
+
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg * {
+  stroke-width: 1.5 !important;
+}
+
+/* 1. NOVA EMISSÃO: Documento + Seta ↑ (Azul Royal pastel suave) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon {
+  background: #eaf2ff !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon svg {
+  color: #2563eb !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_nova .standard-module-card-icon svg * {
+  stroke: #2563eb !important;
+}
+
+/* 2. NOTAS EMITIDAS: Documento + Check (Esmeralda pastel suave) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon {
+  background: #ecfdf5 !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon svg {
+  color: #059669 !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_emitidas .standard-module-card-icon svg * {
+  stroke: #059669 !important;
+}
+
+/* 3. INUTILIZAÇÃO: Documento + X (Rose / Carmim pastel suave) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon {
+  background: #fff1f2 !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon svg {
+  color: #e11d48 !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_inutilizacao .standard-module-card-icon svg * {
+  stroke: #e11d48 !important;
+}
+
+/* 4. HISTÓRICO: Relógio (Roxo pastel suave) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon {
+  background: #f3e8ff !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon svg {
+  color: #9333ea !important;
+}
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-emissao_historico .standard-module-card-icon svg * {
+  stroke: #9333ea !important;
+}
+
+/* Divisória Vertical (1px sutil) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-divider,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-divider {
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  background: #e2e8f0 !important;
+  border: none !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+}
+
+/* Textos do Card (Título + Descrição) */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  text-align: left !important;
+}
+
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy strong,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy strong {
+  font-family: inherit !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+  line-height: 1.25 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy small,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-copy small {
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+  font-weight: 400 !important;
+  color: #64748b !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Chevron Direito */
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-chevron,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-chevron {
+  font-size: 20px !important;
+  color: #94a3b8 !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.18s ease, color 0.18s ease !important;
+}
+
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover .standard-module-card-chevron,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover .standard-module-card-chevron {
+  color: #475569 !important;
+  transform: translateX(3px) !important;
+}
+
+/* Responsividade Mobile (<= 768px) */
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
+  #app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid,
+  .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    max-width: 100% !important;
+    padding-inline: 12px !important;
+  }
+
+  html body:not(.login-active) #app > .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+  #app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+  .dashboard-screen.emissao-nf-submenu-screen .standard-module-card {
+    height: auto !important;
+    min-height: 110px !important;
+    max-height: none !important;
+    padding: 16px 18px !important;
+    gap: 12px !important;
+  }
+}

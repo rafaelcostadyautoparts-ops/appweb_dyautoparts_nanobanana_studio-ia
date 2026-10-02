@@ -2931,6 +2931,7 @@ const MODULE_SIDEBAR_CONFIG = {
  pack: { label: 'CONFER\u00caNCIA (PACK)', icon: 'verified', colorFrom: '#0891B2', colorTo: '#0E7490', shadow: '8,145,178' },
  compras: { label: 'COMPRAS', icon: 'shopping_bag', colorFrom: '#E11D48', colorTo: '#BE123C', shadow: '225,29,72' },
  financeiro: { label: 'FINANCEIRO', icon: 'payments', colorFrom: '#059669', colorTo: '#047857', shadow: '5,150,105' },
+ emissao_nf: { label: 'EMISS\u00c3O NF', icon: 'receipt_long', colorFrom: '#2563EB', colorTo: '#1D4ED8', shadow: '37,99,235' },
  configuracoes: { label: 'CONFIG.', icon: 'settings', colorFrom: '#475569', colorTo: '#1E293B', shadow: '71,85,105' },
 };
 
@@ -4035,6 +4036,10 @@ const menu3DIcons = {
  inventario: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F97316"/><path d="M16 22h32M16 41h32M20 22v24M44 22v24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><rect x="22" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><rect x="33" y="26" width="9" height="11" rx="1.5" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M25 30h3M36 30h3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
  dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><rect x="16" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="16" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="16" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/><rect x="35" y="35" width="13" height="13" rx="2" fill="#fff" opacity="0.9"/></svg>',
  configuracoes: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#4B5563"/><path d="M32 16v4M32 44v4M16 32h4M44 32h4M20.7 20.7l2.8 2.8M40.5 40.5l2.8 2.8M20.7 43.3l2.8-2.8M40.5 23.5l2.8-2.8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="6" stroke="#fff" stroke-width="2.5" fill="none"/></svg>',
+ emissao_nova: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>',
+ emissao_emitidas: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>',
+ emissao_inutilizacao: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg>',
+ emissao_historico: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
  nf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><path d="M20 15h17l7 7v27H20V15Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M37 15v8h7M25 29h14M25 35h8" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/><path d="M36 38v8m0 0-4-4m4 4 4-4" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  compras: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DC2626"/><path d="M20 22 L22 18 H42 L44 22 V40 H20 Z" stroke="#fff" stroke-width="2.5" fill="none" stroke-linejoin="round"/><path d="M26 22 V18 M38 22 V18" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M26 31 L31 36 L38 28" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
  financeiro: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><circle cx="32" cy="32" r="14" stroke="#fff" stroke-width="2.5" fill="none"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">$</text></svg>',
@@ -4115,6 +4120,8 @@ const menuRoutes = {
  movimentacoes: 'renderMovimentacoesSubMenu()',
  inventario: 'renderInventarioSubMenu()',
  nf: 'renderNFSubMenu()',
+ emissao_nf: 'renderEmissaoNFSubMenu()',
+ emissao: 'renderEmissaoNFSubMenu()',
  financeiro: 'renderFinanceiroSubMenu()',
  configuracoes: 'renderConfigSubMenu()',
  pedidos: 'renderPedidosPlaceholder()',
@@ -30880,6 +30887,75 @@ function renderNFSubMenu() {
  </main>
  </div>
  `;
+}
+
+function renderEmissaoNFSubMenu() {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const subItems = [
+    {
+      id: 'emissao_nova',
+      label: 'NOVA EMISSÃO',
+      description: 'Emitir nota fiscal de saída ou venda.',
+      icon: 'emissao_nova',
+      onclick: "typeof renderNovaEmissaoNFScreen === 'function' ? renderNovaEmissaoNFScreen() : showToast('Módulo de Nova Emissão em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_emitidas',
+      label: 'NF-E EMITIDAS',
+      description: 'Consultar, reimprimir e baixar XML/DANFE.',
+      icon: 'emissao_emitidas',
+      onclick: "typeof renderNFEmitidasScreen === 'function' ? renderNFEmitidasScreen() : showToast('Módulo de NF-e Emitidas em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_inutilizacao',
+      label: 'INUTILIZAÇÃO / CANCELAMENTO',
+      description: 'Inutilizar numerações e gerenciar cancelamentos.',
+      icon: 'emissao_inutilizacao',
+      onclick: "typeof renderInutilizacaoCancelamentoScreen === 'function' ? renderInutilizacaoCancelamentoScreen() : showToast('Módulo de Inutilização em desenvolvimento', 'info')"
+    },
+    {
+      id: 'emissao_historico',
+      label: 'HISTÓRICO DE EMISSÕES',
+      description: 'Relatórios e histórico completo de transmissões.',
+      icon: 'emissao_historico',
+      onclick: "typeof renderHistoricoEmissoesScreen === 'function' ? renderHistoricoEmissoesScreen() : showToast('Histórico de Emissões em desenvolvimento', 'info')"
+    }
+  ];
+
+  const cardsHtml = `
+    <div class="standard-module-card-grid">
+      ${subItems.map(item => `
+        <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)}" onclick="${item.onclick}">
+          <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
+          <span class="standard-module-card-divider"></span>
+          <span class="standard-module-card-copy">
+            <strong>${item.label}</strong>
+            ${item.description ? `<small>${item.description}</small>` : ''}
+          </span>
+          <span class="material-symbols-rounded standard-module-card-chevron">chevron_right</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in emissao-nf-submenu-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('emissao_nf')}
+
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Emissão NF</span>
+        </div>
+        ${cardsHtml}
+      </main>
+    </div>
+  `;
 }
 
 let entradaNfXmlState = null;
