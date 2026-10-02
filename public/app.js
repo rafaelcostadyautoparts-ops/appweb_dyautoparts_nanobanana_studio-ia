@@ -11124,12 +11124,12 @@ function renderInventorySuccessScreen() {
 
 function renderInventarioSubMenu() {
  stopScanner();
-
+ 
  if (appData.currentInventory && appData.currentInventory.isNewSession) {
  console.log('[INFO] Operacao registrada.');
  appData.currentInventory = null;
  }
-
+ 
  const currentUser = localStorage.getItem('currentUser');
  const subItems = [
  { id: 'inv_inicial', label: 'INVENT\u00c1RIO INICIAL', icon: 'inventario_inicial', onclick: 'startInventarioInicial()', description: 'Abrir a primeira contagem oficial para definir o estoque inicial.' },
@@ -11138,13 +11138,69 @@ function renderInventarioSubMenu() {
  { id: 'historico_inv', label: 'HIST\u00d3RICO', icon: 'historico', onclick: 'renderInventarioHistory()', description: 'Consultar inventarios abertos, fechados e anulados.' }
  ];
 
+ const activeInv = appData.currentInventory && !['FECHADO', 'ANULADO'].includes(appData.currentInventory.status) ? appData.currentInventory : null;
+ let ongoingHTML = '';
+
+ if (activeInv) {
+ const invTypeLabel = getInventoryTypeLabel(activeInv.tipo || activeInv.type || 'geral');
+ const itemsCount = activeInv.items ? activeInv.items.length : 0;
+ const diffCount = (activeInv.items || []).filter(i => {
+ const expected = parseStockQty(i.saldo_sistema ?? getStockQtyByLocal(getProductStockEntriesFromCache(i.id_interno), activeInv.local));
+ const counted = Number(i.qty || 0);
+ return (counted - expected) !== 0;
+ }).length;
+ 
+ let startTimeStr = '--:--';
+ if (activeInv.data_inicio || activeInv.criado_em || activeInv.date) {
+ try {
+ const d = new Date(activeInv.data_inicio || activeInv.criado_em || activeInv.date);
+ if (!isNaN(d.getTime())) {
+ startTimeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+ }
+ } catch (e) {}
+ }
+
+ ongoingHTML = `
+ <section class="inv-ongoing-banner fade-in">
+ <div class="inv-ongoing-header">
+ <div class="inv-ongoing-title-group">
+ <h2 class="inv-ongoing-title">INVENTÁRIO ${invTypeLabel.toUpperCase()}</h2>
+ <span class="inv-ongoing-status-badge"><i class="inv-status-dot"></i> EM ANDAMENTO</span>
+ </div>
+ <button type="button" class="btn-inv-continue" onclick="renderInventarioInicialScreen('${activeInv.id}', 'edit')">
+ <span class="material-symbols-rounded">play_arrow</span> CONTINUAR
+ </button>
+ </div>
+ <div class="inv-ongoing-metrics">
+ <div class="inv-ongoing-metric">
+ <strong>${itemsCount}</strong> <span>SKUs contados</span>
+ </div>
+ <div class="inv-ongoing-divider"></div>
+ <div class="inv-ongoing-metric">
+ <strong class="${diffCount > 0 ? 'has-diff' : ''}">${diffCount}</strong> <span>divergências</span>
+ </div>
+ <div class="inv-ongoing-divider"></div>
+ <div class="inv-ongoing-metric text-muted">
+ <span>Iniciado às <strong>${startTimeStr}</strong></span>
+ </div>
+ </div>
+ </section>
+ `;
+ }
+
  app.innerHTML = `
- <div class="dashboard-screen fade-in internal inventory-screen module-screen standard-card-menu-screen">
+ <div class="dashboard-screen fade-in internal inventory-screen inventario-submenu-screen module-screen standard-card-menu-screen app-page-shell">
  ${getTopBarHTML(currentUser, 'renderMenu()')}
  ${getModuleSidebarHTML('inventario')}
 
- <main class="container">
+ <main class="container app-page-container">
+ <div class="app-breadcrumb">
+ <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+ <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+ <span class="app-breadcrumb-current">Inventário</span>
+ </div>
  ${getStandardModuleCardsHTML(subItems)}
+ ${ongoingHTML}
  </main>
  </div>
  `;
