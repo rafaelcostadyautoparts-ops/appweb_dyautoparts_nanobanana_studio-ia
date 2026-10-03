@@ -2981,12 +2981,14 @@ function getStandardModuleCardsHTML(items = []) {
  return `
  <div class="standard-module-card-grid">
  ${items.map(item => `
- <button type="button" class="standard-module-card ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
- <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
+ <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)} ${item.disabled ? 'disabled' : ''}" ${item.disabled ? 'disabled aria-disabled="true"' : `onclick="${item.onclick}"`}>
+ <span class="standard-module-card-icon">${(window.dyIcon && window.dyIcon(item.icon, 'module')) || menu3DIcons[item.icon] || ''}</span>
+ <span class="standard-module-card-divider"></span>
  <span class="standard-module-card-copy">
  <strong>${item.label}</strong>
  ${item.description ? `<small>${item.description}</small>` : ''}
  </span>
+ <span class="material-symbols-rounded standard-module-card-chevron">chevron_right</span>
  </button>
  `).join('')}
  </div>
@@ -4062,7 +4064,7 @@ const menu3DIcons = {
  transporte: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><rect x="18" y="26" width="20" height="14" rx="1" fill="#fff" opacity="0.9"/><rect x="38" y="30" width="8" height="10" rx="1" fill="#fff" opacity="0.7"/></svg>',
  abertas: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><circle cx="32" cy="32" r="10" stroke="#fff" stroke-width="3" fill="none" opacity="0.5"/><path d="M32 26 V32 L36 36" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
  garantia: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#EF4444"/><path d="M32 20 L32 36" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="32" cy="43" r="2.5" fill="#fff"/></svg>',
- xml: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#3B82F6"/><path d="M22 22 H42 V42 H22 Z" stroke="#fff" stroke-width="3" fill="none"/><path d="M26 28 L32 34 L38 28" stroke="#fff" stroke-width="3" fill="none"/></svg>',
+ xml: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg>',
  manual: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#10B981"/><path d="M22 22 L42 42 M42 22 L22 42" stroke="#fff" stroke-width="3"/></svg>',
  inventario_inicial: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#8B5CF6"/><rect x="20" y="18" width="24" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="20" y="24" width="18" height="2.5" rx="1.25" fill="#fff" opacity="0.8"/><rect x="20" y="29" width="21" height="2.5" rx="1.25" fill="#fff" opacity="0.7"/><rect x="20" y="34" width="14" height="2.5" rx="1.25" fill="#fff" opacity="0.55"/></svg>',
  inventario_geral: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><rect x="16" y="20" width="32" height="3" rx="1.5" fill="#fff" opacity="0.95"/><rect x="16" y="26" width="26" height="2.5" rx="1.25" fill="#fff" opacity="0.85"/><rect x="16" y="31" width="29" height="2.5" rx="1.25" fill="#fff" opacity="0.75"/><rect x="16" y="36" width="22" height="2.5" rx="1.25" fill="#fff" opacity="0.65"/><path d="M34 42 L40 48 L50 36" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>',
