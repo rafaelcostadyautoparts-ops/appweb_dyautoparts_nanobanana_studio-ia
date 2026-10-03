@@ -38334,12 +38334,12 @@ async function finalizarEntradaNFXml() {
  return;
  }
 
- showAppConfirmModal({
- title: 'Finalizar entrada?',
- message: 'Deseja lan\\u00e7ar as quantidades no estoque do T\\u00c9RREO? Esta a\\u00e7\\u00e3o registra os movimentos de estoque.',
- confirmLabel: 'Finalizar entrada',
- onConfirm: () => finalizarEntradaNFXmlConfirmado()
- });
+  showAppConfirmModal({
+    title: 'Finalizar entrada?',
+    message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra os movimentos de estoque.',
+    confirmLabel: 'Finalizar entrada',
+    onConfirm: () => finalizarEntradaNFXmlConfirmado()
+  });
 }
 
 async function finalizarEntradaNFXmlConfirmado() {
@@ -38479,7 +38479,7 @@ async function finalizarEntradaNFAberta(entradaId) {
  showToast('Entrada finalizada com sucesso! Estoque, movimentos e lotes atualizados.', 'success');
  await showAppAlert({
  title: 'Recebimento finalizado',
- message: 'Revise os dados e tente novamente.',
+ message: 'A entrada da nota fiscal foi finalizada com sucesso. Estoque, lotes e contas a pagar foram atualizados.',
  buttonLabel: 'OK',
  icon: 'check_circle'
  });
@@ -38499,12 +38499,12 @@ async function finalizarEntradaNFAberta(entradaId) {
 }
 
 function confirmarFinalizarEntradaNFAberta(entradaId) {
- showAppConfirmModal({
- title: 'Finalizar entrada?',
- message: 'Deseja lan\\u00e7ar as quantidades no estoque do T\\u00c9RREO? Esta a\\u00e7\\u00e3o registra movimentos e camadas de custo.',
- confirmLabel: 'Finalizar entrada',
- onConfirm: () => finalizarEntradaNFAberta(entradaId)
- });
+  showAppConfirmModal({
+    title: 'Finalizar entrada?',
+    message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra movimentos e camadas de custo.',
+    confirmLabel: 'Finalizar entrada',
+    onConfirm: () => finalizarEntradaNFAberta(entradaId)
+  });
 }
 
 function getEntradaNFOpenStatusInfo(nf) {
@@ -40618,15 +40618,26 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
         }];
       }
 
+      // Condição respeita explicitamente o valor gravado ou a escolha, sem forçar 'a_vista' só por ter 1 parcela
+      let condicaoInicial = 'a_vista';
+      if (nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo') {
+        condicaoInicial = 'parcelado';
+      } else if (nf.tipo_condicao_financeira === 'a_vista') {
+        condicaoInicial = 'a_vista';
+      } else if (parcelasIniciais.length > 1) {
+        condicaoInicial = 'parcelado';
+      }
+
       entradaNFPagamentoModalState[entradaId] = {
         isOpen: false,
-        condicao: (parcelasIniciais.length > 1) ? 'parcelado' : (nf.tipo_condicao_financeira || 'a_vista'),
+        condicao: condicaoInicial,
         formaPagamento: (parcelasExistentes && parcelasExistentes[0]?.forma_pagamento) || 'boleto',
         observacao: nf.observacao_financeira || '',
         qtdParcelas: parcelasIniciais.length || 1,
         primeiroVencimento: parcelasIniciais[0]?.vencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
         intervaloDias: 30,
-        parcelas: parcelasIniciais
+        parcelas: parcelasIniciais,
+        valorTotalNf: valorTotal
       };
     }
     return entradaNFPagamentoModalState[entradaId];
@@ -40658,7 +40669,7 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
         valor: parseDecimal(valorTotal)
       }];
     } else {
-      if (state.qtdParcelas < 2) state.qtdParcelas = 2;
+      state.qtdParcelas = Math.max(1, parseInt(state.qtdParcelas, 10) || 1);
       gerarParcelasPagamentoNF(entradaId, valorTotal);
     }
     renderNFDetail(entradaId);
@@ -40741,6 +40752,9 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
     const state = entradaNFPagamentoModalState[entradaId];
     if (!state) return;
     state[field] = value;
+    if (field === 'primeiroVencimento' && state.parcelas && state.parcelas.length === 1) {
+      state.parcelas[0].vencimento = value;
+    }
   }
 
   async function salvarPagamentoNFDoModal(entradaId) {
@@ -41047,7 +41061,7 @@ async function renderNFDetail(id) {
                 <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
                   <span class="material-symbols-rounded" style="color: #2563eb; font-size: 18px;">receipt_long</span> PARCELAS DA NOTA FISCAL
                 </h3>
-                <span style="font-size: 0.72rem; color: #64748b;">Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>
+                <span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #2563eb;">${(nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo') ? `A PRAZO (${parcelasFiscais.length}x)` : 'À VISTA'}</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>
               </div>
 
               ${!isEntradaFinalizada ? `
@@ -41230,13 +41244,13 @@ async function renderNFDetail(id) {
                 
                 <!-- SELETOR DE CONDIÇÃO -->
                 <div>
-                  <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:6px;">TIPO DE CONDIÇÃO</label>
+                  <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:6px;">CONDIÇÃO DE PAGAMENTO</label>
                   <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                     <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'a_vista' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'a_vista' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'a_vista' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
-                      À VISTA (1x)
+                      À VISTA
                     </button>
                     <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'parcelado', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'parcelado' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'parcelado' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'parcelado' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
-                      PARCELADO
+                      A PRAZO
                     </button>
                   </div>
                 </div>
@@ -41256,7 +41270,7 @@ async function renderNFDetail(id) {
                   </div>
 
                   <div>
-                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">PRIMEIRO VENCIMENTO</label>
+                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">${pagState.condicao === 'parcelado' ? 'PRIMEIRO VENCIMENTO' : 'DATA DE VENCIMENTO'}</label>
                     <input type="date" value="${pagState.primeiroVencimento}" onchange="updatePagamentoField('${nf.id}', 'primeiroVencimento', this.value); if(pagState.condicao==='a_vista') setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF});" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600;">
                   </div>
                 </div>
@@ -41266,7 +41280,7 @@ async function renderNFDetail(id) {
                   <div style="background:#f1f5f9; border-radius:12px; padding:12px 14px; display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:flex-end;">
                     <div>
                       <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">Nº DE PARCELAS</label>
-                      <input type="number" min="2" max="24" value="${pagState.qtdParcelas}" onchange="updatePagamentoField('${nf.id}', 'qtdParcelas', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
+                      <input type="number" min="1" max="24" value="${pagState.qtdParcelas}" onchange="updatePagamentoField('${nf.id}', 'qtdParcelas', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
                     </div>
                     <div>
                       <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">INTERVALO (DIAS)</label>

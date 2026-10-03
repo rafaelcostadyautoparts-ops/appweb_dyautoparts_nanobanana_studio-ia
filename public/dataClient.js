@@ -4731,7 +4731,7 @@ const DataClient = (function () {
 
         const rpcParams = {
             p_entrada_nf_id: entradaId,
-            p_tipo_condicao_financeira: condicao === 'parcelado' ? 'parcelado' : 'a_vista',
+            p_tipo_condicao_financeira: (condicao === 'parcelado' || condicao === 'a_prazo') ? 'parcelado' : 'a_vista',
             p_forma_pagamento: formaPagamento || 'boleto',
             p_observacao_financeira: observacao ? String(observacao).trim() : null,
             p_parcelas: parcelasPayload,
