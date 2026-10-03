@@ -4026,6 +4026,8 @@ const menuModulesConfig = [
 ];
 
 const menu3DIcons = {
+  nf_recebimento: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 12 17 16 17 18 14 20 14"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M4 14V9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/><path d="M12 3v9"/><path d="m9 9 3 3 3-3"/></svg>',
+  nf_pendencias: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
  anuncios: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M20 25 h24 v22 H20 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 17 L38 17 L44 25 L20 25 Z" fill="#fff" opacity="0.95"/><path d="M26 33 h12 M26 39 h8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="41" cy="39" r="2.5" fill="#fff"/></svg>',
  kit_lampada: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#F59E0B"/><path d="M32 18 C26 18 22 23 22 28 C22 33 25 36 28 38 L28 44 L36 44 L36 38 C39 36 42 33 42 28 C42 23 38 18 32 18 Z" stroke="#fff" stroke-width="2.5" fill="none"/><line x1="28" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><line x1="29" y1="47" x2="35" y2="47" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -30947,26 +30949,35 @@ async function renderGarantiaEnvioForm() {
 
 
 function renderNFSubMenu() {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
- const subItems = [
- { id: 'nf_xml', label: 'RECEBER POR XML', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML da NF-e, validar fornecedor e preparar os itens da entrada.' },
- { id: 'nf_rascunhos', label: 'RASCUNHOS DE NF', icon: 'abertas', onclick: 'renderEntradaNFRascunhosList()', description: 'Continuar XMLs iniciados antes de importar a entrada.' },
- { id: 'nf_abertas', label: 'NFs ABERTAS', icon: 'abertas', onclick: 'renderNFAbertasList()', description: 'Acompanhar notas fiscais recebidas e ainda nao finalizadas.' },
- { id: 'nf_historico', label: 'HISTORICO DE ENTRADAS', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas e movimentacoes geradas.' }
- ];
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('nf')}
+  // FASE 1: Callbacks ajustados para ambiente seguro de Produção sem dependência de novas migrations
+  const subItems = [
+    { id: 'nf_nova', label: 'NOVA ENTRADA', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML manualmente.' },
+    // FASE 1: fallback Produção. Substituir por renderEntradaNFEmRecebimento() após migrations da Fase 2.
+    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'nf_recebimento', onclick: 'renderNFAbertasList()', description: 'Continuar notas importadas aguardando recebimento.' },
+    // FASE 1: Comportamento temporário até aplicação das migrations de pendências na Fase 2
+    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'nf_pendencias', onclick: "showToast('A central de pendências será habilitada na próxima etapa da Entrada NF.', 'info')", description: 'Notas que precisam de identificação ou correção.' },
+    { id: 'nf_historico', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas.' }
+  ];
 
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>
- `;
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('nf')}
+
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Entrada NF</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
 function renderEmissaoNFSubMenu() {
