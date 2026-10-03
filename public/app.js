@@ -4020,7 +4020,6 @@ const menuModulesConfig = [
  { id: 'inventario', label: 'INVENTÁRIO', icon: 'inventario', order: 6, type: 'principal' },
  { id: 'dashboard', label: 'DASHBOARD', icon: 'dashboard', order: 2, type: 'principal' },
  { id: 'nf', label: 'ENTRADA NF', icon: 'nf', order: 8, type: 'principal' },
- { id: 'emissao_nf', label: 'EMISSÃO NF', icon: 'emissao_nf', order: 7, type: 'principal' },
  { id: 'financeiro', label: 'FINANCEIRO', icon: 'financeiro', order: 9, type: 'principal' },
  { id: 'compras', label: 'COMPRAS', icon: 'compras', order: 10, type: 'principal' },
  { id: 'anuncios', label: 'ANÚNCIOS', icon: 'anuncios', order: 10, type: 'principal' }
