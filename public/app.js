@@ -4028,6 +4028,8 @@ const menuModulesConfig = [
 ];
 
 const menu3DIcons = {
+  fin_contas_a_pagar: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 12h8"/><path d="M8 17h4"/></svg>',
+  fin_pagamentos: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="15" r="1"/></svg>',
   nf_recebimento: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 12 17 16 17 18 14 20 14"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M4 14V9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/><path d="M12 3v9"/><path d="m9 9 3 3 3-3"/></svg>',
   nf_pendencias: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
  produtos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#DB2777"/><path d="M18 24 32 17l14 7-14 7-14-7Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 24v16l14 7 14-7V24M32 31v16" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m39 19 5 2.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>',
@@ -16894,25 +16896,42 @@ function formatFinanceiroDate(value) {
 }
 
 async function renderFinanceiroSubMenu() {
- await ensureFinanceiroParcelasLoaded();
- const currentUser = localStorage.getItem('currentUser');
- const subItems = [
- { id: 'fin_a_vencer', label: 'A VENCER', icon: 'financeiro_avencer', onclick: "renderFinanceiroLista('a_vencer')", description: 'Consultar parcelas de notas fiscais com vencimento futuro.' },
- { id: 'fin_vencidas', label: 'VENCIDAS', icon: 'financeiro_vencidas', onclick: "renderFinanceiroLista('vencidas')", description: 'Ver parcelas vencidas e valores em atraso.' },
- { id: 'fin_pendentes', label: 'PENDENTES', icon: 'financeiro_pendentes', onclick: "renderFinanceiroLista('pendentes')", description: 'Acompanhar todas as parcelas ainda em aberto.' },
- { id: 'fin_a_combinar', label: 'A COMBINAR', icon: 'financeiro_pendentes', onclick: "renderFinanceiroACombinar()", description: 'Notas recebidas sem pagamento definido.' },
- { id: 'fin_pagas_mes', label: 'PAGAS NO MES', icon: 'financeiro_pagas_mes', onclick: "renderFinanceiroLista('pagas_mes')", description: 'Contas pagas no mes selecionado.' }
- ];
+  await ensureFinanceiroParcelasLoaded();
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen">
- ${getTopBarHTML(currentUser, 'renderMenu()')}
- ${getModuleSidebarHTML('financeiro')}
- <main class="container">
- ${getStandardModuleCardsHTML(subItems)}
- </main>
- </div>
- `;
+  const subItems = [
+    {
+      id: 'fin_contas_a_pagar',
+      label: 'CONTAS A PAGAR',
+      icon: 'fin_contas_a_pagar',
+      onclick: "renderContasAPagar('todas')",
+      description: 'Consulte vencimentos, pendencias e programe pagamentos.'
+    },
+    {
+      id: 'fin_pagamentos',
+      label: 'PAGAMENTOS',
+      icon: 'fin_pagamentos',
+      onclick: "renderPagamentos('mes')",
+      description: 'Consulte pagamentos realizados e comprovantes.'
+    }
+  ];
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-submenu-screen financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderMenu()')}
+      ${getModuleSidebarHTML('financeiro')}
+      <main class="container app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
+          <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="app-breadcrumb-current">Financeiro</span>
+        </div>
+        ${getStandardModuleCardsHTML(subItems)}
+      </main>
+    </div>
+  `;
 }
 
 async function renderFinanceiroLista(filtro = 'pendentes') {
@@ -36789,4 +36808,301 @@ function openQuickActionRomaneioMenu(event) {
 	panel.className = 'quick-separation-submenu quick-romaneio-submenu';
 	panel.innerHTML = `<div><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__novo__')"><img src="/assets/icons/quick-romaneio-new.svg" alt="" aria-hidden="true"><span><strong>NOVO ROMANEIO</strong><small>Iniciar retirada Flex ou Correios</small></span><span class="material-symbols-rounded">chevron_right</span></button><button type="button" onclick="toggleQuickActions();renderRomaneioScreen('', '__realizados__')"><img src="/assets/icons/quick-romaneio-history.svg" alt="" aria-hidden="true"><span><strong>HISTORICO</strong><small>Consultar romaneios realizados</small></span><span class="material-symbols-rounded">chevron_right</span></button></div>`;
 	menu.appendChild(panel);
+}
+
+
+async function renderContasAPagar(filtroAtivo = 'todas', buscaTexto = '') {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  let entradasACombinar = [];
+  try {
+    const entradas = await loadHistoricoEntradasNF(true);
+    entradasACombinar = (entradas || []).filter(e => {
+      const st = String(e.status_financeiro || '').toLowerCase();
+      const tp = String(e.tipo_condicao_financeira || '').toLowerCase();
+      return st === 'a_combinar' || tp === 'a_combinar';
+    });
+  } catch (err) {
+    console.warn('[FINANCEIRO] erro ao carregar entradas a combinar', err);
+  }
+
+  const hoje = getFinanceiroHoje();
+  const emSeteDias = new Date(hoje);
+  emSeteDias.setDate(emSeteDias.getDate() + 7);
+
+  // Parcelas em aberto
+  const parcelasAbertas = (parcelas || []).filter(item => isFinanceiroStatusAberto(item));
+
+  // Indicadores
+  const listVencidas = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v < hoje;
+  });
+  const listHoje = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v.getTime() === hoje.getTime();
+  });
+  const listSeteDias = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v >= hoje && v <= emSeteDias;
+  });
+  const listAVencer = parcelasAbertas.filter(item => {
+    const v = parseFinanceiroDate(getFinanceiroDataVencimento(item));
+    return v && v >= hoje;
+  });
+
+  const sumValor = arr => arr.reduce((sum, item) => sum + roundMoney(item.valor || item.valor_total || 0), 0);
+
+  const indVencidas = { count: listVencidas.length, total: sumValor(listVencidas) };
+  const indHoje = { count: listHoje.length, total: sumValor(listHoje) };
+  const indSeteDias = { count: listSeteDias.length, total: sumValor(listSeteDias) };
+  const indAVencer = { count: listAVencer.length, total: sumValor(listAVencer) };
+  const indACombinar = { count: entradasACombinar.length, total: sumValor(entradasACombinar) };
+
+  // Filtragem da lista
+  let listaExibicao = [];
+
+  if (filtroAtivo === 'vencidas') {
+    listaExibicao = listVencidas.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'hoje') {
+    listaExibicao = listHoje.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'sete_dias') {
+    listaExibicao = listSeteDias.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'a_vencer') {
+    listaExibicao = listAVencer.map(i => ({ ...i, _tipoItem: 'parcela' }));
+  } else if (filtroAtivo === 'a_combinar') {
+    listaExibicao = entradasACombinar.map(e => ({ ...e, _tipoItem: 'a_combinar' }));
+  } else {
+    // todas
+    const pMapped = parcelasAbertas.map(i => ({ ...i, _tipoItem: 'parcela' }));
+    const cMapped = entradasACombinar.map(e => ({ ...e, _tipoItem: 'a_combinar' }));
+    listaExibicao = [...pMapped, ...cMapped];
+  }
+
+  // Filtro de busca texto
+  const query = String(buscaTexto || '').trim().toLowerCase();
+  if (query) {
+    listaExibicao = listaExibicao.filter(item => {
+      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || item.beneficiario || item.fornecedor || '').toLowerCase();
+      const nf = String(item.numero_nf || '').toLowerCase();
+      const desc = String(item.descricao || '').toLowerCase();
+      const obs = String(item.observacoes || item.observacao || item.observacao_financeira || '').toLowerCase();
+      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query) || obs.includes(query);
+    });
+  }
+
+  const currentUser = localStorage.getItem('currentUser');
+  const totalLista = listaExibicao.reduce((s, i) => s + roundMoney(i.valor || i.valor_total || 0), 0);
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+      ${getModuleSidebarHTML('financeiro', 'CONTAS A PAGAR')}
+      <main class="container financeiro-list-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderFinanceiroSubMenu()">Financeiro</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Contas a pagar</span>
+        </div>
+        <section class="financeiro-list-panel">
+          <header class="financeiro-panel-header">
+            <div class="financeiro-title-group">
+              <div>
+                <h2>CONTAS A PAGAR</h2>
+                <p>Acompanhe parcelas, vencimentos e compromissos financeiros.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-nova-despesa" onclick="openModalNovaDespesaManual()">
+              <span class="material-symbols-rounded">add_circle</span>
+              Nova Despesa
+            </button>
+          </header>
+
+          <!-- INDICADORES COMPACTOS CLICÁVEIS -->
+          <div class="financeiro-indicators-grid" role="region" aria-label="Indicadores de Contas a Pagar">
+            <div class="fin-indicator-card ${filtroAtivo === 'vencidas' ? 'active' : ''} is-vencidas" onclick="renderContasAPagar('vencidas')">
+              <span class="fin-indicator-badge">VENCIDAS</span>
+              <strong class="fin-indicator-count">${indVencidas.count} ${indVencidas.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indVencidas.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'hoje' ? 'active' : ''} is-hoje" onclick="renderContasAPagar('hoje')">
+              <span class="fin-indicator-badge">VENCEM HOJE</span>
+              <strong class="fin-indicator-count">${indHoje.count} ${indHoje.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indHoje.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'sete_dias' ? 'active' : ''} is-sete-dias" onclick="renderContasAPagar('sete_dias')">
+              <span class="fin-indicator-badge">PRÓXIMOS 7 DIAS</span>
+              <strong class="fin-indicator-count">${indSeteDias.count} ${indSeteDias.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indSeteDias.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'a_vencer' ? 'active' : ''} is-a-vencer" onclick="renderContasAPagar('a_vencer')">
+              <span class="fin-indicator-badge">A VENCER</span>
+              <strong class="fin-indicator-count">${indAVencer.count} ${indAVencer.count === 1 ? 'conta' : 'contas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indAVencer.total)}</span>
+            </div>
+
+            <div class="fin-indicator-card ${filtroAtivo === 'a_combinar' ? 'active' : ''} is-a-combinar" onclick="renderContasAPagar('a_combinar')">
+              <span class="fin-indicator-badge">A COMBINAR</span>
+              <strong class="fin-indicator-count">${indACombinar.count} ${indACombinar.count === 1 ? 'nota' : 'notas'}</strong>
+              <span class="fin-indicator-val">${formatFinanceiroMoney(indACombinar.total)}</span>
+            </div>
+          </div>
+
+          <!-- BARRA DE FILTROS PILLS & BUSCA -->
+          <div class="financeiro-toolbar">
+            <div class="financeiro-pills">
+              <button type="button" class="fin-pill ${filtroAtivo === 'todas' ? 'active' : ''}" onclick="renderContasAPagar('todas')">Todas</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'vencidas' ? 'active' : ''}" onclick="renderContasAPagar('vencidas')">Vencidas</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'hoje' ? 'active' : ''}" onclick="renderContasAPagar('hoje')">Hoje</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'sete_dias' ? 'active' : ''}" onclick="renderContasAPagar('sete_dias')">7 dias</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'a_vencer' ? 'active' : ''}" onclick="renderContasAPagar('a_vencer')">A vencer</button>
+              <button type="button" class="fin-pill ${filtroAtivo === 'a_combinar' ? 'active' : ''}" onclick="renderContasAPagar('a_combinar')">A combinar</button>
+            </div>
+
+            <div class="financeiro-search-box">
+              <span class="material-symbols-rounded">search</span>
+              <input type="text" placeholder="Buscar fornecedor ou NF..." value="${escapeKitAttribute(query)}" oninput="renderContasAPagar('${filtroAtivo}', this.value)">
+            </div>
+          </div>
+
+          <!-- RESUMO DA LISTA -->
+          <div class="financeiro-list-summary">
+            <div><small>REGISTROS</small><strong>${listaExibicao.length}</strong></div>
+            <div><small>VALOR TOTAL</small><strong>${formatFinanceiroMoney(totalLista)}</strong></div>
+          </div>
+
+          <!-- LISTAGEM -->
+          ${listaExibicao.length ? `
+            <div class="financeiro-list">
+              ${listaExibicao.map(item => renderContasAPagarCardHTML(item, hoje)).join('')}
+            </div>
+          ` : `
+            <div class="financeiro-empty-state">
+              <span class="material-symbols-rounded">receipt_long</span>
+              <strong>Nenhum compromisso financeiro encontrado para o filtro selecionado.</strong>
+            </div>
+          `}
+        </section>
+      </main>
+    </div>
+  `;
+}
+
+async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
+  const parcelas = await ensureFinanceiroParcelasLoaded();
+  const pagas = (parcelas || []).filter(item => normalizarStatusFinanceiro(item?.status) === 'pago');
+
+  const hoje = getFinanceiroHoje();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  // Filtro por período
+  let listaExibicao = pagas.filter(item => {
+    const dtPagto = parseFinanceiroDate(item.data_pagamento || item.pagamento_em || item.atualizado_em);
+    if (!dtPagto) return true;
+
+    if (filtroPeriodo === 'hoje') {
+      return dtPagto.getTime() === hoje.getTime();
+    } else if (filtroPeriodo === 'semana') {
+      const diffDays = Math.round((hoje - dtPagto) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 7;
+    } else if (filtroPeriodo === 'mes') {
+      return dtPagto.getMonth() === mesAtual && dtPagto.getFullYear() === anoAtual;
+    }
+    return true; // todos
+  });
+
+  // Filtro de busca texto
+  const query = String(buscaTexto || '').trim().toLowerCase();
+  if (query) {
+    listaExibicao = listaExibicao.filter(item => {
+      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || '').toLowerCase();
+      const nf = String(item.numero_nf || '').toLowerCase();
+      const desc = String(item.descricao || item.observacoes || '').toLowerCase();
+      return fornecedor.includes(query) || nf.includes(query) || desc.includes(query);
+    });
+  }
+
+  const totalPago = listaExibicao.reduce((s, i) => s + roundMoney(i.valor || 0), 0);
+  const currentUser = localStorage.getItem('currentUser');
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in financeiro-screen module-screen standard-card-menu-screen app-page-shell">
+      ${getTopBarHTML(currentUser, 'renderFinanceiroSubMenu()')}
+      ${getModuleSidebarHTML('financeiro', 'PAGAMENTOS')}
+      <main class="container financeiro-list-workspace app-page-container">
+        <div class="app-breadcrumb">
+          <span class="app-breadcrumb-parent" onclick="renderFinanceiroSubMenu()">Financeiro</span>
+          <span class="material-symbols-rounded">chevron_right</span>
+          <span class="app-breadcrumb-current">Pagamentos</span>
+        </div>
+        <section class="financeiro-list-panel">
+          <header class="financeiro-panel-header">
+            <div class="financeiro-title-group">
+              <div>
+                <h2>PAGAMENTOS</h2>
+                <p>Consulte pagamentos realizados e comprovantes.</p>
+              </div>
+            </div>
+          </header>
+
+          <!-- BARRA DE FILTROS DE PERÍODO & BUSCA -->
+          <div class="financeiro-toolbar">
+            <div class="financeiro-pills">
+              <button type="button" class="fin-pill ${filtroPeriodo === 'hoje' ? 'active' : ''}" onclick="renderPagamentos('hoje')">Hoje</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'semana' ? 'active' : ''}" onclick="renderPagamentos('semana')">Esta semana</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'mes' ? 'active' : ''}" onclick="renderPagamentos('mes')">Este mês</button>
+              <button type="button" class="fin-pill ${filtroPeriodo === 'todos' ? 'active' : ''}" onclick="renderPagamentos('todos')">Todos</button>
+            </div>
+
+            <div class="financeiro-search-box">
+              <span class="material-symbols-rounded">search</span>
+              <input type="text" placeholder="Buscar fornecedor ou NF..." value="${escapeKitAttribute(query)}" oninput="renderPagamentos('${filtroPeriodo}', this.value)">
+            </div>
+          </div>
+
+          <!-- RESUMO DE PAGAMENTOS -->
+          <div class="financeiro-list-summary">
+            <div><small>PAGAMENTOS EFETUADOS</small><strong>${listaExibicao.length}</strong></div>
+            <div><small>TOTAL PAGO</small><strong>${formatFinanceiroMoney(totalPago)}</strong></div>
+          </div>
+
+          <!-- LISTAGEM -->
+          ${listaExibicao.length ? `
+            <div class="financeiro-list">
+              ${listaExibicao.map(item => `
+                <article class="financeiro-row status-paga">
+                  <div class="fin-card-info">
+                    <strong>${escapeKitAttribute(item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
+                    <small>NF ${escapeKitAttribute(item.numero_nf || '-')} ${item.parcela ? `• Parcela ${item.parcela}` : ''}</small>
+                    <span class="fin-status-pill status-paga">PAGO</span>
+                  </div>
+                  <div class="fin-card-details">
+                    <small>Pago em ${formatFinanceiroDate(item.data_pagamento || item.pagamento_em || item.atualizado_em)}</small>
+                    <small>${escapeKitAttribute((item.forma_pagamento || 'Boleto').toUpperCase())}</small>
+                  </div>
+                  <div class="fin-card-value">
+                    <strong>${formatFinanceiroMoney(item.valor)}</strong>
+                  </div>
+                  <div class="fin-card-action">
+                    <button type="button" class="btn-action-editar" onclick="openModalDetalhesPagamento('${item.id}')" title="Ver detalhes do pagamento">
+                      <span class="material-symbols-rounded">visibility</span>
+                      VER DETALHES
+                    </button>
+                  </div>
+                </article>
+              `).join('')}
+            </div>
+          ` : `
+            <div class="financeiro-empty-state">
+              <span class="material-symbols-rounded">task_alt</span>
+              <strong>Nenhum pagamento encontrado para o período selecionado.</strong>
+            </div>
+          `}
+        </section>
+      </main>
+    </div>
+  `;
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dy-sync-prod-20261003-01';
+const CACHE_NAME = 'dy-sync-prod-20261003-02';
 
 // Pre-cache sem query strings; o match usa ignoreSearch para funcionar
 // independentemente da versao usada pelo index.html
