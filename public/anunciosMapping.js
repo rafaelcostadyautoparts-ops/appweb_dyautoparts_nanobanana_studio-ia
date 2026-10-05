@@ -1018,7 +1018,7 @@
 
                 <main class="container an-shell app-page-container">
                     <div class="app-breadcrumb">
-                        <span class="app-breadcrumb-parent" onclick="renderMenu()">Início</span>
+                        <span class="app-breadcrumb-parent" tabindex="0" role="button" onclick="renderMenu()" onkeydown="if(event.key==='Enter'||event.key===' ')renderMenu()">Início</span>
                         <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
                         <span class="app-breadcrumb-current">Anúncios</span>
                     </div>

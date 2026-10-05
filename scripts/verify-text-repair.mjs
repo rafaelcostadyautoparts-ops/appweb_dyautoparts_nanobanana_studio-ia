@@ -5,7 +5,7 @@ const root = process.cwd();
 const allowedExts = new Set([
   '.css', '.csv', '.html', '.js', '.json', '.md', '.mjs', '.sql', '.svg', '.ts', '.tsx', '.txt', '.xml', '.yml', '.yaml'
 ]);
-const rootFiles = new Set(['index.html', 'package.json', 'package-lock.json', 'vite.config.js']);
+const rootFiles = new Set(['index.html', 'package.json', 'vite.config.js']);
 const skipDirs = new Set([
   '.git', '.agents', '.codex', 'node_modules', 'dist', 'build', 'coverage', '.vite', '.cache'
 ]);

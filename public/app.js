@@ -19200,6 +19200,32 @@ function normalizarStatusFinanceiro(status) {
  return String(status || '').trim().toLowerCase();
 }
 
+function getFinanceiroFornecedorNome(item) {
+  const nomeDireto = String(item?.fornecedor_nome || item?.fornecedor || item?.beneficiario || '').trim();
+  if (nomeDireto && nomeDireto !== '-' && nomeDireto !== 'null' && nomeDireto !== 'undefined') {
+    return nomeDireto;
+  }
+
+  const entradaId = item?.entrada_nf_id || item?.nf_id;
+  if (entradaId) {
+    const listaEntradas = appData.historicoEntradasNF || appData.entradas_nf || appData.entradas || [];
+    const entrada = Array.isArray(listaEntradas) ? listaEntradas.find(e => String(e?.id) === String(entradaId)) : null;
+    if (entrada) {
+      const nomeEntrada = String(entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || '').trim();
+      if (nomeEntrada && nomeEntrada !== '-' && nomeEntrada !== 'null' && nomeEntrada !== 'undefined') {
+        return nomeEntrada;
+      }
+    }
+  }
+
+  const cnpjDireto = String(item?.fornecedor_cnpj || item?.cnpj_fornecedor || '').trim();
+  if (cnpjDireto && cnpjDireto !== '-' && cnpjDireto !== 'null' && cnpjDireto !== 'undefined') {
+    return cnpjDireto;
+  }
+
+  return 'Fornecedor não informado';
+}
+
 function getFinanceiroDataVencimento(item) {
  return item?.data_vencimento || item?.vencimento || item?.dt_vencimento || null;
 }
@@ -19274,27 +19300,27 @@ function calcularFinanceiroPagasMes(parcelas = getFinanceiroParcelasBase()) {
  });
 }
 
-async function ensureFinanceiroParcelasLoaded() {
- if (appData.financeiroParcelasLoaded) return appData.financeiroParcelas || [];
- appData.financeiroParcelasLoaded = true;
- appData.financeiroParcelas = getFinanceiroParcelasBase();
+async function ensureFinanceiroParcelasLoaded(force = false) {
+  if (!force && appData.financeiroParcelasLoaded) return appData.financeiroParcelas || [];
+  appData.financeiroParcelasLoaded = true;
+  appData.financeiroParcelas = getFinanceiroParcelasBase();
 
- const client = window.supabaseClient;
- if (!client) return appData.financeiroParcelas;
+  const client = window.supabaseClient;
+  if (!client) return appData.financeiroParcelas;
 
- try {
- const { data, error } = await client
- .from('contas_pagar')
- .select('*')
- .order('data_vencimento', { ascending: true });
- if (error) throw error;
- appData.financeiroParcelas = data || [];
- } catch (error) {
- console.warn('[FINANCEIRO] fonte contas_pagar indisponivel, usando fallback vazio/lista local.', error);
- appData.financeiroParcelas = appData.financeiroParcelas || [];
- }
+  try {
+    const [contasRes] = await Promise.all([
+      client.from('contas_pagar').select('*').order('data_vencimento', { ascending: true }),
+      typeof loadHistoricoEntradasNF === 'function' && (!appData.historicoEntradasNFLoaded ? loadHistoricoEntradasNF(false).catch(() => []) : Promise.resolve([]))
+    ]);
+    if (contasRes.error) throw contasRes.error;
+    appData.financeiroParcelas = contasRes.data || [];
+  } catch (error) {
+    console.warn('[FINANCEIRO] fonte contas_pagar indisponivel, usando fallback vazio/lista local.', error);
+    appData.financeiroParcelas = appData.financeiroParcelas || [];
+  }
 
- return appData.financeiroParcelas;
+  return appData.financeiroParcelas;
 }
 
 function getFinanceiroFiltroConfig(filtro) {
@@ -19446,7 +19472,7 @@ async function renderContasAPagar(filtroAtivo = 'todas', buscaTexto = '') {
   const query = String(buscaTexto || '').trim().toLowerCase();
   if (query) {
     listaExibicao = listaExibicao.filter(item => {
-      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || item.beneficiario || item.fornecedor || '').toLowerCase();
+      const fornecedor = String(getFinanceiroFornecedorNome(item) || '').toLowerCase();
       const nf = String(item.numero_nf || '').toLowerCase();
       const desc = String(item.descricao || '').toLowerCase();
       const obs = String(item.observacoes || item.observacao || item.observacao_financeira || '').toLowerCase();
@@ -19559,7 +19585,7 @@ function renderContasAPagarCardHTML(item, hoje) {
     return `
       <article class="financeiro-row financeiro-row-a-combinar">
         <div class="fin-card-info">
-          <strong>${escapeKitAttribute(item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
+          <strong>${escapeKitAttribute(getFinanceiroFornecedorNome(item))}</strong>
           <small>NF ${escapeKitAttribute(item.numero_nf || '-')} | Recebimento ${getEntradaNFDate(item.data_recebimento || item.created_at)}</small>
           <span class="fin-status-pill status-a-combinar">A COMBINAR</span>
         </div>
@@ -19599,7 +19625,7 @@ function renderContasAPagarCardHTML(item, hoje) {
     }
   }
 
-  const fornecedor = item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado';
+  const fornecedor = getFinanceiroFornecedorNome(item);
   const nf = item.numero_nf ? `NF ${item.numero_nf}` : (item.descricao || 'Despesa');
   const parcelaInfo = item.parcela ? `Parcela ${item.parcela}` : '';
   const subline = [nf, parcelaInfo].filter(Boolean).join(' • ');
@@ -19665,7 +19691,7 @@ async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
   const query = String(buscaTexto || '').trim().toLowerCase();
   if (query) {
     listaExibicao = listaExibicao.filter(item => {
-      const fornecedor = String(item.fornecedor_nome || item.fornecedor_cnpj || '').toLowerCase();
+      const fornecedor = String(getFinanceiroFornecedorNome(item) || '').toLowerCase();
       const nf = String(item.numero_nf || '').toLowerCase();
       const desc = String(item.descricao || item.observacoes || '').toLowerCase();
       return fornecedor.includes(query) || nf.includes(query) || desc.includes(query);
@@ -19719,28 +19745,45 @@ async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
           <!-- LISTAGEM -->
           ${listaExibicao.length ? `
             <div class="financeiro-list">
-              ${listaExibicao.map(item => `
-                <article class="financeiro-row status-paga">
-                  <div class="fin-card-info">
-                    <strong>${escapeKitAttribute(item.fornecedor_nome || item.fornecedor_cnpj || 'Fornecedor nao informado')}</strong>
-                    <small>NF ${escapeKitAttribute(item.numero_nf || '-')} ${item.parcela ? `• Parcela ${item.parcela}` : ''}</small>
-                    <span class="fin-status-pill status-paga">PAGO</span>
-                  </div>
-                  <div class="fin-card-details">
-                    <small>Pago em ${formatFinanceiroDate(item.data_pagamento || item.pagamento_em || item.atualizado_em)}</small>
-                    <small>${escapeKitAttribute((item.forma_pagamento || 'Boleto').toUpperCase())}</small>
-                  </div>
-                  <div class="fin-card-value">
-                    <strong>${formatFinanceiroMoney(item.valor)}</strong>
-                  </div>
-                  <div class="fin-card-action">
-                    <button type="button" class="btn-action-editar" onclick="openModalDetalhesPagamento('${item.id}')" title="Ver detalhes do pagamento">
-                      <span class="material-symbols-rounded">visibility</span>
-                      VER DETALHES
-                    </button>
-                  </div>
-                </article>
-              `).join('')}
+              ${listaExibicao.map(item => {
+                const dtPagto = item.data_pagamento || item.pagamento_em || item.atualizado_em;
+                const dtFormatada = dtPagto ? formatFinanceiroDate(dtPagto) : '-';
+                const descResp = item.pago_por_nome
+                  ? `Pago em ${dtFormatada} por ${escapeKitAttribute(item.pago_por_nome)}`
+                  : `Pago em ${dtFormatada} • Responsável não registrado`;
+                const formaStr = (item.forma_pagamento || 'Boleto').toUpperCase();
+
+                return `
+                  <article class="financeiro-row status-paga">
+                    <div class="fin-card-info">
+                      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <strong>${escapeKitAttribute(getFinanceiroFornecedorNome(item))}</strong>
+                        ${item.comprovante_path ? `
+                          <span style="display: inline-flex; align-items: center; gap: 3px; background: #e0f2fe; color: #0369a1; font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 13px;">attach_file</span>
+                            COMPROVANTE
+                          </span>
+                        ` : ''}
+                      </div>
+                      <small>NF ${escapeKitAttribute(item.numero_nf || '-')} ${item.parcela ? `• Parcela ${item.parcela}` : ''}</small>
+                      <span class="fin-status-pill status-paga">PAGO</span>
+                    </div>
+                    <div class="fin-card-details">
+                      <small>${descResp}</small>
+                      <small>${escapeKitAttribute(formaStr)}</small>
+                    </div>
+                    <div class="fin-card-value">
+                      <strong>${formatFinanceiroMoney(item.valor)}</strong>
+                    </div>
+                    <div class="fin-card-action">
+                      <button type="button" class="btn-action-editar" onclick="openModalDetalhesPagamento('${item.id}')" title="Ver detalhes do pagamento">
+                        <span class="material-symbols-rounded">visibility</span>
+                        VER DETALHES
+                      </button>
+                    </div>
+                  </article>
+                `;
+              }).join('')}
             </div>
           ` : `
             <div class="financeiro-empty-state">
@@ -19754,6 +19797,439 @@ async function renderPagamentos(filtroPeriodo = 'mes', buscaTexto = '') {
   `;
 }
 
+const MAX_COMPROVANTE_FINANCEIRO_SIZE = 5 * 1024 * 1024; // 5 MB
+const COMPROVANTE_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const EXTENSAO_MIME_MAP = {
+  'pdf': 'application/pdf',
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'png': 'image/png'
+};
+
+function validarArquivoComprovante(file) {
+  if (!file) return { valido: false, erro: 'Nenhum arquivo fornecido.' };
+
+  if (file.size > MAX_COMPROVANTE_FINANCEIRO_SIZE) {
+    return { valido: false, erro: 'O arquivo excede o limite máximo permitido de 5 MB.' };
+  }
+
+  const rawName = String(file.name || '');
+  const extMatch = rawName.match(/\.([a-zA-Z0-9]+)$/);
+  if (!extMatch) {
+    return { valido: false, erro: 'Formato de arquivo não suportado. Utilize apenas PDF, JPG ou PNG.' };
+  }
+
+  const ext = extMatch[1].toLowerCase();
+  const expectedMime = EXTENSAO_MIME_MAP[ext];
+  if (!expectedMime) {
+    return { valido: false, erro: 'Formato de arquivo não suportado. Utilize apenas PDF, JPG ou PNG.' };
+  }
+
+  const fileType = String(file.type || '').toLowerCase();
+  if (fileType) {
+    if (!COMPROVANTE_MIME_TYPES.has(fileType)) {
+      return { valido: false, erro: 'Tipo MIME não permitido. Formatos aceitos: PDF, JPG, PNG.' };
+    }
+    if (fileType !== expectedMime) {
+      return { valido: false, erro: 'Divergência entre a extensão do arquivo e o tipo de conteúdo detectado.' };
+    }
+  }
+
+  return { valido: true, ext, mime: expectedMime };
+}
+
+function formatarTamanhoArquivo(bytes) {
+  const num = Number(bytes);
+  if (isNaN(num) || num <= 0) return '0 B';
+  if (num < 1024) return `${num} B`;
+  if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
+  return `${(num / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function sanitizarNomeArquivoComprovante(fileName) {
+  const raw = String(fileName || '').trim();
+  const lastDot = raw.lastIndexOf('.');
+  const base = lastDot !== -1 ? raw.substring(0, lastDot) : raw;
+  const ext = lastDot !== -1 ? raw.substring(lastDot).toLowerCase() : '';
+
+  const semAcentos = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let limpo = semAcentos.replace(/[^a-zA-Z0-9_-]/g, '_');
+  limpo = limpo.replace(/_+/g, '_').substring(0, 50);
+  if (!limpo) limpo = 'comprovante';
+
+  return `${limpo}${ext}`;
+}
+
+function gerarPathStorageComprovante(contaId, fileName) {
+  const timestamp = Date.now();
+  const sanitized = sanitizarNomeArquivoComprovante(fileName);
+  return `contas-pagar/${contaId}/${timestamp}-${sanitized}`;
+}
+
+function handleSelecionarComprovante(event) {
+  const input = event?.target || document.getElementById('pagto-comprovante-input');
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  const validacao = validarArquivoComprovante(file);
+  if (!validacao.valido) {
+    if (typeof showToast === 'function') showToast(validacao.erro, 'warning');
+    if (input) input.value = '';
+    handleRemoverComprovanteSelecionado();
+    return;
+  }
+
+  const vazioDiv = document.getElementById('pagto-comprovante-vazio');
+  const selecDiv = document.getElementById('pagto-comprovante-selecionado');
+  const nomeEl = document.getElementById('pagto-comprovante-nome');
+  const tamEl = document.getElementById('pagto-comprovante-tam');
+  const iconeEl = document.getElementById('pagto-comprovante-icone');
+
+  if (nomeEl) nomeEl.textContent = file.name;
+  if (tamEl) tamEl.textContent = formatarTamanhoArquivo(file.size);
+  if (iconeEl) {
+    const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+    iconeEl.textContent = isPdf ? 'picture_as_pdf' : 'image';
+    iconeEl.style.color = isPdf ? '#ef4444' : '#3b82f6';
+  }
+
+  if (vazioDiv) vazioDiv.style.display = 'none';
+  if (selecDiv) selecDiv.style.display = 'flex';
+}
+
+function handleRemoverComprovanteSelecionado() {
+  const input = document.getElementById('pagto-comprovante-input');
+  if (input) input.value = '';
+
+  const vazioDiv = document.getElementById('pagto-comprovante-vazio');
+  const selecDiv = document.getElementById('pagto-comprovante-selecionado');
+
+  if (vazioDiv) vazioDiv.style.display = 'block';
+  if (selecDiv) selecDiv.style.display = 'none';
+}
+
+async function handleVisualizarComprovante(contaId) {
+  try {
+    const parcelas = await ensureFinanceiroParcelasLoaded();
+    const conta = parcelas.find(c => String(c.id) === String(contaId));
+    if (!conta || !conta.comprovante_path) {
+      showToast('Comprovante não encontrado para este pagamento.', 'warning');
+      return;
+    }
+
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+    const { data, error } = await client.storage
+      .from('financeiro-comprovantes')
+      .createSignedUrl(conta.comprovante_path, 300);
+
+    if (error || !data?.signedUrl) {
+      console.error('[FINANCEIRO_COMPROVANTE] Erro ao criar Signed URL:', error);
+      throw new Error('Não foi possível gerar visualização segura do comprovante.');
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.error('[FINANCEIRO_COMPROVANTE] Falha na visualização:', err);
+    showToast(err.message || 'Erro ao visualizar comprovante.', 'error');
+  }
+}
+
+async function handleBaixarComprovante(contaId) {
+  try {
+    const parcelas = await ensureFinanceiroParcelasLoaded();
+    const conta = parcelas.find(c => String(c.id) === String(contaId));
+    if (!conta || !conta.comprovante_path) {
+      showToast('Comprovante não encontrado para este pagamento.', 'warning');
+      return;
+    }
+
+    const client = window.supabaseClient;
+    if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+    const { data, error } = await client.storage
+      .from('financeiro-comprovantes')
+      .createSignedUrl(conta.comprovante_path, 300, {
+        download: conta.comprovante_nome || true
+      });
+
+    if (error || !data?.signedUrl) {
+      console.error('[FINANCEIRO_COMPROVANTE] Erro ao gerar URL para download:', error);
+      throw new Error('Não foi possível gerar link de download.');
+    }
+
+    const link = document.createElement('a');
+    link.href = data.signedUrl;
+    link.download = conta.comprovante_nome || 'comprovante';
+    link.target = '_blank';
+    link.rel = 'noopener,noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error('[FINANCEIRO_COMPROVANTE] Falha no download:', err);
+    showToast(err.message || 'Erro ao baixar comprovante.', 'error');
+  }
+}
+
+async function handleAnexarComprovantePosterior(contaId, event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  let uploadedStoragePath = null;
+  const client = window.supabaseClient;
+
+  try {
+    if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+    const rawUserId = String(localStorage.getItem('currentUserId') || '').trim();
+    const rawUserName = String(localStorage.getItem('currentUser') || '').trim();
+    const invalidValues = new Set(['', 'null', 'undefined', 'não registrado', 'nao registrado']);
+    const normalizedUserId = invalidValues.has(rawUserId.toLowerCase()) ? '' : rawUserId;
+    const normalizedUserName = invalidValues.has(rawUserName.toLowerCase()) ? '' : rawUserName;
+
+    if (!normalizedUserId && !normalizedUserName) {
+      showToast('É necessário identificar o operador antes de anexar comprovante.', 'warning');
+      if (input) input.value = '';
+      return;
+    }
+
+    const opId = normalizedUserId || null;
+    const opNome = normalizedUserName || normalizedUserId;
+
+    const validacao = validarArquivoComprovante(file);
+    if (!validacao.valido) {
+      showToast(validacao.erro, 'warning');
+      if (input) input.value = '';
+      return;
+    }
+
+    const storagePath = gerarPathStorageComprovante(contaId, file.name);
+    const { error: uploadError } = await client.storage
+      .from('financeiro-comprovantes')
+      .upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || 'application/octet-stream'
+      });
+
+    if (uploadError) {
+      console.error('[FINANCEIRO_COMPROVANTE] Falha no upload:', uploadError);
+      throw new Error('Não foi possível enviar o comprovante. Tente novamente.');
+    }
+
+    uploadedStoragePath = storagePath;
+    const now = getDataHoraBrasil();
+
+    const { data: updatedRows, error: updateError } = await client
+      .from('contas_pagar')
+      .update({
+        comprovante_path: storagePath,
+        comprovante_nome: file.name,
+        comprovante_tipo: file.type,
+        comprovante_tamanho: file.size,
+        comprovante_anexado_em: now,
+        comprovante_anexado_por_id: opId,
+        comprovante_anexado_por_nome: opNome,
+        atualizado_em: now
+      })
+      .eq('id', contaId)
+      .eq('status', 'pago')
+      .is('comprovante_path', null)
+      .select('*');
+
+    if (updateError) {
+      if (uploadedStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+          uploadedStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+        }
+      }
+      throw updateError;
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      if (uploadedStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+          uploadedStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback de concorrência:', cleanupErr);
+        }
+      }
+
+      appData.financeiroParcelasLoaded = false;
+      showToast('Este pagamento já possui um comprovante ou não está mais disponível para anexação.', 'warning');
+      await openModalDetalhesPagamento(contaId);
+      renderPagamentos();
+      return;
+    }
+
+    appData.financeiroParcelasLoaded = false;
+    showToast('Comprovante anexado com sucesso!', 'success');
+    await openModalDetalhesPagamento(contaId);
+    renderPagamentos();
+  } catch (err) {
+    if (uploadedStoragePath && client) {
+      try {
+        await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+        uploadedStoragePath = null;
+      } catch (cleanupErr) {
+        console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+      }
+    }
+    console.error('[FINANCEIRO_COMPROVANTE] Erro ao anexar comprovante:', err);
+    showToast(err.message || 'Erro ao anexar comprovante.', 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
+async function handleSubstituirComprovante(contaId, event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  let novoStoragePath = null;
+  const client = window.supabaseClient;
+
+  try {
+    if (!client) throw new Error('Cliente Supabase não inicializado.');
+
+    const rawUserId = String(localStorage.getItem('currentUserId') || '').trim();
+    const rawUserName = String(localStorage.getItem('currentUser') || '').trim();
+    const invalidValues = new Set(['', 'null', 'undefined', 'não registrado', 'nao registrado']);
+    const normalizedUserId = invalidValues.has(rawUserId.toLowerCase()) ? '' : rawUserId;
+    const normalizedUserName = invalidValues.has(rawUserName.toLowerCase()) ? '' : rawUserName;
+
+    if (!normalizedUserId && !normalizedUserName) {
+      showToast('É necessário identificar o operador antes de substituir comprovante.', 'warning');
+      if (input) input.value = '';
+      return;
+    }
+
+    const opId = normalizedUserId || null;
+    const opNome = normalizedUserName || normalizedUserId;
+
+    const validacao = validarArquivoComprovante(file);
+    if (!validacao.valido) {
+      showToast(validacao.erro, 'warning');
+      if (input) input.value = '';
+      return;
+    }
+
+    const parcelas = await ensureFinanceiroParcelasLoaded();
+    const conta = parcelas.find(c => String(c.id) === String(contaId));
+    const pathAntigo = conta?.comprovante_path;
+
+    if (!pathAntigo) {
+      // Se não havia comprovante, redireciona para anexação
+      return handleAnexarComprovantePosterior(contaId, event);
+    }
+
+    novoStoragePath = gerarPathStorageComprovante(contaId, file.name);
+    const { error: uploadError } = await client.storage
+      .from('financeiro-comprovantes')
+      .upload(novoStoragePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || 'application/octet-stream'
+      });
+
+    if (uploadError) {
+      console.error('[FINANCEIRO_COMPROVANTE] Falha no upload de substituição:', uploadError);
+      throw new Error('Não foi possível enviar o novo comprovante.');
+    }
+
+    const now = getDataHoraBrasil();
+
+    const { data: updatedRows, error: updateError } = await client
+      .from('contas_pagar')
+      .update({
+        comprovante_path: novoStoragePath,
+        comprovante_nome: file.name,
+        comprovante_tipo: file.type,
+        comprovante_tamanho: file.size,
+        comprovante_anexado_em: now,
+        comprovante_anexado_por_id: opId,
+        comprovante_anexado_por_nome: opNome,
+        atualizado_em: now
+      })
+      .eq('id', contaId)
+      .eq('comprovante_path', pathAntigo)
+      .select('*');
+
+    if (updateError) {
+      if (novoStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([novoStoragePath]);
+          novoStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+        }
+      }
+      throw updateError;
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      if (novoStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([novoStoragePath]);
+          novoStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+        }
+      }
+
+      appData.financeiroParcelasLoaded = false;
+      showToast('O comprovante foi alterado por outra sessão ou o título foi modificado.', 'warning');
+      await openModalDetalhesPagamento(contaId);
+      renderPagamentos();
+      return;
+    }
+
+    // Remoção do arquivo antigo APÓS confirmação do banco de dados
+    try {
+      await client.storage.from('financeiro-comprovantes').remove([pathAntigo]);
+    } catch (remErr) {
+      console.warn('[FINANCEIRO_COMPROVANTE] Falha ao remover comprovante antigo após substituição:', remErr);
+    }
+
+    appData.financeiroParcelasLoaded = false;
+    showToast('Comprovante substituído com sucesso!', 'success');
+    await openModalDetalhesPagamento(contaId);
+    renderPagamentos();
+  } catch (err) {
+    if (novoStoragePath && client) {
+      try {
+        await client.storage.from('financeiro-comprovantes').remove([novoStoragePath]);
+        novoStoragePath = null;
+      } catch (cleanupErr) {
+        console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+      }
+    }
+    console.error('[FINANCEIRO_COMPROVANTE] Erro ao substituir comprovante:', err);
+    showToast(err.message || 'Erro ao substituir comprovante.', 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
+window.validarArquivoComprovante = validarArquivoComprovante;
+window.formatarTamanhoArquivo = formatarTamanhoArquivo;
+window.sanitizarNomeArquivoComprovante = sanitizarNomeArquivoComprovante;
+window.gerarPathStorageComprovante = gerarPathStorageComprovante;
+window.handleSelecionarComprovante = handleSelecionarComprovante;
+window.handleRemoverComprovanteSelecionado = handleRemoverComprovanteSelecionado;
+window.handleVisualizarComprovante = handleVisualizarComprovante;
+window.handleBaixarComprovante = handleBaixarComprovante;
+window.handleAnexarComprovantePosterior = handleAnexarComprovantePosterior;
+window.handleSubstituirComprovante = handleSubstituirComprovante;
+
 async function openModalPagarConta(contaId) {
   const parcelas = await ensureFinanceiroParcelasLoaded();
   const conta = parcelas.find(c => String(c.id) === String(contaId));
@@ -19763,7 +20239,7 @@ async function openModalPagarConta(contaId) {
   }
   closeAppCenterModal();
 
-  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const fornecedor = getFinanceiroFornecedorNome(conta);
   const nfInfo = conta.numero_nf ? `NF ${conta.numero_nf}` : (conta.descricao || 'Sem NF');
   const valorFormatado = formatFinanceiroMoney(conta.valor);
 
@@ -19810,6 +20286,42 @@ async function openModalPagarConta(contaId) {
           <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: block; margin-bottom: 4px;">Observacoes / Conta Bancaria</span>
           <textarea id="pagto-obs" rows="2" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px;">${escapeKitAttribute(conta.observacoes || conta.observacao || '')}</textarea>
         </label>
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-weight: 700; font-size: 0.85rem; color: #475569; display: flex; align-items: center; gap: 6px;">
+              <span class="material-symbols-rounded" style="font-size: 18px; color: #64748b;">attach_file</span>
+              COMPROVANTE
+            </span>
+            <span style="font-size: 0.75rem; background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Opcional</span>
+          </div>
+
+          <input type="file" id="pagto-comprovante-input" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="display: none;" onchange="handleSelecionarComprovante(event)">
+
+          <div id="pagto-comprovante-container" style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; background-color: #f8fafc; text-align: center;">
+            <div id="pagto-comprovante-vazio">
+              <button type="button" class="app-center-modal-secondary" style="font-size: 0.82rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="document.getElementById('pagto-comprovante-input').click()">
+                <span class="material-symbols-rounded" style="font-size: 16px;">upload_file</span>
+                Selecionar arquivo
+              </button>
+              <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">PDF, JPG ou PNG • máximo 5 MB</div>
+              <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">Nenhum arquivo selecionado</div>
+            </div>
+
+            <div id="pagto-comprovante-selecionado" style="display: none; align-items: center; justify-content: space-between; text-align: left; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px;">
+              <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; min-width: 0;">
+                <span id="pagto-comprovante-icone" class="material-symbols-rounded" style="font-size: 22px; color: #3b82f6; flex-shrink: 0;">description</span>
+                <div style="min-width: 0; overflow: hidden;">
+                  <div id="pagto-comprovante-nome" style="font-size: 0.82rem; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+                  <div id="pagto-comprovante-tam" style="font-size: 0.72rem; color: #64748b;"></div>
+                </div>
+              </div>
+              <button type="button" onclick="handleRemoverComprovanteSelecionado()" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: flex; align-items: center; border-radius: 4px;" title="Remover comprovante">
+                <span class="material-symbols-rounded" style="font-size: 18px;">delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="app-center-modal-actions" style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
@@ -19825,9 +20337,26 @@ async function salvarPagamentoConta(contaId) {
   const btnSalvar = document.getElementById('btn-confirmar-pagamento-conta');
   if (btnSalvar && btnSalvar.disabled) return;
 
+  let uploadedStoragePath = null;
+  const client = window.supabaseClient;
+
   try {
-    const client = window.supabaseClient;
     if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+    const rawUserId = String(localStorage.getItem('currentUserId') || '').trim();
+    const rawUserName = String(localStorage.getItem('currentUser') || '').trim();
+
+    const invalidValues = new Set(['', 'null', 'undefined', 'não registrado', 'nao registrado']);
+    const normalizedUserId = invalidValues.has(rawUserId.toLowerCase()) ? '' : rawUserId;
+    const normalizedUserName = invalidValues.has(rawUserName.toLowerCase()) ? '' : rawUserName;
+
+    if (!normalizedUserId && !normalizedUserName) {
+      showToast('É necessário identificar o operador antes de confirmar o pagamento.', 'warning');
+      return;
+    }
+
+    const opId = normalizedUserId || null;
+    const opNome = normalizedUserName || normalizedUserId;
 
     const valorVal = nfXmlMoney(document.getElementById('pagto-valor')?.value);
     const dataVal = document.getElementById('pagto-data')?.value;
@@ -19837,33 +20366,118 @@ async function salvarPagamentoConta(contaId) {
     if (!dataVal) throw new Error('Informe a data de pagamento.');
     if (valorVal <= 0) throw new Error('Valor pago deve ser maior que zero.');
 
+    const fileInput = document.getElementById('pagto-comprovante-input');
+    const file = fileInput?.files?.[0] || null;
+
+    if (file) {
+      const validacao = validarArquivoComprovante(file);
+      if (!validacao.valido) {
+        showToast(validacao.erro, 'warning');
+        return;
+      }
+    }
+
     if (btnSalvar) {
       btnSalvar.disabled = true;
-      btnSalvar.textContent = 'Confirmando...';
+      btnSalvar.textContent = file ? 'Enviando comprovante...' : 'Confirmando...';
     }
 
     const now = getDataHoraBrasil();
 
-    const { error } = await client
-      .from('contas_pagar')
-      .update({
-        status: 'pago',
-        status_vencimento: 'pago',
-        data_pagamento: dataVal,
-        forma_pagamento: formaVal,
-        observacoes: obsVal,
-        observacao: obsVal,
-        atualizado_em: now
-      })
-      .eq('id', contaId);
+    if (file) {
+      const storagePath = gerarPathStorageComprovante(contaId, file.name);
+      const { data: uploadData, error: uploadError } = await client.storage
+        .from('financeiro-comprovantes')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'application/octet-stream'
+        });
 
-    if (error) throw error;
+      if (uploadError) {
+        console.error('[FINANCEIRO_COMPROVANTE] Falha no upload:', uploadError);
+        throw new Error('Não foi possível enviar o comprovante. Tente novamente ou remova o arquivo para prosseguir sem anexo.');
+      }
+
+      uploadedStoragePath = storagePath;
+    }
+
+    if (btnSalvar) {
+      btnSalvar.textContent = 'Confirmando...';
+    }
+
+    const payloadUpdate = {
+      status: 'pago',
+      status_vencimento: 'pago',
+      data_pagamento: dataVal,
+      forma_pagamento: formaVal,
+      observacoes: obsVal,
+      observacao: obsVal,
+      pago_por_id: opId,
+      pago_por_nome: opNome,
+      atualizado_em: now
+    };
+
+    if (uploadedStoragePath && file) {
+      payloadUpdate.comprovante_path = uploadedStoragePath;
+      payloadUpdate.comprovante_nome = file.name;
+      payloadUpdate.comprovante_tipo = file.type;
+      payloadUpdate.comprovante_tamanho = file.size;
+      payloadUpdate.comprovante_anexado_em = now;
+      payloadUpdate.comprovante_anexado_por_id = opId;
+      payloadUpdate.comprovante_anexado_por_nome = opNome;
+    }
+
+    const { data: updatedRows, error } = await client
+      .from('contas_pagar')
+      .update(payloadUpdate)
+      .eq('id', contaId)
+      .eq('status', 'pendente')
+      .select('id, status, valor, data_pagamento, forma_pagamento, pago_por_id, pago_por_nome, comprovante_path, comprovante_nome');
+
+    if (error) {
+      if (uploadedStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+          uploadedStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+        }
+      }
+      throw error;
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      if (uploadedStoragePath) {
+        try {
+          await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+          uploadedStoragePath = null;
+        } catch (cleanupErr) {
+          console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback de concorrência:', cleanupErr);
+        }
+      }
+
+      appData.financeiroParcelasLoaded = false;
+      closeAppCenterModal();
+      showToast('Este título já foi liquidado ou não está mais disponível para pagamento.', 'warning');
+      renderContasAPagar('todas');
+      return;
+    }
 
     appData.financeiroParcelasLoaded = false;
     closeAppCenterModal();
     showToast('Pagamento registrado com sucesso!', 'success');
     renderContasAPagar('todas');
   } catch (error) {
+    if (uploadedStoragePath && client) {
+      try {
+        await client.storage.from('financeiro-comprovantes').remove([uploadedStoragePath]);
+        uploadedStoragePath = null;
+      } catch (cleanupErr) {
+        console.error('[FINANCEIRO_COMPROVANTE] Falha no rollback:', cleanupErr);
+      }
+    }
+
     console.error('[FINANCEIRO_PAGTO] erro ao liquidar conta', error);
     showToast(error.message || 'Erro ao registrar pagamento.', 'error');
     if (btnSalvar) {
@@ -19882,7 +20496,7 @@ async function openModalDetalhesPagamento(contaId) {
   }
   closeAppCenterModal();
 
-  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const fornecedor = getFinanceiroFornecedorNome(conta);
   const cnpj = conta.fornecedor_cnpj || conta.cnpj_fornecedor || '-';
   const nfNum = conta.numero_nf ? `NF ${conta.numero_nf}` : '-';
   const parcelaNum = conta.parcela ? `Parcela ${conta.parcela}` : (conta.numero_parcela ? `Parcela ${conta.numero_parcela}` : '-');
@@ -19899,7 +20513,15 @@ async function openModalDetalhesPagamento(contaId) {
   const vencimentoStr = formatFinanceiroDate(conta.vencimento || conta.data_vencimento);
   const obsStr = conta.observacoes || conta.observacao || '-';
   const statusStr = (conta.status || 'pago').toUpperCase();
+  const responsavelStr = conta.pago_por_nome ? conta.pago_por_nome : 'Não registrado';
   const atualizadoEmStr = conta.atualizado_em ? formatDateTimeBR(conta.atualizado_em) : '-';
+
+  const temComprovante = !!conta.comprovante_path;
+  const compNome = conta.comprovante_nome || 'comprovante';
+  const compTipo = (conta.comprovante_tipo || 'DOCUMENTO').replace('application/', '').replace('image/', '').toUpperCase();
+  const compTam = formatarTamanhoArquivo(conta.comprovante_tamanho);
+  const compAnexadoEm = conta.comprovante_anexado_em ? formatDateTimeBR(conta.comprovante_anexado_em) : '-';
+  const compAnexadoPor = conta.comprovante_anexado_por_nome || 'Não registrado';
 
   const modal = document.createElement('div');
   modal.id = 'app-center-modal';
@@ -19920,6 +20542,7 @@ async function openModalDetalhesPagamento(contaId) {
         <div><span style="color: #64748b; font-weight: 500;">Parcela:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(parcelaNum)}</strong></div>
         <div><span style="color: #64748b; font-weight: 500;">Tipo de Lançamento:</span> <strong style="color: #1e293b; display: block;">${escapeKitAttribute(tipoLancamentoStr)}</strong></div>
         <div><span style="color: #64748b; font-weight: 500;">Status:</span> <span class="fin-status-pill status-paga" style="display: inline-block; margin-top: 2px;">${escapeKitAttribute(statusStr)}</span></div>
+        <div style="grid-column: span 2; border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 2px;"><span style="color: #64748b; font-weight: 500;">Responsável pela Liquidação:</span> <strong style="color: #0f172a; display: block; font-size: 0.95rem;">${escapeKitAttribute(responsavelStr)}</strong></div>
       </div>
 
       <div style="background: #f1f5f9; border-left: 4px solid #059669; border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 0.85rem;">
@@ -19928,7 +20551,61 @@ async function openModalDetalhesPagamento(contaId) {
         <div><span style="color: #475569; font-weight: 600; font-size: 0.78rem; text-transform: uppercase;">Forma de Pagamento</span><strong style="color: #1e293b; font-size: 0.95rem; display: block; margin-top: 2px;">${escapeKitAttribute(formaPagtoStr)}</strong></div>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem; color: #475569; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+      <!-- SEÇÃO DE COMPROVANTE DE PAGAMENTO -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <strong style="font-size: 0.85rem; color: #334155; display: flex; align-items: center; gap: 6px;">
+            <span class="material-symbols-rounded" style="font-size: 18px; color: #475569;">attach_file</span>
+            COMPROVANTE DE PAGAMENTO
+          </strong>
+          ${temComprovante ? `
+            <span style="font-size: 0.72rem; background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 700;">ANEXADO</span>
+          ` : `
+            <span style="font-size: 0.72rem; background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 4px; font-weight: 600;">SEM ANEXO</span>
+          `}
+        </div>
+
+        ${temComprovante ? `
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82rem; color: #475569; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
+            <div style="grid-column: span 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span style="color: #64748b;">Arquivo:</span> <strong style="color: #0f172a;">${escapeKitAttribute(compNome)}</strong>
+            </div>
+            <div><span style="color: #64748b;">Tipo:</span> <strong style="color: #1e293b;">${escapeKitAttribute(compTipo)}</strong></div>
+            <div><span style="color: #64748b;">Tamanho:</span> <strong style="color: #1e293b;">${compTam}</strong></div>
+            <div><span style="color: #64748b;">Anexado em:</span> <strong style="color: #1e293b;">${compAnexadoEm}</strong></div>
+            <div><span style="color: #64748b;">Anexado por:</span> <strong style="color: #1e293b;">${escapeKitAttribute(compAnexadoPor)}</strong></div>
+          </div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="app-center-modal-primary" style="font-size: 0.8rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="handleVisualizarComprovante('${conta.id}')">
+              <span class="material-symbols-rounded" style="font-size: 16px;">visibility</span>
+              VISUALIZAR
+            </button>
+            <button type="button" class="app-center-modal-secondary" style="font-size: 0.8rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="handleBaixarComprovante('${conta.id}')">
+              <span class="material-symbols-rounded" style="font-size: 16px;">download</span>
+              BAIXAR
+            </button>
+            <input type="file" id="detalhe-substituir-comprovante-input" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="display: none;" onchange="handleSubstituirComprovante('${conta.id}', event)">
+            <button type="button" class="app-center-modal-secondary" style="font-size: 0.8rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 4px;" onclick="document.getElementById('detalhe-substituir-comprovante-input').click()">
+              <span class="material-symbols-rounded" style="font-size: 16px;">sync</span>
+              SUBSTITUIR
+            </button>
+          </div>
+        ` : `
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <span style="font-size: 0.82rem; color: #64748b;">Nenhum comprovante anexado.</span>
+            <div>
+              <input type="file" id="detalhe-anexar-comprovante-input" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="display: none;" onchange="handleAnexarComprovantePosterior('${conta.id}', event)">
+              <button type="button" class="app-center-modal-secondary" style="font-size: 0.8rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;" onclick="document.getElementById('detalhe-anexar-comprovante-input').click()">
+                <span class="material-symbols-rounded" style="font-size: 16px;">upload_file</span>
+                ANEXAR COMPROVANTE
+              </button>
+            </div>
+          </div>
+        `}
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: #475569; border-top: 1px solid #e2e8f0; padding-top: 12px;">
         <div><strong>Vencimento Original:</strong> ${vencimentoStr}</div>
         <div><strong>Observações / Conta Bancária:</strong> ${escapeKitAttribute(obsStr)}</div>
         <div><strong style="color: #64748b;">Última atualização:</strong> ${atualizadoEmStr}</div>
@@ -19955,7 +20632,7 @@ async function openModalEditarParcelaConta(contaId) {
   }
   closeAppCenterModal();
 
-  const fornecedor = conta.fornecedor_nome || conta.fornecedor_cnpj || 'Fornecedor nao informado';
+  const fornecedor = getFinanceiroFornecedorNome(conta);
   const nfInfo = conta.numero_nf ? `NF ${conta.numero_nf}` : (conta.descricao || 'Despesa');
   const parcelaInfo = conta.parcela ? `Parc. ${conta.parcela}` : (conta.tipo_lancamento || 'Lancamento');
   const valorAtualStr = formatFinanceiroMoney(conta.valor);
@@ -36999,21 +37676,77 @@ async function hydrateNFXmlPreviewFromSupabase() {
  vinculos = data || [];
  }
 
- for (const item of state.itens) {
- const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '') === String(item.codigo_produto_fornecedor || ''));
- if (vinculo?.id_interno) {
- applyNFXmlItemProductLink(item.numero_item, vinculo.id_interno, 'fornecedor+cProd', true);
- item.ean_divergente = !!vinculo.ean_divergente;
- continue;
- }
+  // REGRA 1: VALIDAÇÃO CRUZADA EAN x FORNECEDOR/CPROD
+  const produtosCatalogo = appData.products || [];
+  for (const item of state.itens) {
+    const cProd = String(item.codigo_produto_fornecedor || '').trim();
+    const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+    
+    // CANDIDATO A: buscar fornecedor_cnpj + cProd em fornecedor_produtos
+    let candidatoA = null;
+    if (vinculo?.id_interno) {
+      candidatoA = produtosCatalogo.find(p => String(p.id_interno || '').trim() === String(vinculo.id_interno).trim()) 
+        || { id_interno: vinculo.id_interno, status: 'ativo' };
+    }
 
- const ean = nfXmlOnlyDigits(item.ean_fornecedor);
- if (ean && !['SEMGTIN', 'ISENTO'].includes(String(item.ean_fornecedor).toUpperCase())) {
- const product = (appData.products || []).find(p => nfXmlOnlyDigits(p.ean) === ean);
- if (product) applyNFXmlItemProductLink(item.numero_item, product.id_interno, 'ean', true);
- }
- }
+    // CANDIDATO B: buscar EAN válido no catálogo de produtos
+    const rawEan = String(item.ean_fornecedor || item.ean_xml || '').trim();
+    const isEanExempt = !rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase());
+    const eanClean = !isEanExempt ? nfXmlOnlyDigits(rawEan) : '';
+    const isEanValido = eanClean.length >= 7 && eanClean.length <= 14;
+    let candidatoB = null;
+    if (isEanValido) {
+      candidatoB = produtosCatalogo.find(p => nfXmlOnlyDigits(p.ean) === eanClean) || null;
+    }
+
+    // APLICAÇÃO DA MATRIZ CRUZADA
+    if (candidatoA && candidatoB) {
+      if (candidatoA.id_interno === candidatoB.id_interno) {
+        // A existe + B existe + mesmo produto: IDENTIFICADO (confiança alta)
+        applyNFXmlItemProductLink(item.numero_item, candidatoA.id_interno, 'fornecedor_e_ean', true);
+        item.ean_divergente = false;
+        item.conflito_vinculo = false;
+        item.conflito = null;
+      } else {
+        // A existe + B existe + produtos diferentes: CONFLITO DE VÍNCULO
+        // NÃO escolher automaticamente nenhum dos dois. NÃO sobrescrever fornecedor_produtos.
+        item.id_interno = null;
+        item.produto_id = null;
+        item.produto_nome = null;
+        item.status_vinculo = 'conflito_vinculo';
+        item.conflito_vinculo = true;
+        item.conflito = { fornecedor: candidatoA, ean: candidatoB, cProd, eanClean };
+        item.match_source = 'conflito';
+      }
+    } else if (candidatoA && !candidatoB) {
+      // A existe + XML sem EAN válido (ou B não encontrado): IDENTIFICADO por fornecedor+cProd
+      applyNFXmlItemProductLink(item.numero_item, candidatoA.id_interno, 'fornecedor+cProd', true);
+      item.ean_divergente = !!vinculo?.ean_divergente;
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    } else if (!candidatoA && candidatoB) {
+      // A não existe + B existe: IDENTIFICADO por EAN. Marcar como elegível para aprendizado futuro.
+      applyNFXmlItemProductLink(item.numero_item, candidatoB.id_interno, 'ean', true);
+      item.elegivel_aprendizado = true;
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    } else {
+      // Nenhum candidato: NÃO IDENTIFICADO
+      item.id_interno = null;
+      item.produto_id = null;
+      item.produto_nome = null;
+      item.status_vinculo = 'nao_identificado';
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    }
+  }
  saveEntradaNFXMLDraft();
+}
+
+function isProductInactive(product) {
+  if (!product) return false;
+  const status = String(product.status || '').trim().toLowerCase();
+  return status === 'inativo' || status === 'nao' || status === '0' || product.ativo === false;
 }
 
 function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', silent = false) {
@@ -37030,13 +37763,93 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
  item.id_interno = product.id_interno;
  item.produto_id = product.id || null;
  item.produto_nome = product.descricao_completa || product.descricao_base || product.nome || product.id_interno;
- item.status_vinculo = 'vinculado';
  item.match_source = source;
+ item.conflito_vinculo = false;
+ item.conflito = null;
+
+ // REGRA 2: PRODUTO INATIVO
+ const inactive = isProductInactive(product);
+ item.produto_inativo = inactive;
+ if (inactive) {
+   if (item.decisao_inativo === 'manter_inativo') {
+     item.status_vinculo = 'vinculado';
+   } else {
+     item.status_vinculo = 'produto_inativo';
+   }
+ } else {
+   item.status_vinculo = 'vinculado';
+   item.decisao_inativo = null;
+ }
+
  Object.assign(item, applyNFXmlItemConversion(item, product));
  console.log('[INFO] Operacao registrada.');
  saveEntradaNFXMLDraft();
  if (!silent) renderNFXmlPreview();
  return true;
+}
+
+async function reativarProdutoDraftNF(numeroItem, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !idInterno) return;
+  try {
+    const { error } = await client
+      .from('produtos')
+      .update({ status: 'ativo', atualizado_em: new Date().toISOString() })
+      .eq('id_interno', idInterno);
+    if (error) throw error;
+
+    const prod = (appData.products || []).find(p => p.id_interno === idInterno);
+    if (prod) prod.status = 'ativo';
+
+    const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+    if (item) {
+      item.produto_inativo = false;
+      item.status_vinculo = 'vinculado';
+      saveEntradaNFXMLDraft();
+    }
+    showToast(`Produto ${idInterno} reativado com sucesso!`, 'success');
+    renderNFXmlPreview();
+  } catch (err) {
+    console.error('[ENTRADA_NF] Erro ao reativar produto:', err);
+    showToast('Falha ao reativar produto: ' + err.message, 'error');
+  }
+}
+
+function manterInativoReceberDraftNF(numeroItem) {
+  const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item) return;
+  item.decisao_inativo = 'manter_inativo';
+  item.status_vinculo = 'vinculado';
+  saveEntradaNFXMLDraft();
+  showToast('Decisão registrada: produto mantido inativo e autorizado para recebimento.', 'success');
+  renderNFXmlPreview();
+}
+
+function resolverConflitoUsarFornecedorDraft(numeroItem, idInterno) {
+  const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item || !idInterno) return;
+  applyNFXmlItemProductLink(numeroItem, idInterno, 'fornecedor+cProd');
+  showToast(`Conflito resolvido: mantido vínculo com ${idInterno}.`, 'success');
+}
+
+async function resolverConflitoUsarEanDraft(numeroItem, idInternoEan) {
+  const state = entradaNfXmlState;
+  const item = state?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item || !idInternoEan) return;
+
+  const confirmar = await showAppConfirm({
+    title: 'Atualizar Vínculo do Fornecedor?',
+    message: `Confirma atualizar o vínculo deste fornecedor para apontar para o produto ${idInternoEan}?`,
+    detail: 'O cadastro do fornecedor será atualizado no fechamento.',
+    confirmLabel: 'Sim, atualizar vínculo',
+    cancelLabel: 'Cancelar',
+    danger: true
+  });
+  if (!confirmar) return;
+
+  applyNFXmlItemProductLink(numeroItem, idInternoEan, 'ean');
+  item.elegivel_aprendizado = true;
+  showToast(`Conflito resolvido: selecionado ${idInternoEan}.`, 'success');
 }
 
 function updateNFXmlItemManualLink(numeroItem, inputId) {
@@ -37970,12 +38783,58 @@ function renderNFXmlItemCard(item, allowLink = true) {
  </div>
  ${allowLink ? `
  <div class="nfxml-item-link-panel">
- <div class="nfxml-item-link-title">VAnculo com produto interno</div>
- ${linked ? `
+ <div class="nfxml-item-link-title">Vínculo com produto interno</div>
+ ${item.conflito_vinculo ? `
+   <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px; margin-bottom:8px;">
+     <span style="display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:0.75rem; color:#b91c1c; text-transform:uppercase;">
+       <span class="material-symbols-rounded" style="font-size:16px;">warning</span> CONFLITO DE VÍNCULO
+     </span>
+     <div style="font-size:0.75rem; color:#475569; margin-top:4px;">
+       Vínculo atual do fornecedor: <b>${escapeKitAttribute(item.conflito?.fornecedor?.id_interno || '-')}</b><br>
+       Produto encontrado pelo EAN: <b>${escapeKitAttribute(item.conflito?.ean?.id_interno || '-')}</b>
+     </div>
+     <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
+       ${item.conflito?.fornecedor?.id_interno ? `
+         <button type="button" onclick="resolverConflitoUsarFornecedorDraft(${item.numero_item}, '${escapeKitAttribute(item.conflito.fornecedor.id_interno)}')" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:0.72rem; font-weight:700; padding:6px 8px; border-radius:6px; cursor:pointer; text-align:left;">
+           Usar Vínculo Atual (${escapeKitAttribute(item.conflito.fornecedor.id_interno)})
+         </button>
+       ` : ''}
+       ${item.conflito?.ean?.id_interno ? `
+         <button type="button" onclick="resolverConflitoUsarEanDraft(${item.numero_item}, '${escapeKitAttribute(item.conflito.ean.id_interno)}')" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:0.72rem; font-weight:800; padding:6px 8px; border-radius:6px; cursor:pointer; text-align:left;">
+           Usar Produto do EAN (${escapeKitAttribute(item.conflito.ean.id_interno)}) e Atualizar
+         </button>
+       ` : ''}
+     </div>
+   </div>
+ ` : item.produto_inativo ? `
+   <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px; margin-bottom:8px;">
+     <span style="display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:0.75rem; color:#b45309; text-transform:uppercase;">
+       <span class="material-symbols-rounded" style="font-size:16px;">warning</span> ⚠ PRODUTO INATIVO
+     </span>
+     <div style="font-size:0.75rem; color:#475569; margin-top:4px;">
+       O produto <b>${escapeKitAttribute(item.id_interno)}</b> está inativo no catálogo.
+     </div>
+     ${item.decisao_inativo === 'manter_inativo' ? `
+       <div style="margin-top:6px; font-size:0.72rem; font-weight:700; color:#15803d; background:#dcfce7; padding:4px 8px; border-radius:6px;">
+         ✓ Decisão: Manter inativo e receber autorizado
+       </div>
+     ` : `
+       <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
+         <button type="button" onclick="reativarProdutoDraftNF(${item.numero_item}, '${escapeKitAttribute(item.id_interno)}')" style="background:#22c55e; color:white; border:none; font-size:0.72rem; font-weight:800; padding:6px 10px; border-radius:6px; cursor:pointer; text-align:center;">
+           REATIVAR PRODUTO
+         </button>
+         <button type="button" onclick="manterInativoReceberDraftNF(${item.numero_item})" style="background:#f8fafc; border:1px solid #cbd5e1; color:#334155; font-size:0.72rem; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; text-align:center;">
+           MANTER INATIVO E RECEBER
+         </button>
+       </div>
+     `}
+     <div class="nfxml-item-linked-product" style="margin-top:8px;">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
+   </div>
+ ` : linked ? `
  <div class="nfxml-item-linked-product">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
  <div class="nfxml-item-origin">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
  ` : `
- <div class="nfxml-item-pending">Pendente de vAnculo</div>
+ <div class="nfxml-item-pending">Pendente de vínculo</div>
  `}
  <div class="nfxml-item-link-input">
  <input id="nfxml-id-${item.numero_item}" class="input-field" placeholder="Informar id_interno">
@@ -38050,7 +38909,8 @@ async function salvarEntradaNFXml() {
  const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
  let status = 'importada';
  if (state.tipo_lancamento === 'entrada_normal') {
- status = state.itens.some(item => !item.id_interno) ? 'pendente_vinculo' : 'pronta_para_finalizar';
+   const temPendencia = state.itens.some(item => !item.id_interno || item.conflito_vinculo || (item.produto_inativo && item.decisao_inativo !== 'manter_inativo'));
+   status = temPendencia ? 'pendente_vinculo' : 'pronta_para_finalizar';
  } else if (state.tipo_lancamento === 'somente_financeiro') {
  status = 'financeiro_lancado';
  }
@@ -38136,7 +38996,12 @@ async function salvarEntradaNFXml() {
  id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
  produto_id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
  produto_id: state.tipo_lancamento === 'entrada_normal' ? (item.produto_id || null) : null,
- status_vinculo: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno ? 'vinculado' : 'pendente_vinculo') : 'nao_exigido',
+ status_vinculo: state.tipo_lancamento === 'entrada_normal' 
+   ? (item.conflito_vinculo ? 'conflito_vinculo' 
+      : (item.produto_inativo && item.decisao_inativo !== 'manter_inativo' ? 'produto_inativo' 
+         : (item.id_interno ? 'vinculado' : 'pendente_vinculo'))) 
+   : 'nao_exigido',
+ observacoes: item.observacoes || (item.decisao_inativo === 'manter_inativo' ? '[DECISAO_INATIVO:manter_inativo]' : (item.conflito_vinculo ? `[CONFLITO_VINCULO:forn=${item.conflito?.fornecedor?.id_interno || ''};ean=${item.conflito?.ean?.id_interno || ''}]` : null)),
  ean_divergente: !!item.ean_divergente,
  atualizado_em: getDataHoraBrasil()
  }));
@@ -38437,8 +39302,50 @@ async function finalizarEntradaNFAberta(entradaId) {
 
  const itens = await fetchEntradaNFItens(entrada.id);
  if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
- const pendentes = itens.filter(item => !item.id_interno || getEntradaNFStockQuantity(item) <= 0);
- if (pendentes.length) throw new Error('Existem itens sem vAnculo interno ou quantidade valida.');
+
+ // 1. Bloquear itens não identificados
+ const pendentes = itens.filter(item => !item.id_interno || item.status_vinculo === 'pendente_vinculo' || item.status_vinculo === 'nao_identificado' || getEntradaNFStockQuantity(item) <= 0);
+ if (pendentes.length) throw new Error(`Existem ${pendentes.length} item(ns) não identificado(s) ou sem quantidade válida.`);
+
+ // 2. Bloquear conflito de vínculo (EAN x Fornecedor)
+ const emConflito = itens.filter(item => item.status_vinculo === 'conflito_vinculo' || (item.observacoes && item.observacoes.includes('CONFLITO_VINCULO')));
+ if (emConflito.length) throw new Error(`Existem ${emConflito.length} item(ns) com conflito de vínculo não resolvido (EAN x Fornecedor).`);
+
+ // 3. Bloquear produto inativo sem decisão registrada
+ const prodsIds = itens.map(i => i.id_interno).filter(Boolean);
+ const { data: prodsDb } = await client
+   .from('produtos')
+   .select('id, id_interno, status')
+   .in('id_interno', prodsIds);
+ const prodsMap = new Map((prodsDb || []).map(p => [p.id_interno, p]));
+
+ for (const it of itens) {
+   const pDb = prodsMap.get(it.id_interno);
+   if (isProductInactive(pDb)) {
+     const decisao = (it.observacoes && it.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || it.decisao_inativo === 'manter_inativo';
+     if (!decisao) {
+       throw new Error(`O produto "${it.id_interno}" está inativo no catálogo. Reative o produto ou selecione 'Manter Inativo e Receber' antes de finalizar.`);
+     }
+   }
+ }
+
+ // 4. Bloquear conflito com fornecedor_produtos existente
+ const cnpjClean = nfXmlOnlyDigits(entrada.fornecedor_cnpj || entrada.cnpj_fornecedor);
+ if (cnpjClean) {
+   const { data: vinculosFp } = await client
+     .from('fornecedor_produtos')
+     .select('*')
+     .eq('fornecedor_cnpj', cnpjClean);
+   const mapFp = new Map((vinculosFp || []).map(v => [String(v.codigo_produto_fornecedor).trim(), v]));
+
+   for (const it of itens) {
+     const cProd = String(it.codigo_produto_fornecedor || '').trim();
+     const existingFp = mapFp.get(cProd);
+     if (existingFp && existingFp.id_interno && existingFp.id_interno !== it.id_interno) {
+       throw new Error(`CONFLITO DE VÍNCULO: O código "${cProd}" do fornecedor já está vinculado ao produto "${existingFp.id_interno}", diferente do item "${it.id_interno}". A finalização foi bloqueada para evitar sobrescrita.`);
+     }
+   }
+ }
 
  const recebimentosPayload = [];
  for (const item of itens) {
@@ -38470,6 +39377,56 @@ async function finalizarEntradaNFAberta(entradaId) {
  const currentUser = localStorage.getItem('currentUser') || 'N/A';
  const finResult = await DataClient.finalizarRecebimentoEntradaNF(entrada.id, currentUser);
  console.log('[ENTRADA_NF_XML] resultado finalizacao NF aberta via RPC:', finResult);
+
+ // REGRA 4: APRENDIZADO FORNECEDOR + CPROD NA FINALIZAÇÃO
+ if (cnpjClean) {
+   try {
+     for (const it of itens) {
+       const cProd = String(it.codigo_produto_fornecedor || '').trim();
+       if (cProd && it.id_interno) {
+         const { data: fpCheck } = await client
+           .from('fornecedor_produtos')
+           .select('id, id_interno')
+           .eq('fornecedor_cnpj', cnpjClean)
+           .eq('codigo_produto_fornecedor', cProd)
+           .maybeSingle();
+
+         if (!fpCheck) {
+           await client
+             .from('fornecedor_produtos')
+             .insert({
+               fornecedor_id: entrada.fornecedor_id || null,
+               fornecedor_cnpj: cnpjClean,
+               codigo_produto_fornecedor: cProd,
+               descricao_produto_fornecedor: it.descricao_produto_fornecedor || it.descricao_xml || null,
+               ean_fornecedor: it.ean_fornecedor || it.ean_xml || null,
+               id_interno: it.id_interno,
+               produto_id: it.produto_id || null,
+               ultimo_custo: parseDecimal(it.custo_real_unitario ?? it.valor_unitario),
+               ultima_quantidade: parseDecimal(it.quantidade),
+               ultima_compra_em: entrada.data_emissao || entrada.data_recebimento || getDataBrasilISO(),
+               ean_divergente: !!it.ean_divergente,
+               criado_em: new Date().toISOString(),
+               atualizado_em: new Date().toISOString()
+             });
+           console.log(`[FORNECEDOR_PRODUTOS] Aprendizado automático: "${cProd}" -> "${it.id_interno}".`);
+         } else if (fpCheck.id_interno === it.id_interno) {
+           await client
+             .from('fornecedor_produtos')
+             .update({
+               ultimo_custo: parseDecimal(it.custo_real_unitario ?? it.valor_unitario),
+               ultima_quantidade: parseDecimal(it.quantidade),
+               ultima_compra_em: entrada.data_emissao || entrada.data_recebimento || getDataBrasilISO(),
+               atualizado_em: new Date().toISOString()
+             })
+             .eq('id', fpCheck.id);
+         }
+       }
+     }
+   } catch (learnErr) {
+     console.warn('[FORNECEDOR_PRODUTOS] Aviso no aprendizado seguro pós-finalização:', learnErr);
+   }
+ }
 
  appData.historicoEntradasNFLoaded = false;
  DataClient.invalidateCache?.('nf');
@@ -39023,9 +39980,25 @@ async function renderEntradaNFPendencias(backAction = 'renderNFSubMenu()', filte
     }
 
     const itens = await fetchEntradaNFItens(nf.id);
-    const temItensNaoIdentificados = Array.isArray(itens) && (itens.length === 0 || itens.some(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo'));
-    if (temItensNaoIdentificados) {
-      badges.push({ cat: 'PRODUTO', label: 'Produto Não Identificado', tone: '#f59e0b', icon: 'help_outline' });
+    if (Array.isArray(itens)) {
+      const temConflito = itens.some(i => i.status_vinculo === 'conflito_vinculo' || (i.observacoes && i.observacoes.includes('CONFLITO_VINCULO')));
+      if (temConflito) {
+        badges.push({ cat: 'PRODUTO', label: 'Conflito de Vínculo', tone: '#ef4444', icon: 'warning' });
+      }
+
+      const temInativo = itens.some(i => {
+        const isStatusInativo = i.status_vinculo === 'produto_inativo';
+        const decisaoRegistrada = (i.observacoes && i.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || i.decisao_inativo === 'manter_inativo';
+        return isStatusInativo && !decisaoRegistrada;
+      });
+      if (temInativo) {
+        badges.push({ cat: 'PRODUTO', label: 'Produto Inativo', tone: '#f59e0b', icon: 'warning' });
+      }
+
+      const temNaoIdentificado = itens.length === 0 || itens.some(i => (!i.id_interno || i.status_vinculo === 'pendente_vinculo') && i.status_vinculo !== 'conflito_vinculo' && i.status_vinculo !== 'produto_inativo');
+      if (temNaoIdentificado) {
+        badges.push({ cat: 'PRODUTO', label: 'Produto Não Identificado', tone: '#f59e0b', icon: 'help_outline' });
+      }
     }
 
     // 2. FÍSICO — Fonte de verdade: RECEBIMENTOS REAIS
@@ -39720,46 +40693,81 @@ async function renderDetalheEntradaNF(entradaId) {
 
 const entradaNFComplementarUIState = {};
 
+function getEntradaNFComplementarCleanState() {
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    isModalOpen: false,
+    isMockActive: false,
+    complementarId: null,
+    descricao: '',
+    valorTotal: 0,
+    incorporarCusto: true,
+    parcelas: [
+      { numero: 1, vencimento: today, valor: 0 }
+    ]
+  };
+}
+
+function resetEntradaNFComplementarState(entradaId) {
+  entradaNFComplementarUIState[entradaId] = getEntradaNFComplementarCleanState();
+  return entradaNFComplementarUIState[entradaId];
+}
+
 function getEntradaNFComplementarState(entradaId) {
   if (!entradaNFComplementarUIState[entradaId]) {
-    entradaNFComplementarUIState[entradaId] = {
-      isModalOpen: false,
-      isMockActive: false,
-      descricao: 'Acordo Comercial / Frete Adicional',
-      valorTotal: 1174.42,
-      incorporarCusto: true,
-      parcelas: [
-        { numero: 1, vencimento: '2026-10-15', valor: 500.00 },
-        { numero: 2, vencimento: '2026-11-15', valor: 674.42 }
-      ]
-    };
+    entradaNFComplementarUIState[entradaId] = getEntradaNFComplementarCleanState();
   }
   return entradaNFComplementarUIState[entradaId];
 }
 
-function openModalComplementarNF(entradaId) {
-  const state = getEntradaNFComplementarState(entradaId);
-  state.isModalOpen = true;
+function openModalComplementarNF(entradaId, complementarExistente = null) {
+  if (complementarExistente) {
+    const today = new Date().toISOString().split('T')[0];
+    const parcelas = (complementarExistente.parcelas || []).map((p, idx) => ({
+      numero: Number(p.numero_parcela || p.parcela || idx + 1),
+      vencimento: p.vencimento || p.data_vencimento || today,
+      valor: parseDecimal(p.valor || 0)
+    }));
+    const valorTotal = parseDecimal(complementarExistente.valor_total || parcelas.reduce((sum, p) => sum + p.valor, 0));
+    entradaNFComplementarUIState[entradaId] = {
+      isModalOpen: true,
+      isMockActive: false,
+      complementarId: complementarExistente.complementar_id || null,
+      descricao: complementarExistente.descricao || '',
+      valorTotal: valorTotal,
+      incorporarCusto: complementarExistente.incorporar_custo !== undefined ? !!complementarExistente.incorporar_custo : true,
+      parcelas: parcelas.length > 0 ? parcelas : [
+        { numero: 1, vencimento: today, valor: valorTotal }
+      ]
+    };
+  } else {
+    // NOVO COMPLEMENTAR: sempre inicializa em estado limpo
+    const state = resetEntradaNFComplementarState(entradaId);
+    state.isModalOpen = true;
+  }
   renderNFDetail(entradaId);
 }
 
 function closeModalComplementarNF(entradaId) {
-  const state = getEntradaNFComplementarState(entradaId);
-  state.isModalOpen = false;
+  resetEntradaNFComplementarState(entradaId);
   renderNFDetail(entradaId);
 }
 
 function toggleMockComplementarNF(entradaId, active) {
   const state = getEntradaNFComplementarState(entradaId);
   state.isMockActive = active;
-  showToast(active ? 'Simulação de Complementar R$ 1.174,42 ATIVADA na UI' : 'Simulação de Complementar DESATIVADA', 'info');
+  showToast(active ? 'Simulação de Complementar ATIVADA na UI' : 'Simulação de Complementar DESATIVADA', 'info');
   renderNFDetail(entradaId);
 }
 
 function updateComplementarField(entradaId, field, value) {
   const state = getEntradaNFComplementarState(entradaId);
   if (field === 'valorTotal') {
+    const prevTotal = state.valorTotal;
     state.valorTotal = parseDecimal(value);
+    if (state.parcelas && state.parcelas.length === 1 && (state.parcelas[0].valor === 0 || state.parcelas[0].valor === prevTotal)) {
+      state.parcelas[0].valor = state.valorTotal;
+    }
   } else if (field === 'incorporarCusto') {
     state.incorporarCusto = !!value;
   } else {
@@ -39771,8 +40779,16 @@ function updateComplementarField(entradaId, field, value) {
 function addComplementarParcela(entradaId) {
   const state = getEntradaNFComplementarState(entradaId);
   const nextNum = state.parcelas.length + 1;
-  const today = new Date().toISOString().split('T')[0];
-  state.parcelas.push({ numero: nextNum, vencimento: today, valor: 0 });
+  const lastVenc = state.parcelas.length > 0 ? state.parcelas[state.parcelas.length - 1].vencimento : null;
+  let nextVenc = new Date().toISOString().split('T')[0];
+  if (lastVenc) {
+    try {
+      const d = new Date(lastVenc + 'T12:00:00');
+      d.setDate(d.getDate() + 30);
+      nextVenc = d.toISOString().split('T')[0];
+    } catch (_) {}
+  }
+  state.parcelas.push({ numero: nextNum, vencimento: nextVenc, valor: 0 });
   renderNFDetail(entradaId);
 }
 
@@ -39780,6 +40796,7 @@ function removeComplementarParcela(entradaId, index) {
   const state = getEntradaNFComplementarState(entradaId);
   if (state.parcelas.length <= 1) return;
   state.parcelas.splice(index, 1);
+  state.parcelas.forEach((p, idx) => { p.numero = idx + 1; });
   renderNFDetail(entradaId);
 }
 
@@ -39807,6 +40824,7 @@ async function salvarComplementarDoModal(entradaId) {
 
   try {
     const payload = {
+      complementarId: state.complementarId || undefined,
       descricao: state.descricao || 'Lancamento Complementar',
       valorTotal: state.valorTotal,
       incorporarCusto: !!state.incorporarCusto,
@@ -39820,13 +40838,20 @@ async function salvarComplementarDoModal(entradaId) {
     const res = await DataClient.salvarComplementarEntradaNFSupabase(entradaId, payload);
     if (res.success) {
       showToast('Lancamento Complementar salvo com sucesso!', 'success');
-      state.isModalOpen = false;
-      state.savedInUI = true;
+      resetEntradaNFComplementarState(entradaId);
       renderNFDetail(entradaId);
     }
   } catch (err) {
     console.error('[COMPLEMENTAR] Erro ao salvar complementar:', err);
     showToast('Erro ao salvar lancamento complementar: ' + err.message, 'error');
+  }
+}
+
+function editarComplementarNF(entradaId, complementarId) {
+  const list = window.currentEntradaNFComplementaresSalvos || [];
+  const comp = list.find(c => c.complementar_id === complementarId);
+  if (comp) {
+    openModalComplementarNF(entradaId, comp);
   }
 }
 
@@ -40098,8 +41123,56 @@ async function renderEntradaNFIdentificacao(entradaId) {
 
   const itens = await fetchEntradaNFItens(entradaId);
   const totalItens = itens.length;
-  const vinculadosCount = itens.filter(i => i.id_interno && i.status_vinculo !== 'pendente_vinculo').length;
-  const todosVinculados = totalItens > 0 && vinculadosCount === totalItens;
+
+  const client = window.supabaseClient;
+  const cnpjClean = nfXmlOnlyDigits(nf.cnpj_fornecedor || nf.fornecedor_cnpj);
+  let vinculosFornecedor = [];
+  if (cnpjClean && client) {
+    const { data: vData } = await client
+      .from('fornecedor_produtos')
+      .select('*')
+      .eq('fornecedor_cnpj', cnpjClean);
+    vinculosFornecedor = vData || [];
+  }
+
+  const idInternos = itens.map(i => i.id_interno).filter(Boolean);
+  const eans = itens.map(i => nfXmlOnlyDigits(i.ean_fornecedor || i.ean_xml)).filter(e => e && e.length >= 7 && e.length <= 14);
+  let produtosMap = new Map();
+  let eanMap = new Map();
+  if (client && (idInternos.length > 0 || eans.length > 0)) {
+    const filterParts = [];
+    if (idInternos.length > 0) filterParts.push(`id_interno.in.(${idInternos.map(id => `"${id}"`).join(',')})`);
+    if (eans.length > 0) filterParts.push(`ean.in.(${eans.map(e => `"${e}"`).join(',')})`);
+    const { data: prodsData } = await client
+      .from('produtos')
+      .select('id, id_interno, status, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+      .or(filterParts.join(','));
+    (prodsData || []).forEach(p => {
+      if (p.id_interno) produtosMap.set(p.id_interno, p);
+      if (p.ean) eanMap.set(nfXmlOnlyDigits(p.ean), p);
+    });
+  }
+
+  // Avaliação estrita dos 4 estados para cada item
+  let itensProntosCount = 0;
+  for (const it of itens) {
+    const cProd = String(it.codigo_produto_fornecedor || '').trim();
+    const vForn = vinculosFornecedor.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+    const rawEan = String(it.ean_fornecedor || it.ean_xml || '').trim();
+    const eanClean = (!rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase())) ? '' : nfXmlOnlyDigits(rawEan);
+    const pEan = (eanClean && eanClean.length >= 7 && eanClean.length <= 14) ? eanMap.get(eanClean) : null;
+    const isConflict = it.status_vinculo === 'conflito_vinculo' || (it.observacoes && it.observacoes.includes('CONFLITO_VINCULO'))
+      || (vForn?.id_interno && pEan?.id_interno && vForn.id_interno !== pEan.id_interno && !it.id_interno);
+
+    const itProd = it.id_interno ? produtosMap.get(it.id_interno) : null;
+    const itInativo = isProductInactive(itProd);
+    const itDecisao = (it.observacoes && it.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || it.decisao_inativo === 'manter_inativo';
+
+    if (it.id_interno && it.status_vinculo !== 'pendente_vinculo' && !isConflict && (!itInativo || itDecisao)) {
+      itensProntosCount++;
+    }
+  }
+  const todosVinculados = totalItens > 0 && itensProntosCount === totalItens;
 
   const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
   const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
@@ -40133,7 +41206,7 @@ async function renderEntradaNFIdentificacao(entradaId) {
                 </span>
               ` : `
                 <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
-                  <span class="material-symbols-rounded" style="font-size: 16px;">help_outline</span> AGUARDANDO IDENTIFICAÇÃO (${vinculadosCount}/${totalItens})
+                  <span class="material-symbols-rounded" style="font-size: 16px;">help_outline</span> AGUARDANDO IDENTIFICAÇÃO (${itensProntosCount}/${totalItens})
                 </span>
               `}
             </div>
@@ -40179,33 +41252,64 @@ async function renderEntradaNFIdentificacao(entradaId) {
               <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">Vincule cada item fiscal a um Produto Mestre do sistema.</p>
             </div>
             <span style="font-size: 0.78rem; font-weight: 800; color: #3b82f6; background: rgba(59,130,246,0.08); padding: 4px 12px; border-radius: 16px;">
-              ${vinculadosCount} de ${totalItens} vinculados
+              ${itensProntosCount} de ${totalItens} liberados
             </span>
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 14px;">
-            ${await (async () => {
-              const client = window.supabaseClient;
-              const idInternos = itens.map(i => i.id_interno).filter(Boolean);
-              let produtosMap = new Map();
-              if (idInternos.length > 0 && client) {
-                const { data: prodsData } = await client
-                  .from('produtos')
-                  .select('id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
-                  .in('id_interno', idInternos);
-                (prodsData || []).forEach(p => produtosMap.set(p.id_interno, p));
-              }
-
+            ${(() => {
               return itens.map((item, idx) => {
-                const isVinculado = !!item.id_interno && item.status_vinculo !== 'pendente_vinculo';
+                const cProd = String(item.codigo_produto_fornecedor || '').trim();
+                const vinculoForn = vinculosFornecedor.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+                const rawEan = String(item.ean_fornecedor || item.ean_xml || '').trim();
+                const isEanExempt = !rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase());
+                const eanClean = !isEanExempt ? nfXmlOnlyDigits(rawEan) : '';
+                const prodEan = (eanClean && eanClean.length >= 7 && eanClean.length <= 14) ? eanMap.get(eanClean) : null;
+
+                const candidatoA_id = vinculoForn?.id_interno || null;
+                const candidatoB_id = prodEan?.id_interno || null;
+
+                // DETECÇÃO DE CONFLITO DE VÍNCULO
+                const isConflict = item.status_vinculo === 'conflito_vinculo' 
+                  || (item.observacoes && item.observacoes.includes('CONFLITO_VINCULO'))
+                  || (candidatoA_id && candidatoB_id && candidatoA_id !== candidatoB_id && !item.id_interno);
+
                 const prod = item.id_interno ? produtosMap.get(item.id_interno) : null;
-                const nomeComercial = prod?.descricao_completa || prod?.descricao_base || '-';
+                const nomeComercial = prod?.descricao_completa || prod?.descricao_base || item.id_interno || '-';
                 const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || 'Item sem descrição fiscal';
-                const cProd = item.codigo_produto_fornecedor || 'N/A';
                 const eanFiscal = item.ean_fornecedor || item.ean_xml || 'Sem EAN';
 
+                // DETECÇÃO DE PRODUTO INATIVO
+                const isInactive = isProductInactive(prod);
+                const decisaoInativoFeita = (item.observacoes && item.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || item.decisao_inativo === 'manter_inativo';
+
+                const isVinculado = !!item.id_interno && item.status_vinculo !== 'pendente_vinculo' && !isConflict;
+
+                // ESTILO DO CARD CONFORME ESTADO OPERACIONAL
+                let cardBg = '#f0fdf4';
+                let cardBorder = '#bbf7d0';
+                let cardBorderLeft = '#22c55e';
+
+                if (isConflict) {
+                  cardBg = '#fef2f2';
+                  cardBorder = '#fecaca';
+                  cardBorderLeft = '#ef4444';
+                } else if (isInactive && !decisaoInativoFeita) {
+                  cardBg = '#fffbeb';
+                  cardBorder = '#fde68a';
+                  cardBorderLeft = '#f59e0b';
+                } else if (isInactive && decisaoInativoFeita) {
+                  cardBg = '#fefce8';
+                  cardBorder = '#fef08a';
+                  cardBorderLeft = '#ca8a04';
+                } else if (!isVinculado) {
+                  cardBg = '#fffbebf5';
+                  cardBorder = '#fef3c7';
+                  cardBorderLeft = '#f59e0b';
+                }
+
                 return `
-                  <div style="background: ${isVinculado ? '#f0fdf4' : '#fffbebf5'}; border: 1px solid ${isVinculado ? '#bbf7d0' : '#fef3c7'}; border-left: 5px solid ${isVinculado ? '#22c55e' : '#f59e0b'}; border-radius: 14px; padding: 16px 18px;">
+                  <div style="background: ${cardBg}; border: 1px solid ${cardBorder}; border-left: 5px solid ${cardBorderLeft}; border-radius: 14px; padding: 16px 18px;">
                     
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 10px;">
                       
@@ -40226,9 +41330,24 @@ async function renderEntradaNFIdentificacao(entradaId) {
                         </div>
                       </div>
 
-                      <!-- LADO DIREITO: STATUS DO VÍNCULO E BOTÃO -->
+                      <!-- LADO DIREITO: BADGE DE STATUS E AÇÕES -->
                       <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px;">
-                        ${isVinculado ? `
+                        ${isConflict ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(239, 68, 68, 0.12); color: #b91c1c; border: 1px solid rgba(239, 68, 68, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">warning</span> CONFLITO DE VÍNCULO
+                          </span>
+                        ` : isInactive && !decisaoInativoFeita ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.4);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">warning</span> ⚠ PRODUTO INATIVO
+                          </span>
+                        ` : isInactive && decisaoInativoFeita ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(202, 138, 4, 0.12); color: #a16207; border: 1px solid rgba(202, 138, 4, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check_circle</span> INATIVO (LIBERADO)
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Alterar Vínculo
+                          </button>
+                        ` : isVinculado ? `
                           <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
                             <span class="material-symbols-rounded" style="font-size: 14px;">check_circle</span> IDENTIFICADO
                           </span>
@@ -40247,10 +41366,66 @@ async function renderEntradaNFIdentificacao(entradaId) {
 
                     </div>
 
-                    <!-- BLOCO DE PRODUTO MESTRE VINCULADO (SE HOUVER) -->
+                    <!-- DETALHE: CONFLITO DE VÍNCULO (CANDIDATO A x CANDIDATO B) -->
+                    ${isConflict ? `
+                      <div style="margin-top: 12px; padding: 12px 16px; background: #ffffff; border: 1px solid #fecaca; border-radius: 10px;">
+                        <div style="font-size: 0.78rem; font-weight: 800; color: #b91c1c; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                          <span class="material-symbols-rounded" style="font-size: 16px;">alt_route</span>
+                          Divergência detectada entre vínculo existente e catálogo por EAN:
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                          <div style="padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Vínculo atual do fornecedor:</span>
+                            <strong style="color: #0f172a; font-size: 0.85rem;">${escapeKitAttribute(candidatoA_id || '-')}</strong>
+                          </div>
+                          <div style="padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+                            <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #1d4ed8; text-transform: uppercase;">Produto encontrado pelo EAN:</span>
+                            <strong style="color: #1e3a8a; font-size: 0.85rem;">${escapeKitAttribute(candidatoB_id || '-')} ${prodEan?.descricao_completa ? `(${escapeKitAttribute(prodEan.descricao_completa)})` : ''}</strong>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                          ${candidatoA_id ? `
+                            <button type="button" onclick="resolverConflitoUsarFornecedor('${nf.id}', '${item.id}', '${candidatoA_id}')" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">
+                              Usar Vínculo Atual (${escapeKitAttribute(candidatoA_id)})
+                            </button>
+                          ` : ''}
+                          ${candidatoB_id ? `
+                            <button type="button" onclick="resolverConflitoUsarEanEAtualizar('${nf.id}', '${item.id}', '${candidatoB_id}', '${prodEan?.id || ''}', '${escapeKitAttribute(cProd)}', '${cnpjClean}')" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 800; cursor: pointer;">
+                              Usar Produto do EAN (${escapeKitAttribute(candidatoB_id)}) e Atualizar
+                            </button>
+                          ` : ''}
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">
+                            Mapear Outro Produto
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- DETALHE: PRODUTO INATIVO (AÇÕES OBRIGATÓRIAS) -->
+                    ${isInactive && !decisaoInativoFeita ? `
+                      <div style="margin-top: 12px; padding: 12px 16px; background: #ffffff; border: 1px solid #fde68a; border-radius: 10px;">
+                        <div style="font-size: 0.78rem; font-weight: 800; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                          <span class="material-symbols-rounded" style="font-size: 16px;">info</span>
+                          O produto vinculado <b>${escapeKitAttribute(item.id_interno)}</b> está inativo no catálogo. Escolha uma ação:
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px;">
+                          <button type="button" onclick="reativarProdutoEntradaNF('${nf.id}', '${item.id}', '${item.id_interno}')" style="background: #22c55e; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(34,197,94,0.25);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check</span> REATIVAR PRODUTO
+                          </button>
+                          <button type="button" onclick="manterInativoReceberEntradaNF('${nf.id}', '${item.id}')" style="background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">done_all</span> MANTER INATIVO E RECEBER
+                          </button>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> CORRIGIR VÍNCULO
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- BLOCO DE PRODUTO MESTRE VINCULADO (SE IDENTIFICADO) -->
                     ${isVinculado ? `
-                      <div style="margin-top: 10px; padding: 10px 14px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
-                        <span style="background: #fef08a; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
+                      <div style="margin-top: 10px; padding: 10px 14px; background: #ffffff; border: 1px solid ${isInactive ? '#fef08a' : '#bbf7d0'}; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+                        <span style="background: ${isInactive ? '#fef08a' : '#fef08a'}; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
                           ${escapeKitAttribute(item.id_interno)}
                         </span>
                         <div style="flex: 1; min-width: 0;">
@@ -40260,6 +41435,7 @@ async function renderEntradaNFIdentificacao(entradaId) {
                           <div style="font-size: 0.72rem; color: #64748b; display: flex; gap: 10px;">
                             ${prod?.marca ? `<span>Marca: <b>${escapeKitAttribute(prod.marca)}</b></span>` : ''}
                             ${prod?.sku_fornecedor ? `<span>SKU: <b>${escapeKitAttribute(prod.sku_fornecedor)}</b></span>` : ''}
+                            ${isInactive ? `<span style="color:#b45309; font-weight:700;">(Status: Inativo)</span>` : ''}
                           </div>
                         </div>
                       </div>
@@ -40275,6 +41451,159 @@ async function renderEntradaNFIdentificacao(entradaId) {
       </main>
     </div>
   `;
+}
+
+async function reativarProdutoEntradaNF(entradaId, itemId, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !idInterno) return;
+  try {
+    const { error: errProd } = await client
+      .from('produtos')
+      .update({ status: 'ativo', atualizado_em: new Date().toISOString() })
+      .eq('id_interno', idInterno);
+    if (errProd) throw errProd;
+
+    const pMem = (appData.products || []).find(p => p.id_interno === idInterno);
+    if (pMem) pMem.status = 'ativo';
+
+    if (itemId) {
+      await client
+        .from('entradas_nf_itens')
+        .update({ status_vinculo: 'vinculado', updated_at: new Date().toISOString() })
+        .eq('id', itemId);
+    }
+
+    showToast(`Produto ${idInterno} reativado com sucesso!`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao reativar produto:', err);
+    showToast('Falha ao reativar produto: ' + err.message, 'error');
+  }
+}
+
+async function manterInativoReceberEntradaNF(entradaId, itemId) {
+  const client = window.supabaseClient;
+  if (!client || !itemId) return;
+  try {
+    const { data: itemData } = await client
+      .from('entradas_nf_itens')
+      .select('observacoes')
+      .eq('id', itemId)
+      .maybeSingle();
+
+    let obs = String(itemData?.observacoes || '');
+    if (!obs.includes('DECISAO_INATIVO:manter_inativo')) {
+      obs = obs ? `${obs} [DECISAO_INATIVO:manter_inativo]` : '[DECISAO_INATIVO:manter_inativo]';
+    }
+
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        status_vinculo: 'vinculado',
+        observacoes: obs,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) throw errItem;
+
+    showToast('Decisão registrada: produto inativo autorizado para recebimento.', 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao registrar decisão de produto inativo:', err);
+    showToast('Falha ao registrar decisão: ' + err.message, 'error');
+  }
+}
+
+async function resolverConflitoUsarFornecedor(entradaId, itemId, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInterno) return;
+  try {
+    const { data: prod } = await client
+      .from('produtos')
+      .select('id, id_interno, status')
+      .eq('id_interno', idInterno)
+      .maybeSingle();
+
+    const isInactive = isProductInactive(prod);
+    const newStatus = isInactive ? 'produto_inativo' : 'vinculado';
+
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        id_interno: idInterno,
+        produto_id_interno: idInterno,
+        produto_id: prod?.id || null,
+        status_vinculo: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) throw errItem;
+
+    showToast(`Conflito resolvido: mantido vínculo com ${idInterno}.`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao resolver conflito usando fornecedor:', err);
+    showToast('Falha ao resolver conflito: ' + err.message, 'error');
+  }
+}
+
+async function resolverConflitoUsarEanEAtualizar(entradaId, itemId, idInternoEan, produtoIdEan, cProd, fornecedorCnpj) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInternoEan) return;
+
+  const confirmar = await showAppConfirm({
+    title: 'Atualizar Vínculo de Fornecedor?',
+    message: `Confirma alterar o vínculo global do fornecedor para o código "${cProd}" apontando para o produto "${idInternoEan}"?`,
+    detail: 'O cadastro em fornecedor_produtos será atualizado com este novo produto mestre.',
+    confirmLabel: 'Sim, atualizar vínculo',
+    cancelLabel: 'Cancelar',
+    danger: true
+  });
+  if (!confirmar) return;
+
+  try {
+    const cnpjClean = nfXmlOnlyDigits(fornecedorCnpj);
+    const cProdClean = String(cProd).trim();
+    if (cnpjClean && cProdClean) {
+      await client
+        .from('fornecedor_produtos')
+        .upsert({
+          fornecedor_cnpj: cnpjClean,
+          codigo_produto_fornecedor: cProdClean,
+          id_interno: idInternoEan,
+          produto_id: produtoIdEan || null,
+          atualizado_em: new Date().toISOString()
+        }, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
+    }
+
+    const { data: prod } = await client
+      .from('produtos')
+      .select('id, id_interno, status')
+      .eq('id_interno', idInternoEan)
+      .maybeSingle();
+
+    const isInactive = isProductInactive(prod);
+    const newStatus = isInactive ? 'produto_inativo' : 'vinculado';
+
+    await client
+      .from('entradas_nf_itens')
+      .update({
+        id_interno: idInternoEan,
+        produto_id_interno: idInternoEan,
+        produto_id: prod?.id || produtoIdEan || null,
+        status_vinculo: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    showToast(`Conflito resolvido: fornecedor atualizado para ${idInternoEan}.`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao resolver conflito usando EAN:', err);
+    showToast('Falha ao resolver conflito: ' + err.message, 'error');
+  }
 }
 
 async function openModalMapearProdutoEntradaNF(entradaId, itemId) {
@@ -40598,9 +41927,34 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
   // ==========================================
   const entradaNFPagamentoModalState = {};
 
-  function getEntradaNFPagamentoState(entradaId, nf, parcelasExistentes) {
+  function getComparativoParcelaXML(state, idx, parcelaAtual) {
+    if (!state || state.origem !== 'xml' || !state.duplicatasFiscaisOriginais || !state.duplicatasFiscaisOriginais[idx]) {
+      return { modificado: false };
+    }
+    const orig = state.duplicatasFiscaisOriginais[idx];
+    const origVenc = orig.vencimento_xml || '';
+    const origVal = parseDecimal(orig.valor_xml || 0);
+    const atualVenc = parcelaAtual.vencimento || '';
+    const atualVal = parseDecimal(parcelaAtual.valor || 0);
+
+    const dataMudou = Boolean(origVenc && atualVenc && origVenc !== atualVenc);
+    const valorMudou = Math.abs(origVal - atualVal) > 0.005;
+
+    if (dataMudou || valorMudou) {
+      return {
+        modificado: true,
+        vencimentoOrig: origVenc,
+        valorOrig: origVal
+      };
+    }
+    return { modificado: false };
+  }
+
+  function getEntradaNFPagamentoState(entradaId, nf, parcelasExistentes, duplicatasFiscaisXML) {
     if (!entradaNFPagamentoModalState[entradaId]) {
       const valorTotal = parseDecimal(nf.valor_total || 0);
+      const temDuplicatasXML = Array.isArray(duplicatasFiscaisXML) && duplicatasFiscaisXML.length > 0;
+      const origem = temDuplicatasXML ? 'xml' : 'manual';
       let parcelasIniciais = [];
 
       if (parcelasExistentes && parcelasExistentes.length > 0) {
@@ -40608,6 +41962,12 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
           numero: p.numero_parcela || (idx + 1),
           vencimento: p.data_vencimento || p.vencimento || '',
           valor: parseDecimal(p.valor || 0)
+        }));
+      } else if (temDuplicatasXML) {
+        parcelasIniciais = duplicatasFiscaisXML.map((d, idx) => ({
+          numero: d.numero_duplicata || (idx + 1),
+          vencimento: d.vencimento_xml || '',
+          valor: parseDecimal(d.valor_xml || 0)
         }));
       } else {
         const hojeISO = getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
@@ -40628,10 +41988,28 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
         condicaoInicial = 'parcelado';
       }
 
+      // Sugestão de forma de pagamento a partir de pagamentos_xml se ainda não houver salva
+      let formaPagamentoInicial = (parcelasExistentes && parcelasExistentes[0]?.forma_pagamento) || '';
+      if (!formaPagamentoInicial) {
+        if (Array.isArray(nf.pagamentos_xml) && nf.pagamentos_xml.length === 1) {
+          const tPag = String(nf.pagamentos_xml[0].codigoFormaPagamento || '').trim();
+          if (tPag === '15') formaPagamentoInicial = 'boleto';
+          else if (tPag === '17') formaPagamentoInicial = 'pix';
+          else if (tPag === '03' || tPag === '04') formaPagamentoInicial = 'cartao';
+          else if (tPag === '01') formaPagamentoInicial = 'dinheiro';
+          else if (tPag === '18') formaPagamentoInicial = 'transferencia';
+          else formaPagamentoInicial = 'boleto';
+        } else {
+          formaPagamentoInicial = 'boleto';
+        }
+      }
+
       entradaNFPagamentoModalState[entradaId] = {
         isOpen: false,
+        origem: origem,
+        duplicatasFiscaisOriginais: duplicatasFiscaisXML || [],
         condicao: condicaoInicial,
-        formaPagamento: (parcelasExistentes && parcelasExistentes[0]?.forma_pagamento) || 'boleto',
+        formaPagamento: formaPagamentoInicial || 'boleto',
         observacao: nf.observacao_financeira || '',
         qtdParcelas: parcelasIniciais.length || 1,
         primeiroVencimento: parcelasIniciais[0]?.vencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
@@ -40713,48 +42091,24 @@ async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produ
       state.parcelas[index].valor = parseDecimal(value || 0);
     } else if (field === 'vencimento') {
       state.parcelas[index].vencimento = value;
-    }
-
-    // Re-render dinâmico do footer de fechamento financeiro do modal
-    const totalFiscal = state.valorTotalNf || 0;
-    const somaParcelas = state.parcelas.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
-    const somaCentavos = Math.round(somaParcelas * 100);
-    const fiscalCentavos = Math.round(totalFiscal * 100);
-    const diffCentavos = somaCentavos - fiscalCentavos;
-    const diffValor = diffCentavos / 100;
-
-    const somaEl = document.getElementById('modal-pagamento-soma');
-    const diffEl = document.getElementById('modal-pagamento-diff');
-    const btnSalvar = document.getElementById('btn-salvar-pagamento-nf');
-
-    if (somaEl) somaEl.innerText = formatCurrency(somaCentavos / 100);
-    if (diffEl) {
-      if (diffCentavos === 0) {
-        diffEl.innerHTML = '<span style="color:#15803d; font-weight:800;">R$ 0,00 (PAGAMENTO CONFERIDO ✓)</span>';
-      } else {
-        diffEl.innerHTML = `<span style="color:#b91c1c; font-weight:800;">${diffValor > 0 ? '+' : ''}${formatCurrency(diffValor)} (VALORES NÃO FECHAM)</span>`;
+      if (index === 0) {
+        state.primeiroVencimento = value;
       }
     }
-    if (btnSalvar) {
-      if (diffCentavos === 0) {
-        btnSalvar.removeAttribute('disabled');
-        btnSalvar.style.opacity = '1';
-        btnSalvar.style.cursor = 'pointer';
-      } else {
-        btnSalvar.setAttribute('disabled', 'true');
-        btnSalvar.style.opacity = '0.5';
-        btnSalvar.style.cursor = 'not-allowed';
-      }
-    }
+
+    renderNFDetail(entradaId);
   }
 
   function updatePagamentoField(entradaId, field, value) {
     const state = entradaNFPagamentoModalState[entradaId];
     if (!state) return;
     state[field] = value;
-    if (field === 'primeiroVencimento' && state.parcelas && state.parcelas.length === 1) {
-      state.parcelas[0].vencimento = value;
+    if (field === 'primeiroVencimento') {
+      if (state.parcelas && state.parcelas.length === 1) {
+        state.parcelas[0].vencimento = value;
+      }
     }
+    renderNFDetail(entradaId);
   }
 
   async function salvarPagamentoNFDoModal(entradaId) {
@@ -40847,7 +42201,9 @@ async function renderNFDetail(id) {
   const estadoConferencia = initEntradaNFConferenciaState(id, itensRaw, temRecebimentosNoBanco);
   const compState = getEntradaNFComplementarState(id);
   const complementaresSalvos = await DataClient.fetchComplementaresEntradaNF(id);
-  const pagState = getEntradaNFPagamentoState(id, nf, parcelasFiscais);
+  window.currentEntradaNFComplementaresSalvos = complementaresSalvos || [];
+  const duplicatasFiscaisXML = await DataClient.fetchEntradaNFDuplicatasFiscais(id);
+  const pagState = getEntradaNFPagamentoState(id, nf, parcelasFiscais, duplicatasFiscaisXML);
 
   // Calcular impacto do Complementar
   let valorComplementar = (complementaresSalvos || []).reduce((sum, c) => sum + Number(c.valor_total || 0), 0);
@@ -41061,7 +42417,17 @@ async function renderNFDetail(id) {
                 <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
                   <span class="material-symbols-rounded" style="color: #2563eb; font-size: 18px;">receipt_long</span> PARCELAS DA NOTA FISCAL
                 </h3>
-                <span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #2563eb;">${(nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo') ? `A PRAZO (${parcelasFiscais.length}x)` : 'À VISTA'}</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>
+                ${(() => {
+                  if (!parcelasFiscais.length) {
+                    return `<span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #d97706;">NÃO DEFINIDA</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>`;
+                  }
+                  const isAPrazo = parcelasFiscais.length > 1 || pagState.condicao === 'parcelado' || nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo';
+                  const forma = (parcelasFiscais[0]?.forma_pagamento || pagState.formaPagamento || '').toUpperCase();
+                  const condLabel = isAPrazo 
+                    ? `A PRAZO (${parcelasFiscais.length}x)${forma ? ` · ${forma}` : ''}`
+                    : `À VISTA${forma ? ` · ${forma}` : ''}`;
+                  return `<span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #2563eb;">${condLabel}</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>`;
+                })()}
               </div>
 
               ${!isEntradaFinalizada ? `
@@ -41074,13 +42440,16 @@ async function renderNFDetail(id) {
             
             ${parcelasFiscais.length ? `
               <div style="display: flex; flex-direction: column; gap: 8px;">
-                ${parcelasFiscais.map(p => {
+                ${parcelasFiscais.map((p, idx) => {
                   const st = getContasPagarDisplayStatus(p.status);
                   const dtVenc = getEntradaNFDate(p.vencimento || p.data_vencimento);
+                  const totalParcelas = parcelasFiscais.length;
+                  const numParcela = p.numero_parcela || (idx + 1);
+                  const labelParcela = typeof p.parcela === 'string' && p.parcela.includes('/') ? p.parcela : `${numParcela}/${totalParcelas}`;
                   return `
                     <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
                       <div>
-                        <div style="font-weight: 800; color: #0f172a; font-size: 0.85rem;">Parcela ${p.parcela || '1/1'}</div>
+                        <div style="font-weight: 800; color: #0f172a; font-size: 0.85rem;">Parcela ${labelParcela}</div>
                         <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Vencimento: <b>${dtVenc}</b> ${p.forma_pagamento ? `· Forma: <span style="text-transform:uppercase;">${escapeKitAttribute(p.forma_pagamento)}</span>` : ''}</div>
                       </div>
                       <div style="display: flex; align-items: center; gap: 14px;">
@@ -41147,7 +42516,14 @@ async function renderNFDetail(id) {
                         </div>
                         
                         <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                          <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(valorCompTotal)}</strong>
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            ${!isEntradaFinalizada ? `
+                              <button type="button" onclick="editarComplementarNF('${nf.id}', '${comp.complementar_id}')" style="display: inline-flex; align-items: center; gap: 4px; background: #ffffff; color: #2563eb; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
+                                <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Editar
+                              </button>
+                            ` : ''}
+                            <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(valorCompTotal)}</strong>
+                          </div>
                           <span style="display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: ${incCustoBg}; color: ${incCustoColor}; border: 1px solid ${incCustoBorder};">
                             ${incCustoLabel}
                           </span>
@@ -41226,16 +42602,32 @@ async function renderNFDetail(id) {
         <!-- MODAL: CONFIGURAR / REVISAR PAGAMENTO DA NOTA FISCAL -->
         ${pagState.isOpen ? `
           <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
-            <div style="background:white; border-radius:24px; max-width:620px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+            <div style="background:white; border-radius:24px; max-width:640px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
               
-              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:16px;">
                 <div>
-                  <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
-                    ${pagState.isRevisao ? 'REVISAR PAGAMENTO DA NOTA' : 'CONFIGURAR PAGAMENTO DA NOTA'}
-                  </h3>
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                    <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
+                      ${pagState.isRevisao ? 'REVISAR PAGAMENTO DA NOTA' : 'CONFIGURAR PAGAMENTO DA NOTA'}
+                    </h3>
+                    ${pagState.origem === 'xml' ? `
+                      <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:0.72rem; font-weight:700;">
+                        <span class="material-symbols-rounded" style="font-size:14px;">description</span> Carregado do XML da NF-e
+                      </span>
+                    ` : `
+                      <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; background:#f1f5f9; border:1px solid #e2e8f0; color:#475569; font-size:0.72rem; font-weight:700;">
+                        <span class="material-symbols-rounded" style="font-size:14px;">edit_note</span> Configuração manual
+                      </span>
+                    `}
+                  </div>
                   <span style="font-size:0.75rem; color:#64748b;">NF ${nf.numero_nf || '-'} · ${escapeKitAttribute(nf.fornecedor_nome || '')}</span>
+                  ${pagState.origem === 'xml' ? `
+                    <span style="display:block; font-size:0.72rem; color:#64748b; margin-top:2px;">
+                      As parcelas abaixo foram informadas no XML da NF-e. Você pode ajustá-las antes da finalização.
+                    </span>
+                  ` : ''}
                 </div>
-                <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b;">
+                <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b; padding:4px;">
                   <span class="material-symbols-rounded">close</span>
                 </button>
               </div>
@@ -41271,7 +42663,7 @@ async function renderNFDetail(id) {
 
                   <div>
                     <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">${pagState.condicao === 'parcelado' ? 'PRIMEIRO VENCIMENTO' : 'DATA DE VENCIMENTO'}</label>
-                    <input type="date" value="${pagState.primeiroVencimento}" onchange="updatePagamentoField('${nf.id}', 'primeiroVencimento', this.value); if(pagState.condicao==='a_vista') setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF});" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600;">
+                    <input type="date" value="${pagState.primeiroVencimento}" onchange="updatePagamentoField('${nf.id}', 'primeiroVencimento', this.value)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600;">
                   </div>
                 </div>
 
@@ -41301,14 +42693,25 @@ async function renderNFDetail(id) {
                     <span style="font-size:0.72rem; color:#64748b;">Ajuste vencimentos e valores se necessário</span>
                   </div>
 
-                  <div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto;">
-                    ${pagState.parcelas.map((p, idx) => `
-                      <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:center; background:white; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
-                        <span style="font-size:0.75rem; font-weight:800; color:#64748b; min-width:35px;">#${p.numero || idx + 1}</span>
-                        <input type="date" value="${p.vencimento}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
-                        <input type="number" step="0.01" value="${p.valor}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:800; font-size:0.78rem; text-align:right;">
-                      </div>
-                    `).join('')}
+                  <div style="display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto;">
+                    ${pagState.parcelas.map((p, idx) => {
+                      const comp = getComparativoParcelaXML(pagState, idx, p);
+                      return `
+                        <div style="background:white; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:4px;">
+                          <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:center;">
+                            <span style="font-size:0.75rem; font-weight:800; color:#64748b; min-width:35px;">#${p.numero || idx + 1}</span>
+                            <input type="date" value="${p.vencimento}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
+                            <input type="number" step="0.01" value="${p.valor}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:800; font-size:0.78rem; text-align:right;">
+                          </div>
+                          ${comp.modificado ? `
+                            <div style="font-size:0.70rem; color:#64748b; background:#f8fafc; padding:3px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:4px; border:1px dashed #cbd5e1;">
+                              <span class="material-symbols-rounded" style="font-size:12px; color:#3b82f6;">history</span>
+                              Original XML: <strong>${comp.vencimentoOrig ? comp.vencimentoOrig.split('-').reverse().join('/') : '-'}</strong> · <strong>${getEntradaNFMoney(comp.valorOrig)}</strong>
+                            </div>
+                          ` : ''}
+                        </div>
+                      `;
+                    }).join('')}
                   </div>
 
                   <!-- VALIDAÇÃO EM TEMPO REAL -->
@@ -41344,10 +42747,14 @@ async function renderNFDetail(id) {
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
-                  <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; font-weight:700; cursor:pointer;">
-                    Cancelar
+                  <button type="button" 
+                          onclick="closeModalPagamentoNF('${nf.id}')" 
+                          style="padding:10px 18px; border-radius:10px; border:1px solid rgba(239,68,68,0.35); background:rgba(239,68,68,0.08); color:#dc2626; font-weight:800; font-size:0.8rem; cursor:pointer; transition:all 0.15s ease; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; outline:none;"
+                          onmouseover="this.style.background='rgba(239,68,68,0.16)'; this.style.borderColor='rgba(239,68,68,0.5)';"
+                          onmouseout="this.style.background='rgba(239,68,68,0.08)'; this.style.borderColor='rgba(239,68,68,0.35)';">
+                    CANCELAR
                   </button>
-                  <button type="button" ${!parcelasValidasPagModal ? 'disabled' : ''} onclick="salvarPagamentoNFDoModal('${nf.id}', ${valorFiscalNF})" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasPagModal ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; cursor:${parcelasValidasPagModal ? 'pointer' : 'not-allowed'}; box-shadow:${parcelasValidasPagModal ? '0 4px 12px rgba(34,197,94,0.25)' : 'none'};">
+                  <button type="button" ${!parcelasValidasPagModal ? 'disabled' : ''} onclick="salvarPagamentoNFDoModal('${nf.id}', ${valorFiscalNF})" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasPagModal ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; font-size:0.8rem; cursor:${parcelasValidasPagModal ? 'pointer' : 'not-allowed'}; box-shadow:${parcelasValidasPagModal ? '0 4px 12px rgba(34,197,94,0.25)' : 'none'}; transition:all 0.15s ease; display:inline-flex; align-items:center; justify-content:center;">
                     Salvar Pagamento
                   </button>
                 </div>
@@ -41361,7 +42768,9 @@ async function renderNFDetail(id) {
           <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
             <div style="background:white; border-radius:24px; max-width:600px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
               <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
-                <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">COMPLEMENTAR / ESPECIAL</h3>
+                <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
+                  ${compState.complementarId ? 'EDITAR COMPLEMENTAR / ESPECIAL' : 'NOVO COMPLEMENTAR / ESPECIAL'}
+                </h3>
                 <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b;">
                   <span class="material-symbols-rounded">close</span>
                 </button>
@@ -41370,13 +42779,13 @@ async function renderNFDetail(id) {
               <div style="display:flex; flex-direction:column; gap:14px;">
                 <div>
                   <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">DESCRIÇÃO DO COMPLEMENTAR</label>
-                  <input type="text" value="${escapeKitAttribute(compState.descricao)}" onchange="updateComplementarField('${nf.id}', 'descricao', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:600;" placeholder="Ex: Acordo Comercial / Frete Adicional">
+                  <input type="text" value="${escapeKitAttribute(compState.descricao || '')}" onchange="updateComplementarField('${nf.id}', 'descricao', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:600;" placeholder="Ex: Acordo Comercial / Frete Adicional">
                 </div>
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                   <div>
                     <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">VALOR TOTAL (R$)</label>
-                    <input type="number" step="0.01" value="${compState.valorTotal}" onchange="updateComplementarField('${nf.id}', 'valorTotal', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:800; color:#0f172a;">
+                    <input type="number" step="0.01" value="${compState.valorTotal > 0 ? compState.valorTotal : ''}" onchange="updateComplementarField('${nf.id}', 'valorTotal', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:800; color:#0f172a;" placeholder="0,00">
                   </div>
                   <div style="display:flex; align-items:center; gap:8px; padding-top:20px;">
                     <input type="checkbox" id="comp-inc-custo" ${compState.incorporarCusto ? 'checked' : ''} onchange="updateComplementarField('${nf.id}', 'incorporarCusto', this.checked)">
@@ -41398,7 +42807,7 @@ async function renderNFDetail(id) {
                       <div style="display:grid; grid-template-columns:auto 1fr 1fr auto; gap:8px; align-items:center; background:white; padding:8px 12px; border-radius:10px; border:1px solid #e2e8f0;">
                         <span style="font-size:0.75rem; font-weight:800; color:#64748b;">#${idx + 1}</span>
                         <input type="date" value="${p.vencimento}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
-                        <input type="number" step="0.01" value="${p.valor}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:0.78rem;">
+                        <input type="number" step="0.01" value="${p.valor > 0 ? p.valor : ''}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:0.78rem;" placeholder="0,00">
                         ${compState.parcelas.length > 1 ? `
                           <button type="button" onclick="removeComplementarParcela('${nf.id}', ${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer;">
                             <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
@@ -41424,7 +42833,9 @@ async function renderNFDetail(id) {
                     </div>
                     ${!parcelasValidasComp ? `
                       <div style="color:#ef4444; font-weight:700; font-size:0.72rem; margin-top:6px; background:#fef2f2; padding:6px 10px; border-radius:6px;">
-                        ⚠ A soma das parcelas deve ser exatamente igual ao valor total do complementar.
+                        ${compState.valorTotal <= 0 
+                          ? '⚠ Informe o valor total e os valores de cada parcela.' 
+                          : '⚠ A soma das parcelas deve ser exatamente igual ao valor total do complementar.'}
                       </div>
                     ` : `
                       <div style="color:#16a34a; font-weight:700; font-size:0.72rem; margin-top:6px; background:#f0fdf4; padding:6px 10px; border-radius:6px;">
@@ -41435,8 +42846,8 @@ async function renderNFDetail(id) {
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
-                  <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; font-weight:700; cursor:pointer;">
-                    Cancelar
+                  <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; color:#475569; font-weight:800; cursor:pointer;">
+                    CANCELAR
                   </button>
                   <button type="button" ${!parcelasValidasComp ? 'disabled' : ''} onclick="salvarComplementarDoModal('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasComp ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; cursor:${parcelasValidasComp ? 'pointer' : 'not-allowed'};">
                     Salvar Complementar
@@ -41532,7 +42943,7 @@ async function renderNFDetail(id) {
                         <!-- FOTO DA EMBALAGEM / PRODUTO -->
                         <div style="width: 72px; height: 72px; min-width: 72px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
                           ${prod?.url_imagem ? `
-                            <img src="${escapeKitAttribute(prod.url_imagem)}" alt="${escapeKitAttribute(item.id_interno)}" style="width: 100%; height: 100%; object-fit: cover;">
+                            <img src="${escapeKitAttribute(prod.url_imagem)}" alt="${escapeKitAttribute(item.id_interno)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\' style=\\'font-size: 32px; color: #94a3b8;\\'>image</span>';">
                           ` : `
                             <span class="material-symbols-rounded" style="font-size: 32px; color: #94a3b8;">image</span>
                           `}

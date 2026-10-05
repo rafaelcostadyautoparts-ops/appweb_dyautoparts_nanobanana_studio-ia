@@ -234,3 +234,93 @@ test('CENÁRIO G: XML com múltiplos vencimentos', () => {
   assert.equal(state.parcelas[0].vencimento, '2026-10-10');
   assert.equal(state.parcelas[1].vencimento, '2026-11-10');
 });
+
+function updatePagamentoField(state, field, value) {
+  if (!state) return;
+  state[field] = value;
+  if (field === 'primeiroVencimento') {
+    if (state.parcelas && state.parcelas.length === 1) {
+      state.parcelas[0].vencimento = value;
+    }
+  }
+}
+
+function updateParcelaPagamentoField(state, index, field, value) {
+  if (!state || !state.parcelas[index]) return;
+  if (field === 'valor') {
+    state.parcelas[index].valor = parseDecimal(value || 0);
+  } else if (field === 'vencimento') {
+    state.parcelas[index].vencimento = value;
+    if (index === 0) {
+      state.primeiroVencimento = value;
+    }
+  }
+}
+
+test('CENÁRIO H: A PRAZO 1x + alteração de data de primeiroVencimento', () => {
+  const state = {
+    condicao: 'parcelado',
+    qtdParcelas: 1,
+    primeiroVencimento: '2026-10-06',
+    formaPagamento: 'boleto',
+    parcelas: [{ numero: 1, vencimento: '2026-10-06', valor: 1463.35 }]
+  };
+
+  // Usuário altera a data de vencimento no campo
+  updatePagamentoField(state, 'primeiroVencimento', '2026-11-15');
+
+  assert.equal(state.condicao, 'parcelado', 'Condição DEVE continuar parcelado');
+  assert.equal(state.primeiroVencimento, '2026-11-15');
+  assert.equal(state.parcelas.length, 1);
+  assert.equal(state.parcelas[0].vencimento, '2026-11-15', 'Parcela única deve ter a data sincronizada');
+  assert.equal(state.parcelas[0].valor, 1463.35);
+
+  const payload = buildSavePayload(state);
+  assert.equal(payload.condicao, 'parcelado');
+  assert.equal(payload.parcelas[0].vencimento, '2026-11-15');
+});
+
+test('CENÁRIO I: A PRAZO 2x + alteração de primeiro vencimento e regeneração', () => {
+  const state = {
+    condicao: 'parcelado',
+    qtdParcelas: 2,
+    intervaloDias: 30,
+    primeiroVencimento: '2026-10-06',
+    formaPagamento: 'boleto',
+    parcelas: []
+  };
+
+  updatePagamentoField(state, 'primeiroVencimento', '2026-11-01');
+  gerarParcelasPagamentoNF(state, 1463.35);
+
+  assert.equal(state.condicao, 'parcelado');
+  assert.equal(state.parcelas.length, 2);
+  assert.equal(state.parcelas[0].vencimento, '2026-11-01');
+  assert.equal(state.parcelas[1].vencimento, '2026-12-01');
+
+  // Alteração manual da data da 2ª parcela via grade
+  updateParcelaPagamentoField(state, 1, 'vencimento', '2026-12-05');
+  assert.equal(state.parcelas[1].vencimento, '2026-12-05');
+});
+
+test('CENÁRIO J: À VISTA + alteração de data de vencimento', () => {
+  const state = {
+    condicao: 'a_vista',
+    qtdParcelas: 1,
+    primeiroVencimento: '2026-10-03',
+    formaPagamento: 'pix',
+    parcelas: [{ numero: 1, vencimento: '2026-10-03', valor: 1463.35 }]
+  };
+
+  updatePagamentoField(state, 'primeiroVencimento', '2026-10-10');
+
+  assert.equal(state.condicao, 'a_vista');
+  assert.equal(state.primeiroVencimento, '2026-10-10');
+  assert.equal(state.parcelas.length, 1);
+  assert.equal(state.parcelas[0].vencimento, '2026-10-10');
+
+  const payload = buildSavePayload(state);
+  assert.equal(payload.condicao, 'a_vista');
+  assert.equal(payload.parcelas[0].vencimento, '2026-10-10');
+});
+

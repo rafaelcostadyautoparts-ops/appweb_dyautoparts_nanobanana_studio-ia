@@ -17,7 +17,7 @@ html body:not(.login-active) #app > .dashboard-screen.internal:not(.menu-screen)
     width: min(1520px, calc(100% - 48px)) !important;
     max-width: 1520px !important;
     margin: 0 auto !important;
-    padding: 86px 0 64px !important;
+    padding: 76px 0 64px !important;
 }
 
 /* --- Topbar & Header --- */
@@ -1225,7 +1225,7 @@ a.an-card-image:hover {
     html body:not(.login-active) #app > .dashboard-screen.internal.product-search-screen:not(.menu-screen) > main.container.prod-shell,
     html body:not(.login-active) #app > .dashboard-screen.internal:not(.menu-screen) > main.container.prod-detail-shell {
         width: calc(100% - 16px) !important;
-        padding-top: 76px !important;
+        padding-top: 68px !important;
     }
 }
 

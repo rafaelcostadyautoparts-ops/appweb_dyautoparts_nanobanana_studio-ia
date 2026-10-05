@@ -3722,6 +3722,7 @@ const DataClient = (function () {
         salvarComplementarEntradaNFSupabase,
         fetchComplementaresEntradaNF,
         saveEntradaNFParcelasFiscais,
+        fetchEntradaNFDuplicatasFiscais,
 
         // GARANTIA
         saveGarantiaSupabase,
@@ -4752,6 +4753,34 @@ const DataClient = (function () {
             success: true,
             data: data
         };
+    }
+
+    /**
+     * Busca as duplicatas fiscais originais do XML salvas no Supabase
+     * @param {string} entradaId
+     * @returns {Promise<Array>}
+     */
+    async function fetchEntradaNFDuplicatasFiscais(entradaId) {
+        if (!entradaId) return [];
+        const client = window.supabaseClient;
+        if (!client) return [];
+
+        try {
+            const { data, error } = await client
+                .from('entrada_nf_duplicatas_fiscais')
+                .select('*')
+                .eq('entrada_nf_id', entradaId)
+                .order('numero_duplicata', { ascending: true });
+
+            if (error) {
+                console.warn('[DataClient] Aviso ao buscar duplicatas fiscais do XML:', error);
+                return [];
+            }
+            return data || [];
+        } catch (err) {
+            console.warn('[DataClient] Falha ao carregar duplicatas fiscais:', err);
+            return [];
+        }
     }
 
 })();
