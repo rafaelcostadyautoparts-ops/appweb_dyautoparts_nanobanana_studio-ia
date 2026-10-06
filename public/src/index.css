@@ -78970,6 +78970,1343 @@ html body:not(.login-active) #app > :is(
   stroke-linejoin: round !important;
 }
 
+/* FASE VISUAL 1 - REDESIGN ENTRADAS EM RECEBIMENTO */
+.nf-recebimento-card-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+}
+
+html[data-theme="dark"] .nf-recebimento-card-item {
+  background: #10141d !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .nf-recebimento-card-item span:not(.btn-continuar-entrada span) {
+  color: #f8fafc;
+}
+
+@media (max-width: 640px) {
+  .nf-recebimento-card-item {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .nf-recebimento-card-item > div {
+    min-width: 100% !important;
+  }
+  .nf-recebimento-card-item > div:nth-child(2) {
+    justify-content: flex-start !important;
+  }
+  .nf-recebimento-card-item > div:nth-child(3) {
+    justify-content: space-between !important;
+    border-top: 1px dashed rgba(15, 23, 42, 0.08);
+    padding-top: 10px;
+  }
+}
+
+
+/* FASE VISUAL 2A - REDESIGN DETALHE DA ENTRADA NF */
+html[data-theme="dark"] .entrada-nf-detail-v2 > main > div {
+  background: #10141d !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .entrada-nf-detail-v2 h1,
+html[data-theme="dark"] .entrada-nf-detail-v2 h2,
+html[data-theme="dark"] .entrada-nf-detail-v2 h3,
+html[data-theme="dark"] .entrada-nf-detail-v2 strong {
+  color: #f8fafc !important;
+}
+
+@media (max-width: 640px) {
+  .entrada-nf-detail-v2 main.container {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+
+/* FASE VISUAL 2B - REDESIGN DOS ITENS DA NF E CONFERÊNCIA FÍSICA */
+.nf-item-card-v2 {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.nf-item-card-v2:hover {
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05) !important;
+}
+
+html[data-theme="dark"] .nf-item-card-v2 {
+  background: #141a25 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .nf-item-card-v2 h4 {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .nf-item-card-v2 > div:last-child {
+  background: #0f141d !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+@media (max-width: 640px) {
+  .nf-item-card-v2 > div:first-child {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .nf-item-card-v2 > div:first-child > div:last-child {
+    align-items: flex-start !important;
+    text-align: left !important;
+    border-top: 1px dashed rgba(15, 23, 42, 0.08);
+    padding-top: 8px;
+    width: 100%;
+  }
+  .nf-item-card-v2 > div:first-child > div:last-child > div {
+    text-align: left !important;
+  }
+}
+
+:root {
+  --homolog-header-height: 84px;
+}
+
+/* ==========================================================================
+   COMPONENTE REUTILIZÁVEL - CABEÇALHO PADRÃO DO SISTEMA (renderModuleHeader)
+   ========================================================================== */
+html body:not(.login-active) #app header.module-header-standard,
+.module-header-standard {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  max-width: 100vw !important;
+  height: var(--homolog-header-height, 84px) !important;
+  min-height: var(--homolog-header-height, 84px) !important;
+  max-height: var(--homolog-header-height, 84px) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  z-index: 990 !important;
+  display: block !important;
+  align-items: center !important;
+  border-radius: 0 !important;
+}
+
+html body:not(.login-active) #app header.module-header-standard .module-header-standard__container,
+.module-header-standard__container {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  height: 100% !important;
+}
+
+html body:not(.login-active) #app header.module-header-standard .module-header-standard__left,
+.module-header-standard__left {
+  position: absolute !important;
+  left: clamp(16px, 2.5vw, 32px) !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  z-index: 2 !important;
+}
+
+.module-header-standard__back {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: var(--homolog-back-size, 42px) !important;
+  min-width: var(--homolog-back-size, 42px) !important;
+  max-width: var(--homolog-back-size, 42px) !important;
+  height: var(--homolog-back-size, 42px) !important;
+  min-height: var(--homolog-back-size, 42px) !important;
+  max-height: var(--homolog-back-size, 42px) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  z-index: 1 !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.module-header-standard__back::before,
+.module-header-standard__back::after {
+  content: none !important;
+  display: none !important;
+}
+
+.module-header-standard__back:hover {
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.module-header-standard__back:active {
+  transform: scale(0.95) !important;
+}
+
+.module-header-standard__back .dy-icon,
+.module-header-standard__back svg {
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  display: block !important;
+  margin: 0 !important;
+  filter: none !important;
+  color: inherit !important;
+}
+
+.module-header-standard__back svg path,
+.module-header-standard__back svg line,
+.module-header-standard__back svg polyline {
+  stroke: currentColor !important;
+}
+
+.module-header-standard__icon {
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #ffffff !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+}
+
+.module-header-standard__icon-symbol {
+  font-size: 22px !important;
+  color: #ffffff !important;
+}
+
+.module-header-standard__icon svg,
+.module-header-standard__icon .dy-icon {
+  width: 26px !important;
+  min-width: 26px !important;
+  max-width: 26px !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  display: block !important;
+}
+
+html body:not(.login-active) #app header.module-header-standard .module-header-standard__center,
+.module-header-standard__center {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  width: max-content !important;
+  max-width: 60% !important;
+}
+
+.module-header-standard__title {
+  color: #ffffff !important;
+  font-family: var(--font-display, 'Oswald', sans-serif) !important;
+  font-size: clamp(1.1rem, 2vw, 1.45rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: 2px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1.15 !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+}
+
+.module-header-standard__subtitle {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.module-header-standard__right {
+  position: absolute !important;
+  right: clamp(16px, 2.5vw, 32px) !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  z-index: 2 !important;
+}
+
+@media (max-width: 768px) {
+  .module-header-standard {
+    padding: 0 !important;
+  }
+  .module-header-standard__left {
+    left: 12px !important;
+    gap: 8px !important;
+  }
+  .module-header-standard__right {
+    right: 12px !important;
+  }
+  .module-header-standard__icon {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .module-header-standard__icon-symbol {
+    font-size: 18px !important;
+  }
+  .module-header-standard__title {
+    font-size: 1.05rem !important;
+    letter-spacing: 1px !important;
+  }
+}
+
+/* ==========================================================================
+   REFINAMENTO VISUAL SCOPED - ENTRADA NF > HISTÓRICO
+   ========================================================================== */
+
+/* Cards de Resumo */
+.entrada-nf-history-screen .entrada-nf-history-summary {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  margin-bottom: 20px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-card {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 16px 20px !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  min-height: 84px !important;
+  box-sizing: border-box !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-summary-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-icon {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  max-width: 40px !important;
+  max-height: 40px !important;
+  border-radius: 10px !important;
+  background: rgba(139, 92, 246, 0.1) !important;
+  color: #8b5cf6 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-icon .dy-icon,
+.entrada-nf-history-screen .entrada-nf-summary-icon svg {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-info {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-label {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-val {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.1 !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-summary-val {
+  color: #f8fafc !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-hint {
+  font-size: 0.72rem !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  font-style: normal !important;
+}
+
+/* Cores Semânticas Elegantes nos Cards de Resumo */
+.entrada-nf-history-screen .entrada-nf-summary-icon.icon-finalizadas {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-label.label-finalizadas {
+  color: #15803d !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-icon.icon-estoque {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-label.label-estoque {
+  color: #1d4ed8 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-icon.icon-financeiro {
+  background: #f3e8ff !important;
+  color: #7e22ce !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-summary-label.label-financeiro {
+  color: #7e22ce !important;
+}
+
+/* Filtros */
+.entrada-nf-history-screen .entrada-nf-history-filters {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-search {
+  position: relative !important;
+  flex: 1 1 320px !important;
+  min-width: 240px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-search-icon {
+  position: absolute !important;
+  left: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 20px !important;
+  height: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #94a3b8 !important;
+  pointer-events: none !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-search-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-search input {
+  width: 100% !important;
+  height: 42px !important;
+  padding: 0 14px 0 40px !important;
+  border-radius: 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  font-size: 0.88rem !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-filter-select {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  min-width: 160px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-filter-select .filter-label-text {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-filter-select select {
+  height: 42px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  font-size: 0.88rem !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+}
+
+.entrada-nf-history-screen .btn-more-filters {
+  height: 42px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  background: #1e293b !important;
+  color: #ffffff !important;
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+}
+
+.entrada-nf-history-screen .btn-more-filters svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: #ffffff !important;
+}
+
+/* Tabela e Linhas */
+.entrada-nf-history-screen .entrada-nf-history-table-card {
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  overflow: hidden !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-history-table-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-table-head {
+  display: grid !important;
+  grid-template-columns: 140px minmax(220px, 1.5fr) 110px 130px 70px 130px minmax(200px, 1fr) 90px !important;
+  align-items: center !important;
+  padding: 12px 20px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  color: #64748b !important;
+  letter-spacing: 0.8px !important;
+  text-transform: uppercase !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-history-table-head {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-row {
+  display: grid !important;
+  grid-template-columns: 140px minmax(220px, 1.5fr) 110px 130px 70px 130px minmax(200px, 1fr) 90px !important;
+  align-items: center !important;
+  padding: 14px 20px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-history-row {
+  border-color: #334155 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-row:hover {
+  background: #f8fafc !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-history-row:hover {
+  background: #334155 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-cell {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+/* Coluna NF-E */
+.entrada-nf-history-screen .nf-cell-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  align-items: flex-start !important;
+}
+
+.entrada-nf-history-screen .nf-number-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.entrada-nf-history-screen .nf-icon-small {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #64748b !important;
+  flex-shrink: 0 !important;
+}
+
+.entrada-nf-history-screen .nf-icon-small svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.entrada-nf-history-screen .nf-number {
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  white-space: nowrap !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .nf-number {
+  color: #f8fafc !important;
+}
+
+.entrada-nf-history-screen .nf-chip-tag {
+  display: inline-block !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .nf-chip-tag {
+  background: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+/* Coluna Fornecedor */
+.entrada-nf-history-screen .supplier-name {
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  line-height: 1.25 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .supplier-name {
+  color: #f8fafc !important;
+}
+
+.entrada-nf-history-screen .supplier-type {
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  color: #94a3b8 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.3px !important;
+}
+
+/* Colunas Emissao e Lançamento */
+.entrada-nf-history-screen .date-primary {
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  white-space: nowrap !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .date-primary {
+  color: #cbd5e1 !important;
+}
+
+.entrada-nf-history-screen .time-secondary {
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  color: #94a3b8 !important;
+}
+
+/* Coluna Itens */
+.entrada-nf-history-screen .entrada-nf-history-cell.count {
+  align-items: flex-start !important;
+}
+
+.entrada-nf-history-screen .count-val {
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .count-val {
+  color: #cbd5e1 !important;
+}
+
+/* Coluna Total */
+.entrada-nf-history-screen .total-val {
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  color: #16a34a !important;
+  white-space: nowrap !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .total-val {
+  color: #4ade80 !important;
+}
+
+/* Coluna Status Chips */
+.entrada-nf-history-screen .entrada-nf-history-cell.status {
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  align-items: center !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge.finalizada {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge.estoque {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge.financeiro {
+  background: #f3e8ff !important;
+  color: #7e22ce !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-badge.erro {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+/* Coluna Acoes */
+.entrada-nf-history-screen .entrada-nf-history-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.entrada-nf-history-screen .btn-action-icon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  background: #f1f5f9 !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.entrada-nf-history-screen .btn-action-icon:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  transform: scale(1.05) !important;
+}
+
+.entrada-nf-history-screen .btn-action-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Paginacao */
+.entrada-nf-history-screen .entrada-nf-history-pagination {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 20px !important;
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+  font-size: 0.82rem !important;
+  color: #64748b !important;
+}
+
+html[data-theme="dark"] .entrada-nf-history-screen .entrada-nf-history-pagination {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-pagination div {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-pagination button {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #334155 !important;
+  cursor: pointer !important;
+}
+
+.entrada-nf-history-screen .entrada-nf-history-pagination button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* ==========================================================================
+   PADRONIZAÇÃO VISUAL DEFINITIVA — SUBMENUS: ENTRADA NF, COMPRAS E FINANCEIRO
+   - Design System compartilhado e unificado
+   - Cards compactos retangulares em grid 2 colunas (max-width: 1080px)
+   - Fundo útil branco, container matematicamente centralizado
+   - Ícone container: 50x50 com SVG outline 20-21px (stroke 1.5px)
+   - Separador vertical sutil + Chevron discreto
+   ========================================================================== */
+
+.dashboard-screen.nf-submenu-screen,
+#app .dashboard-screen.nf-submenu-screen,
+.dashboard-screen.compras-submenu-screen,
+#app .dashboard-screen.compras-submenu-screen,
+.dashboard-screen.financeiro-submenu-screen,
+#app .dashboard-screen.financeiro-submenu-screen,
+.dashboard-screen.emissao-nf-submenu-screen,
+#app .dashboard-screen.emissao-nf-submenu-screen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+}
+
+/* ========================================================
+   PADRONIZAÇÃO DEFINITIVA DA GEOMETRIA VERTICAL
+   (Dashboard, Produtos, Inventário, Compras, Entrada NF, Emissão NF, Financeiro)
+   ======================================================== */
+
+/* 1. Topbar unificada fixa no topo com altura padronizada de 60px */
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > .module-top-bar {
+  display: flex !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: var(--app-header-height, 60px) !important;
+  min-height: var(--app-header-height, 60px) !important;
+  max-height: var(--app-header-height, 60px) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 1000 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 60px !important;
+}
+
+/* 2. Centralização vertical e posicionamento idêntico do botão voltar */
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > .top-action-group {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  min-width: 60px !important;
+  height: var(--app-header-height, 60px) !important;
+  min-height: var(--app-header-height, 60px) !important;
+  max-height: var(--app-header-height, 60px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 0 0 14px !important;
+  margin: 0 !important;
+  z-index: 10000 !important;
+  pointer-events: none !important;
+}
+
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > .top-action-group button:is(.fab-voltar, .back-button-standard, .ds-back-button, .dashboard-back-button) {
+  pointer-events: auto !important;
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: var(--app-back-size, 42px) !important;
+  min-width: var(--app-back-size, 42px) !important;
+  max-width: var(--app-back-size, 42px) !important;
+  height: var(--app-back-size, 42px) !important;
+  min-height: var(--app-back-size, 42px) !important;
+  max-height: var(--app-back-size, 42px) !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  overflow: visible !important;
+}
+
+/* 3. Área útil: container fixo abaixo do header com padding-top padronizado de 60px para manter cards em top: 120px */
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > main:is(.container, .app-page-container, .operations-dashboard-shell) {
+  position: fixed !important;
+  top: var(--app-header-height, 60px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: calc(100dvh - var(--app-header-height, 60px)) !important;
+  min-height: calc(100dvh - var(--app-header-height, 60px)) !important;
+  max-height: calc(100dvh - var(--app-header-height, 60px)) !important;
+  margin: 0 !important;
+  padding: 60px clamp(16px, 2vw, 35px) 32px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > main:is(.container, .app-page-container, .operations-dashboard-shell)::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 4. Breadcrumb unificado: exatamente 30px abaixo do final do header e 35px da margem esquerda no desktop */
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .operations-dashboard-screen,
+  .dashboard-screen.standard-card-menu-screen
+) > main:is(.container, .app-page-container, .operations-dashboard-shell) > .app-breadcrumb {
+  display: inline-flex !important;
+  position: absolute !important;
+  top: 30px !important;
+  left: 35px !important;
+  right: auto !important;
+  bottom: auto !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  width: auto !important;
+  max-width: calc(100vw - 70px) !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  line-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  z-index: 50 !important;
+  pointer-events: auto !important;
+}
+
+@media (max-width: 768px) {
+  html body:not(.login-active) #app > :is(
+    .product-submenu-screen,
+    .produtos-submenu-screen,
+    .inventario-submenu-screen,
+    .inventory-screen.standard-card-menu-screen,
+    .compras-submenu-screen,
+    .compras-screen.standard-card-menu-screen,
+    .nf-submenu-screen,
+    .entrada-nf-screen.standard-card-menu-screen,
+    .emissao-nf-submenu-screen,
+    .financeiro-submenu-screen,
+    .financeiro-screen.standard-card-menu-screen,
+    .operations-dashboard-screen,
+    .dashboard-screen.standard-card-menu-screen
+  ) > main:is(.container, .app-page-container, .operations-dashboard-shell) > .app-breadcrumb {
+    left: 16px !important;
+    max-width: calc(100vw - 32px) !important;
+  }
+}
+
+/* 5. Grid de Cards nos submenus (max-width: 1080px) */
+html body:not(.login-active) #app > :is(
+  .product-submenu-screen,
+  .produtos-submenu-screen,
+  .inventario-submenu-screen,
+  .inventory-screen.standard-card-menu-screen,
+  .compras-submenu-screen,
+  .compras-screen.standard-card-menu-screen,
+  .nf-submenu-screen,
+  .entrada-nf-screen.standard-card-menu-screen,
+  .emissao-nf-submenu-screen,
+  .financeiro-submenu-screen,
+  .financeiro-screen.standard-card-menu-screen,
+  .movimentos-screen,
+  .movimentos-submenu-screen,
+  .movimentos-screen.standard-card-menu-screen,
+  .relatorios-screen,
+  .relatorios-screen.standard-card-menu-screen
+) .standard-module-card-grid {
+  width: 100% !important;
+  max-width: 1080px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin-inline: auto !important;
+  margin-block: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 22px 24px !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* Design dos Cards: Fundo cinza claro uniforme, cantos 6px, dimensão idêntica */
+.dashboard-screen.nf-submenu-screen .standard-module-card,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card,
+.dashboard-screen.compras-submenu-screen .standard-module-card,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card,
+.dashboard-screen.inventario-submenu-screen .standard-module-card,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card,
+.dashboard-screen.product-submenu-screen .standard-module-card,
+#app .dashboard-screen.product-submenu-screen .standard-module-card,
+.dashboard-screen.produtos-submenu-screen .standard-module-card,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card,
+.dashboard-screen.movimentos-screen .standard-module-card,
+#app .dashboard-screen.movimentos-screen .standard-module-card,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card,
+.dashboard-screen.relatorios-screen .standard-module-card,
+#app .dashboard-screen.relatorios-screen .standard-module-card {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 152px !important;
+  min-height: 152px !important;
+  max-height: 152px !important;
+  margin: 0 !important;
+  padding: 20px 24px !important;
+  border-radius: 6px !important;
+  border: 0 !important;
+  background: #f7f7f8 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 16px !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease !important;
+}
+
+.dashboard-screen.nf-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card:hover,
+.dashboard-screen.compras-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card:hover,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card:hover,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card:hover,
+.dashboard-screen.inventario-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card:hover,
+.dashboard-screen.product-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.product-submenu-screen .standard-module-card:hover,
+.dashboard-screen.produtos-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card:hover,
+.dashboard-screen.movimentos-screen .standard-module-card:hover,
+#app .dashboard-screen.movimentos-screen .standard-module-card:hover,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card:hover,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card:hover,
+.dashboard-screen.relatorios-screen .standard-module-card:hover,
+#app .dashboard-screen.relatorios-screen .standard-module-card:hover {
+  transform: translateY(-2px) !important;
+  background: #f1f3f5 !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Ícones: círculo colorido de 50px x 50px */
+.dashboard-screen.nf-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card-icon,
+.dashboard-screen.compras-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card-icon,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card-icon,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon,
+.dashboard-screen.inventario-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card-icon,
+.dashboard-screen.product-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.product-submenu-screen .standard-module-card-icon,
+.dashboard-screen.produtos-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon,
+.dashboard-screen.movimentos-screen .standard-module-card-icon,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon,
+.dashboard-screen.relatorios-screen .standard-module-card-icon,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px !important;
+  min-height: 50px !important;
+  max-width: 50px !important;
+  max-height: 50px !important;
+  flex: 0 0 50px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  filter: none !important;
+  box-sizing: border-box !important;
+}
+
+/* Símbolo interno proporcional */
+.dashboard-screen.nf-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.nf-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.compras-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.compras-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.inventario-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.inventario-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.product-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.product-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.product-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.product-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.produtos-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.movimentos-screen .standard-module-card-icon svg,
+.dashboard-screen.movimentos-screen .standard-module-card-icon img,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon img,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon img,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon img,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg,
+.dashboard-screen.relatorios-screen .standard-module-card-icon img,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon svg,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon img {
+  display: block !important;
+  object-fit: contain !important;
+}
+
+/* Regra de traço padronizada (1.5px fino, elegante, outline) */
+.dashboard-screen.nf-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.nf-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.compras-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.compras-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.financeiro-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.financeiro-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.emissao-nf-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.inventario-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.inventario-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.product-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.product-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.produtos-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-screen .standard-module-card-icon svg *,
+.dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.movimentos-submenu-screen .standard-module-card-icon svg *,
+.dashboard-screen.relatorios-screen .standard-module-card-icon svg *,
+#app .dashboard-screen.relatorios-screen .standard-module-card-icon svg * {
+  stroke-width: 1.5px !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
 /* ========================================================
    CORES E ÍCONES: ENTRADA NF (MANTIDO INTACTO)
    ======================================================== */

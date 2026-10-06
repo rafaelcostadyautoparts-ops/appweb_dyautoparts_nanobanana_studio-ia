@@ -2389,6 +2389,431 @@ const DataClient = (function () {
     }
 
     /**
+     * ENTRADA NF - Listar recebimentos físicos por entrada
+     */
+    async function listEntradaNFRecebimentos(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        const { data, error } = await client
+            .from('entrada_nf_item_recebimentos')
+            .select('*')
+            .eq('entrada_nf_id', entradaId)
+            .order('criado_em', { ascending: true });
+
+        if (error) {
+            console.error('[ENTRADA NF DEBUG] erro ao carregar recebimentos físicos:', error);
+            return [];
+        }
+
+        return data || [];
+    }
+
+    /**
+     * ENTRADA NF - Salvar recebimentos físicos (Transacional via RPC)
+     */
+    async function saveEntradaNFRecebimentos(entradaId, recebimentos = []) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return { ok: false, reason: 'missing_client_or_id' };
+
+        try {
+            const payload = (recebimentos || []).map(row => ({
+                entrada_nf_item_id: row.entrada_nf_item_id,
+                produto_id: row.produto_id || null,
+                id_interno: String(row.id_interno || ''),
+                quantidade_fisica: parseDecimal(row.quantidade_fisica) || 0,
+                quantidade_aceita: parseDecimal(row.quantidade_aceita) || 0,
+                quantidade_recusada: parseDecimal(row.quantidade_recusada) || 0,
+                local_destino: String(row.local_destino || 'TERREO').toUpperCase(),
+                situacao: String(row.situacao || 'CONFERE'),
+                motivo_divergencia: row.motivo_divergencia || null,
+                observacoes: row.observacoes || null,
+                criado_por: localStorage.getItem('currentUser') || null
+            }));
+
+            const { data, error } = await client.rpc('salvar_entrada_nf_recebimentos', {
+                p_entrada_nf_id: entradaId,
+                p_recebimentos: payload
+            });
+
+            if (error) throw error;
+            return { ok: true, count: data?.count || payload.length, data };
+        } catch (error) {
+            console.error('[ENTRADA NF DEBUG] erro ao salvar recebimentos físicos via RPC:', error);
+            return { ok: false, error };
+        }
+    }
+
+    /**
+     * ENTRADA NF - Finalização Transacional do Recebimento (RPC)
+     */
+    async function finalizarRecebimentoEntradaNF(entradaId, usuario = '') {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) throw new Error('ID da Entrada NF não informado.');
+
+        const user = usuario || localStorage.getItem('currentUser') || 'SISTEMA';
+        const { data, error } = await client.rpc('finalizar_recebimento_entrada_nf', {
+            p_entrada_nf_id: entradaId,
+            p_usuario: user
+        });
+
+        if (error) {
+            console.error('[ENTRADA_NF] Erro na RPC finalizar_recebimento_entrada_nf:', error);
+            throw new Error(error.message || 'Erro ao finalizar recebimento da entrada no banco de dados.');
+        }
+
+        invalidateCache('produtos');
+        invalidateCache('movimentos');
+        invalidateCache('estoque_lotes');
+        invalidateCache('nf');
+        return data;
+    }
+
+    /**
+     * ENTRADA NF - Buscar pedidos de compra candidatos para vinculo de item fiscal
+     */
+    async function fetchPedidosCompraCandidatos(fornecedorId, idInterno) {
+        const client = window.supabaseClient;
+        if (!client || !idInterno) return [];
+
+        try {
+            let query = client
+                .from('pedidos_compra_itens')
+                .select('*')
+                .eq('id_interno', String(idInterno).trim())
+                .neq('status', 'CANCELADO')
+                .order('data_pedido', { ascending: true });
+
+            if (fornecedorId) {
+                query = query.eq('fornecedor_id', fornecedorId);
+            }
+
+            const { data, error } = await query;
+            if (error) {
+                console.warn('[DATA_CLIENT] Erro ao buscar pedidos candidatos:', error);
+                return [];
+            }
+            return (data || []).map(p => ({
+                ...p,
+                saldo_pendente: Math.max(parseDecimal(p.quantidade_pedida) - parseDecimal(p.quantidade_recebida), 0)
+            })).filter(p => p.saldo_pendente > 0);
+        } catch (e) {
+            console.error('[DATA_CLIENT] Erro ao buscar pedidos de compra candidatos:', e);
+            return [];
+        }
+    }
+
+    /**
+     * ENTRADA NF - Salvar alocacoes de Pedidos de Compra para uma Entrada NF (Transacional via RPC)
+     */
+    async function salvarAlocacoesPedidoEntradaNF(entradaId, tipoVinculo = 'SEM_PEDIDO', alocacoes = []) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return { ok: false, error: 'ID da Entrada NF nao informado.' };
+
+        try {
+            const payload = (alocacoes || []).map(a => ({
+                entrada_nf_item_id: a.entrada_nf_item_id,
+                pedido_compra_item_id: a.pedido_compra_item_id,
+                quantidade_alocada_xml: parseDecimal(a.quantidade_alocada_xml)
+            }));
+
+            const { data, error } = await client.rpc('salvar_entrada_nf_pedido_alocacoes', {
+                p_entrada_nf_id: entradaId,
+                p_tipo_vinculo: tipoVinculo,
+                p_alocacoes: payload
+            });
+
+            if (error) throw error;
+            return { ok: true, count: data?.alocacoes_salvas || 0, data };
+        } catch (error) {
+            console.error('[DATA_CLIENT] Erro ao salvar alocacoes de pedidos da Entrada NF via RPC:', error);
+            return { ok: false, error };
+        }
+    }
+
+    /**
+     * ENTRADA NF - Buscar alocacoes de Pedidos de Compra existentes para uma Entrada NF
+     */
+    async function fetchAlocacoesPedidoEntradaNF(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        try {
+            const { data, error } = await client
+                .from('entrada_nf_item_pedido_alocacoes')
+                .select('*, pedidos_compra_itens(*)')
+                .eq('entrada_nf_id', entradaId);
+
+            if (error) {
+                console.warn('[DATA_CLIENT] Erro ao buscar alocacoes da Entrada NF:', error);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            console.error('[DATA_CLIENT] Erro ao buscar alocacoes da Entrada NF:', e);
+            return [];
+        }
+    }
+
+    async function fetchFornecedorProdutosSupabase() {
+        const client = window.supabaseClient;
+        if (!client) return [];
+        try {
+            const { data, error } = await client
+                .from('fornecedor_produtos')
+                .select('id_interno, codigo_produto_fornecedor, ean_fornecedor, fornecedor_cnpj');
+            if (error) {
+                console.warn('[Supabase] Erro ao carregar fornecedor_produtos:', error.message);
+                return [];
+            }
+            return data || [];
+        } catch (e) {
+            console.warn('[Supabase] Excecao ao carregar fornecedor_produtos:', e?.message || String(e));
+            return [];
+        }
+    }
+
+    /**
+     * Salva lancamento complementar com suas parcelas no Supabase (contas_pagar)
+     * @param {string} entradaId
+     * @param {Object} payload { descricao, valorTotal, incorporarCusto, parcelas, fornecedor_nome, fornecedor_cnpj, numero_nf }
+     */
+    async function salvarComplementarEntradaNFSupabase(entradaId, payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponivel');
+        if (!entradaId) throw new Error('entrada_nf_id e obrigatorio para salvar lancamento complementar');
+
+        const {
+            descricao = 'Lancamento Complementar',
+            valorTotal = 0,
+            incorporarCusto = false,
+            parcelas = [],
+            fornecedor_nome = null,
+            fornecedor_cnpj = null,
+            numero_nf = null
+        } = payload;
+
+        if (!parcelas.length) throw new Error('O lancamento complementar deve conter ao menos uma parcela.');
+
+        const complementarId = crypto.randomUUID();
+        const totalParcelas = parcelas.length;
+        const incFlag = !!incorporarCusto;
+        const metaTag = `[COMPLEMENTAR:${complementarId}:${incFlag ? 'INC_CUSTO=1' : 'INC_CUSTO=0'}] ${descricao}`.trim();
+
+        const rows = parcelas.map((p, idx) => {
+            const numParcela = Number(p.numeroParcela || p.parcela || idx + 1);
+            const numText = `${numParcela}/${totalParcelas}`;
+            const dtVenc = p.vencimento || p.data_vencimento || new Date().toISOString().slice(0, 10);
+            const valNum = Number(p.valor || 0);
+
+            return {
+                entrada_nf_id: entradaId,
+                nf_id: entradaId,
+                complementar_id: complementarId,
+                incorporar_custo: incFlag,
+                tipo_lancamento: 'complementar',
+                origem: 'complementar',
+                numero_parcela: numParcela,
+                parcela: numText,
+                valor: valNum,
+                vencimento: dtVenc,
+                data_vencimento: dtVenc,
+                descricao: descricao,
+                observacao: descricao,
+                observacoes: descricao,
+                status: 'rascunho',
+                status_vencimento: 'em_aberto',
+                fornecedor_nome: fornecedor_nome || null,
+                fornecedor_cnpj: fornecedor_cnpj || null,
+                numero_nf: numero_nf || null
+            };
+        });
+
+        console.log('[DataClient] Salvando lancamento complementar:', { complementarId, count: rows.length, incorporarCusto: incFlag });
+
+        let { data, error } = await client
+            .from('contas_pagar')
+            .insert(rows)
+            .select();
+
+        if (error) {
+            if (error.code === '42703' || String(error.message || '').includes('column')) {
+                console.warn('[DataClient] Fallback de insercao em contas_pagar sem colunas estendidas:', error.message);
+                const safeRows = rows.map(r => {
+                    const copy = { ...r };
+                    delete copy.complementar_id;
+                    delete copy.incorporar_custo;
+                    return copy;
+                });
+                const fallbackRes = await client.from('contas_pagar').insert(safeRows).select();
+                if (fallbackRes.error) throw fallbackRes.error;
+                data = fallbackRes.data;
+            } else {
+                throw error;
+            }
+        }
+
+        invalidateCache('nf');
+        return {
+            success: true,
+            complementarId,
+            data: data || rows
+        };
+    }
+
+    /**
+     * Busca e agrupa os lancamentos complementares de uma entrada_nf
+     * @param {string} entradaId
+     */
+    async function fetchComplementaresEntradaNF(entradaId) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return [];
+
+        const { data, error } = await client
+            .from('contas_pagar')
+            .select('*')
+            .eq('entrada_nf_id', entradaId);
+
+        if (error) {
+            console.error('[DataClient] Erro ao buscar complementares de contas_pagar:', error);
+            return [];
+        }
+
+        const rawList = (data || []).filter(item => {
+            const tipo = String(item.tipo_lancamento || item.origem || '').toLowerCase();
+            const obs = String(item.observacao || item.observacoes || '');
+            return tipo.includes('complementar') || obs.includes('[COMPLEMENTAR:');
+        });
+
+        const groupsMap = new Map();
+
+        rawList.forEach(item => {
+            let compId = item.complementar_id;
+            let incCusto = item.incorporar_custo;
+            let desc = item.descricao;
+
+            const obs = String(item.observacao || item.observacoes || '');
+            const matchTag = obs.match(/\[COMPLEMENTAR:([a-f0-9\-]+):(INC_CUSTO=[01])\](?:\s*(.*))?/i);
+
+            if (matchTag) {
+                if (!compId) compId = matchTag[1];
+                if (incCusto === null || incCusto === undefined) {
+                    incCusto = matchTag[2].toUpperCase().includes('1');
+                }
+                if (!desc && matchTag[3]) desc = matchTag[3].trim();
+            }
+
+            if (!compId) {
+                compId = `legacy_${item.id}`;
+                incCusto = false;
+            }
+
+            if (!groupsMap.has(compId)) {
+                groupsMap.set(compId, {
+                    complementar_id: compId,
+                    is_legacy: compId.startsWith('legacy_'),
+                    descricao: desc || item.descricao || 'Lancamento Complementar',
+                    incorporar_custo: !!incCusto,
+                    parcelas: []
+                });
+            }
+
+            const group = groupsMap.get(compId);
+            group.parcelas.push(item);
+        });
+
+        const complementares = Array.from(groupsMap.values()).map(grp => {
+            grp.parcelas.sort((a, b) => Number(a.numero_parcela || 0) - Number(b.numero_parcela || 0));
+            grp.valor_total = grp.parcelas.reduce((sum, p) => sum + Number(p.valor || 0), 0);
+            return grp;
+        });
+
+        return complementares;
+    }
+
+    /**
+     * Salva ou substitui as parcelas fiscais da Entrada NF de forma atômica via RPC PostgreSQL
+     * @param {string} entradaId
+     * @param {Object} payload { condicao, formaPagamento, observacao, parcelas }
+     */
+    async function saveEntradaNFParcelasFiscais(entradaId, payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!entradaId) throw new Error('ID da Entrada NF não informado.');
+
+        const {
+            condicao = 'a_vista',
+            formaPagamento = 'boleto',
+            observacao = '',
+            parcelas = []
+        } = payload;
+
+        if (!parcelas.length) {
+            throw new Error('Informe ao menos uma parcela.');
+        }
+
+        const currentUser = localStorage.getItem('currentUser') || 'SISTEMA';
+
+        const parcelasPayload = parcelas.map((p, idx) => ({
+            numero_parcela: Number(p.numero || p.numero_parcela || idx + 1),
+            vencimento: p.vencimento || p.data_vencimento || '',
+            valor: Number(p.valor || 0)
+        }));
+
+        const rpcParams = {
+            p_entrada_nf_id: entradaId,
+            p_tipo_condicao_financeira: (condicao === 'parcelado' || condicao === 'a_prazo') ? 'parcelado' : 'a_vista',
+            p_forma_pagamento: formaPagamento || 'boleto',
+            p_observacao_financeira: observacao ? String(observacao).trim() : null,
+            p_parcelas: parcelasPayload,
+            p_usuario: currentUser
+        };
+
+        const { data, error } = await client.rpc('salvar_parcelas_fiscais_entrada_nf', rpcParams);
+
+        if (error) {
+            console.error('[DataClient] Erro na RPC salvar_parcelas_fiscais_entrada_nf:', error);
+            throw new Error(error.message || 'Falha ao salvar parcelas fiscais da nota fiscal.');
+        }
+
+        invalidateCache('nf');
+        invalidateCache('contas_pagar');
+
+        return {
+            success: true,
+            data: data
+        };
+    }
+
+    /**
+     * Busca as duplicatas fiscais originais do XML salvas no Supabase
+     * @param {string} entradaId
+     * @returns {Promise<Array>}
+     */
+    async function fetchEntradaNFDuplicatasFiscais(entradaId) {
+        if (!entradaId) return [];
+        const client = window.supabaseClient;
+        if (!client) return [];
+
+        try {
+            const { data, error } = await client
+                .from('entrada_nf_duplicatas_fiscais')
+                .select('*')
+                .eq('entrada_nf_id', entradaId)
+                .order('numero_duplicata', { ascending: true });
+
+            if (error) {
+                console.warn('[DataClient] Aviso ao buscar duplicatas fiscais do XML:', error);
+                return [];
+            }
+            return data || [];
+        } catch (err) {
+            console.warn('[DataClient] Falha ao carregar duplicatas fiscais:', err);
+            return [];
+        }
+    }
+
+    /**
      * GARANTIA - Salvar envio
      */
     async function saveGarantiaSupabase(garantiaData) {
@@ -3402,6 +3827,17 @@ const DataClient = (function () {
         // ENTRADA NF
         listEntradasNFAbertas,
         getEntradaNFById,
+        listEntradaNFRecebimentos,
+        saveEntradaNFRecebimentos,
+        finalizarRecebimentoEntradaNF,
+        fetchPedidosCompraCandidatos,
+        salvarAlocacoesPedidoEntradaNF,
+        fetchAlocacoesPedidoEntradaNF,
+        fetchFornecedorProdutosSupabase,
+        salvarComplementarEntradaNFSupabase,
+        fetchComplementaresEntradaNF,
+        saveEntradaNFParcelasFiscais,
+        fetchEntradaNFDuplicatasFiscais,
 
         // GARANTIA
         saveGarantiaSupabase,

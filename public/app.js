@@ -2977,6 +2977,75 @@ function getMaterialScreenIconHTML(icon, color = '#3B82F6') {
  `;
 }
 
+/**
+ * Componente unificado e padronizado de cabeçalho (Top Bar) para telas internas dos módulos.
+ * Altura padrão: 84px no Desktop com centralização visual perfeita.
+ *
+ * @param {Object} config
+ * @param {string} config.moduleKey - Chave do módulo (ex: 'nf', 'compras', 'financeiro')
+ * @param {string} [config.title] - Título da tela/módulo (ex: 'HISTÓRICO DE ENTRADAS')
+ * @param {string} [config.subtitle] - Subtítulo opcional de contexto ou breadcrumb simplificado
+ * @param {string} [config.icon] - Nome do ícone da tela no catálogo dyIcons (ex: 'historico')
+ * @param {string} [config.backAction] - Expressão JS de clique para o botão voltar (ex: 'renderNFSubMenu()')
+ * @param {string} [config.rightHTML] - HTML de ações adicionais no lado direito (opcional)
+ * @param {Array}  [config.breadcrumbs] - Lista [{ label, onclick }] para navegação (opcional)
+ * @returns {string} String HTML do cabeçalho unificado de 84px
+ */
+function renderModuleHeader({
+  moduleKey = 'nf',
+  title = '',
+  subtitle = '',
+  icon = null,
+  backAction = null,
+  rightHTML = '',
+  breadcrumbs = []
+}) {
+  const cfg = MODULE_SIDEBAR_CONFIG[moduleKey] || MODULE_SIDEBAR_CONFIG.nf;
+  const moduleTitle = title || cfg.label;
+  const topBarBg = `linear-gradient(90deg, ${cfg.colorFrom} 0%, ${cfg.colorTo} 100%)`;
+  const headerColor = cfg.colorFrom || '#8B5CF6';
+
+  const backButtonIcon = (window.dyIcon && window.dyIcon('back', 'navigation')) || getBackButtonStandardIconHTML(headerColor);
+  const backButtonHTML = backAction ? `
+    <button type="button" class="module-header-standard__back" onclick="${backAction}" aria-label="Voltar" style="color:${headerColor}!important;">
+      ${backButtonIcon}
+    </button>
+  ` : '';
+
+  // Identidade da Tela (ícone específico se fornecido, senão fallback do módulo)
+  let iconHTML = '';
+  if (icon) {
+    if (window.dyIcon) {
+      iconHTML = window.dyIcon(icon, 'module');
+    } else if (typeof menu3DIcons !== 'undefined' && menu3DIcons[icon]) {
+      iconHTML = menu3DIcons[icon];
+    }
+  }
+  if (!iconHTML) {
+    iconHTML = `<span class="material-symbols-rounded module-header-standard__icon-symbol">${cfg.icon}</span>`;
+  }
+
+  return `
+    <header class="module-header-standard mod-topbar-${moduleKey}" style="background:${topBarBg}!important;box-shadow:0 12px 26px rgba(${cfg.shadow},0.22);" data-ds-module="${moduleKey}">
+      <div class="module-header-standard__container">
+        <div class="module-header-standard__left">
+          ${backButtonHTML}
+          <div class="module-header-standard__icon">
+            ${iconHTML}
+          </div>
+        </div>
+        <div class="module-header-standard__center">
+          <h1 class="module-header-standard__title">${escapeKitAttribute(moduleTitle)}</h1>
+          ${subtitle ? `<span class="module-header-standard__subtitle">${escapeKitAttribute(subtitle)}</span>` : ''}
+        </div>
+        <div class="module-header-standard__right">
+          ${rightHTML || ''}
+        </div>
+      </div>
+    </header>
+  `;
+}
+
 function getStandardModuleCardsHTML(items = []) {
  return `
  <div class="standard-module-card-grid">
@@ -30974,16 +31043,13 @@ function renderNFSubMenu() {
   currentScreen = 'internal';
   document.body.classList.remove('menu-active');
 
-  // FASE 1: Callbacks ajustados para ambiente seguro de Produção sem dependência de novas migrations
   const subItems = [
     { id: 'nf_nova', label: 'NOVA ENTRADA', icon: 'xml', onclick: 'renderNFXmlUploadScreen()', description: 'Importar XML manualmente.' },
-    // FASE 1: fallback Produção. Substituir por renderEntradaNFEmRecebimento() após migrations da Fase 2.
-    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'nf_recebimento', onclick: 'renderNFAbertasList()', description: 'Continuar notas importadas aguardando recebimento.' },
-    // FASE 1: Comportamento temporário até aplicação das migrations de pendências na Fase 2
-    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'nf_pendencias', onclick: "showToast('A central de pendências será habilitada na próxima etapa da Entrada NF.', 'info')", description: 'Notas que precisam de identificação ou correção.' },
+    { id: 'nf_em_recebimento', label: 'EM RECEBIMENTO', icon: 'nf_recebimento', onclick: 'renderEntradaNFEmRecebimento()', description: 'Continuar notas importadas aguardando recebimento.' },
+    { id: 'nf_pendencias', label: 'PENDÊNCIAS', icon: 'nf_pendencias', onclick: 'renderEntradaNFPendencias()', description: 'Notas que precisam de identificação ou correção.' },
     { id: 'nf_historico', label: 'HISTÓRICO', icon: 'historico', onclick: 'renderHistoricoEntradasNF()', description: 'Consultar entradas finalizadas.' }
   ];
-
+  
   app.innerHTML = `
     <div class="dashboard-screen internal fade-in nf-submenu-screen entrada-nf-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -31037,22 +31103,6 @@ function renderEmissaoNFSubMenu() {
     }
   ];
 
-  const cardsHtml = `
-    <div class="standard-module-card-grid">
-      ${subItems.map(item => `
-        <button type="button" class="standard-module-card standard-module-card-${escapeKitAttribute(item.id)}" onclick="${item.onclick}">
-          <span class="standard-module-card-icon">${menu3DIcons[item.icon] || ''}</span>
-          <span class="standard-module-card-divider"></span>
-          <span class="standard-module-card-copy">
-            <strong>${item.label}</strong>
-            ${item.description ? `<small>${item.description}</small>` : ''}
-          </span>
-          <span class="material-symbols-rounded standard-module-card-chevron">chevron_right</span>
-        </button>
-      `).join('')}
-    </div>
-  `;
-
   app.innerHTML = `
     <div class="dashboard-screen internal fade-in emissao-nf-submenu-screen module-screen standard-card-menu-screen app-page-shell">
       ${getTopBarHTML(currentUser, 'renderMenu()')}
@@ -31064,7 +31114,7 @@ function renderEmissaoNFSubMenu() {
           <span class="material-symbols-rounded" aria-hidden="true">chevron_right</span>
           <span class="app-breadcrumb-current">Emissão NF</span>
         </div>
-        ${cardsHtml}
+        ${getStandardModuleCardsHTML(subItems)}
       </main>
     </div>
   `;
@@ -31538,6 +31588,199 @@ function getEntradaNFStockTotalCost(item = {}) {
  return parseDecimal(item.custo_total_real_item ?? item.custo_real_total ?? item.valor_total);
 }
 
+function getNFXmlItemRecebimentos(item) {
+ if (Array.isArray(item?.recebimentos) && item.recebimentos.length > 0) {
+ return item.recebimentos;
+ }
+ const idInterno = item.id_interno || '';
+ const qtd = parseDecimal(item.quantidade_estoque_calculada ?? item.quantidade) || 0;
+ return [{
+ id: `rec-${item.numero_item || 1}-1`,
+ entrada_nf_item_id: item.id || null,
+ produto_id: item.produto_id || null,
+ id_interno: idInterno,
+ quantidade_fisica: qtd,
+ quantidade_aceita: qtd,
+ quantidade_recusada: 0,
+ local_destino: 'TERREO',
+ situacao: idInterno ? 'CONFERE' : 'NAO_IDENTIFICADO',
+ motivo_divergencia: null,
+ observacoes: ''
+ }];
+}
+
+function calcularSituacaoRecebimentoItem(item, recebimentos = null) {
+ const qtdXml = parseDecimal(item.quantidade_estoque_calculada ?? item.quantidade) || 0;
+ const idInternoFiscal = String(item.id_interno || '').trim();
+ const recs = (recebimentos && recebimentos.length) ? recebimentos : getNFXmlItemRecebimentos(item);
+
+ const totalFisico = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_fisica) || 0), 0);
+ const totalAceito = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_aceita) || 0), 0);
+ const totalRecusado = recs.reduce((sum, r) => sum + (parseDecimal(r.quantidade_recusada) || 0), 0);
+
+ const temRecusa = totalRecusado > 0;
+ const temDivergenciaQtd = Math.abs(totalFisico - qtdXml) > 0.0001;
+ const temDivergenciaSku = recs.some(r => String(r.id_interno || '').trim() !== idInternoFiscal);
+ const temMultiSku = recs.length > 1;
+ const temSemIdentificacao = !idInternoFiscal || recs.some(r => !String(r.id_interno || '').trim());
+
+ if (temSemIdentificacao) return 'NAO_IDENTIFICADO';
+ if (totalAceito === 0 && temRecusa) return 'RECUSADO';
+ if (temDivergenciaQtd || temDivergenciaSku || temMultiSku || temRecusa) return 'DIVERGENCIA_XML_FISICO';
+ return 'CONFERE';
+}
+
+function getSituacaoLabel(situacao) {
+ const map = {
+ 'CONFERE': { label: 'Confere', tone: '#22c55e', badgeClass: 'positive' },
+ 'NAO_IDENTIFICADO': { label: 'SKU N&atilde;o Identificado', tone: '#eab308', badgeClass: 'warning' },
+ 'DIVERGENCIA_XML_FISICO': { label: 'Diverg&ecirc;ncia XML &times; F&iacute;sico', tone: '#f97316', badgeClass: 'warning' },
+ 'ITEM_NAO_PEDIDO': { label: 'Item N&atilde;o Pedido', tone: '#a855f7', badgeClass: 'warning' },
+ 'RECEBIMENTO_PARCIAL': { label: 'Recebimento Parcial', tone: '#3b82f6', badgeClass: 'info' },
+ 'RECUSADO': { label: 'Recusado', tone: '#ef4444', badgeClass: 'danger' }
+ };
+ return map[situacao] || { label: situacao || 'Pendente', tone: '#64748b', badgeClass: 'neutral' };
+}
+
+function addNFXmlItemRecebimento(numeroItem) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item) return;
+ if (!item.recebimentos) item.recebimentos = getNFXmlItemRecebimentos(item);
+ const nextIdx = item.recebimentos.length + 1;
+ item.recebimentos.push({
+ id: `rec-${numeroItem}-${nextIdx}-${Date.now()}`,
+ entrada_nf_item_id: item.id || null,
+ produto_id: null,
+ id_interno: '',
+ quantidade_fisica: 0,
+ quantidade_aceita: 0,
+ quantidade_recusada: 0,
+ local_destino: 'TERREO',
+ situacao: 'DIVERGENCIA_XML_FISICO',
+ motivo_divergencia: null,
+ observacoes: ''
+ });
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function removeNFXmlItemRecebimento(numeroItem, index) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item || !item.recebimentos) return;
+ if (item.recebimentos.length <= 1) return;
+ item.recebimentos.splice(index, 1);
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function updateNFXmlItemRecebimentoField(numeroItem, index, field, value) {
+ const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+ if (!item) return;
+ if (!item.recebimentos) item.recebimentos = getNFXmlItemRecebimentos(item);
+ const rec = item.recebimentos[index];
+ if (!rec) return;
+
+ if (field === 'quantidade_fisica') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_fisica = val;
+ rec.quantidade_aceita = Math.min(rec.quantidade_aceita, val);
+ rec.quantidade_recusada = Math.max(0, val - rec.quantidade_aceita);
+ } else if (field === 'quantidade_aceita') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_aceita = Math.min(val, rec.quantidade_fisica);
+ rec.quantidade_recusada = Math.max(0, rec.quantidade_fisica - rec.quantidade_aceita);
+ } else if (field === 'quantidade_recusada') {
+ const val = Math.max(0, parseDecimal(value) || 0);
+ rec.quantidade_recusada = Math.min(val, rec.quantidade_fisica);
+ rec.quantidade_aceita = Math.max(0, rec.quantidade_fisica - rec.quantidade_recusada);
+ } else if (field === 'id_interno') {
+ rec.id_interno = String(value || '').trim();
+ const prod = (appData.products || []).find(p => String(p.id_interno) === rec.id_interno);
+ rec.produto_id = prod?.id || null;
+ } else {
+ rec[field] = value;
+ }
+
+ rec.situacao = calcularSituacaoRecebimentoItem(item, item.recebimentos);
+ saveEntradaNFXMLDraft();
+ renderNFXmlPreview();
+}
+
+function renderNFXmlRecebimentoFisicoBlock(item, allowLink = true) {
+ const recebimentos = getNFXmlItemRecebimentos(item);
+ const situacao = calcularSituacaoRecebimentoItem(item, recebimentos);
+ const sitInfo = getSituacaoLabel(situacao);
+ const locs = ['TERREO', '1ANDAR', 'MOSTRUARIO'];
+
+ return `
+ <div class="nfxml-recebimento-block" style="margin-top:14px; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.12);">
+ <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+ <div style="display:flex; align-items:center; gap:8px;">
+ <span class="material-symbols-rounded" style="color:var(--primary); font-size:20px;">inventory</span>
+ <strong style="font-size:0.85rem; letter-spacing:0.5px;">RECEBIMENTO F&Iacute;SICO (ALOCA&Ccedil;&Atilde;O &amp; DIVERG&Ecirc;NCIAS)</strong>
+ </div>
+ <span class="nfxml-status-pill ${sitInfo.badgeClass}" style="font-weight:800; font-size:0.75rem;">${escapeKitAttribute(sitInfo.label)}</span>
+ </div>
+
+ <div style="display:flex; flex-direction:column; gap:10px;">
+ ${recebimentos.map((rec, idx) => {
+ const prod = (appData.products || []).find(p => String(p.id_interno) === String(rec.id_interno));
+ const prodDesc = prod ? (prod.descricao_completa || prod.descricao_base || prod.nome) : '';
+ return `
+ <div class="nfxml-rec-row" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px;">
+ <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; align-items:end;">
+ <label style="display:flex; flex-direction:column; gap:4px; flex:2;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">PRODUTO F&Iacute;SICO</span>
+ <input class="input-field" value="${escapeKitAttribute(rec.id_interno || '')}" placeholder="id_interno" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'id_interno', this.value)">
+ ${prodDesc ? `<small style="font-size:0.72rem; color:#94a3b8; margin-top:2px;">${escapeKitAttribute(prodDesc)}</small>` : ''}
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">F&Iacute;SICO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_fisica}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_fisica', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:#4ade80; font-weight:700;">ACEITO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_aceita}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_aceita', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:#f87171; font-weight:700;">RECUSADO</span>
+ <input type="number" step="0.0001" min="0" class="input-field" value="${rec.quantidade_recusada}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'quantidade_recusada', this.value)">
+ </label>
+ <label style="display:flex; flex-direction:column; gap:4px;">
+ <span style="font-size:0.72rem; color:var(--muted); font-weight:700;">DESTINO</span>
+ <select class="input-field" ${allowLink ? '' : 'disabled'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'local_destino', this.value)">
+ ${locs.map(l => `<option value="${l}" ${String(rec.local_destino).toUpperCase() === l ? 'selected' : ''}>${l}</option>`).join('')}
+ </select>
+ </label>
+ ${recebimentos.length > 1 && allowLink ? `
+ <button type="button" class="btn-action danger" onclick="removeNFXmlItemRecebimento(${item.numero_item}, ${idx})" style="height:38px; padding:0 10px; background:#ef4444 !important;" title="Remover aloca&ccedil;&atilde;o">
+ <span class="material-symbols-rounded">delete</span>
+ </button>
+ ` : ''}
+ </div>
+ ${situacao !== 'CONFERE' ? `
+ <div style="margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+ <input class="input-field" placeholder="Motivo da diverg&ecirc;ncia" value="${escapeKitAttribute(rec.motivo_divergencia || '')}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'motivo_divergencia', this.value)">
+ <input class="input-field" placeholder="Observa&ccedil;&otilde;es" value="${escapeKitAttribute(rec.observacoes || '')}" ${allowLink ? '' : 'readonly'} onchange="updateNFXmlItemRecebimentoField(${item.numero_item}, ${idx}, 'observacoes', this.value)">
+ </div>
+ ` : ''}
+ </div>
+ `;
+ }).join('')}
+ </div>
+
+ ${allowLink ? `
+ <div style="margin-top:10px; display:flex; justify-content:flex-start;">
+ <button type="button" class="btn-action" onclick="addNFXmlItemRecebimento(${item.numero_item})" style="font-size:0.78rem; background:rgba(59,130,246,0.2) !important; color:#60a5fa !important; border:1px dashed #3b82f6 !important;">
+ <span class="material-symbols-rounded">add_circle</span>
+ + ADICIONAR OUTRO PRODUTO RECEBIDO (MULTI-SKU)
+ </button>
+ </div>
+ ` : ''}
+ </div>
+ `;
+}
+
 function aplicarCustosReaisNF(nota, options = {}) {
  const rateios = calcularRateioCustosNF(nota, nota.itens);
  const totalProdutosNF = nfXmlMoney(nota?.totais?.valor_produtos) ||
@@ -31826,13 +32069,14 @@ async function renderNFXmlUploadScreen() {
  entradaNfXmlState = null;
 
  app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
+ <div class="dashboard-screen internal fade-in nf-form-screen entrada-nf-screen">
+ ${renderModuleHeader({
+ moduleKey: 'nf',
+ title: 'NOVA ENTRADA',
+ icon: 'xml',
+ backAction: 'renderNFSubMenu()'
+ })}
  <main class="container">
- <div class="screen-mini-title">
- <div class="mini-icon">${menu3DIcons.xml}</div>
- <span>ENTRADA NF - XML</span>
- </div>
  <div id="nfxml-wizard-root">
  ${renderNFXmlWizardHTML()}
  </div>
@@ -32290,21 +32534,77 @@ async function hydrateNFXmlPreviewFromSupabase() {
  vinculos = data || [];
  }
 
- for (const item of state.itens) {
- const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '') === String(item.codigo_produto_fornecedor || ''));
- if (vinculo?.id_interno) {
- applyNFXmlItemProductLink(item.numero_item, vinculo.id_interno, 'fornecedor+cProd', true);
- item.ean_divergente = !!vinculo.ean_divergente;
- continue;
- }
+  // REGRA 1: VALIDAÇÃO CRUZADA EAN x FORNECEDOR/CPROD
+  const produtosCatalogo = appData.products || [];
+  for (const item of state.itens) {
+    const cProd = String(item.codigo_produto_fornecedor || '').trim();
+    const vinculo = vinculos.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+    
+    // CANDIDATO A: buscar fornecedor_cnpj + cProd em fornecedor_produtos
+    let candidatoA = null;
+    if (vinculo?.id_interno) {
+      candidatoA = produtosCatalogo.find(p => String(p.id_interno || '').trim() === String(vinculo.id_interno).trim()) 
+        || { id_interno: vinculo.id_interno, status: 'ativo' };
+    }
 
- const ean = nfXmlOnlyDigits(item.ean_fornecedor);
- if (ean && !['SEMGTIN', 'ISENTO'].includes(String(item.ean_fornecedor).toUpperCase())) {
- const product = (appData.products || []).find(p => nfXmlOnlyDigits(p.ean) === ean);
- if (product) applyNFXmlItemProductLink(item.numero_item, product.id_interno, 'ean', true);
- }
- }
+    // CANDIDATO B: buscar EAN válido no catálogo de produtos
+    const rawEan = String(item.ean_fornecedor || item.ean_xml || '').trim();
+    const isEanExempt = !rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase());
+    const eanClean = !isEanExempt ? nfXmlOnlyDigits(rawEan) : '';
+    const isEanValido = eanClean.length >= 7 && eanClean.length <= 14;
+    let candidatoB = null;
+    if (isEanValido) {
+      candidatoB = produtosCatalogo.find(p => nfXmlOnlyDigits(p.ean) === eanClean) || null;
+    }
+
+    // APLICAÇÃO DA MATRIZ CRUZADA
+    if (candidatoA && candidatoB) {
+      if (candidatoA.id_interno === candidatoB.id_interno) {
+        // A existe + B existe + mesmo produto: IDENTIFICADO (confiança alta)
+        applyNFXmlItemProductLink(item.numero_item, candidatoA.id_interno, 'fornecedor_e_ean', true);
+        item.ean_divergente = false;
+        item.conflito_vinculo = false;
+        item.conflito = null;
+      } else {
+        // A existe + B existe + produtos diferentes: CONFLITO DE VÍNCULO
+        // NÃO escolher automaticamente nenhum dos dois. NÃO sobrescrever fornecedor_produtos.
+        item.id_interno = null;
+        item.produto_id = null;
+        item.produto_nome = null;
+        item.status_vinculo = 'conflito_vinculo';
+        item.conflito_vinculo = true;
+        item.conflito = { fornecedor: candidatoA, ean: candidatoB, cProd, eanClean };
+        item.match_source = 'conflito';
+      }
+    } else if (candidatoA && !candidatoB) {
+      // A existe + XML sem EAN válido (ou B não encontrado): IDENTIFICADO por fornecedor+cProd
+      applyNFXmlItemProductLink(item.numero_item, candidatoA.id_interno, 'fornecedor+cProd', true);
+      item.ean_divergente = !!vinculo?.ean_divergente;
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    } else if (!candidatoA && candidatoB) {
+      // A não existe + B existe: IDENTIFICADO por EAN. Marcar como elegível para aprendizado futuro.
+      applyNFXmlItemProductLink(item.numero_item, candidatoB.id_interno, 'ean', true);
+      item.elegivel_aprendizado = true;
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    } else {
+      // Nenhum candidato: NÃO IDENTIFICADO
+      item.id_interno = null;
+      item.produto_id = null;
+      item.produto_nome = null;
+      item.status_vinculo = 'nao_identificado';
+      item.conflito_vinculo = false;
+      item.conflito = null;
+    }
+  }
  saveEntradaNFXMLDraft();
+}
+
+function isProductInactive(product) {
+  if (!product) return false;
+  const status = String(product.status || '').trim().toLowerCase();
+  return status === 'inativo' || status === 'nao' || status === '0' || product.ativo === false;
 }
 
 function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', silent = false) {
@@ -32321,13 +32621,93 @@ function applyNFXmlItemProductLink(numeroItem, idInterno, source = 'manual', sil
  item.id_interno = product.id_interno;
  item.produto_id = product.id || null;
  item.produto_nome = product.descricao_completa || product.descricao_base || product.nome || product.id_interno;
- item.status_vinculo = 'vinculado';
  item.match_source = source;
+ item.conflito_vinculo = false;
+ item.conflito = null;
+
+ // REGRA 2: PRODUTO INATIVO
+ const inactive = isProductInactive(product);
+ item.produto_inativo = inactive;
+ if (inactive) {
+   if (item.decisao_inativo === 'manter_inativo') {
+     item.status_vinculo = 'vinculado';
+   } else {
+     item.status_vinculo = 'produto_inativo';
+   }
+ } else {
+   item.status_vinculo = 'vinculado';
+   item.decisao_inativo = null;
+ }
+
  Object.assign(item, applyNFXmlItemConversion(item, product));
  console.log('[INFO] Operacao registrada.');
  saveEntradaNFXMLDraft();
  if (!silent) renderNFXmlPreview();
  return true;
+}
+
+async function reativarProdutoDraftNF(numeroItem, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !idInterno) return;
+  try {
+    const { error } = await client
+      .from('produtos')
+      .update({ status: 'ativo', atualizado_em: new Date().toISOString() })
+      .eq('id_interno', idInterno);
+    if (error) throw error;
+
+    const prod = (appData.products || []).find(p => p.id_interno === idInterno);
+    if (prod) prod.status = 'ativo';
+
+    const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+    if (item) {
+      item.produto_inativo = false;
+      item.status_vinculo = 'vinculado';
+      saveEntradaNFXMLDraft();
+    }
+    showToast(`Produto ${idInterno} reativado com sucesso!`, 'success');
+    renderNFXmlPreview();
+  } catch (err) {
+    console.error('[ENTRADA_NF] Erro ao reativar produto:', err);
+    showToast('Falha ao reativar produto: ' + err.message, 'error');
+  }
+}
+
+function manterInativoReceberDraftNF(numeroItem) {
+  const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item) return;
+  item.decisao_inativo = 'manter_inativo';
+  item.status_vinculo = 'vinculado';
+  saveEntradaNFXMLDraft();
+  showToast('Decisão registrada: produto mantido inativo e autorizado para recebimento.', 'success');
+  renderNFXmlPreview();
+}
+
+function resolverConflitoUsarFornecedorDraft(numeroItem, idInterno) {
+  const item = entradaNfXmlState?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item || !idInterno) return;
+  applyNFXmlItemProductLink(numeroItem, idInterno, 'fornecedor+cProd');
+  showToast(`Conflito resolvido: mantido vínculo com ${idInterno}.`, 'success');
+}
+
+async function resolverConflitoUsarEanDraft(numeroItem, idInternoEan) {
+  const state = entradaNfXmlState;
+  const item = state?.itens?.find(i => Number(i.numero_item) === Number(numeroItem));
+  if (!item || !idInternoEan) return;
+
+  const confirmar = await showAppConfirm({
+    title: 'Atualizar Vínculo do Fornecedor?',
+    message: `Confirma atualizar o vínculo deste fornecedor para apontar para o produto ${idInternoEan}?`,
+    detail: 'O cadastro do fornecedor será atualizado no fechamento.',
+    confirmLabel: 'Sim, atualizar vínculo',
+    cancelLabel: 'Cancelar',
+    danger: true
+  });
+  if (!confirmar) return;
+
+  applyNFXmlItemProductLink(numeroItem, idInternoEan, 'ean');
+  item.elegivel_aprendizado = true;
+  showToast(`Conflito resolvido: selecionado ${idInternoEan}.`, 'success');
 }
 
 function updateNFXmlItemManualLink(numeroItem, inputId) {
@@ -32878,7 +33258,7 @@ function buildNFXmlFinancePayload(entradaId) {
  vencimento: item.vencimento,
  data_vencimento: item.vencimento,
  valor: nfXmlMoney(item.valor),
- status: pago ? 'pago' : 'pendente',
+ status: pago ? 'pago' : 'rascunho',
  status_vencimento: pago ? 'pago' : 'em_aberto',
  data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
  forma_pagamento: item.forma_pagamento || null,
@@ -32899,7 +33279,7 @@ function buildNFXmlFinancePayload(entradaId) {
  vencimento: item.vencimento,
  data_vencimento: item.vencimento,
  valor: nfXmlMoney(item.valor),
- status: pago ? 'pago' : 'pendente',
+ status: pago ? 'pago' : 'rascunho',
  status_vencimento: pago ? 'pago' : 'em_aberto',
  data_pagamento: pago ? (item.data_pagamento || item.vencimento || getDataBrasilISO()) : null,
  forma_pagamento: item.forma_pagamento || null,
@@ -33159,6 +33539,20 @@ function renderNFXmlPreview() {
 
  </div>
 
+  <section class="nfxml-light-card" style="margin-top:14px; margin-bottom:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:14px;">
+    <div class="nfxml-kicker" style="color:#60a5fa; font-size:0.72rem; font-weight:900; letter-spacing:0.05em; margin-bottom:6px;">MODO DA ENTRADA - PEDIDO DE COMPRA</div>
+    <div style="display:flex; gap:24px; margin-top:8px; align-items:center; flex-wrap:wrap;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:800; color:#fff; font-size:0.85rem;">
+        <input type="radio" name="tipo_vinculo_pedido" value="SEM_PEDIDO" ${state.tipo_vinculo_pedido !== 'COM_PEDIDO' ? 'checked' : ''} onchange="setNFXmlTipoVinculoPedido(this.value)">
+        <span>SEM PEDIDO DE COMPRA</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:800; color:#fff; font-size:0.85rem;">
+        <input type="radio" name="tipo_vinculo_pedido" value="COM_PEDIDO" ${state.tipo_vinculo_pedido === 'COM_PEDIDO' ? 'checked' : ''} onchange="setNFXmlTipoVinculoPedido(this.value)">
+        <span>COM PEDIDO DE COMPRA</span>
+      </label>
+    </div>
+  </section>
+
  ${renderNFXmlFinanceBlock()}
 
  <section class="nfxml-card nfxml-products-card">
@@ -33188,6 +33582,27 @@ function renderNFXmlPreview() {
  ` : ''}
  </div>
  `;
+}
+
+function setNFXmlTipoVinculoPedido(value) {
+  if (!entradaNfXmlState) return;
+  entradaNfXmlState.tipo_vinculo_pedido = value;
+  saveEntradaNFXMLDraft();
+  renderNFXmlPreview();
+}
+
+function renderNFXmlPedidoVinculoBlock(item) {
+  if (entradaNfXmlState?.tipo_vinculo_pedido !== 'COM_PEDIDO') return '';
+  const alocacoes = Array.isArray(item?.alocacoes) ? item.alocacoes : [];
+  const qtdAlocada = alocacoes.reduce((acc, a) => acc + (Number(a.quantidade_alocada) || 0), 0);
+  return `
+    <div class="nfxml-pedido-vinculo-block" style="margin-top:8px; padding:8px 10px; background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:8px; font-size:0.75rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#60a5fa; font-weight:700;">Vínculo com Pedido de Compra:</span>
+        <span style="color:#e2e8f0;">${qtdAlocada > 0 ? `${qtdAlocada} unid. alocada(s)` : 'Sem alocação direta'}</span>
+      </div>
+    </div>
+  `;
 }
 
 function renderNFXmlItemCard(item, allowLink = true) {
@@ -33243,15 +33658,62 @@ function renderNFXmlItemCard(item, allowLink = true) {
  <span class="nf-cost-real">Custo real unao: <strong>${custo.custoRealUnitario}</strong></span>
  </div>
  ${conversionHtml}
+ ${renderNFXmlPedidoVinculoBlock(item)}
  </div>
  ${allowLink ? `
  <div class="nfxml-item-link-panel">
- <div class="nfxml-item-link-title">VAnculo com produto interno</div>
- ${linked ? `
+ <div class="nfxml-item-link-title">Vínculo com produto interno</div>
+ ${item.conflito_vinculo ? `
+   <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px; margin-bottom:8px;">
+     <span style="display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:0.75rem; color:#b91c1c; text-transform:uppercase;">
+       <span class="material-symbols-rounded" style="font-size:16px;">warning</span> CONFLITO DE VÍNCULO
+     </span>
+     <div style="font-size:0.75rem; color:#475569; margin-top:4px;">
+       Vínculo atual do fornecedor: <b>${escapeKitAttribute(item.conflito?.fornecedor?.id_interno || '-')}</b><br>
+       Produto encontrado pelo EAN: <b>${escapeKitAttribute(item.conflito?.ean?.id_interno || '-')}</b>
+     </div>
+     <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
+       ${item.conflito?.fornecedor?.id_interno ? `
+         <button type="button" onclick="resolverConflitoUsarFornecedorDraft(${item.numero_item}, '${escapeKitAttribute(item.conflito.fornecedor.id_interno)}')" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:0.72rem; font-weight:700; padding:6px 8px; border-radius:6px; cursor:pointer; text-align:left;">
+           Usar Vínculo Atual (${escapeKitAttribute(item.conflito.fornecedor.id_interno)})
+         </button>
+       ` : ''}
+       ${item.conflito?.ean?.id_interno ? `
+         <button type="button" onclick="resolverConflitoUsarEanDraft(${item.numero_item}, '${escapeKitAttribute(item.conflito.ean.id_interno)}')" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:0.72rem; font-weight:800; padding:6px 8px; border-radius:6px; cursor:pointer; text-align:left;">
+           Usar Produto do EAN (${escapeKitAttribute(item.conflito.ean.id_interno)}) e Atualizar
+         </button>
+       ` : ''}
+     </div>
+   </div>
+ ` : item.produto_inativo ? `
+   <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px; margin-bottom:8px;">
+     <span style="display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:0.75rem; color:#b45309; text-transform:uppercase;">
+       <span class="material-symbols-rounded" style="font-size:16px;">warning</span> ⚠ PRODUTO INATIVO
+     </span>
+     <div style="font-size:0.75rem; color:#475569; margin-top:4px;">
+       O produto <b>${escapeKitAttribute(item.id_interno)}</b> está inativo no catálogo.
+     </div>
+     ${item.decisao_inativo === 'manter_inativo' ? `
+       <div style="margin-top:6px; font-size:0.72rem; font-weight:700; color:#15803d; background:#dcfce7; padding:4px 8px; border-radius:6px;">
+         ✓ Decisão: Manter inativo e receber autorizado
+       </div>
+     ` : `
+       <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
+         <button type="button" onclick="reativarProdutoDraftNF(${item.numero_item}, '${escapeKitAttribute(item.id_interno)}')" style="background:#22c55e; color:white; border:none; font-size:0.72rem; font-weight:800; padding:6px 10px; border-radius:6px; cursor:pointer; text-align:center;">
+           REATIVAR PRODUTO
+         </button>
+         <button type="button" onclick="manterInativoReceberDraftNF(${item.numero_item})" style="background:#f8fafc; border:1px solid #cbd5e1; color:#334155; font-size:0.72rem; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; text-align:center;">
+           MANTER INATIVO E RECEBER
+         </button>
+       </div>
+     `}
+     <div class="nfxml-item-linked-product" style="margin-top:8px;">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
+   </div>
+ ` : linked ? `
  <div class="nfxml-item-linked-product">${escapeKitAttribute(item.id_interno)} - ${escapeKitAttribute(item.produto_nome || '')}</div>
  <div class="nfxml-item-origin">Origem: ${escapeKitAttribute(item.match_source || 'manual')}</div>
  ` : `
- <div class="nfxml-item-pending">Pendente de vAnculo</div>
+ <div class="nfxml-item-pending">Pendente de vínculo</div>
  `}
  <div class="nfxml-item-link-input">
  <input id="nfxml-id-${item.numero_item}" class="input-field" placeholder="Informar id_interno">
@@ -33326,7 +33788,8 @@ async function salvarEntradaNFXml() {
  const tipoConfig = getNFXmlTipoConfig(state.tipo_lancamento);
  let status = 'importada';
  if (state.tipo_lancamento === 'entrada_normal') {
- status = state.itens.some(item => !item.id_interno) ? 'pendente_vinculo' : 'pronta_para_finalizar';
+   const temPendencia = state.itens.some(item => !item.id_interno || item.conflito_vinculo || (item.produto_inativo && item.decisao_inativo !== 'manter_inativo'));
+   status = temPendencia ? 'pendente_vinculo' : 'pronta_para_finalizar';
  } else if (state.tipo_lancamento === 'somente_financeiro') {
  status = 'financeiro_lancado';
  }
@@ -33412,7 +33875,12 @@ async function salvarEntradaNFXml() {
  id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
  produto_id_interno: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno || null) : null,
  produto_id: state.tipo_lancamento === 'entrada_normal' ? (item.produto_id || null) : null,
- status_vinculo: state.tipo_lancamento === 'entrada_normal' ? (item.id_interno ? 'vinculado' : 'pendente_vinculo') : 'nao_exigido',
+ status_vinculo: state.tipo_lancamento === 'entrada_normal' 
+   ? (item.conflito_vinculo ? 'conflito_vinculo' 
+      : (item.produto_inativo && item.decisao_inativo !== 'manter_inativo' ? 'produto_inativo' 
+         : (item.id_interno ? 'vinculado' : 'pendente_vinculo'))) 
+   : 'nao_exigido',
+ observacoes: item.observacoes || (item.decisao_inativo === 'manter_inativo' ? '[DECISAO_INATIVO:manter_inativo]' : (item.conflito_vinculo ? `[CONFLITO_VINCULO:forn=${item.conflito?.fornecedor?.id_interno || ''};ean=${item.conflito?.ean?.id_interno || ''}]` : null)),
  ean_divergente: !!item.ean_divergente,
  atualizado_em: getDataHoraBrasil()
  }));
@@ -33424,6 +33892,39 @@ async function salvarEntradaNFXml() {
  itensError = retry.error;
  }
  if (itensError) throw itensError;
+
+ // Salvar alocações de pedidos de compra (Bloco 3)
+ try {
+ const { data: dbItens } = await client
+ .from('entradas_nf_itens')
+ .select('id, numero_item')
+ .eq('entrada_nf_id', entrada.id);
+
+ const itemMap = new Map((dbItens || []).map(i => [i.numero_item, i.id]));
+ const alocacoesPayload = [];
+ (state.itens || []).forEach(item => {
+ if (Array.isArray(item.alocacoes)) {
+ item.alocacoes.forEach(aloc => {
+ const dbItemId = itemMap.get(item.numero_item) || item.id || null;
+ alocacoesPayload.push({
+ entrada_nf_item_id: dbItemId,
+ numero_item: item.numero_item,
+ pedido_compra_id: aloc.pedido_compra_id,
+ pedido_compra_item_id: aloc.pedido_compra_item_id,
+ quantidade_alocada: aloc.quantidade_alocada
+ });
+ });
+ }
+ });
+
+ await DataClient.salvarAlocacoesPedidoEntradaNF(
+ entrada.id,
+ state.tipo_vinculo_pedido || 'SEM_PEDIDO',
+ alocacoesPayload
+ );
+ } catch (alocErr) {
+ console.error('[ENTRADA_NF_PEDIDO_ALOCACOES] Erro ao salvar alocacoes de pedidos:', alocErr);
+ }
 
  if (tipoConfig.afetaFinanceiro && state.financeiro?.modoPagamento !== 'a_combinar') {
  const contasPayload = buildNFXmlFinancePayload(entrada.id);
@@ -33577,75 +34078,15 @@ async function finalizarEntradaNFXml() {
  return;
  }
 
- showAppConfirmModal({
- title: 'Finalizar entrada?',
- message: 'Deseja lan\\u00e7ar as quantidades no estoque do T\\u00c9RREO? Esta a\\u00e7\\u00e3o registra os movimentos de estoque.',
- confirmLabel: 'Finalizar entrada',
- onConfirm: () => finalizarEntradaNFXmlConfirmado()
- });
+  showAppConfirmModal({
+    title: 'Finalizar entrada?',
+    message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra os movimentos de estoque.',
+    confirmLabel: 'Finalizar entrada',
+    onConfirm: () => finalizarEntradaNFXmlConfirmado()
+  });
 }
 
 async function finalizarEntradaNFXmlConfirmado() {
- const client = window.supabaseClient;
- const state = entradaNfXmlState;
- if (!client || !state?.savedEntradaId) return;
-
- try {
- console.log('[ENTRADA_NF_XML] finalizando entrada', state.savedEntradaId);
- recalcularCustosReaisEntradaNFXML({ log: true });
- for (const item of state.itens) {
- const quantidadeEntrada = getEntradaNFStockQuantity(item);
- await applyStockChangeWithRequiredMovement({
- idInterno: item.id_interno,
- local: 'TERREO',
- operacao: 'soma',
- quantidade: quantidadeEntrada,
- contextLabel: `movimento da NF ${state.numero_nf}`,
- movPayload: {
- tipo: 'ENTRADA',
- id_interno: item.id_interno,
- local_origem: null,
- local_destino: 'TERREO',
- quantidade: quantidadeEntrada,
- usuario: localStorage.getItem('currentUser'),
- origem: 'APP_COMPRAS',
- observacao: `NF ${state.numero_nf} - ${state.chave_acesso} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
- }
- });
- }
-
- const lotesResult = await criarLotesEntradaNF({
- id: state.savedEntradaId,
- numero_nf: state.numero_nf,
- data_emissao: state.data_emissao,
- local_estoque: 'terreo'
- }, state.itens.map(item => ({ ...item, local_entrada: 'terreo' })));
- if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
- console.warn('[ESTOQUE_LOTES] lotes da Entrada NF nao foram criados integralmente', lotesResult);
- }
-
- const { error } = await client
- .from('entradas_nf')
- .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
- .eq('id', state.savedEntradaId);
- if (error) throw error;
-
- await atualizarCustoProdutosEntradaNF(state.itens);
-
- state.status = 'finalizada';
- state.estoque_finalizado = true;
- appData.historicoEntradasNFLoaded = false;
- DataClient.invalidateCache?.('nf');
- showToast('Entrada finalizada e estoque atualizado.', 'success');
- await showAppAlert({
- title: 'Recebimento finalizado',
- message: 'Revise os dados e tente novamente.',
- buttonLabel: 'OK',
- icon: 'check_circle'
- });
- renderNFXmlUploadScreen();
- } catch (error) {
- console.error('[ENTRADA_NF_XML] erro ao finalizar entrada', error);
  await showAppAlert({
  title: 'Erro ao finalizar entrada',
  message: error.message || String(error),
@@ -33653,7 +34094,6 @@ async function finalizarEntradaNFXmlConfirmado() {
  danger: true,
  icon: 'error'
  });
- }
 }
 
 function normalizeEntradaNFItemForStock(item = {}) {
@@ -33691,7 +34131,32 @@ async function fetchEntradaNFItens(entradaId) {
  return [];
  }
 
- return (data || []).map(normalizeEntradaNFItemForStock);
+ const recs = await DataClient.listEntradaNFRecebimentos(entradaId);
+
+ return (data || []).map(raw => {
+   const normalized = normalizeEntradaNFItemForStock(raw);
+   const itemRecs = (recs || []).filter(r => r.entrada_nf_item_id === raw.id);
+   if (itemRecs.length > 0) {
+     normalized.recebimentos = itemRecs.map(r => ({
+       id: r.id,
+       entrada_nf_item_id: r.entrada_nf_item_id,
+       produto_id: r.produto_id,
+       id_interno: r.id_interno,
+       quantidade_fisica: parseDecimal(r.quantidade_fisica),
+       quantidade_aceita: parseDecimal(r.quantidade_aceita),
+       quantidade_recusada: parseDecimal(r.quantidade_recusada),
+       local_destino: r.local_destino || 'TERREO',
+       situacao: r.situacao || 'CONFERE',
+       motivo_divergencia: r.motivo_divergencia,
+       observacoes: r.observacoes
+     }));
+     normalized.recebimentoPersistido = true;
+   } else {
+     normalized.recebimentos = getNFXmlItemRecebimentos(normalized);
+      normalized.recebimentoPersistido = false;
+   }
+   return normalized;
+ });
 }
 
 async function finalizarEntradaNFAberta(entradaId) {
@@ -33716,70 +34181,141 @@ async function finalizarEntradaNFAberta(entradaId) {
 
  const itens = await fetchEntradaNFItens(entrada.id);
  if (!itens.length) throw new Error('Nenhum item encontrado para finalizar.');
- const pendentes = itens.filter(item => !item.id_interno || getEntradaNFStockQuantity(item) <= 0);
- if (pendentes.length) throw new Error('Existem itens sem vAnculo interno ou quantidade valida.');
- console.log('[ENTRADA_NF_CUSTO_REAL]', {
- numero_nf: entrada.numero_nf,
- valor_oficial_nf: entrada.valor_total,
- origem: 'nf_aberta',
- itens: itens.map(item => ({
- numero_item: item.numero_item,
- id_interno: item.id_interno,
- quantidade: item.quantidade,
- custo_unitario_nf: item.custo_nota_unitario ?? item.valor_unitario,
- custo_real_unitario: item.custo_real_unitario,
- custo_real_total: item.custo_real_total
- }))
- });
 
+ // 1. Bloquear itens não identificados
+ const pendentes = itens.filter(item => !item.id_interno || item.status_vinculo === 'pendente_vinculo' || item.status_vinculo === 'nao_identificado' || getEntradaNFStockQuantity(item) <= 0);
+ if (pendentes.length) throw new Error(`Existem ${pendentes.length} item(ns) não identificado(s) ou sem quantidade válida.`);
+
+ // 2. Bloquear conflito de vínculo (EAN x Fornecedor)
+ const emConflito = itens.filter(item => item.status_vinculo === 'conflito_vinculo' || (item.observacoes && item.observacoes.includes('CONFLITO_VINCULO')));
+ if (emConflito.length) throw new Error(`Existem ${emConflito.length} item(ns) com conflito de vínculo não resolvido (EAN x Fornecedor).`);
+
+ // 3. Bloquear produto inativo sem decisão registrada
+ const prodsIds = itens.map(i => i.id_interno).filter(Boolean);
+ const { data: prodsDb } = await client
+   .from('produtos')
+   .select('id, id_interno, status')
+   .in('id_interno', prodsIds);
+ const prodsMap = new Map((prodsDb || []).map(p => [p.id_interno, p]));
+
+ for (const it of itens) {
+   const pDb = prodsMap.get(it.id_interno);
+   if (isProductInactive(pDb)) {
+     const decisao = (it.observacoes && it.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || it.decisao_inativo === 'manter_inativo';
+     if (!decisao) {
+       throw new Error(`O produto "${it.id_interno}" está inativo no catálogo. Reative o produto ou selecione 'Manter Inativo e Receber' antes de finalizar.`);
+     }
+   }
+ }
+
+ // 4. Bloquear conflito com fornecedor_produtos existente
+ const cnpjClean = nfXmlOnlyDigits(entrada.fornecedor_cnpj || entrada.cnpj_fornecedor);
+ if (cnpjClean) {
+   const { data: vinculosFp } = await client
+     .from('fornecedor_produtos')
+     .select('*')
+     .eq('fornecedor_cnpj', cnpjClean);
+   const mapFp = new Map((vinculosFp || []).map(v => [String(v.codigo_produto_fornecedor).trim(), v]));
+
+   for (const it of itens) {
+     const cProd = String(it.codigo_produto_fornecedor || '').trim();
+     const existingFp = mapFp.get(cProd);
+     if (existingFp && existingFp.id_interno && existingFp.id_interno !== it.id_interno) {
+       throw new Error(`CONFLITO DE VÍNCULO: O código "${cProd}" do fornecedor já está vinculado ao produto "${existingFp.id_interno}", diferente do item "${it.id_interno}". A finalização foi bloqueada para evitar sobrescrita.`);
+     }
+   }
+ }
+
+ const recebimentosPayload = [];
  for (const item of itens) {
- const quantidadeEntrada = getEntradaNFStockQuantity(item);
- await applyStockChangeWithRequiredMovement({
- idInterno: item.id_interno,
- local: 'TERREO',
- operacao: 'soma',
- quantidade: quantidadeEntrada,
- contextLabel: `movimento da NF ${entrada.numero_nf || entrada.id}`,
- movPayload: {
- tipo: 'ENTRADA',
- id_interno: item.id_interno,
- local_origem: null,
- local_destino: 'TERREO',
- quantidade: quantidadeEntrada,
- usuario: localStorage.getItem('currentUser'),
- origem: 'APP_COMPRAS',
- observacao: `NF ${entrada.numero_nf || '-'} - ${entrada.chave_acesso || entrada.id} | qtd_nf=${formatStockNumber(item.quantidade_nf_original ?? item.quantidade)} ${item.unidade_nf || item.unidade || ''} | fator=${item.fator_conversao_usado || 1} | qtd_estoque=${formatStockNumber(quantidadeEntrada)} | custo_real_unit=${nfXmlFormatMoney(getEntradaNFStockUnitCost(item))} | custo_real_total=${nfXmlFormatMoney(getEntradaNFStockTotalCost(item))}`
- }
+ const itemRecs = item.recebimentos && item.recebimentos.length > 0
+ ? item.recebimentos
+ : getNFXmlItemRecebimentos(item);
+
+ for (const r of itemRecs) {
+ recebimentosPayload.push({
+ entrada_nf_item_id: item.id || r.entrada_nf_item_id,
+ produto_id: r.produto_id || item.produto_id || null,
+ id_interno: r.id_interno || item.id_interno || '',
+ quantidade_fisica: parseDecimal(r.quantidade_fisica),
+ quantidade_aceita: parseDecimal(r.quantidade_aceita),
+ quantidade_recusada: parseDecimal(r.quantidade_recusada),
+ local_destino: r.local_destino || 'TERREO',
+ situacao: r.situacao || 'CONFERE',
+ motivo_divergencia: r.motivo_divergencia || null,
+ observacoes: r.observacoes || null
  });
  }
-
- const lotesResult = await criarLotesEntradaNF({
- id: entrada.id,
- numero_nf: entrada.numero_nf,
- data_emissao: entrada.data_emissao,
- data_recebimento: entrada.data_recebimento,
- local_estoque: 'terreo'
- }, itens.map(item => ({ ...item, local_entrada: 'terreo' })));
- if (!lotesResult.ok && lotesResult.reason !== 'missing_table') {
- console.warn('[ESTOQUE_LOTES] lotes da Entrada NF aberta nao foram criados integralmente', lotesResult);
  }
 
- const { error } = await client
- .from('entradas_nf')
- .update({ status: 'finalizada', estoque_finalizado: true, atualizado_em: getDataHoraBrasil() })
- .eq('id', entrada.id);
- if (error) throw error;
+ const saveRecRes = await DataClient.saveEntradaNFRecebimentos(entrada.id, recebimentosPayload);
+ if (!saveRecRes.ok) {
+ throw new Error('Falha ao salvar a conferencia fisica antes da finalizacao: ' + (saveRecRes.error?.message || saveRecRes.error || 'Erro desconhecido.'));
+ }
 
- await atualizarCustoProdutosEntradaNF(itens);
+ const currentUser = localStorage.getItem('currentUser') || 'N/A';
+ const finResult = await DataClient.finalizarRecebimentoEntradaNF(entrada.id, currentUser);
+ console.log('[ENTRADA_NF_XML] resultado finalizacao NF aberta via RPC:', finResult);
+
+ // REGRA 4: APRENDIZADO FORNECEDOR + CPROD NA FINALIZAÇÃO
+ if (cnpjClean) {
+   try {
+     for (const it of itens) {
+       const cProd = String(it.codigo_produto_fornecedor || '').trim();
+       if (cProd && it.id_interno) {
+         const { data: fpCheck } = await client
+           .from('fornecedor_produtos')
+           .select('id, id_interno')
+           .eq('fornecedor_cnpj', cnpjClean)
+           .eq('codigo_produto_fornecedor', cProd)
+           .maybeSingle();
+
+         if (!fpCheck) {
+           await client
+             .from('fornecedor_produtos')
+             .insert({
+               fornecedor_id: entrada.fornecedor_id || null,
+               fornecedor_cnpj: cnpjClean,
+               codigo_produto_fornecedor: cProd,
+               descricao_produto_fornecedor: it.descricao_produto_fornecedor || it.descricao_xml || null,
+               ean_fornecedor: it.ean_fornecedor || it.ean_xml || null,
+               id_interno: it.id_interno,
+               produto_id: it.produto_id || null,
+               ultimo_custo: parseDecimal(it.custo_real_unitario ?? it.valor_unitario),
+               ultima_quantidade: parseDecimal(it.quantidade),
+               ultima_compra_em: entrada.data_emissao || entrada.data_recebimento || getDataBrasilISO(),
+               ean_divergente: !!it.ean_divergente,
+               criado_em: new Date().toISOString(),
+               atualizado_em: new Date().toISOString()
+             });
+           console.log(`[FORNECEDOR_PRODUTOS] Aprendizado automático: "${cProd}" -> "${it.id_interno}".`);
+         } else if (fpCheck.id_interno === it.id_interno) {
+           await client
+             .from('fornecedor_produtos')
+             .update({
+               ultimo_custo: parseDecimal(it.custo_real_unitario ?? it.valor_unitario),
+               ultima_quantidade: parseDecimal(it.quantidade),
+               ultima_compra_em: entrada.data_emissao || entrada.data_recebimento || getDataBrasilISO(),
+               atualizado_em: new Date().toISOString()
+             })
+             .eq('id', fpCheck.id);
+         }
+       }
+     }
+   } catch (learnErr) {
+     console.warn('[FORNECEDOR_PRODUTOS] Aviso no aprendizado seguro pós-finalização:', learnErr);
+   }
+ }
 
  appData.historicoEntradasNFLoaded = false;
  DataClient.invalidateCache?.('nf');
  DataClient.invalidateCache?.('produtos');
  DataClient.invalidateCache?.('movimentos');
- showToast('Entrada finalizada e estoque atualizado.', 'success');
+ DataClient.invalidateCache?.('estoque_lotes');
+ showToast('Entrada finalizada com sucesso! Estoque, movimentos e lotes atualizados.', 'success');
  await showAppAlert({
  title: 'Recebimento finalizado',
- message: 'Revise os dados e tente novamente.',
+ message: 'A entrada da nota fiscal foi finalizada com sucesso. Estoque, lotes e contas a pagar foram atualizados.',
  buttonLabel: 'OK',
  icon: 'check_circle'
  });
@@ -33799,12 +34335,12 @@ async function finalizarEntradaNFAberta(entradaId) {
 }
 
 function confirmarFinalizarEntradaNFAberta(entradaId) {
- showAppConfirmModal({
- title: 'Finalizar entrada?',
- message: 'Deseja lan\\u00e7ar as quantidades no estoque do T\\u00c9RREO? Esta a\\u00e7\\u00e3o registra movimentos e camadas de custo.',
- confirmLabel: 'Finalizar entrada',
- onConfirm: () => finalizarEntradaNFAberta(entradaId)
- });
+  showAppConfirmModal({
+    title: 'Finalizar entrada?',
+    message: 'Deseja lançar as quantidades no estoque do TÉRREO? Esta ação registra movimentos e camadas de custo.',
+    confirmLabel: 'Finalizar entrada',
+    onConfirm: () => finalizarEntradaNFAberta(entradaId)
+  });
 }
 
 function getEntradaNFOpenStatusInfo(nf) {
@@ -33965,80 +34501,561 @@ function applyEntradaNFDraftFilters() {
  document.querySelector('.entrada-nf-drafts-empty-filter')?.classList.toggle('hidden', visibleCount > 0);
 }
 
+function getEntradaNFFriendlyStatusText(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'pendente_vinculo') return 'Produto pendente';
+  if (s === 'pronta_para_finalizar') return 'Pronta para finalizar';
+  if (s === 'pendente_fornecedor') return 'Fornecedor pendente';
+  if (s === 'importada') return 'Importada';
+  if (s === 'rascunho') return 'Rascunho';
+  if (s === 'finalizada') return 'Finalizada';
+  if (s === 'cancelada') return 'Cancelada';
+  if (s === 'financeiro_lancado') return 'Financeiro lançado';
+  return s ? s.replace(/_/g, ' ') : 'Pendente';
+}
+
+function getEntradaNFDisplayStatus(nf) {
+  const s = String(nf?.status || '').toLowerCase();
+  
+  if (s === 'pendente_vinculo' || s === 'pendente_fornecedor') {
+    return {
+      label: 'AGUARDANDO IDENTIFICAÇÃO',
+      color: '#d97706',
+      bg: 'rgba(245, 158, 11, 0.1)',
+      border: 'rgba(245, 158, 11, 0.25)'
+    };
+  }
+  
+  if (s === 'conferencia_iniciada' || s === 'em_conferencia') {
+    return {
+      label: 'AGUARDANDO CONFERÊNCIA',
+      color: '#b45309',
+      bg: 'rgba(234, 179, 8, 0.1)',
+      border: 'rgba(234, 179, 8, 0.25)'
+    };
+  }
+
+  if (s === 'pronta_para_finalizar' || s === 'conferencia_concluida') {
+    return {
+      label: 'PRONTA PARA FINALIZAR',
+      color: '#15803d',
+      bg: 'rgba(34, 197, 94, 0.1)',
+      border: 'rgba(34, 197, 94, 0.25)'
+    };
+  }
+
+  return {
+    label: 'IMPORTADA',
+    color: '#2563eb',
+    bg: 'rgba(37, 99, 235, 0.1)',
+    border: 'rgba(37, 99, 235, 0.25)'
+  };
+}
+
 async function renderNFAbertasList(backAction = 'renderNFSubMenu()') {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- document.body.classList.remove('menu-active');
- const hasLocalDraft = hasEntradaNFXMLDraft();
+  return renderEntradaNFEmRecebimento(backAction);
+}
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-list-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, backAction)}
+async function renderEntradaNFEmRecebimento(backAction = 'renderNFSubMenu()') {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+  
+  const drafts = getEntradaNFXMLDrafts();
 
- <main class="container">
- ${getStandardScreenTitleHTML('NOTAS EM ABERTO', menu3DIcons.abertas)}
- <div id="nf-list-container" style="padding: 12px 20px 40px 20px;">
- <div style="background:#fff; border:1px solid rgba(15,23,42,0.08); border-radius:18px; padding:16px 18px; margin-bottom:16px; color:#334155; box-shadow:0 10px 24px rgba(15,23,42,0.05);">
- <strong style="display:block; color:#0f172a; font-size:0.9rem; margin-bottom:4px;">PendAAncias operacionais</strong>
- <span style="font-size:0.78rem;">Aqui aparecem somente notas que ainda precisam de fornecedor, vAnculo de produtos ou finao de estoque. Notas somente financeiro ficam no Hisao de entradas.</span>
- </div>
- <div class="entrada-nf-quick-actions" style="display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
- ${hasLocalDraft ? `
- <button type="button" class="btn-action" onclick="resumeEntradaNFXMLDraft()" style="background:#f59e0b !important; color:#111827 !important;">
- <span class="material-symbols-rounded">restore</span>
- Continuar XML local
- </button>
- ` : ''}
- <button type="button" class="btn-action" onclick="renderNFXmlUploadScreen()" style="background:#2563eb !important;">
- <span class="material-symbols-rounded">upload_file</span>
- Importar nova NF
- </button>
- </div>
- <div id="nf-list-items">
- <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas...</div>
- </div>
- </div>
- </main>
- </div>
- `;
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in entrada-nf-em-recebimento-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'ENTRADAS EM RECEBIMENTO',
+        icon: 'nf_recebimento',
+        backAction: backAction
+      })}
+      
+      <main class="container app-page-container entrada-nf-em-recebimento-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        <p style="font-size: 0.85rem; color: var(--muted, #64748b); margin: 0 0 20px 0; font-weight: 500;">
+          Notas fiscais importadas aguardando continuidade do recebimento.
+        </p>
 
- const notas = await DataClient.listEntradasNFAbertas();
- const container = document.getElementById('nf-list-items');
+        <!-- RESUMO OPERACIONAL COMPACTO -->
+        <div class="entrada-nf-summary-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;">
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">EM RECEBIMENTO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #0f172a;" id="summary-count-total">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #3b82f6; font-size: 26px; opacity: 0.85;">inbox</span>
+          </div>
 
- if (notas.length === 0) {
- container.innerHTML = `
- <div style="text-align: center; padding: 60px 20px; background: #fff; border-radius: 24px; border: 1px dashed rgba(15,23,42,0.16); box-shadow:0 10px 24px rgba(15,23,42,0.04);">
- <span class="material-symbols-rounded" style="font-size: 48px; color: #94a3b8; margin-bottom: 16px;">task_alt</span>
- <p style="color: #0f172a; font-weight:800; margin:0 0 6px 0;">Nenhuma nota operacional em aberto.</p>
- <p style="color: #64748b; margin:0;">Notas jA lanAadas somente no financeiro aparecem no Hisao de entradas.</p>
- </div>
- `;
- return;
- }
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">AGUARDANDO IDENTIFICAÇÃO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #b45309;" id="summary-count-ident">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #f59e0b; font-size: 26px; opacity: 0.85;">help_outline</span>
+          </div>
 
- container.innerHTML = `
- <div style="display: flex; flex-direction: column; gap: 12px;">
- ${notas.map(nf => {
- const statusInfo = getEntradaNFOpenStatusInfo(nf);
- return `
- <div class="nf-card" onclick="renderNFDetail('${nf.id}')" style="background: white; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: transform 0.2s; gap:16px;">
- <div style="flex: 1; min-width:0;">
- <div style="font-weight: 800; color: #101018; font-size: 1rem;">NF ${nf.numero_nf}</div>
- <div style="font-size: 0.75rem; color: #666; text-transform: uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${nf.fornecedor_nome}</div>
- </div>
- <div style="text-align: right; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
- <div style="font-weight: 700; color: var(--primary); font-size: 0.9rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
- <div style="display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 4px;">
- <span class="status-dot" style="width: 6px; height: 6px; background: ${statusInfo.tone}; border-radius: 50%;"></span>
- <span style="font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase;">${statusInfo.label}</span>
- </div>
- <span style="font-size:0.68rem; font-weight:800; color:${statusInfo.tone}; text-transform:uppercase;">${statusInfo.action}</span>
- </div>
- </div>
- `;
- }).join('')}
- </div>
- `;
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748b;">PRONTAS PARA RECEBIMENTO</span>
+              <span style="font-size: 1.35rem; font-weight: 800; color: #15803d;" id="summary-count-prontas">-</span>
+            </div>
+            <span class="material-symbols-rounded" style="color: #22c55e; font-size: 26px; opacity: 0.85;">check_circle</span>
+          </div>
+        </div>
+
+        ${drafts.length ? `
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.85rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="color:#f59e0b; font-size: 18px;">draft</span>
+              Rascunhos Locais de XML (${drafts.length})
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              ${drafts.map(d => {
+                const supplierName = d.fornecedor?.razao_social || d.fornecedor?.nome_fantasia || d.fornecedor?.cnpj || 'Fornecedor não identificado';
+                const totalItems = d.itens?.length || 0;
+                return `
+                  <div style="background: #fff; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 800; color: #0f172a; font-size: 0.9rem;">NF ${d.numero_nf || 'XML Sem Número'}</div>
+                      <div style="font-size: 0.78rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${supplierName}</div>
+                      <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">${totalItems} itens · Salvo localmente neste dispositivo</div>
+                    </div>
+                    <button type="button" onclick="resumeEntradaNFXMLDraft('${d.chave_acesso}')" style="background:#f59e0b; color:#111827; font-weight:700; padding:8px 14px; border-radius:8px; border:none; cursor:pointer; font-size:0.78rem; display:inline-flex; align-items:center; gap:6px;">
+                      <span class="material-symbols-rounded" style="font-size:16px;">restore</span> Continuar
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- BUSCA COMPACTA -->
+        <div style="margin-bottom: 20px; position: relative;">
+          <span class="material-symbols-rounded" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 20px;">search</span>
+          <input 
+            type="text" 
+            id="search-nf-em-recebimento" 
+            placeholder="Buscar por número da NF ou fornecedor..." 
+            style="width: 100%; padding: 11px 14px 11px 42px; border-radius: 12px; border: 1px solid rgba(15,23,42,0.12); background: var(--bg-card, #fff); color: var(--text-main, #0f172a); font-size: 0.88rem; font-weight: 500; outline: none; transition: border-color 0.2s;"
+            oninput="filterEntradasEmRecebimentoList()"
+          />
+        </div>
+
+        <div id="em-recebimento-banco-list">
+          <div style="text-align: center; padding: 40px; color: var(--muted);">Carregando notas fiscais em recebimento...</div>
+        </div>
+      </main>
+    </div>
+  `;
+
+  const todasNotas = await DataClient.listEntradasNFAbertas();
+  const container = document.getElementById('em-recebimento-banco-list');
+  if (!container) return;
+
+  // Filtragem estrita: apenas registros operacionais reais em recebimento aberto (ignora testes 3P, canceladas e finalizadas com estoque_finalizado)
+  const notas = (todasNotas || []).filter(nf => {
+    if (!isEntradaNFHistoricoOperacional(nf)) return false;
+    const status = String(nf?.status || '').toLowerCase();
+    if (status.includes('finalizada') || status === 'entrada_confirmada' || status === 'financeiro_lancado' || nf?.estoque_finalizado) return false;
+    const forn = String(nf?.fornecedor_nome || '').toUpperCase();
+    if (forn.includes('TESTE') || (forn.includes('FORNECEDOR NAO CADASTRADO') && String(nf?.numero_nf || '').includes('TEST'))) return false;
+    const num = String(nf?.numero_nf || '').toUpperCase();
+    if (num.startsWith('B2-TEST') || num.startsWith('B3-TEST') || num.startsWith('VERIF-') || num.startsWith('AUDIT-NF')) return false;
+    return true;
+  });
+
+  // Buscar itens de todas as notas abertas para determinar estado real de identificação
+  const client = window.supabaseClient;
+  const nfIds = notas.map(n => n.id);
+  const itensPorNota = new Map();
+
+  if (client && nfIds.length > 0) {
+    const { data: itensData } = await client
+      .from('entradas_nf_itens')
+      .select('id, entrada_nf_id, nf_id, id_interno, status_vinculo');
+
+    (itensData || []).forEach(item => {
+      const eId = item.entrada_nf_id || item.nf_id;
+      if (eId) {
+        if (!itensPorNota.has(eId)) itensPorNota.set(eId, []);
+        itensPorNota.get(eId).push(item);
+      }
+    });
+  }
+
+  // Analisar itens reais de cada NF
+  notas.forEach(nf => {
+    const itens = itensPorNota.get(nf.id) || [];
+    const totalItens = itens.length;
+    const pendentesCount = itens.filter(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo').length;
+    nf._totalItens = totalItens;
+    nf._pendentesCount = pendentesCount;
+    nf._temPendenciasIdentificacao = totalItens === 0 || pendentesCount > 0;
+  });
+
+  // Atualizar indicadores operacionais com dados reais
+  const countTotal = notas.length;
+  const countIdentificacao = notas.filter(nf => nf._temPendenciasIdentificacao).length;
+  const countProntas = notas.filter(nf => !nf._temPendenciasIdentificacao).length;
+
+  document.getElementById('summary-count-total')?.replaceChildren(document.createTextNode(String(countTotal)));
+  document.getElementById('summary-count-ident')?.replaceChildren(document.createTextNode(String(countIdentificacao)));
+  document.getElementById('summary-count-prontas')?.replaceChildren(document.createTextNode(String(countProntas)));
+
+  if (notas.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 54px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+        <span class="material-symbols-rounded" style="font-size: 48px; color: #94a3b8; margin-bottom: 12px; display: block;">inventory_2</span>
+        <h3 style="color: #0f172a; font-weight: 800; font-size: 1.05rem; margin: 0 0 6px 0;">Nenhuma nota fiscal aguardando recebimento.</h3>
+        <p style="color: #64748b; font-size: 0.85rem; font-weight: 500; margin: 0;">As novas notas importadas aparecerão aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div id="nf-recebimento-cards-container" style="display: flex; flex-direction: column; gap: 12px;">
+      ${notas.map(nf => {
+        const hasUnlinked = nf._temPendenciasIdentificacao;
+        const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+        const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+
+        const statusDisplay = hasUnlinked
+          ? {
+              label: 'AGUARDANDO IDENTIFICAÇÃO',
+              color: '#b45309',
+              bg: 'rgba(245, 158, 11, 0.12)',
+              border: 'rgba(245, 158, 11, 0.3)'
+            }
+          : {
+              label: 'PRONTA PARA RECEBIMENTO',
+              color: '#15803d',
+              bg: 'rgba(34, 197, 94, 0.12)',
+              border: 'rgba(34, 197, 94, 0.3)'
+            };
+
+        const targetAction = hasUnlinked
+          ? `renderEntradaNFIdentificacao('${nf.id}')`
+          : `renderNFDetail('${nf.id}')`;
+
+        const buttonHtml = hasUnlinked
+          ? `<button type="button" class="btn-acao-identificar" onclick="event.stopPropagation(); renderEntradaNFIdentificacao('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #f59e0b; color: #111827; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(245,158,11,0.25); transition: transform 0.15s, background 0.15s;">
+               <span class="material-symbols-rounded" style="font-size: 16px;">link</span> IDENTIFICAR PRODUTOS
+             </button>`
+          : `<button type="button" class="btn-acao-recebimento" onclick="event.stopPropagation(); renderNFDetail('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #22c55e; color: #ffffff; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(34,197,94,0.25); transition: transform 0.15s, background 0.15s;">
+               <span class="material-symbols-rounded" style="font-size: 16px;">inventory_2</span> INICIAR RECEBIMENTO
+             </button>`;
+
+        return `
+          <div class="nf-recebimento-card-item" data-numero="${escapeKitAttribute(nf.numero_nf || '')}" data-fornecedor="${escapeKitAttribute(fornecedorNome.toLowerCase())}" onclick="${targetAction}" style="background: #fff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; box-shadow: 0 4px 12px rgba(15,23,42,0.03); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            
+            <!-- LADO ESQUERDO: HIERARQUIA NF + FORNECEDOR + DATA -->
+            <div style="flex: 1; min-width: 220px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">NF ${nf.numero_nf || '-'}</span>
+                <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+              </div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #334155; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px;">
+                ${fornecedorNome}
+              </div>
+              <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">
+                Emissão: ${dateStr}
+              </div>
+            </div>
+
+            <!-- ÁREA CENTRAL: STATUS OPERACIONAL -->
+            <div style="display: flex; align-items: center; justify-content: center; min-width: 200px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; background: ${statusDisplay.bg}; color: ${statusDisplay.color}; border: 1px solid ${statusDisplay.border};">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: ${statusDisplay.color};"></span>
+                ${statusDisplay.label}
+              </span>
+            </div>
+
+            <!-- LADO DIREITO: VALOR FISCAL + BOTÃO DE AÇÃO -->
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 220px;">
+              <div style="text-align: right;">
+                <span style="display: block; font-size: 0.68rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Valor Fiscal</span>
+                <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">${nfXmlFormatMoney(nf.valor_total)}</span>
+              </div>
+              ${buttonHtml}
+            </div>
+
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div id="nf-recebimento-search-empty" style="display: none; text-align: center; padding: 36px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+      <span class="material-symbols-rounded" style="font-size: 36px; color: #94a3b8; margin-bottom: 8px; display: block;">search_off</span>
+      <p style="color: #0f172a; font-weight: 700; margin: 0 0 4px 0;">Nenhuma nota encontrada para o filtro informado.</p>
+    </div>
+  `;
+}
+
+function filterEntradasEmRecebimentoList() {
+  const query = String(document.getElementById('search-nf-em-recebimento')?.value || '').trim().toLowerCase();
+  const cards = document.querySelectorAll('.nf-recebimento-card-item');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const num = card.dataset.numero || '';
+    const forn = card.dataset.fornecedor || '';
+    const matches = !query || num.toLowerCase().includes(query) || forn.includes(query);
+    card.style.display = matches ? 'flex' : 'none';
+    if (matches) visibleCount++;
+  });
+
+  const emptyMsg = document.getElementById('nf-recebimento-search-empty');
+  if (emptyMsg) {
+    emptyMsg.style.display = (cards.length > 0 && visibleCount === 0) ? 'block' : 'none';
+  }
+}
+
+async function renderEntradaNFPendencias(backAction = 'renderNFSubMenu()', filterCategory = 'TODOS') {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in entrada-nf-pendencias-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'PENDÊNCIAS OPERACIONAIS',
+        icon: 'nf_pendencias',
+        backAction: backAction
+      })}
+      
+      <main class="container app-page-container entrada-nf-pendencias-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        <div id="pendencias-container-root">
+          <div style="text-align: center; padding: 40px; color: var(--muted);">Analisando pendências operacionais...</div>
+        </div>
+      </main>
+    </div>
+  `;
+
+  const todasNotas = await DataClient.listEntradasNFAbertas();
+  const root = document.getElementById('pendencias-container-root');
+  if (!root) return;
+
+  const notas = (todasNotas || []).filter(nf => {
+    if (!isEntradaNFHistoricoOperacional(nf)) return false;
+    const status = String(nf?.status || '').toLowerCase();
+    if (status.includes('finalizada') || status === 'entrada_confirmada' || status === 'financeiro_lancado' || nf?.estoque_finalizado) return false;
+    const forn = String(nf?.fornecedor_nome || '').toUpperCase();
+    if (forn.includes('TESTE') || (forn.includes('FORNECEDOR NAO CADASTRADO') && String(nf?.numero_nf || '').includes('TEST'))) return false;
+    const num = String(nf?.numero_nf || '').toUpperCase();
+    if (num.startsWith('B2-TEST') || num.startsWith('B3-TEST') || num.startsWith('VERIF-') || num.startsWith('AUDIT-NF')) return false;
+    return true;
+  });
+
+  const listWithBadges = (await Promise.all(notas.map(async nf => {
+    const badges = [];
+    const status = String(nf.status || '').toLowerCase();
+
+    // 1. PRODUTO / FORNECEDOR — Fonte de verdade: ITENS REAIS
+    if (status === 'pendente_fornecedor') {
+      badges.push({ cat: 'PRODUTO', label: 'Fornecedor Pendente', tone: '#f59e0b', icon: 'person_search' });
+    }
+
+    const itens = await fetchEntradaNFItens(nf.id);
+    if (Array.isArray(itens)) {
+      const temConflito = itens.some(i => i.status_vinculo === 'conflito_vinculo' || (i.observacoes && i.observacoes.includes('CONFLITO_VINCULO')));
+      if (temConflito) {
+        badges.push({ cat: 'PRODUTO', label: 'Conflito de Vínculo', tone: '#ef4444', icon: 'warning' });
+      }
+
+      const temInativo = itens.some(i => {
+        const isStatusInativo = i.status_vinculo === 'produto_inativo';
+        const decisaoRegistrada = (i.observacoes && i.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || i.decisao_inativo === 'manter_inativo';
+        return isStatusInativo && !decisaoRegistrada;
+      });
+      if (temInativo) {
+        badges.push({ cat: 'PRODUTO', label: 'Produto Inativo', tone: '#f59e0b', icon: 'warning' });
+      }
+
+      const temNaoIdentificado = itens.length === 0 || itens.some(i => (!i.id_interno || i.status_vinculo === 'pendente_vinculo') && i.status_vinculo !== 'conflito_vinculo' && i.status_vinculo !== 'produto_inativo');
+      if (temNaoIdentificado) {
+        badges.push({ cat: 'PRODUTO', label: 'Produto Não Identificado', tone: '#f59e0b', icon: 'help_outline' });
+      }
+    }
+
+    // 2. FÍSICO — Fonte de verdade: RECEBIMENTOS REAIS
+    if (Array.isArray(itens)) {
+      const temRecusa = itens.some(i => (i.recebimentos || []).some(r => r.quantidade_recusada > 0 || r.situacao === 'RECUSADO'));
+      const temDivergenciaFisica = itens.some(i => (i.recebimentos || []).some(r => r.situacao === 'DIVERGENCIA' || (r.quantidade_fisica !== undefined && r.quantidade_fisica !== parseDecimal(i.quantidade))));
+      if (temRecusa) {
+        badges.push({ cat: 'FÍSICO', label: 'Item Recusado', tone: '#ef4444', icon: 'block' });
+      } else if (temDivergenciaFisica) {
+        badges.push({ cat: 'FÍSICO', label: 'Divergência Física', tone: '#f59e0b', icon: 'warning' });
+      }
+    }
+
+    // 3. FINANCEIRO — Condição financeira pendente
+    if (nf.status_financeiro === 'a_combinar' || nf.tipo_condicao_financeira === 'a_combinar') {
+      badges.push({ cat: 'FINANCEIRO', label: 'Financeiro A Combinar', tone: '#3b82f6', icon: 'payments' });
+    }
+
+    // 4. PEDIDO — Vínculo de Pedido de Compra pendente
+    if (nf.tipo_vinculo_pedido === 'COM_PEDIDO') {
+      const alocs = await DataClient.fetchAlocacoesPedidoEntradaNF(nf.id);
+      if (!alocs || !alocs.length) {
+        badges.push({ cat: 'PEDIDO', label: 'Item Não Pedido', tone: '#f59e0b', icon: 'assignment_late' });
+      }
+    }
+
+    return { nf, badges, itens };
+  }))).filter(item => item.badges.length > 0);
+
+  // Contadores reais por categoria
+  const countTodos = listWithBadges.length;
+  const countProduto = listWithBadges.filter(i => i.badges.some(b => b.cat === 'PRODUTO')).length;
+  const countFisico = listWithBadges.filter(i => i.badges.some(b => b.cat === 'FÍSICO')).length;
+  const countPedido = listWithBadges.filter(i => i.badges.some(b => b.cat === 'PEDIDO')).length;
+  const countFinanceiro = listWithBadges.filter(i => i.badges.some(b => b.cat === 'FINANCEIRO')).length;
+
+  const filterOptions = [
+    { id: 'TODOS', label: 'TODOS', count: countTodos },
+    { id: 'PRODUTO', label: 'PRODUTO', count: countProduto },
+    { id: 'FÍSICO', label: 'FÍSICO', count: countFisico },
+    { id: 'PEDIDO', label: 'PEDIDO', count: countPedido },
+    { id: 'FINANCEIRO', label: 'FINANCEIRO', count: countFinanceiro }
+  ];
+
+  const filtered = listWithBadges.filter(item => {
+    if (filterCategory === 'TODOS') return true;
+    return item.badges.some(b => b.cat === filterCategory);
+  });
+
+  root.innerHTML = `
+    <!-- RESUMO COMPACTO DA SEÇÃO -->
+    <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(15,23,42,0.02); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+      <div>
+        <strong style="display: block; color: #0f172a; font-size: 0.92rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">PENDÊNCIAS ENCONTRADAS</strong>
+        <span style="font-size: 0.78rem; color: #64748b; font-weight: 500;">Somente notas que exigem intervenção antes da finalização.</span>
+      </div>
+      <div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: ${countTodos > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)'}; color: ${countTodos > 0 ? '#ef4444' : '#15803d'}; border: 1px solid ${countTodos > 0 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.25)'};">
+          <span class="material-symbols-rounded" style="font-size: 16px;">${countTodos > 0 ? 'warning' : 'check_circle'}</span>
+          ${countTodos} ${countTodos === 1 ? 'NOTA COM PENDÊNCIA' : 'NOTAS COM PENDÊNCIA'}
+        </span>
+      </div>
+    </div>
+
+    <!-- FILTROS POR CATEGORIA INTEGRADOS COM CONTADORES -->
+    <div class="entrada-nf-pendencias-filters" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 20px;">
+      ${filterOptions.map(opt => {
+        const isActive = filterCategory === opt.id;
+        return `
+          <button type="button" onclick="renderEntradaNFPendencias('${backAction}', '${opt.id}')" 
+            style="padding: 7px 16px; border-radius: 20px; border: 1px solid ${isActive ? '#2563eb' : 'rgba(15,23,42,0.12)'}; background: ${isActive ? '#2563eb' : 'var(--bg-card, #fff)'}; color: ${isActive ? '#ffffff' : '#475569'}; font-weight: 700; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px; box-shadow: ${isActive ? '0 2px 6px rgba(37,99,235,0.25)' : 'none'};">
+            <span>${opt.label}</span>
+            <span style="display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 800; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.06)'}; color: ${isActive ? '#ffffff' : '#64748b'};">${opt.count}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+
+    <div id="pendencias-nf-list">
+      ${filtered.length === 0 ? `
+        <div style="text-align: center; padding: 54px 20px; background: var(--bg-card, #fff); border-radius: 16px; border: 1px dashed rgba(15,23,42,0.16); margin-top: 8px;">
+          <span class="material-symbols-rounded" style="font-size: 48px; color: #22c55e; margin-bottom: 12px; display: block;">verified</span>
+          <h3 style="color: #0f172a; font-weight: 800; font-size: 1.05rem; margin: 0 0 6px 0;">NENHUMA PENDÊNCIA OPERACIONAL</h3>
+          <p style="color: #64748b; font-size: 0.85rem; font-weight: 500; margin: 0;">${filterCategory === 'TODOS' ? 'Todas as entradas em andamento estão sem pendências que exijam intervenção.' : `Nenhuma entrada possui pendências na categoria '${filterCategory}'.`}</p>
+        </div>
+      ` : `
+        <div id="pendencias-cards-container" style="display: flex; flex-direction: column; gap: 12px;">
+          ${filtered.map(({ nf, badges }) => {
+            const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+            const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+            const categories = [...new Set(badges.map(b => b.cat))];
+
+            let actionLabel = 'CORRIGIR PENDÊNCIAS';
+            let actionIcon = 'arrow_forward';
+            let actionBg = '#2563eb';
+            let actionColor = '#ffffff';
+            let actionClick = `continueEntradaNF('${nf.id}')`;
+
+            if (categories.length === 1) {
+              const cat = categories[0];
+              if (cat === 'PRODUTO') {
+                actionLabel = 'IDENTIFICAR PRODUTOS';
+                actionIcon = 'link';
+                actionBg = '#f59e0b';
+                actionColor = '#111827';
+                actionClick = `renderEntradaNFIdentificacao('${nf.id}')`;
+              } else if (cat === 'FÍSICO') {
+                actionLabel = 'CONFERIR / RESOLVER';
+                actionIcon = 'inventory_2';
+                actionBg = '#22c55e';
+                actionColor = '#ffffff';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              } else if (cat === 'FINANCEIRO') {
+                actionLabel = 'DEFINIR FINANCEIRO';
+                actionIcon = 'payments';
+                actionBg = '#3b82f6';
+                actionColor = '#ffffff';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              } else if (cat === 'PEDIDO') {
+                actionLabel = 'VINCULAR PEDIDO';
+                actionIcon = 'assignment_late';
+                actionBg = '#f59e0b';
+                actionColor = '#111827';
+                actionClick = `renderNFDetail('${nf.id}')`;
+              }
+            } else {
+              actionLabel = 'CORRIGIR PENDÊNCIAS';
+              actionIcon = 'arrow_forward';
+              actionBg = '#2563eb';
+              actionColor = '#ffffff';
+              actionClick = categories.includes('PRODUTO') ? `renderEntradaNFIdentificacao('${nf.id}')` : `renderNFDetail('${nf.id}')`;
+            }
+
+            return `
+              <div class="nf-pendencia-card-item" onclick="${actionClick}" style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; box-shadow: 0 4px 12px rgba(15,23,42,0.03); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                
+                <!-- ESQUERDA: NF + FORNECEDOR + EMISSÃO -->
+                <div style="flex: 1; min-width: 220px;">
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">NF ${nf.numero_nf || '-'}</span>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+                  </div>
+                  <div style="font-size: 0.82rem; font-weight: 700; color: #334155; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px;">
+                    ${escapeKitAttribute(fornecedorNome)}
+                  </div>
+                  <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">
+                    Emissão: ${dateStr}
+                  </div>
+                </div>
+
+                <!-- CENTRO: BADGES DAS PENDÊNCIAS REAIS -->
+                <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; min-width: 200px;">
+                  ${badges.map(b => `
+                    <span style="display: inline-flex; align-items: center; gap: 5px; background: ${b.tone}15; color: ${b.tone}; border: 1px solid ${b.tone}40; padding: 5px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">
+                      <span class="material-symbols-rounded" style="font-size: 15px;">${b.icon}</span>
+                      ${b.label}
+                    </span>
+                  `).join('')}
+                </div>
+
+                <!-- DIREITA: VALOR FISCAL + BOTÃO CONTEXTUAL -->
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 220px;">
+                  <div style="text-align: right;">
+                    <span style="display: block; font-size: 0.68rem; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Valor Fiscal</span>
+                    <span style="font-size: 1.05rem; font-weight: 800; color: #0f172a;">${nfXmlFormatMoney(nf.valor_total)}</span>
+                  </div>
+                  <button type="button" class="btn-corrigir-entrada" onclick="event.stopPropagation(); ${actionClick}" style="display: inline-flex; align-items: center; gap: 6px; background: ${actionBg}; color: ${actionColor}; border: none; padding: 9px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: transform 0.15s, background 0.15s;">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">${actionIcon}</span> ${actionLabel}
+                  </button>
+                </div>
+
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+  `;
 }
 
 function getEntradaNFDate(value) {
@@ -34201,520 +35218,2808 @@ function isEntradaNFWithinPeriod(entrada, period) {
  return date >= min;
 }
 
+function isEntradaNFHistoricoOperacional(entrada) {
+  const status = String(entrada?.status || '').toLowerCase();
+  const fornecedor = String(entrada?.fornecedor_nome || '').toUpperCase();
+  if (status === 'cancelada') return false;
+  if (fornecedor.includes('TESTE FASE 3P')) return false;
+  return true;
+}
+
 function getFilteredHistoricoEntradasNF(historico = []) {
- const query = normalizeProductSearchTerm(entradaNFHistoryState.query || '');
- return (historico || []).filter(entrada => {
- const resumo = calcularResumoEntradaNF(entrada);
- const statusLabel = getEntradaNFStatusLabel(entrada).toLowerCase();
- const statusFilter = entradaNFHistoryState.status;
- if (statusFilter !== 'todos') {
- if (statusFilter === 'estoque' && !resumo.gerouEstoque) return false;
- else if (statusFilter === 'financeiro' && !resumo.gerouFinanceiro) return false;
- else if (statusFilter !== 'estoque' && statusFilter !== 'financeiro' && !statusLabel.includes(statusFilter)) return false;
- }
- if (!isEntradaNFWithinPeriod(entrada, entradaNFHistoryState.period)) return false;
- if (!query) return true;
- const itemText = (entrada.itens || []).map(item => `${item.descricao_produto_fornecedor || ''} ${item.descricao_xml || ''} ${item.id_interno || ''}`).join('');
- const haystack = normalizeProductSearchTerm([
- entrada.numero_nf,
- entrada.chave_acesso,
- entrada.fornecedor_nome,
- entrada.fornecedor_cnpj,
- entrada.cnpj_fornecedor,
- entrada.status,
- itemText
- ].join(' '));
- return haystack.includes(query);
- });
+  const query = normalizeProductSearchTerm(entradaNFHistoryState.query || '');
+  const operacionais = (historico || []).filter(isEntradaNFHistoricoOperacional);
+  return operacionais.filter(entrada => {
+    const resumo = calcularResumoEntradaNF(entrada);
+    const statusLabel = getEntradaNFStatusLabel(entrada).toLowerCase();
+    const statusFilter = entradaNFHistoryState.status;
+    if (statusFilter !== 'todos') {
+      if (statusFilter === 'estoque' && !resumo.gerouEstoque) return false;
+      else if (statusFilter === 'financeiro' && !resumo.gerouFinanceiro) return false;
+      else if (statusFilter !== 'estoque' && statusFilter !== 'financeiro' && !statusLabel.includes(statusFilter)) return false;
+    }
+    if (!isEntradaNFWithinPeriod(entrada, entradaNFHistoryState.period)) return false;
+    if (!query) return true;
+    const itemText = (entrada.itens || []).map(item => `${item.descricao_produto_fornecedor || ''} ${item.descricao_xml || ''} ${item.id_interno || ''}`).join('');
+    const haystack = normalizeProductSearchTerm([
+      entrada.numero_nf,
+      entrada.chave_acesso,
+      entrada.fornecedor_nome,
+      entrada.fornecedor_cnpj,
+      entrada.cnpj_fornecedor,
+      entrada.status,
+      itemText
+    ].join(' '));
+    return haystack.includes(query);
+  });
+}
+
+function getDyIconHTML(name, category = 'action') {
+  if (typeof window.dyIcon === 'function') {
+    const svg = window.dyIcon(name, category);
+    if (svg) return svg;
+  }
+  return `<span class="material-symbols-rounded">${name}</span>`;
 }
 
 function renderEntradaNFHistorySummaryCards(historico = []) {
- const total = historico.length;
- const finalizadas = historico.filter(entrada => String(entrada.status || '').toLowerCase().includes('finalizada') || entrada.estoque_finalizado).length;
- const emEstoque = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouEstoque).length;
- const financeiro = historico.filter(entrada => calcularResumoEntradaNF(entrada).gerouFinanceiro).length;
- const valorTotal = historico.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
- const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
- const cards = [
- ['receipt_long', 'Total de entradas', total, 'AAiltimos registros'],
- ['task_alt', 'Finalizadas', finalizadas, percent(finalizadas)],
- ['inventory_2', 'Em estoque', emEstoque, percent(emEstoque)],
- ['payments', 'Financeiro', financeiro, percent(financeiro)],
- ['paid', 'Valor total', getEntradaNFMoney(valorTotal), 'SomatArio das NFs']
- ];
- return `
- <section class="entrada-nf-history-summary">
- ${cards.map(([icon, label, value, hint]) => `
- <article>
- <span class="material-symbols-rounded">${icon}</span>
- <div>
- <small>${label}</small>
- <strong>${value}</strong>
- <em>${hint}</em>
- </div>
- </article>
- `).join('')}
- </section>
- `;
+  const operacionais = (historico || []).filter(isEntradaNFHistoricoOperacional);
+  const total = operacionais.length;
+  const finalizadas = operacionais.filter(entrada => String(entrada.status || '').toLowerCase().includes('finalizada') || entrada.estoque_finalizado).length;
+  const emEstoque = operacionais.filter(entrada => calcularResumoEntradaNF(entrada).gerouEstoque).length;
+  const financeiro = operacionais.filter(entrada => calcularResumoEntradaNF(entrada).gerouFinanceiro).length;
+  const valorTotal = operacionais.reduce((sum, entrada) => sum + calcularResumoEntradaNF(entrada).valorTotal, 0);
+  const percent = value => total ? `${Math.round((value / total) * 100)}% do total` : 'Sem entradas';
+  
+  const cards = [
+    { key: 'total', icon: null, label: 'TOTAL DE ENTRADAS', value: total, hint: 'Últimos registros' },
+    { key: 'finalizadas', icon: 'check_circle', category: 'status', label: 'FINALIZADAS', value: finalizadas, hint: percent(finalizadas) },
+    { key: 'estoque', icon: 'inventory_2', category: 'status', label: 'EM ESTOQUE', value: emEstoque, hint: percent(emEstoque) },
+    { key: 'financeiro', icon: 'financial', category: 'status', label: 'FINANCEIRO', value: financeiro, hint: percent(financeiro) },
+    { key: 'valor', icon: null, label: 'VALOR TOTAL', value: getEntradaNFMoney(valorTotal), hint: 'Somatório das NFs' }
+  ];
+  return `
+  <section class="entrada-nf-history-summary">
+    ${cards.map(c => `
+    <article class="entrada-nf-summary-card card-${c.key} ${!c.icon ? 'no-icon' : ''}">
+      ${c.icon ? `<span class="entrada-nf-summary-icon icon-${c.key}">${(window.dyIcon && window.dyIcon(c.icon, c.category || 'status')) || getDyIconHTML('check_circle', 'navigation')}</span>` : ''}
+      <div class="entrada-nf-summary-info">
+        <small class="entrada-nf-summary-label label-${c.key}">${c.label}</small>
+        <strong class="entrada-nf-summary-val">${c.value}</strong>
+        <em class="entrada-nf-summary-hint">${c.hint}</em>
+      </div>
+    </article>
+    `).join('')}
+  </section>
+  `;
 }
 
 function renderEntradaNFHistoryFilters() {
- return `
- <section class="entrada-nf-history-filters">
- <label class="entrada-nf-history-search">
- <span class="material-symbols-rounded">search</span>
- <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
- </label>
- <label>
- <span>PerAodo</span>
- <select onchange="setEntradaNFHistoryFilter('period', this.value)">
- ${[
- ['30', 'AAiltimos 30 dias'],
- ['90', 'AAiltimos 90 dias'],
- ['180', 'AAiltimos 180 dias'],
- ['todos', 'Todo o hisao']
- ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
- </select>
- </label>
- <label>
- <span>Status</span>
- <select onchange="setEntradaNFHistoryFilter('status', this.value)">
- ${[
- ['todos', 'Todos'],
- ['finalizada', 'Finalizada'],
- ['estoque', 'Estoque'],
- ['financeiro', 'Financeiro'],
- ['rascunho', 'Rascunho'],
- ['pendente', 'Pendente'],
- ['erro', 'Erro XML']
- ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
- </select>
- </label>
- showToast('Operacao concluida.', 'info');
- <span class="material-symbols-rounded">tune</span>
- Mais filtros
- </button>
- </section>
- `;
+  return `
+  <section class="entrada-nf-history-filters">
+    <div class="entrada-nf-history-search">
+      <span class="entrada-nf-history-search-icon">${(window.dyIcon && window.dyIcon('search', 'action')) || getDyIconHTML('search', 'navigation')}</span>
+      <input id="entrada-nf-history-search-input" type="search" placeholder="Buscar por NF, fornecedor, produto..." value="${escapeKitAttribute(entradaNFHistoryState.query)}" oninput="setEntradaNFHistoryFilter('query', this.value)">
+    </div>
+    <label class="entrada-nf-history-filter-select">
+      <span class="filter-label-text">Período</span>
+      <select onchange="setEntradaNFHistoryFilter('period', this.value)">
+        ${[
+          ['30', 'Últimos 30 dias'],
+          ['90', 'Últimos 90 dias'],
+          ['180', 'Últimos 180 dias'],
+          ['todos', 'Todo o histórico']
+        ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.period === value ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+    </label>
+    <label class="entrada-nf-history-filter-select">
+      <span class="filter-label-text">Status</span>
+      <select onchange="setEntradaNFHistoryFilter('status', this.value)">
+        ${[
+          ['todos', 'Todos'],
+          ['finalizada', 'Finalizada'],
+          ['estoque', 'Estoque'],
+          ['financeiro', 'Financeiro'],
+          ['rascunho', 'Rascunho'],
+          ['pendente', 'Pendente'],
+          ['erro', 'Erro XML']
+        ].map(([value, label]) => `<option value="${value}" ${entradaNFHistoryState.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
+    </label>
+    <button type="button" class="btn-more-filters" onclick="showToast('Filtros adicionais em desenvolvimento.', 'info')">
+      ${(window.dyIcon && window.dyIcon('filter', 'action')) || getDyIconHTML('tune', 'navigation')}
+      Mais filtros
+    </button>
+  </section>
+  `;
 }
 
 function renderEntradaNFHistoryBadges(entrada, resumo) {
- const statusLabel = getEntradaNFStatusLabel(entrada);
- const isFinalizada = String(statusLabel || '').toLowerCase().includes('finalizada') || !!entrada.estoque_finalizado;
- const indicators = [];
- const renderIndicator = (type, icon, label) => `
- <span class="entrada-nf-indicator ${type}" title="${label}" aria-label="${label}" role="img">
- <span class="material-symbols-rounded">${icon}</span>
- </span>
- `;
+  const statusLabel = getEntradaNFStatusLabel(entrada);
+  const isFinalizada = String(statusLabel || '').toLowerCase().includes('finalizada') || !!entrada.estoque_finalizado;
+  const indicators = [];
 
- if (isFinalizada) indicators.push(renderIndicator('finalizada', 'check_circle', 'Entrada finalizada'));
- if (resumo.gerouEstoque) indicators.push(renderIndicator('estoque', 'inventory_2', 'Estoque atualizado'));
- if (resumo.gerouFinanceiro) indicators.push(renderIndicator('financeiro', 'account_balance_wallet', 'Financeiro gerado'));
- if (entrada.erro_xml || entrada.xml_error) indicators.push(renderIndicator('erro', 'warning', 'Erro no XML'));
+  const renderBadge = (type, icon, text, category = 'status') => `
+  <span class="entrada-nf-badge ${type}" title="${text}">
+    ${(window.dyIcon && window.dyIcon(icon, category)) || getDyIconHTML('check_circle', 'navigation')}
+    <span>${text}</span>
+  </span>
+  `;
 
- return indicators.length
- ? indicators.join('')
- : renderIndicator('neutro', 'radio_button_unchecked', 'Sem indicadores conteudos');
+  if (isFinalizada) indicators.push(renderBadge('finalizada', 'check_circle', 'Finalizada', 'status'));
+  if (resumo.gerouEstoque) indicators.push(renderBadge('estoque', 'inventory_2', 'Estoque', 'status'));
+  if (resumo.gerouFinanceiro) indicators.push(renderBadge('financeiro', 'financial', 'Financeiro', 'status'));
+  if (entrada.erro_xml || entrada.xml_error) indicators.push(renderBadge('erro', 'warning', 'Erro XML', 'status'));
+
+  return indicators.join('');
 }
 
 function renderEntradaNFHistoryRows(entries = []) {
- return entries.map(entrada => {
- const resumo = calcularResumoEntradaNF(entrada);
- const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor nao informado';
- return `
- <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
- <div class="entrada-nf-history-cell nf">
- <span class="entrada-nf-history-icon material-symbols-rounded">receipt_long</span>
- <div>
- <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
- <small>XML importado</small>
- </div>
- </div>
- <div class="entrada-nf-history-cell supplier">
- <strong>${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
- <small>${escapeKitAttribute(entrada.tipo_lancamento || entrada.chave_acesso || 'Entrada fiscal')}</small>
- </div>
- <div class="entrada-nf-history-cell date"><small>Emisao</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
- <div class="entrada-nf-history-cell date"><small>Lanao</small><strong>${getEntradaNFDateTime(getEntradaNFLaunchDate(entrada))}</strong></div>
- <div class="entrada-nf-history-cell count"><small>Itens</small><strong>${resumo.quantidadeItens}</strong></div>
- <div class="entrada-nf-history-cell total"><small>Total</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
- <div class="entrada-nf-history-cell status">${renderEntradaNFHistoryBadges(entrada, resumo)}</div>
- <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
- <button type="button" title="Visualizar detalhes" aria-label="Visualizar detalhes" onclick="renderDetalheEntradaNF('${entrada.id}')"><span class="material-symbols-rounded">visibility</span></button>
- <button type="button" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')"><span class="material-symbols-rounded">text_snippet</span></button>
- <button type="button" title="Abrir lancamento" aria-label="Abrir lancamento" onclick="editEntradaNFLancamento('${entrada.id}')"><span class="material-symbols-rounded">assignment</span></button>
- <button type="button" title="Mais opcoes" aria-label="Mais opcoes" onclick="cancelEntradaNFHistoryItem('${entrada.id}')"><span class="material-symbols-rounded">more_horiz</span></button>
- </div>
- </article>
- `;
- }).join('');
+  return entries.map(entrada => {
+    const resumo = calcularResumoEntradaNF(entrada);
+    const fornecedor = entrada.fornecedor_nome || entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || 'Fornecedor não informado';
+    const launchDateTime = getEntradaNFLaunchDate(entrada);
+    const launchFormatted = getEntradaNFDateTime(launchDateTime);
+    const [launchDateStr, launchTimeStr] = launchFormatted.includes(' ') ? launchFormatted.split(' ') : [launchFormatted, ''];
+
+    return `
+    <article class="entrada-nf-history-row" onclick="renderDetalheEntradaNF('${entrada.id}')">
+      <div class="entrada-nf-history-cell nf">
+        <div class="nf-cell-content">
+          <div class="nf-number-group">
+            <span class="nf-icon-small">${(window.dyIcon && window.dyIcon('xml', 'action')) || ''}</span>
+            <strong class="nf-number">NF ${escapeKitAttribute(entrada.numero_nf || '-')}</strong>
+          </div>
+          <span class="nf-chip-tag">XML IMPORTADO</span>
+        </div>
+      </div>
+      <div class="entrada-nf-history-cell supplier">
+        <strong class="supplier-name" title="${escapeKitAttribute(fornecedor)}">${escapeKitAttribute(fornecedor).toUpperCase()}</strong>
+        <small class="supplier-type">${escapeKitAttribute(entrada.tipo_lancamento || 'ENTRADA_NORMAL')}</small>
+      </div>
+      <div class="entrada-nf-history-cell date">
+        <strong class="date-primary">${getEntradaNFDate(entrada.data_emissao)}</strong>
+      </div>
+      <div class="entrada-nf-history-cell launch-date">
+        <strong class="date-primary">${launchDateStr}</strong>
+        ${launchTimeStr ? `<small class="time-secondary">${launchTimeStr}</small>` : ''}
+      </div>
+      <div class="entrada-nf-history-cell count">
+        <strong class="count-val">${resumo.quantidadeItens}</strong>
+      </div>
+      <div class="entrada-nf-history-cell total">
+        <strong class="total-val">${getEntradaNFMoney(resumo.valorTotal)}</strong>
+      </div>
+      <div class="entrada-nf-history-cell status">
+        ${renderEntradaNFHistoryBadges(entrada, resumo)}
+      </div>
+      <div class="entrada-nf-history-actions" onclick="event.stopPropagation()">
+        <button type="button" class="btn-action-icon" title="Visualizar entrada" aria-label="Visualizar entrada" onclick="renderDetalheEntradaNF('${entrada.id}')">
+          ${(window.dyIcon && window.dyIcon('visibility', 'action')) || getDyIconHTML('visibility', 'action')}
+        </button>
+        <button type="button" class="btn-action-icon" title="Visualizar XML" aria-label="Visualizar XML" onclick="openEntradaNFXML('${entrada.id}')">
+          ${(window.dyIcon && window.dyIcon('xml', 'action')) || getDyIconHTML('text_snippet', 'action')}
+        </button>
+      </div>
+    </article>
+    `;
+  }).join('');
 }
 
-function renderEntradaNFHistoryDashboard(historico = []) {
- const filtered = getFilteredHistoricoEntradasNF(historico);
- const totalPages = Math.max(1, Math.ceil(filtered.length / entradaNFHistoryState.pageSize));
- entradaNFHistoryState.page = Math.min(Math.max(1, entradaNFHistoryState.page), totalPages);
- const start = (entradaNFHistoryState.page - 1) * entradaNFHistoryState.pageSize;
- const pageEntries = filtered.slice(start, start + entradaNFHistoryState.pageSize);
- const showingStart = filtered.length ? start + 1 : 0;
- const showingEnd = start + pageEntries.length;
 
- return `
- <section class="entrada-nf-history-hero">
- <button type="button" class="entrada-nf-history-back back-button-standard" onclick="renderNFSubMenu()" aria-label="Voltar">
- ${getBackButtonStandardIconHTML()}
- </button>
- <div>
- <span class="entrada-nf-history-hero-icon material-symbols-rounded">history</span>
- <h1>HISTORICO DE ENTRADAS</h1>
- </div>
- </section>
- ${renderEntradaNFHistorySummaryCards(historico)}
- ${renderEntradaNFHistoryFilters()}
- <section class="entrada-nf-history-table-card">
- <div class="entrada-nf-history-table-head">
- <span>NF-e</span>
- <span>Fornecedor</span>
- <span>Emisao</span>
- <span>Lanao</span>
- <span>Itens</span>
- <span>Total</span>
- <span>Indicadores</span>
- <span>A\u00e7\u00f5es</span>
- </div>
- <div class="entrada-nf-history-list">
- ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
- <div class="entrada-nf-empty-state compact">
- <span class="material-symbols-rounded">search_off</span>
- <strong>Nenhuma entrada encontrada com os filtros atuais.</strong>
- </div>
- `}
- </div>
- <footer class="entrada-nf-history-pagination">
- <span>Mostrando ${showingStart} a ${showingEnd} de ${filtered.length} entradas</span>
- <div>
- <button type="button" ${entradaNFHistoryState.page <= 1 ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page - 1})">
- <span class="material-symbols-rounded">chevron_left</span>
- </button>
- <strong>${entradaNFHistoryState.page} / ${totalPages}</strong>
- <button type="button" ${entradaNFHistoryState.page >= totalPages ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page + 1})">
- <span class="material-symbols-rounded">chevron_right</span>
- </button>
- </div>
- </footer>
- </section>
- `;
+function renderEntradaNFHistoryDashboard(historico = []) {
+  const filtered = getFilteredHistoricoEntradasNF(historico);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / entradaNFHistoryState.pageSize));
+  entradaNFHistoryState.page = Math.min(Math.max(1, entradaNFHistoryState.page), totalPages);
+  const start = (entradaNFHistoryState.page - 1) * entradaNFHistoryState.pageSize;
+  const pageEntries = filtered.slice(start, start + entradaNFHistoryState.pageSize);
+  const showingStart = filtered.length ? start + 1 : 0;
+  const showingEnd = start + pageEntries.length;
+
+  return `
+  ${renderEntradaNFHistorySummaryCards(historico)}
+  ${renderEntradaNFHistoryFilters()}
+  <section class="entrada-nf-history-table-card">
+    <div class="entrada-nf-history-table-head">
+      <span>NF-e</span>
+      <span>Fornecedor</span>
+      <span>Emissão</span>
+      <span>Lançamento</span>
+      <span>Itens</span>
+      <span>Total</span>
+      <span>STATUS</span>
+      <span>Ações</span>
+    </div>
+    <div class="entrada-nf-history-list">
+      ${pageEntries.length ? renderEntradaNFHistoryRows(pageEntries) : `
+      <div class="entrada-nf-empty-state compact">
+        ${(window.dyIcon && window.dyIcon('search', 'action')) || getDyIconHTML('search_off', 'navigation')}
+        <strong>Nenhuma entrada encontrada com os filtros atuais.</strong>
+      </div>
+      `}
+    </div>
+    <footer class="entrada-nf-history-pagination">
+      <span>Mostrando ${showingStart} a ${showingEnd} de ${filtered.length} entradas</span>
+      <div>
+        <button type="button" ${entradaNFHistoryState.page <= 1 ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page - 1})">
+          ${(window.dyIcon && window.dyIcon('previous', 'navigation')) || getDyIconHTML('chevron_left', 'navigation')}
+        </button>
+        <strong>${entradaNFHistoryState.page} / ${totalPages}</strong>
+        <button type="button" ${entradaNFHistoryState.page >= totalPages ? 'disabled' : ''} onclick="setEntradaNFHistoryPage(${entradaNFHistoryState.page + 1})">
+          ${(window.dyIcon && window.dyIcon('next', 'navigation')) || `<span class="material-symbols-rounded">chevron_right</span>`}
+        </button>
+      </div>
+    </footer>
+  </section>
+  `;
 }
 
 function refreshEntradaNFHistoryDashboard() {
- const container = document.getElementById('entrada-nf-history-content');
- if (!container) return;
- const activeInput = document.getElementById('entrada-nf-history-search-input');
- const shouldRestoreFocus = document.activeElement === activeInput;
- const selectionStart = activeInput?.selectionStart ?? null;
- const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
- container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
- if (!shouldRestoreFocus) return;
- requestAnimationFrame(() => {
- const nextInput = document.getElementById('entrada-nf-history-search-input');
- if (!nextInput) return;
- nextInput.focus({ preventScroll: true });
- const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
- const end = Math.min(selectionEnd ?? start, nextInput.value.length);
- nextInput.setSelectionRange(start, end);
- });
+  const container = document.getElementById('entrada-nf-history-content');
+  if (!container) return;
+  const activeInput = document.getElementById('entrada-nf-history-search-input');
+  const shouldRestoreFocus = document.activeElement === activeInput;
+  const selectionStart = activeInput?.selectionStart ?? null;
+  const selectionEnd = activeInput?.selectionEnd ?? selectionStart;
+  container.innerHTML = renderEntradaNFHistoryDashboard(appData.historicoEntradasNF || []);
+  if (!shouldRestoreFocus) return;
+  requestAnimationFrame(() => {
+    const nextInput = document.getElementById('entrada-nf-history-search-input');
+    if (!nextInput) return;
+    nextInput.focus({ preventScroll: true });
+    const start = Math.min(selectionStart ?? nextInput.value.length, nextInput.value.length);
+    const end = Math.min(selectionEnd ?? start, nextInput.value.length);
+    nextInput.setSelectionRange(start, end);
+  });
 }
 
 function setEntradaNFHistoryFilter(key, value) {
- entradaNFHistoryState[key] = value;
- entradaNFHistoryState.page = 1;
- refreshEntradaNFHistoryDashboard();
+  entradaNFHistoryState[key] = value;
+  entradaNFHistoryState.page = 1;
+  refreshEntradaNFHistoryDashboard();
 }
 
 function setEntradaNFHistoryPage(page) {
- entradaNFHistoryState.page = page;
- refreshEntradaNFHistoryDashboard();
+  entradaNFHistoryState.page = page;
+  refreshEntradaNFHistoryDashboard();
 }
 
 function openEntradaNFXML(entradaId) {
- const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
- if (!entrada?.xml_original) {
- showToast('Operacao concluida.', 'info');
- return;
- }
- const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
- const url = URL.createObjectURL(blob);
- window.open(url, '_blank');
- setTimeout(() => URL.revokeObjectURL(url), 5000);
+  const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+  if (!entrada?.xml_original) {
+    showToast('XML original não disponível para esta NF.', 'warning');
+    return;
+  }
+  const blob = new Blob([entrada.xml_original], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function editEntradaNFLancamento(entradaId) {
- renderNFDetail(entradaId);
+  renderNFDetail(entradaId);
 }
 
 function cancelEntradaNFHistoryItem(entradaId) {
- const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
- if (!entrada) return;
- if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
- showToast('Operacao concluida.', 'info');
- return;
- }
- showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
- renderDetalheEntradaNF(entradaId);
+  const entrada = (appData.historicoEntradasNF || []).find(item => String(item.id) === String(entradaId));
+  if (!entrada) return;
+  if (entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada') {
+    showToast('NF finalizada não pode ser cancelada.', 'warning');
+    return;
+  }
+  showToast('Use os detalhes da entrada para conferir antes de cancelar.', 'info');
+  renderNFDetail(entradaId);
 }
 
 async function renderHistoricoEntradasNF() {
- const currentUser = localStorage.getItem('currentUser');
- currentScreen = 'internal';
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
- <main class="container entrada-nf-history-workspace">
- <div id="entrada-nf-history-content" class="entrada-nf-history-content">
- <div class="entrada-nf-history-loading">
- <span class="material-symbols-rounded">sync</span>
- <strong>Carregando hisao...</strong>
- </div>
- </div>
- </main>
- </div>
- `;
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'HISTÓRICO DE ENTRADAS',
+        icon: 'historico',
+        backAction: 'renderNFSubMenu()'
+      })}
+      <main class="container app-page-container entrada-nf-history-workspace">
+        <div id="entrada-nf-history-content" class="entrada-nf-history-content">
+          <div class="entrada-nf-history-loading">
+            <span class="material-symbols-rounded">sync</span>
+            <strong>Carregando histórico...</strong>
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
 
- const container = document.getElementById('entrada-nf-history-content');
- try {
- const historico = await loadHistoricoEntradasNF(true);
- if (!container) return;
+  const container = document.getElementById('entrada-nf-history-content');
+  try {
+    const historico = await loadHistoricoEntradasNF(true);
+    if (!container) return;
 
- if (!historico.length) {
- container.innerHTML = `
- <div class="entrada-nf-empty-state">
- <span class="material-symbols-rounded">history</span>
- <strong>Nenhuma entrada de nota fiscal encontrada.</strong>
- </div>
- `;
- return;
- }
+    if (!historico.length) {
+      container.innerHTML = `
+        <div class="entrada-nf-empty-state">
+          <span class="material-symbols-rounded">history</span>
+          <strong>Nenhuma entrada de nota fiscal encontrada.</strong>
+        </div>
+      `;
+      return;
+    }
 
- container.innerHTML = renderEntradaNFHistoryDashboard(historico);
- } catch (error) {
- console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
- if (container) {
- container.innerHTML = `
- <div class="entrada-nf-empty-state">
- <span class="material-symbols-rounded">error</span>
- <strong>NAo foi possAvel carregar o hisao agora.</strong>
- <small>Tente novamente em alguns instantes.</small>
- </div>
- `;
- }
- }
+    container.innerHTML = renderEntradaNFHistoryDashboard(historico);
+  } catch (error) {
+    console.error('[ENTRADA_NF_HISTORICO] erro ao renderizar historico', error);
+    if (container) {
+      container.innerHTML = `
+        <div class="entrada-nf-empty-state">
+          <span class="material-symbols-rounded">error</span>
+          <strong>Não foi possível carregar o histórico agora.</strong>
+          <small>Tente novamente em alguns instantes.</small>
+        </div>
+      `;
+    }
+  }
 }
 
 async function renderDetalheEntradaNF(entradaId) {
- const currentUser = localStorage.getItem('currentUser');
- const historico = await loadHistoricoEntradasNF(false);
- const entrada = (historico || []).find(item => String(item.id) === String(entradaId));
+  if (typeof renderNFDetail === 'function') {
+    return renderNFDetail(entradaId);
+  }
+}
 
- if (!entrada) {
- showToast('Operacao concluida.', 'info');
- renderHistoricoEntradasNF();
- return;
- }
 
- const itens = entrada.itens || [];
- const parcelas = entrada.parcelas || [];
- const resumo = calcularResumoEntradaNF(entrada, itens);
- const parcelasNota = resumo.parcelasNota || parcelas.filter(item => !isEntradaNFParcelaComplementar(item));
- const parcelasComplementares = resumo.parcelasComplementares || parcelas.filter(isEntradaNFParcelaComplementar);
+const entradaNFComplementarUIState = {};
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in entrada-nf-history-screen entrada-nf-screen no-top-bar">
- ${getTopBarHTML(currentUser, 'renderHistoricoEntradasNF()')}
- <main class="container entrada-nf-history-workspace">
- ${getStandardScreenTitleHTML(`NF ${escapeKitAttribute(entrada.numero_nf || '-')}`, menu3DIcons.nf)}
- <section class="entrada-nf-detail-card">
- <header class="entrada-nf-detail-header">
- <div>
- <strong>NF ${escapeKitAttribute(entrada.numero_nf || '-')} / SArie ${escapeKitAttribute(entrada.serie || '-')}</strong>
- <small>${escapeKitAttribute(entrada.fornecedor_nome || entrada.fornecedor_cnpj || 'Fornecedor nao informado')}</small>
- </div>
- ${renderEntradaNFStatusPill(entrada.status)}
- </header>
+function getEntradaNFComplementarCleanState() {
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    isModalOpen: false,
+    isMockActive: false,
+    complementarId: null,
+    descricao: '',
+    valorTotal: 0,
+    incorporarCusto: true,
+    parcelas: [
+      { numero: 1, vencimento: today, valor: 0 }
+    ]
+  };
+}
 
- <div class="entrada-nf-detail-grid">
- <div><small>Data de emisao</small><strong>${getEntradaNFDate(entrada.data_emissao)}</strong></div>
- <div><small>Data de lancamento</small><strong>${getEntradaNFDateTime(entrada.created_at || entrada.data_recebimento || entrada.atualizado_em)}</strong></div>
- <div><small>Total oficial da NF</small><strong>${getEntradaNFMoney(resumo.valorTotal)}</strong></div>
- <div><small>Parcelas da nota</small><strong>${getEntradaNFMoney(resumo.totalParcelasNota)}</strong></div>
- <div><small>Lanaos complementares</small><strong>${getEntradaNFMoney(resumo.totalComplementares)}</strong></div>
- <div><small>Total financeiro previsto</small><strong>${getEntradaNFMoney(resumo.totalFinanceiroPrevisto)}</strong></div>
- <div><small>Usao</small><strong>${escapeKitAttribute(entrada.criado_por || entrada.usuario || localStorage.getItem('currentUser') || '-')}</strong></div>
- <div><small>Gerou estoque</small><strong>${resumo.gerouEstoque ? 'Sim' : 'NAo'}</strong></div>
- <div><small>Gerou financeiro</small><strong>${resumo.gerouFinanceiro ? 'Sim' : 'NAo'}</strong></div>
- </div>
+function resetEntradaNFComplementarState(entradaId) {
+  entradaNFComplementarUIState[entradaId] = getEntradaNFComplementarCleanState();
+  return entradaNFComplementarUIState[entradaId];
+}
 
- <h3>Produtos lanaos</h3>
- ${itens.length ? `
- <div class="entrada-nf-detail-list">
- ${itens.map(item => `
- <article class="entrada-nf-detail-row">
- <div>
- <strong>${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</strong>
- <small>ID interno: ${escapeKitAttribute(item.id_interno || item.produto_id_interno || '-')} - EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</small>
- </div>
- <div>
- <span><b>Qtd</b>${Number(item.quantidade || 0).toLocaleString('pt-BR')}</span>
- <span><b>Custo NF</b>${getEntradaNFMoney(item.custo_nota_unitario ?? item.valor_unitario)}</span>
- <span><b>Custo real un.</b>${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
- <span><b>Complemento rateado</b>${getEntradaNFMoney(roundMoney(item.custo_real_unitario ?? item.valor_unitario) - roundMoney(item.custo_nota_unitario ?? item.valor_unitario))}</span>
- <span><b>Custo real total</b>${getEntradaNFMoney(item.custo_real_total ?? item.valor_total)}</span>
- <span><b>Local</b>${escapeKitAttribute(item.local_entrada || item.local || 'TERREO')}</span>
- <span><b>Status</b>${escapeKitAttribute(item.status_vinculo || item.status || '-')}</span>
- </div>
- <div class="entrada-nf-cost-breakdown">
- <span><b>IPI</b>${getEntradaNFMoney(item.valor_ipi)}</span>
- <span><b>ICMS ST</b>${getEntradaNFMoney(item.valor_icms_st)}</span>
- <span><b>Frete</b>${getEntradaNFMoney(item.valor_frete_rateado)}</span>
- <span><b>Seguro</b>${getEntradaNFMoney(item.valor_seguro_rateado)}</span>
- <span><b>Outras desp.</b>${getEntradaNFMoney(item.valor_outras_despesas_rateado)}</span>
- <span><b>Desconto</b>${getEntradaNFMoney(item.valor_desconto_rateado)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum item encontrado para esta entrada.</strong></div>`}
+function getEntradaNFComplementarState(entradaId) {
+  if (!entradaNFComplementarUIState[entradaId]) {
+    entradaNFComplementarUIState[entradaId] = getEntradaNFComplementarCleanState();
+  }
+  return entradaNFComplementarUIState[entradaId];
+}
 
- <h3>Parcelas da nota</h3>
- ${parcelasNota.length ? `
- <div class="entrada-nf-detail-list">
- ${parcelasNota.map(parcela => `
- <article class="entrada-nf-detail-row finance">
- <div>
- <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || '-')}</strong>
- <small>Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} - Status: ${escapeKitAttribute(parcela.status || '-')}</small>
- </div>
- <div>
- <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
- <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhuma parcela da nota vinculada.</strong></div>`}
+function openModalComplementarNF(entradaId, complementarExistente = null) {
+  if (complementarExistente) {
+    const today = new Date().toISOString().split('T')[0];
+    const parcelas = (complementarExistente.parcelas || []).map((p, idx) => ({
+      numero: Number(p.numero_parcela || p.parcela || idx + 1),
+      vencimento: p.vencimento || p.data_vencimento || today,
+      valor: parseDecimal(p.valor || 0)
+    }));
+    const valorTotal = parseDecimal(complementarExistente.valor_total || parcelas.reduce((sum, p) => sum + p.valor, 0));
+    entradaNFComplementarUIState[entradaId] = {
+      isModalOpen: true,
+      isMockActive: false,
+      complementarId: complementarExistente.complementar_id || null,
+      descricao: complementarExistente.descricao || '',
+      valorTotal: valorTotal,
+      incorporarCusto: complementarExistente.incorporar_custo !== undefined ? !!complementarExistente.incorporar_custo : true,
+      parcelas: parcelas.length > 0 ? parcelas : [
+        { numero: 1, vencimento: today, valor: valorTotal }
+      ]
+    };
+  } else {
+    // NOVO COMPLEMENTAR: sempre inicializa em estado limpo
+    const state = resetEntradaNFComplementarState(entradaId);
+    state.isModalOpen = true;
+  }
+  renderNFDetail(entradaId);
+}
 
- <h3>Lanaos complementares</h3>
- ${parcelasComplementares.length ? `
- <div class="entrada-nf-detail-list">
- ${parcelasComplementares.map(parcela => `
- <article class="entrada-nf-detail-row finance">
- <div>
- <strong>${escapeKitAttribute(parcela.descricao || parcela.parcela || 'Lanao complementar')}</strong>
- <small>Complementar - Vencimento: ${getEntradaNFDate(parcela.data_vencimento || parcela.vencimento)} - Status: ${escapeKitAttribute(parcela.status || '-')}</small>
- </div>
- <div>
- <span><b>Valor</b>${getEntradaNFMoney(parcela.valor)}</span>
- <span><b>Forma</b>${escapeKitAttribute(parcela.forma_pagamento || '-')}</span>
- <span><b>Pagamento</b>${getEntradaNFDate(parcela.data_pagamento)}</span>
- </div>
- </article>
- `).join('')}
- </div>
- ` : `<div class="entrada-nf-empty-state compact"><strong>Nenhum lancamento complementar vinculado.</strong></div>`}
- </section>
- </main>
- </div>
- `;
+function closeModalComplementarNF(entradaId) {
+  resetEntradaNFComplementarState(entradaId);
+  renderNFDetail(entradaId);
+}
+
+function toggleMockComplementarNF(entradaId, active) {
+  const state = getEntradaNFComplementarState(entradaId);
+  state.isMockActive = active;
+  showToast(active ? 'Simulação de Complementar ATIVADA na UI' : 'Simulação de Complementar DESATIVADA', 'info');
+  renderNFDetail(entradaId);
+}
+
+function updateComplementarField(entradaId, field, value) {
+  const state = getEntradaNFComplementarState(entradaId);
+  if (field === 'valorTotal') {
+    const prevTotal = state.valorTotal;
+    state.valorTotal = parseDecimal(value);
+    if (state.parcelas && state.parcelas.length === 1 && (state.parcelas[0].valor === 0 || state.parcelas[0].valor === prevTotal)) {
+      state.parcelas[0].valor = state.valorTotal;
+    }
+  } else if (field === 'incorporarCusto') {
+    state.incorporarCusto = !!value;
+  } else {
+    state[field] = value;
+  }
+  renderNFDetail(entradaId);
+}
+
+function addComplementarParcela(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const nextNum = state.parcelas.length + 1;
+  const lastVenc = state.parcelas.length > 0 ? state.parcelas[state.parcelas.length - 1].vencimento : null;
+  let nextVenc = new Date().toISOString().split('T')[0];
+  if (lastVenc) {
+    try {
+      const d = new Date(lastVenc + 'T12:00:00');
+      d.setDate(d.getDate() + 30);
+      nextVenc = d.toISOString().split('T')[0];
+    } catch (_) {}
+  }
+  state.parcelas.push({ numero: nextNum, vencimento: nextVenc, valor: 0 });
+  renderNFDetail(entradaId);
+}
+
+function removeComplementarParcela(entradaId, index) {
+  const state = getEntradaNFComplementarState(entradaId);
+  if (state.parcelas.length <= 1) return;
+  state.parcelas.splice(index, 1);
+  state.parcelas.forEach((p, idx) => { p.numero = idx + 1; });
+  renderNFDetail(entradaId);
+}
+
+function updateComplementarParcelaField(entradaId, index, field, value) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const p = state.parcelas[index];
+  if (!p) return;
+  if (field === 'valor') {
+    p.valor = parseDecimal(value);
+  } else {
+    p[field] = value;
+  }
+  renderNFDetail(entradaId);
+}
+
+async function salvarComplementarDoModal(entradaId) {
+  const state = getEntradaNFComplementarState(entradaId);
+  const somaParcelasComp = state.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasComp = Math.round((state.valorTotal - somaParcelasComp) * 100) / 100;
+
+  if (Math.abs(diffParcelasComp) > 0.01 || state.valorTotal <= 0 || !state.parcelas.every(p => parseDecimal(p.valor) > 0 && p.vencimento)) {
+    showToast('Preencha os valores e vencimentos de todas as parcelas corretamente. A soma das parcelas deve ser igual ao valor total.', 'warning');
+    return;
+  }
+
+  try {
+    const payload = {
+      complementarId: state.complementarId || undefined,
+      descricao: state.descricao || 'Lancamento Complementar',
+      valorTotal: state.valorTotal,
+      incorporarCusto: !!state.incorporarCusto,
+      parcelas: state.parcelas.map((p, idx) => ({
+        numeroParcela: idx + 1,
+        valor: parseDecimal(p.valor),
+        vencimento: p.vencimento
+      }))
+    };
+
+    const res = await DataClient.salvarComplementarEntradaNFSupabase(entradaId, payload);
+    if (res.success) {
+      showToast('Lancamento Complementar salvo com sucesso!', 'success');
+      resetEntradaNFComplementarState(entradaId);
+      renderNFDetail(entradaId);
+    }
+  } catch (err) {
+    console.error('[COMPLEMENTAR] Erro ao salvar complementar:', err);
+    showToast('Erro ao salvar lancamento complementar: ' + err.message, 'error');
+  }
+}
+
+function editarComplementarNF(entradaId, complementarId) {
+  const list = window.currentEntradaNFComplementaresSalvos || [];
+  const comp = list.find(c => c.complementar_id === complementarId);
+  if (comp) {
+    openModalComplementarNF(entradaId, comp);
+  }
+}
+
+const entradaNFAbertaConferenciaState = {};
+
+function initEntradaNFConferenciaState(entradaId, itensRaw, temRecebimentosNoBanco) {
+  if (!entradaNFAbertaConferenciaState[entradaId]) {
+    entradaNFAbertaConferenciaState[entradaId] = {
+      dirty: false,
+      conferenciaSalva: temRecebimentosNoBanco,
+      itensState: {}
+    };
+  } else if (!entradaNFAbertaConferenciaState[entradaId].dirty) {
+    entradaNFAbertaConferenciaState[entradaId].conferenciaSalva = temRecebimentosNoBanco;
+  }
+
+  const state = entradaNFAbertaConferenciaState[entradaId];
+  if (!state.itensState) state.itensState = {};
+
+  (itensRaw || []).forEach(item => {
+    if (!state.itensState[item.id]) {
+      const rec = (item.recebimentos && item.recebimentos[0]) || {};
+      const qFis = parseDecimal(rec.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+      const qAce = parseDecimal(rec.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+      const qRec = parseDecimal(rec.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+      const loc = String(rec.local_destino || item.local_destino || 'TERREO').toUpperCase();
+
+      const sit = calcularSituacaoRecebimentoItem(item, [{
+        id_interno: item.id_interno,
+        quantidade_fisica: qFis,
+        quantidade_aceita: qAce,
+        quantidade_recusada: qRec,
+        local_destino: loc
+      }]);
+
+      state.itensState[item.id] = {
+        quantidade_fisica: qFis,
+        quantidade_aceita: qAce,
+        quantidade_recusada: qRec,
+        local_destino: loc,
+        situacao: sit,
+        motivo_divergencia: rec.motivo_divergencia || '',
+        observacoes: rec.observacoes || '',
+        isEditing: false,
+        errorMsg: null
+      };
+    }
+  });
+
+  return state;
+}
+
+function toggleEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+  itemState.isEditing = !itemState.isEditing;
+  itemState.errorMsg = null;
+  renderNFDetail(entradaId);
+}
+
+function cancelEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+  itemState.isEditing = false;
+  itemState.errorMsg = null;
+  renderNFDetail(entradaId);
+}
+
+function updateConferenciaItemField(entradaId, itemId, field, value) {
+  const state = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!state) return;
+
+  if (field === 'quantidade_fisica') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_fisica = val;
+    if (state.quantidade_aceita > val) {
+      state.quantidade_aceita = val;
+      state.quantidade_recusada = 0;
+    } else {
+      state.quantidade_recusada = Math.max(0, val - state.quantidade_aceita);
+    }
+  } else if (field === 'quantidade_aceita') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_aceita = val;
+    state.quantidade_recusada = Math.max(0, state.quantidade_fisica - val);
+  } else if (field === 'quantidade_recusada') {
+    const val = Math.max(0, parseDecimal(value) || 0);
+    state.quantidade_recusada = val;
+    state.quantidade_aceita = Math.max(0, state.quantidade_fisica - val);
+  } else if (field === 'local_destino') {
+    state.local_destino = String(value || 'TERREO').toUpperCase();
+  } else {
+    state[field] = value;
+  }
+
+  // Validação em tempo real: Aceito + Recusado === Físico
+  const soma = Math.round((state.quantidade_aceita + state.quantidade_recusada) * 10000) / 10000;
+  const fis = Math.round(state.quantidade_fisica * 10000) / 10000;
+  if (Math.abs(soma - fis) > 0.0001) {
+    state.errorMsg = `Aceito (${state.quantidade_aceita}) + Recusado (${state.quantidade_recusada}) deve ser igual ao Físico (${state.quantidade_fisica}).`;
+  } else {
+    state.errorMsg = null;
+  }
+
+  renderNFDetail(entradaId);
+}
+
+function confirmEditConferenciaItem(entradaId, itemId) {
+  const itemState = entradaNFAbertaConferenciaState[entradaId]?.itensState?.[itemId];
+  if (!itemState) return;
+
+  const soma = Math.round((itemState.quantidade_aceita + itemState.quantidade_recusada) * 10000) / 10000;
+  const fis = Math.round(itemState.quantidade_fisica * 10000) / 10000;
+  if (Math.abs(soma - fis) > 0.0001) {
+    showToast('Aceito + Recusado deve ser exatamente igual à Quantidade Física.', 'warning');
+    return;
+  }
+
+  itemState.isEditing = false;
+  itemState.errorMsg = null;
+  entradaNFAbertaConferenciaState[entradaId].dirty = true;
+  showToast('Item atualizado no rascunho de conferência.', 'info');
+  renderNFDetail(entradaId);
+}
+
+function marcarConferenciaNFAbertaDirty(entradaId) {
+  if (!entradaNFAbertaConferenciaState[entradaId]) {
+    entradaNFAbertaConferenciaState[entradaId] = { dirty: true, conferenciaSalva: false, itensState: {} };
+  } else {
+    entradaNFAbertaConferenciaState[entradaId].dirty = true;
+    entradaNFAbertaConferenciaState[entradaId].conferenciaSalva = false;
+  }
+}
+
+async function salvarConferenciaFisicaEntradaNF(entradaId) {
+  const itens = await fetchEntradaNFItens(entradaId);
+  if (!itens.length) {
+    showToast('Nenhum item encontrado para conferir', 'warning');
+    return;
+  }
+  const pendentes = itens.filter(item => !item.id_interno);
+  if (pendentes.length) {
+    showToast('Existem itens pendentes de vínculo com produtos DY', 'warning');
+    return;
+  }
+
+  const confState = entradaNFAbertaConferenciaState[entradaId]?.itensState || {};
+
+  // Validação de integridade de todos os itens antes do envio
+  for (const item of itens) {
+    const st = confState[item.id] || {};
+    const qFis = parseDecimal(st.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+    const qAce = parseDecimal(st.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+    const qRec = parseDecimal(st.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+    const soma = Math.round((qAce + qRec) * 10000) / 10000;
+    const fis = Math.round(qFis * 10000) / 10000;
+
+    if (Math.abs(soma - fis) > 0.0001) {
+      showToast(`Item ${item.id_interno || item.numero_item}: Aceito + Recusado deve ser igual ao Físico.`, 'warning');
+      return;
+    }
+  }
+
+  const recebimentosPayload = itens.map(item => {
+    const st = confState[item.id] || {};
+    const qFis = parseDecimal(st.quantidade_fisica ?? item.quantidade_fisica ?? item.quantidade);
+    const qAce = parseDecimal(st.quantidade_aceita ?? item.quantidade_aceita ?? item.quantidade);
+    const qRec = parseDecimal(st.quantidade_recusada ?? item.quantidade_recusada ?? 0);
+    const loc = String(st.local_destino || item.local_destino || 'TERREO').toUpperCase();
+    const sit = calcularSituacaoRecebimentoItem(item, [{
+      id_interno: item.id_interno,
+      quantidade_fisica: qFis,
+      quantidade_aceita: qAce,
+      quantidade_recusada: qRec,
+      local_destino: loc
+    }]);
+
+    return {
+      entrada_nf_item_id: item.id,
+      produto_id: item.produto_id || null,
+      id_interno: item.id_interno || '',
+      quantidade_fisica: qFis,
+      quantidade_aceita: qAce,
+      quantidade_recusada: qRec,
+      local_destino: loc,
+      situacao: sit,
+      motivo_divergencia: st.motivo_divergencia || null,
+      observacoes: st.observacoes || null
+    };
+  });
+
+  const saveRecRes = await DataClient.saveEntradaNFRecebimentos(entradaId, recebimentosPayload);
+  if (!saveRecRes.ok) {
+    showToast('Falha ao salvar a conferência física: ' + (saveRecRes.error?.message || 'Erro desconhecido'), 'error');
+    return;
+  }
+
+  entradaNFAbertaConferenciaState[entradaId] = {
+    dirty: false,
+    conferenciaSalva: true,
+    itensState: {}
+  };
+  showToast('Conferência física salva com sucesso!', 'success');
+  renderNFDetail(entradaId);
+}
+
+function getContasPagarDisplayStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'rascunho') {
+    return {
+      label: 'RASCUNHO | EFETIVA AO FINALIZAR',
+      bg: 'rgba(245, 158, 11, 0.12)',
+      color: '#b45309',
+      border: 'rgba(245, 158, 11, 0.3)'
+    };
+  }
+  if (s === 'pago') {
+    return {
+      label: 'PAGO',
+      bg: 'rgba(34, 197, 94, 0.12)',
+      color: '#15803d',
+      border: 'rgba(34, 197, 94, 0.3)'
+    };
+  }
+  if (s === 'parcial') {
+    return {
+      label: 'PARCIAL',
+      bg: 'rgba(147, 51, 234, 0.12)',
+      color: '#7e22ce',
+      border: 'rgba(147, 51, 234, 0.3)'
+    };
+  }
+  return {
+    label: 'PENDENTE',
+    bg: 'rgba(37, 99, 235, 0.12)',
+    color: '#1d4ed8',
+    border: 'rgba(37, 99, 235, 0.3)'
+  };
+}
+
+async function continueEntradaNF(entradaId) {
+  if (!entradaId) return;
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  if (!nf) {
+    showToast('Nota fiscal não encontrada.', 'warning');
+    return;
+  }
+  const itens = await fetchEntradaNFItens(entradaId);
+  const temItensPendentes = itens.some(i => i.status_vinculo === 'pendente_vinculo' || !i.id_interno);
+  
+  if (temItensPendentes || nf.status === 'pendente_vinculo' || nf.status === 'pendente_fornecedor') {
+    renderEntradaNFIdentificacao(entradaId);
+  } else {
+    renderNFDetail(entradaId);
+  }
+}
+
+async function renderEntradaNFIdentificacao(entradaId) {
+  const currentUser = localStorage.getItem('currentUser');
+  currentScreen = 'internal';
+  document.body.classList.remove('menu-active');
+
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  if (!nf) {
+    showToast('Nota fiscal não encontrada.', 'warning');
+    renderEntradaNFEmRecebimento();
+    return;
+  }
+
+  const itens = await fetchEntradaNFItens(entradaId);
+  const totalItens = itens.length;
+
+  const client = window.supabaseClient;
+  const cnpjClean = nfXmlOnlyDigits(nf.cnpj_fornecedor || nf.fornecedor_cnpj);
+  let vinculosFornecedor = [];
+  if (cnpjClean && client) {
+    const { data: vData } = await client
+      .from('fornecedor_produtos')
+      .select('*')
+      .eq('fornecedor_cnpj', cnpjClean);
+    vinculosFornecedor = vData || [];
+  }
+
+  const idInternos = itens.map(i => i.id_interno).filter(Boolean);
+  const eans = itens.map(i => nfXmlOnlyDigits(i.ean_fornecedor || i.ean_xml)).filter(e => e && e.length >= 7 && e.length <= 14);
+  let produtosMap = new Map();
+  let eanMap = new Map();
+  if (client && (idInternos.length > 0 || eans.length > 0)) {
+    const filterParts = [];
+    if (idInternos.length > 0) filterParts.push(`id_interno.in.(${idInternos.map(id => `"${id}"`).join(',')})`);
+    if (eans.length > 0) filterParts.push(`ean.in.(${eans.map(e => `"${e}"`).join(',')})`);
+    const { data: prodsData } = await client
+      .from('produtos')
+      .select('id, id_interno, status, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+      .or(filterParts.join(','));
+    (prodsData || []).forEach(p => {
+      if (p.id_interno) produtosMap.set(p.id_interno, p);
+      if (p.ean) eanMap.set(nfXmlOnlyDigits(p.ean), p);
+    });
+  }
+
+  // Avaliação estrita dos 4 estados para cada item
+  let itensProntosCount = 0;
+  for (const it of itens) {
+    const cProd = String(it.codigo_produto_fornecedor || '').trim();
+    const vForn = vinculosFornecedor.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+    const rawEan = String(it.ean_fornecedor || it.ean_xml || '').trim();
+    const eanClean = (!rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase())) ? '' : nfXmlOnlyDigits(rawEan);
+    const pEan = (eanClean && eanClean.length >= 7 && eanClean.length <= 14) ? eanMap.get(eanClean) : null;
+    const isConflict = it.status_vinculo === 'conflito_vinculo' || (it.observacoes && it.observacoes.includes('CONFLITO_VINCULO'))
+      || (vForn?.id_interno && pEan?.id_interno && vForn.id_interno !== pEan.id_interno && !it.id_interno);
+
+    const itProd = it.id_interno ? produtosMap.get(it.id_interno) : null;
+    const itInativo = isProductInactive(itProd);
+    const itDecisao = (it.observacoes && it.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || it.decisao_inativo === 'manter_inativo';
+
+    if (it.id_interno && it.status_vinculo !== 'pendente_vinculo' && !isConflict && (!itInativo || itDecisao)) {
+      itensProntosCount++;
+    }
+  }
+  const todosVinculados = totalItens > 0 && itensProntosCount === totalItens;
+
+  const dateStr = formatDateBR(nf.data_emissao || nf.created_at);
+  const fornecedorNome = nf.fornecedor_nome || 'FORNECEDOR NÃO CADASTRADO';
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-identificacao-screen entrada-nf-screen">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'IDENTIFICAÇÃO DE PRODUTOS',
+        icon: 'nf_identificacao',
+        backAction: 'renderEntradaNFEmRecebimento()'
+      })}
+      
+      <main class="container app-page-container entrada-nf-identificacao-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        
+        <!-- CABEÇALHO DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 14px;">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">IDENTIFICAÇÃO DE PRODUTOS DA NOTA FISCAL</span>
+              <h1 style="font-size: 1.35rem; font-weight: 900; color: #0f172a; margin: 2px 0 0 0; display: flex; align-items: center; gap: 8px;">
+                NF ${nf.numero_nf || '-'} 
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+              </h1>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              ${todosVinculados ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span> IDENTIFICAÇÃO CONCLUÍDA (${totalItens}/${totalItens})
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">help_outline</span> AGUARDANDO IDENTIFICAÇÃO (${itensProntosCount}/${totalItens})
+                </span>
+              `}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: center;">
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b; text-transform: uppercase; word-break: break-word;">${escapeKitAttribute(fornecedorNome)}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">CNPJ FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${escapeKitAttribute(nf.cnpj_fornecedor || nf.fornecedor_cnpj || '-')}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">DATA DE EMISSÃO</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${dateStr}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">VALOR FISCAL DA NF</span>
+              <strong style="font-size: 1.15rem; font-weight: 900; color: #2563eb;">${nfXmlFormatMoney(nf.valor_total)}</strong>
+            </div>
+          </div>
+        </div>
+
+        ${todosVinculados ? `
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; box-shadow: 0 4px 14px rgba(34,197,94,0.08);">
+            <div>
+              <strong style="color: #15803d; font-size: 1rem; display: block; font-weight: 800;">TODOS OS PRODUTOS IDENTIFICADOS</strong>
+              <span style="font-size: 0.82rem; color: #166534; font-weight: 500;">A nota fiscal está pronta para iniciar a conferência física e recebimento.</span>
+            </div>
+            <button type="button" onclick="renderNFDetail('${nf.id}')" style="background: #22c55e; color: #ffffff; border: none; padding: 11px 22px; border-radius: 10px; font-weight: 800; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(34,197,94,0.25);">
+              <span class="material-symbols-rounded" style="font-size: 20px;">inventory_2</span> INICIAR RECEBIMENTO
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- LISTA DE ITENS DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <div>
+              <h2 style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0;">ITENS DA NOTA FISCAL (${totalItens})</h2>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">Vincule cada item fiscal a um Produto Mestre do sistema.</p>
+            </div>
+            <span style="font-size: 0.78rem; font-weight: 800; color: #3b82f6; background: rgba(59,130,246,0.08); padding: 4px 12px; border-radius: 16px;">
+              ${itensProntosCount} de ${totalItens} liberados
+            </span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${(() => {
+              return itens.map((item, idx) => {
+                const cProd = String(item.codigo_produto_fornecedor || '').trim();
+                const vinculoForn = vinculosFornecedor.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+                const rawEan = String(item.ean_fornecedor || item.ean_xml || '').trim();
+                const isEanExempt = !rawEan || ['SEMGTIN', 'ISENTO'].includes(rawEan.toUpperCase());
+                const eanClean = !isEanExempt ? nfXmlOnlyDigits(rawEan) : '';
+                const prodEan = (eanClean && eanClean.length >= 7 && eanClean.length <= 14) ? eanMap.get(eanClean) : null;
+
+                const candidatoA_id = vinculoForn?.id_interno || null;
+                const candidatoB_id = prodEan?.id_interno || null;
+
+                // DETECÇÃO DE CONFLITO DE VÍNCULO
+                const isConflict = item.status_vinculo === 'conflito_vinculo' 
+                  || (item.observacoes && item.observacoes.includes('CONFLITO_VINCULO'))
+                  || (candidatoA_id && candidatoB_id && candidatoA_id !== candidatoB_id && !item.id_interno);
+
+                const prod = item.id_interno ? produtosMap.get(item.id_interno) : null;
+                const nomeComercial = prod?.descricao_completa || prod?.descricao_base || item.id_interno || '-';
+                const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || 'Item sem descrição fiscal';
+                const eanFiscal = item.ean_fornecedor || item.ean_xml || 'Sem EAN';
+
+                // DETECÇÃO DE PRODUTO INATIVO
+                const isInactive = isProductInactive(prod);
+                const decisaoInativoFeita = (item.observacoes && item.observacoes.includes('DECISAO_INATIVO:manter_inativo')) || item.decisao_inativo === 'manter_inativo';
+
+                const isVinculado = !!item.id_interno && item.status_vinculo !== 'pendente_vinculo' && !isConflict;
+
+                // ESTILO DO CARD CONFORME ESTADO OPERACIONAL
+                let cardBg = '#f0fdf4';
+                let cardBorder = '#bbf7d0';
+                let cardBorderLeft = '#22c55e';
+
+                if (isConflict) {
+                  cardBg = '#fef2f2';
+                  cardBorder = '#fecaca';
+                  cardBorderLeft = '#ef4444';
+                } else if (isInactive && !decisaoInativoFeita) {
+                  cardBg = '#fffbeb';
+                  cardBorder = '#fde68a';
+                  cardBorderLeft = '#f59e0b';
+                } else if (isInactive && decisaoInativoFeita) {
+                  cardBg = '#fefce8';
+                  cardBorder = '#fef08a';
+                  cardBorderLeft = '#ca8a04';
+                } else if (!isVinculado) {
+                  cardBg = '#fffbebf5';
+                  cardBorder = '#fef3c7';
+                  cardBorderLeft = '#f59e0b';
+                }
+
+                return `
+                  <div style="background: ${cardBg}; border: 1px solid ${cardBorder}; border-left: 5px solid ${cardBorderLeft}; border-radius: 14px; padding: 16px 18px;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 10px;">
+                      
+                      <!-- LADO ESQUERDO: DADOS FISCAIS DO ITEM -->
+                      <div style="flex: 1; min-width: 240px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                          <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; background: rgba(100,116,139,0.1); padding: 2px 8px; border-radius: 6px;">Item #${idx + 1}</span>
+                          <span style="font-size: 0.72rem; font-weight: 800; color: #475569; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">cProd: ${escapeKitAttribute(cProd)}</span>
+                          ${eanFiscal !== 'Sem EAN' ? `<span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">EAN: ${escapeKitAttribute(eanFiscal)}</span>` : ''}
+                        </div>
+                        <h4 style="font-size: 0.92rem; font-weight: 800; color: #0f172a; margin: 4px 0;">
+                          ${escapeKitAttribute(descFiscal)}
+                        </h4>
+                        <div style="font-size: 0.75rem; color: #64748b; display: flex; gap: 14px; margin-top: 4px;">
+                          <span>Qtd Fiscal: <b>${formatStockNumber(item.quantidade)} ${escapeKitAttribute(item.unidade || 'UN')}</b></span>
+                          <span>Valor Unit: <b>${getEntradaNFMoney(item.valor_unitario)}</b></span>
+                          <span>Total: <b>${getEntradaNFMoney(item.valor_total)}</b></span>
+                        </div>
+                      </div>
+
+                      <!-- LADO DIREITO: BADGE DE STATUS E AÇÕES -->
+                      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px;">
+                        ${isConflict ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(239, 68, 68, 0.12); color: #b91c1c; border: 1px solid rgba(239, 68, 68, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">warning</span> CONFLITO DE VÍNCULO
+                          </span>
+                        ` : isInactive && !decisaoInativoFeita ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.4);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">warning</span> ⚠ PRODUTO INATIVO
+                          </span>
+                        ` : isInactive && decisaoInativoFeita ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(202, 138, 4, 0.12); color: #a16207; border: 1px solid rgba(202, 138, 4, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check_circle</span> INATIVO (LIBERADO)
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Alterar Vínculo
+                          </button>
+                        ` : isVinculado ? `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check_circle</span> IDENTIFICADO
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Alterar Vínculo
+                          </button>
+                        ` : `
+                          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">help_outline</span> NÃO IDENTIFICADO
+                          </span>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: #2563eb; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(37,99,235,0.25);">
+                            <span class="material-symbols-rounded" style="font-size: 16px;">link</span> MAPEAR PRODUTO
+                          </button>
+                        `}
+                      </div>
+
+                    </div>
+
+                    <!-- DETALHE: CONFLITO DE VÍNCULO (CANDIDATO A x CANDIDATO B) -->
+                    ${isConflict ? `
+                      <div style="margin-top: 12px; padding: 12px 16px; background: #ffffff; border: 1px solid #fecaca; border-radius: 10px;">
+                        <div style="font-size: 0.78rem; font-weight: 800; color: #b91c1c; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                          <span class="material-symbols-rounded" style="font-size: 16px;">alt_route</span>
+                          Divergência detectada entre vínculo existente e catálogo por EAN:
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                          <div style="padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Vínculo atual do fornecedor:</span>
+                            <strong style="color: #0f172a; font-size: 0.85rem;">${escapeKitAttribute(candidatoA_id || '-')}</strong>
+                          </div>
+                          <div style="padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+                            <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #1d4ed8; text-transform: uppercase;">Produto encontrado pelo EAN:</span>
+                            <strong style="color: #1e3a8a; font-size: 0.85rem;">${escapeKitAttribute(candidatoB_id || '-')} ${prodEan?.descricao_completa ? `(${escapeKitAttribute(prodEan.descricao_completa)})` : ''}</strong>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                          ${candidatoA_id ? `
+                            <button type="button" onclick="resolverConflitoUsarFornecedor('${nf.id}', '${item.id}', '${candidatoA_id}')" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">
+                              Usar Vínculo Atual (${escapeKitAttribute(candidatoA_id)})
+                            </button>
+                          ` : ''}
+                          ${candidatoB_id ? `
+                            <button type="button" onclick="resolverConflitoUsarEanEAtualizar('${nf.id}', '${item.id}', '${candidatoB_id}', '${prodEan?.id || ''}', '${escapeKitAttribute(cProd)}', '${cnpjClean}')" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 800; cursor: pointer;">
+                              Usar Produto do EAN (${escapeKitAttribute(candidatoB_id)}) e Atualizar
+                            </button>
+                          ` : ''}
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 7px 12px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">
+                            Mapear Outro Produto
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- DETALHE: PRODUTO INATIVO (AÇÕES OBRIGATÓRIAS) -->
+                    ${isInactive && !decisaoInativoFeita ? `
+                      <div style="margin-top: 12px; padding: 12px 16px; background: #ffffff; border: 1px solid #fde68a; border-radius: 10px;">
+                        <div style="font-size: 0.78rem; font-weight: 800; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                          <span class="material-symbols-rounded" style="font-size: 16px;">info</span>
+                          O produto vinculado <b>${escapeKitAttribute(item.id_interno)}</b> está inativo no catálogo. Escolha uma ação:
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px;">
+                          <button type="button" onclick="reativarProdutoEntradaNF('${nf.id}', '${item.id}', '${item.id_interno}')" style="background: #22c55e; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(34,197,94,0.25);">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">check</span> REATIVAR PRODUTO
+                          </button>
+                          <button type="button" onclick="manterInativoReceberEntradaNF('${nf.id}', '${item.id}')" style="background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">done_all</span> MANTER INATIVO E RECEBER
+                          </button>
+                          <button type="button" onclick="openModalMapearProdutoEntradaNF('${nf.id}', '${item.id}')" style="background: none; border: 1px solid #cbd5e1; color: #475569; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> CORRIGIR VÍNCULO
+                          </button>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- BLOCO DE PRODUTO MESTRE VINCULADO (SE IDENTIFICADO) -->
+                    ${isVinculado ? `
+                      <div style="margin-top: 10px; padding: 10px 14px; background: #ffffff; border: 1px solid ${isInactive ? '#fef08a' : '#bbf7d0'}; border-radius: 10px; display: flex; align-items: center; gap: 12px;">
+                        <span style="background: ${isInactive ? '#fef08a' : '#fef08a'}; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
+                          ${escapeKitAttribute(item.id_interno)}
+                        </span>
+                        <div style="flex: 1; min-width: 0;">
+                          <strong style="display: block; font-size: 0.85rem; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${escapeKitAttribute(nomeComercial)}
+                          </strong>
+                          <div style="font-size: 0.72rem; color: #64748b; display: flex; gap: 10px;">
+                            ${prod?.marca ? `<span>Marca: <b>${escapeKitAttribute(prod.marca)}</b></span>` : ''}
+                            ${prod?.sku_fornecedor ? `<span>SKU: <b>${escapeKitAttribute(prod.sku_fornecedor)}</b></span>` : ''}
+                            ${isInactive ? `<span style="color:#b45309; font-weight:700;">(Status: Inativo)</span>` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                  </div>
+                `;
+              }).join('');
+            })()}
+          </div>
+        </div>
+
+      </main>
+    </div>
+  `;
+}
+
+async function reativarProdutoEntradaNF(entradaId, itemId, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !idInterno) return;
+  try {
+    const { error: errProd } = await client
+      .from('produtos')
+      .update({ status: 'ativo', atualizado_em: new Date().toISOString() })
+      .eq('id_interno', idInterno);
+    if (errProd) throw errProd;
+
+    const pMem = (appData.products || []).find(p => p.id_interno === idInterno);
+    if (pMem) pMem.status = 'ativo';
+
+    if (itemId) {
+      await client
+        .from('entradas_nf_itens')
+        .update({ status_vinculo: 'vinculado', updated_at: new Date().toISOString() })
+        .eq('id', itemId);
+    }
+
+    showToast(`Produto ${idInterno} reativado com sucesso!`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao reativar produto:', err);
+    showToast('Falha ao reativar produto: ' + err.message, 'error');
+  }
+}
+
+async function manterInativoReceberEntradaNF(entradaId, itemId) {
+  const client = window.supabaseClient;
+  if (!client || !itemId) return;
+  try {
+    const { data: itemData } = await client
+      .from('entradas_nf_itens')
+      .select('observacoes')
+      .eq('id', itemId)
+      .maybeSingle();
+
+    let obs = String(itemData?.observacoes || '');
+    if (!obs.includes('DECISAO_INATIVO:manter_inativo')) {
+      obs = obs ? `${obs} [DECISAO_INATIVO:manter_inativo]` : '[DECISAO_INATIVO:manter_inativo]';
+    }
+
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        status_vinculo: 'vinculado',
+        observacoes: obs,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) throw errItem;
+
+    showToast('Decisão registrada: produto inativo autorizado para recebimento.', 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao registrar decisão de produto inativo:', err);
+    showToast('Falha ao registrar decisão: ' + err.message, 'error');
+  }
+}
+
+async function resolverConflitoUsarFornecedor(entradaId, itemId, idInterno) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInterno) return;
+  try {
+    const { data: prod } = await client
+      .from('produtos')
+      .select('id, id_interno, status')
+      .eq('id_interno', idInterno)
+      .maybeSingle();
+
+    const isInactive = isProductInactive(prod);
+    const newStatus = isInactive ? 'produto_inativo' : 'vinculado';
+
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        id_interno: idInterno,
+        produto_id_interno: idInterno,
+        produto_id: prod?.id || null,
+        status_vinculo: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) throw errItem;
+
+    showToast(`Conflito resolvido: mantido vínculo com ${idInterno}.`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao resolver conflito usando fornecedor:', err);
+    showToast('Falha ao resolver conflito: ' + err.message, 'error');
+  }
+}
+
+async function resolverConflitoUsarEanEAtualizar(entradaId, itemId, idInternoEan, produtoIdEan, cProd, fornecedorCnpj) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInternoEan) return;
+
+  const confirmar = await showAppConfirm({
+    title: 'Atualizar Vínculo de Fornecedor?',
+    message: `Confirma alterar o vínculo global do fornecedor para o código "${cProd}" apontando para o produto "${idInternoEan}"?`,
+    detail: 'O cadastro em fornecedor_produtos será atualizado com este novo produto mestre.',
+    confirmLabel: 'Sim, atualizar vínculo',
+    cancelLabel: 'Cancelar',
+    danger: true
+  });
+  if (!confirmar) return;
+
+  try {
+    const cnpjClean = nfXmlOnlyDigits(fornecedorCnpj);
+    const cProdClean = String(cProd).trim();
+    if (cnpjClean && cProdClean) {
+      await client
+        .from('fornecedor_produtos')
+        .upsert({
+          fornecedor_cnpj: cnpjClean,
+          codigo_produto_fornecedor: cProdClean,
+          id_interno: idInternoEan,
+          produto_id: produtoIdEan || null,
+          atualizado_em: new Date().toISOString()
+        }, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
+    }
+
+    const { data: prod } = await client
+      .from('produtos')
+      .select('id, id_interno, status')
+      .eq('id_interno', idInternoEan)
+      .maybeSingle();
+
+    const isInactive = isProductInactive(prod);
+    const newStatus = isInactive ? 'produto_inativo' : 'vinculado';
+
+    await client
+      .from('entradas_nf_itens')
+      .update({
+        id_interno: idInternoEan,
+        produto_id_interno: idInternoEan,
+        produto_id: prod?.id || produtoIdEan || null,
+        status_vinculo: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    showToast(`Conflito resolvido: fornecedor atualizado para ${idInternoEan}.`, 'success');
+    renderEntradaNFIdentificacao(entradaId);
+  } catch (err) {
+    console.error('Erro ao resolver conflito usando EAN:', err);
+    showToast('Falha ao resolver conflito: ' + err.message, 'error');
+  }
+}
+
+async function openModalMapearProdutoEntradaNF(entradaId, itemId) {
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  const itens = await fetchEntradaNFItens(entradaId);
+  const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+  if (!item) {
+    showToast('Item da nota não encontrado.', 'warning');
+    return;
+  }
+
+  const existingModal = document.getElementById('modal-mapear-produto-container');
+  if (existingModal) existingModal.remove();
+
+  const cProd = item.codigo_produto_fornecedor || 'N/A';
+  const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || '-';
+
+  const modalHtml = `
+    <div id="modal-mapear-produto-container" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:white; border-radius:24px; max-width:680px; width:100%; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 50px rgba(0,0,0,0.25);">
+        
+        <!-- CABEÇALHO DO MODAL -->
+        <div style="padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span style="font-size:0.72rem; font-weight:800; color:#3b82f6; text-transform:uppercase; letter-spacing:0.5px;">MAPEAMENTO DE PRODUTO FISCAL</span>
+            <h3 style="margin:2px 0 0 0; font-family:'Fjalla One', sans-serif; font-size:1.25rem; color:#0f172a;">VINCULAR PRODUTO MESTRE</h3>
+          </div>
+          <button type="button" onclick="document.getElementById('modal-mapear-produto-container').remove()" style="background:none; border:none; color:#64748b; cursor:pointer; padding:6px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+
+        <!-- INFO DO ITEM FISCAL -->
+        <div style="padding:14px 24px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+          <div style="font-size:0.72rem; color:#64748b; font-weight:700;">ITEM FISCAL SELECIONADO:</div>
+          <div style="font-size:0.88rem; font-weight:800; color:#0f172a; margin-top:2px;">${escapeKitAttribute(descFiscal)}</div>
+          <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">Código Fornecedor: <b>${escapeKitAttribute(cProd)}</b></div>
+        </div>
+
+        <!-- CAMPO DE BUSCA -->
+        <div style="padding:16px 24px; border-bottom:1px solid #f1f5f9;">
+          <div style="position:relative;">
+            <span class="material-symbols-rounded" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:20px;">search</span>
+            <input 
+              type="text" 
+              id="input-busca-produto-mestre" 
+              placeholder="Buscar por ID Interno, Descrição, SKU ou EAN..." 
+              style="width:100%; padding:10px 14px 10px 40px; border-radius:10px; border:1px solid #cbd5e1; font-size:0.88rem; font-weight:500; outline:none;"
+              oninput="buscarProdutosParaMapeamento('${entradaId}', '${itemId}')"
+            />
+          </div>
+        </div>
+
+        <!-- LISTA DE RESULTADOS DE PRODUTOS MESTRES -->
+        <div id="resultado-busca-produtos-mestre" style="flex:1; overflow-y:auto; padding:16px 24px; display:flex; flex-direction:column; gap:10px; min-height:220px;">
+          <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+            Digite acima para buscar produtos no catálogo mestre.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('input-busca-produto-mestre')?.focus();
+}
+
+async function buscarProdutosParaMapeamento(entradaId, itemId) {
+  const query = String(document.getElementById('input-busca-produto-mestre')?.value || '').trim();
+  const container = document.getElementById('resultado-busca-produtos-mestre');
+  if (!container) return;
+
+  if (query.length < 2) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+        Digite ao menos 2 caracteres para buscar.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `<div style="text-align:center; padding:30px 10px; color:#64748b;">Buscando produtos...</div>`;
+
+  const client = window.supabaseClient;
+  if (!client) return;
+
+  const { data: prods, error } = await client
+    .from('produtos')
+    .select('id, id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+    .or(`id_interno.ilike.%${query}%,descricao_completa.ilike.%${query}%,descricao_base.ilike.%${query}%,sku_fornecedor.ilike.%${query}%,ean.ilike.%${query}%`)
+    .limit(15);
+
+  if (error || !prods || prods.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:0.85rem;">
+        Nenhum produto encontrado no catálogo para "${escapeKitAttribute(query)}".
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = prods.map(p => {
+    const nomeComercial = p.descricao_completa || p.descricao_base || '-';
+    const prodJsonStr = escapeKitAttribute(JSON.stringify(p));
+
+    return `
+      <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; transition:border-color 0.15s;">
+        <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0;">
+          
+          <div style="width:48px; height:48px; min-width:48px; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            ${p.url_imagem ? `<img src="${escapeKitAttribute(p.url_imagem)}" style="width:100%; height:100%; object-fit:cover;">` : `<span class="material-symbols-rounded" style="color:#94a3b8; font-size:24px;">image</span>`}
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+              <span style="background:#fef08a; color:#854d0e; font-weight:900; font-size:0.72rem; padding:2px 6px; border-radius:4px; border:1px solid #fde047;">
+                ${escapeKitAttribute(p.id_interno)}
+              </span>
+              ${p.marca ? `<span style="font-size:0.7rem; font-weight:700; color:#64748b; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escapeKitAttribute(p.marca)}</span>` : ''}
+            </div>
+            <strong style="font-size:0.85rem; color:#0f172a; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeKitAttribute(nomeComercial)}
+            </strong>
+            <div style="font-size:0.72rem; color:#64748b; display:flex; gap:10px; margin-top:2px;">
+              ${p.sku_fornecedor ? `<span>SKU: <b>${escapeKitAttribute(p.sku_fornecedor)}</b></span>` : ''}
+              ${p.ean ? `<span>EAN: <b>${escapeKitAttribute(p.ean)}</b></span>` : ''}
+            </div>
+          </div>
+
+        </div>
+
+        <button type="button" onclick="openConfirmModalVinculoItem('${entradaId}', '${itemId}', ${prodJsonStr})" style="background:#2563eb; color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:800; font-size:0.75rem; cursor:pointer; white-space:nowrap;">
+          SELECIONAR
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function openConfirmModalVinculoItem(entradaId, itemId, produto) {
+  const nf = await DataClient.getEntradaNFById(entradaId);
+  const itens = await fetchEntradaNFItens(entradaId);
+  const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+  if (!item || !produto) return;
+
+  const existingConfirm = document.getElementById('modal-confirm-vinculo-container');
+  if (existingConfirm) existingConfirm.remove();
+
+  const cProd = item.codigo_produto_fornecedor || 'N/A';
+  const descFiscal = item.descricao_produto_fornecedor || item.descricao_xml || '-';
+  const nomeComercial = produto.descricao_completa || produto.descricao_base || '-';
+
+  const confirmHtml = `
+    <div id="modal-confirm-vinculo-container" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.7); backdrop-filter:blur(4px); z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px;">
+      <div style="background:white; border-radius:24px; max-width:540px; width:100%; padding:24px; box-shadow:0 25px 50px rgba(0,0,0,0.3);">
+        
+        <h3 style="margin:0 0 12px 0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a; display:flex; align-items:center; gap:8px;">
+          <span class="material-symbols-rounded" style="color:#2563eb;">link</span> CONFIRMAR VÍNCULO DE PRODUTO
+        </h3>
+
+        <p style="font-size:0.8rem; color:#64748b; margin:0 0 16px 0;">
+          Confira o produto da Nota Fiscal e o Produto Mestre selecionado antes de efetivar o vínculo.
+        </p>
+
+        <!-- CARD DE COMPARAÇÃO -->
+        <div style="display:flex; flex-direction:column; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:20px;">
+          
+          <div>
+            <span style="font-size:0.68rem; font-weight:800; color:#b45309; text-transform:uppercase; display:block; margin-bottom:2px;">1. ITEM DA NOTA FISCAL (XML)</span>
+            <strong style="font-size:0.85rem; color:#0f172a; display:block;">cProd: ${escapeKitAttribute(cProd)}</strong>
+            <span style="font-size:0.8rem; color:#334155;">${escapeKitAttribute(descFiscal)}</span>
+          </div>
+
+          <div style="border-top:1px dashed #cbd5e1; padding-top:10px;">
+            <span style="font-size:0.68rem; font-weight:800; color:#15803d; text-transform:uppercase; display:block; margin-bottom:2px;">2. PRODUTO MESTRE SELECIONADO</span>
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+              <span style="background:#fef08a; color:#854d0e; font-weight:900; font-size:0.75rem; padding:2px 6px; border-radius:4px; border:1px solid #fde047;">
+                ${escapeKitAttribute(produto.id_interno)}
+              </span>
+              ${produto.marca ? `<span style="font-size:0.7rem; font-weight:700; color:#64748b; background:#e2e8f0; padding:2px 6px; border-radius:4px;">${escapeKitAttribute(produto.marca)}</span>` : ''}
+            </div>
+            <strong style="font-size:0.88rem; color:#0f172a; display:block;">${escapeKitAttribute(nomeComercial)}</strong>
+          </div>
+
+        </div>
+
+        <!-- AÇÕES DO MODAL DE CONFIRMAÇÃO -->
+        <div style="display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" onclick="document.getElementById('modal-confirm-vinculo-container').remove()" style="padding:10px 20px; border-radius:10px; border:none; background:#ef4444; color:white; font-weight:800; font-size:0.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(239,68,68,0.25); transition:background 0.15s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+            <span class="material-symbols-rounded" style="font-size:18px; color:white;">close</span> CANCELAR
+          </button>
+          <button type="button" onclick="confirmarVinculoItemEntradaNF('${entradaId}', '${itemId}', '${produto.id_interno}', '${produto.id}')" style="padding:10px 20px; border-radius:10px; border:none; background:#22c55e; color:white; font-weight:800; font-size:0.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(34,197,94,0.3);">
+            <span class="material-symbols-rounded" style="font-size:18px;">check</span> CONFIRMAR VÍNCULO
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', confirmHtml);
+}
+
+async function confirmarVinculoItemEntradaNF(entradaId, itemId, idInterno, produtoId) {
+  const client = window.supabaseClient;
+  if (!client || !entradaId || !itemId || !idInterno) return;
+
+  try {
+    const nf = await DataClient.getEntradaNFById(entradaId);
+    const itens = await fetchEntradaNFItens(entradaId);
+    const item = (itens || []).find(i => String(i.id) === String(itemId));
+
+    if (!item) {
+      showToast('Item não encontrado.', 'warning');
+      return;
+    }
+
+    // 1. Atualizar o item na tabela entradas_nf_itens (mantendo os dados fiscais originais 100% intactos)
+    const { error: errItem } = await client
+      .from('entradas_nf_itens')
+      .update({
+        produto_id: produtoId,
+        id_interno: idInterno,
+        produto_id_interno: idInterno,
+        status_vinculo: 'vinculado',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (errItem) {
+      throw new Error('Falha ao atualizar vinculo do item: ' + errItem.message);
+    }
+
+    // 2. Verificação de conflito prévio em fornecedor_produtos (Ressalva OBRIGATÓRIA #6)
+    if (nf?.cnpj_fornecedor && item?.codigo_produto_fornecedor) {
+      const cnpjClean = String(nf.cnpj_fornecedor).replace(/\D/g, '');
+      const cProdClean = String(item.codigo_produto_fornecedor).trim();
+
+      const { data: existingFp } = await client
+        .from('fornecedor_produtos')
+        .select('*')
+        .eq('fornecedor_cnpj', cnpjClean)
+        .eq('codigo_produto_fornecedor', cProdClean)
+        .maybeSingle();
+
+      let autorizarUpsert = true;
+
+      if (existingFp && existingFp.id_interno && existingFp.id_interno !== idInterno) {
+        autorizarUpsert = await showAppConfirm({
+          title: 'Conflito de Vínculo de Fornecedor',
+          message: `Já existe um vínculo registrado para o fornecedor (CNPJ ${cnpjClean}) e código "${cProdClean}" apontando para o produto mestre "${existingFp.id_interno}".`,
+          detail: `Deseja atualizar este vínculo global para apontar para o novo produto "${idInterno}"?`,
+          confirmLabel: 'Atualizar Vínculo de Fornecedor',
+          cancelLabel: 'Manter Vínculo Anterior',
+          danger: true
+        });
+      }
+
+      if (autorizarUpsert) {
+        const payloadVinculo = {
+          fornecedor_cnpj: cnpjClean,
+          codigo_produto_fornecedor: cProdClean,
+          descricao_produto_fornecedor: item.descricao_produto_fornecedor || item.descricao_xml || null,
+          ean_fornecedor: item.ean_fornecedor || item.ean_xml || null,
+          id_interno: idInterno,
+          produto_id: produtoId,
+          ultimo_custo: parseDecimal(item.custo_real_unitario ?? item.valor_unitario),
+          ultima_quantidade: parseDecimal(item.quantidade),
+          ultima_compra_em: nf.data_emissao || getDataBrasilISO(),
+          atualizado_em: new Date().toISOString()
+        };
+
+        const { error: errFp } = await client
+          .from('fornecedor_produtos')
+          .upsert(payloadVinculo, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' });
+
+        if (errFp) {
+          console.warn('[FORNECEDOR_PRODUTOS] aviso ao registrar vinculo:', errFp.message);
+        }
+      }
+    }
+
+    // 3. Sincronizar status do cabeçalho da NF caso todos os itens estejam vinculados
+    try {
+      const { data: itensNfCheck } = await client
+        .from('entradas_nf_itens')
+        .select('id, id_interno, status_vinculo')
+        .or(`entrada_nf_id.eq.${entradaId},nf_id.eq.${entradaId}`);
+
+      const temRestante = (itensNfCheck || []).some(i => !i.id_interno || i.status_vinculo === 'pendente_vinculo');
+      if (!temRestante && String(nf?.status || '').toLowerCase() === 'pendente_vinculo') {
+        await client
+          .from('entradas_nf')
+          .update({ status: 'importada', updated_at: new Date().toISOString() })
+          .eq('id', entradaId);
+      }
+    } catch (errSync) {
+      console.warn('[VINCULO] aviso ao sincronizar status do cabeçalho:', errSync);
+    }
+
+    showToast('Vínculo confirmado com sucesso!', 'success');
+    document.getElementById('modal-confirm-vinculo-container')?.remove();
+    document.getElementById('modal-mapear-produto-container')?.remove();
+
+    if (document.querySelector('.nf-identificacao-screen')) {
+      renderEntradaNFIdentificacao(entradaId);
+    } else {
+      renderNFDetail(entradaId);
+    }
+  } catch (err) {
+    console.error('[VINCULO] Erro ao confirmar vínculo:', err);
+    showToast('Erro ao confirmar vínculo: ' + err.message, 'error');
+  }
+}
+
+  // ==========================================
+  // ESTADO E CONTROLE DO MODAL DE PAGAMENTO NF
+  // ==========================================
+  const entradaNFPagamentoModalState = {};
+
+  function getComparativoParcelaXML(state, idx, parcelaAtual) {
+    if (!state || state.origem !== 'xml' || !state.duplicatasFiscaisOriginais || !state.duplicatasFiscaisOriginais[idx]) {
+      return { modificado: false };
+    }
+    const orig = state.duplicatasFiscaisOriginais[idx];
+    const origVenc = orig.vencimento_xml || '';
+    const origVal = parseDecimal(orig.valor_xml || 0);
+    const atualVenc = parcelaAtual.vencimento || '';
+    const atualVal = parseDecimal(parcelaAtual.valor || 0);
+
+    const dataMudou = Boolean(origVenc && atualVenc && origVenc !== atualVenc);
+    const valorMudou = Math.abs(origVal - atualVal) > 0.005;
+
+    if (dataMudou || valorMudou) {
+      return {
+        modificado: true,
+        vencimentoOrig: origVenc,
+        valorOrig: origVal
+      };
+    }
+    return { modificado: false };
+  }
+
+  function getEntradaNFPagamentoState(entradaId, nf, parcelasExistentes, duplicatasFiscaisXML) {
+    if (!entradaNFPagamentoModalState[entradaId]) {
+      const valorTotal = parseDecimal(nf.valor_total || 0);
+      const temDuplicatasXML = Array.isArray(duplicatasFiscaisXML) && duplicatasFiscaisXML.length > 0;
+      const origem = temDuplicatasXML ? 'xml' : 'manual';
+      let parcelasIniciais = [];
+
+      if (parcelasExistentes && parcelasExistentes.length > 0) {
+        parcelasIniciais = parcelasExistentes.map((p, idx) => ({
+          numero: p.numero_parcela || (idx + 1),
+          vencimento: p.data_vencimento || p.vencimento || '',
+          valor: parseDecimal(p.valor || 0)
+        }));
+      } else if (temDuplicatasXML) {
+        parcelasIniciais = duplicatasFiscaisXML.map((d, idx) => ({
+          numero: d.numero_duplicata || (idx + 1),
+          vencimento: d.vencimento_xml || '',
+          valor: parseDecimal(d.valor_xml || 0)
+        }));
+      } else {
+        const hojeISO = getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0];
+        parcelasIniciais = [{
+          numero: 1,
+          vencimento: hojeISO,
+          valor: valorTotal
+        }];
+      }
+
+      // Condição respeita explicitamente o valor gravado ou a escolha, sem forçar 'a_vista' só por ter 1 parcela
+      let condicaoInicial = 'a_vista';
+      if (nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo') {
+        condicaoInicial = 'parcelado';
+      } else if (nf.tipo_condicao_financeira === 'a_vista') {
+        condicaoInicial = 'a_vista';
+      } else if (parcelasIniciais.length > 1) {
+        condicaoInicial = 'parcelado';
+      }
+
+      // Sugestão de forma de pagamento a partir de pagamentos_xml se ainda não houver salva
+      let formaPagamentoInicial = (parcelasExistentes && parcelasExistentes[0]?.forma_pagamento) || '';
+      if (!formaPagamentoInicial) {
+        if (Array.isArray(nf.pagamentos_xml) && nf.pagamentos_xml.length === 1) {
+          const tPag = String(nf.pagamentos_xml[0].codigoFormaPagamento || '').trim();
+          if (tPag === '15') formaPagamentoInicial = 'boleto';
+          else if (tPag === '17') formaPagamentoInicial = 'pix';
+          else if (tPag === '03' || tPag === '04') formaPagamentoInicial = 'cartao';
+          else if (tPag === '01') formaPagamentoInicial = 'dinheiro';
+          else if (tPag === '18') formaPagamentoInicial = 'transferencia';
+          else formaPagamentoInicial = 'boleto';
+        } else {
+          formaPagamentoInicial = 'boleto';
+        }
+      }
+
+      entradaNFPagamentoModalState[entradaId] = {
+        isOpen: false,
+        origem: origem,
+        duplicatasFiscaisOriginais: duplicatasFiscaisXML || [],
+        condicao: condicaoInicial,
+        formaPagamento: formaPagamentoInicial || 'boleto',
+        observacao: nf.observacao_financeira || '',
+        qtdParcelas: parcelasIniciais.length || 1,
+        primeiroVencimento: parcelasIniciais[0]?.vencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
+        intervaloDias: 30,
+        parcelas: parcelasIniciais,
+        valorTotalNf: valorTotal
+      };
+    }
+    return entradaNFPagamentoModalState[entradaId];
+  }
+
+  function openModalPagamentoNF(entradaId) {
+    if (entradaNFPagamentoModalState[entradaId]) {
+      entradaNFPagamentoModalState[entradaId].isOpen = true;
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function closeModalPagamentoNF(entradaId) {
+    if (entradaNFPagamentoModalState[entradaId]) {
+      entradaNFPagamentoModalState[entradaId].isOpen = false;
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function setCondicaoPagamentoNF(entradaId, condicao, valorTotal) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+    state.condicao = condicao;
+    if (condicao === 'a_vista') {
+      state.qtdParcelas = 1;
+      state.parcelas = [{
+        numero: 1,
+        vencimento: state.primeiroVencimento || (getDataBrasilISO ? getDataBrasilISO() : new Date().toISOString().split('T')[0]),
+        valor: parseDecimal(valorTotal)
+      }];
+    } else {
+      state.qtdParcelas = Math.max(1, parseInt(state.qtdParcelas, 10) || 1);
+      gerarParcelasPagamentoNF(entradaId, valorTotal);
+    }
+    renderNFDetail(entradaId);
+  }
+
+  function gerarParcelasPagamentoNF(entradaId, valorTotal) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+
+    const n = Math.max(1, parseInt(state.qtdParcelas, 10) || 1);
+    const totalCentavos = Math.round(parseDecimal(valorTotal) * 100);
+    const baseCentavos = Math.floor(totalCentavos / n);
+    const restoCentavos = totalCentavos % n;
+
+    const dataBase = state.primeiroVencimento ? new Date(state.primeiroVencimento + 'T12:00:00') : new Date();
+    const intervalo = parseInt(state.intervaloDias, 10) || 30;
+
+    const novasParcelas = [];
+    for (let i = 0; i < n; i++) {
+      const centavosDestaParcela = baseCentavos + (i < restoCentavos ? 1 : 0);
+      const dataVenc = new Date(dataBase);
+      dataVenc.setDate(dataBase.getDate() + (i * intervalo));
+      const vencStr = dataVenc.toISOString().split('T')[0];
+
+      novasParcelas.push({
+        numero: i + 1,
+        vencimento: vencStr,
+        valor: centavosDestaParcela / 100
+      });
+    }
+
+    state.parcelas = novasParcelas;
+    renderNFDetail(entradaId);
+  }
+
+  function updateParcelaPagamentoField(entradaId, index, field, value) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state || !state.parcelas[index]) return;
+
+    if (field === 'valor') {
+      state.parcelas[index].valor = parseDecimal(value || 0);
+    } else if (field === 'vencimento') {
+      state.parcelas[index].vencimento = value;
+      if (index === 0) {
+        state.primeiroVencimento = value;
+      }
+    }
+
+    renderNFDetail(entradaId);
+  }
+
+  function updatePagamentoField(entradaId, field, value) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+    state[field] = value;
+    if (field === 'primeiroVencimento') {
+      if (state.parcelas && state.parcelas.length === 1) {
+        state.parcelas[0].vencimento = value;
+      }
+    }
+    renderNFDetail(entradaId);
+  }
+
+  async function salvarPagamentoNFDoModal(entradaId) {
+    const state = entradaNFPagamentoModalState[entradaId];
+    if (!state) return;
+
+    try {
+      const payload = {
+        condicao: state.condicao,
+        formaPagamento: state.formaPagamento,
+        observacao: state.observacao,
+        parcelas: state.parcelas
+      };
+
+      const res = await DataClient.saveEntradaNFParcelasFiscais(entradaId, payload);
+      if (res.success) {
+        showToast('Pagamento da nota fiscal configurado com sucesso!', 'success');
+        state.isOpen = false;
+        delete entradaNFPagamentoModalState[entradaId];
+        renderNFDetail(entradaId);
+      }
+    } catch (err) {
+      console.error('[FINANCEIRO_NF] Erro ao salvar pagamento:', err);
+      showToast('Erro ao salvar parcelas fiscais: ' + err.message, 'error');
+    }
+  }
+
+function getItemSituacaoDisplayStatus(situacao) {
+  const s = String(situacao || '').toUpperCase();
+  if (s === 'CONFERE' || s === 'CONFERIDO' || s === 'VINCULADO') {
+    return {
+      label: 'CONFERE',
+      color: '#15803d',
+      bg: 'rgba(34, 197, 94, 0.1)',
+      border: 'rgba(34, 197, 94, 0.25)'
+    };
+  }
+  if (s === 'RECUSADO') {
+    return {
+      label: 'RECUSADO',
+      color: '#dc2626',
+      bg: 'rgba(239, 68, 68, 0.1)',
+      border: 'rgba(239, 68, 68, 0.25)'
+    };
+  }
+  if (s.includes('DIVERG') || s === 'DIVERGENTE' || s === 'DIVERGENCIA' || s === 'DIVERGENCIA_XML_FISICO') {
+    return {
+      label: 'DIVERGÊNCIA',
+      color: '#d97706',
+      bg: 'rgba(245, 158, 11, 0.1)',
+      border: 'rgba(245, 158, 11, 0.25)'
+    };
+  }
+  return {
+    label: 'AGUARDANDO CONFERÊNCIA',
+    color: '#b45309',
+    bg: 'rgba(245, 158, 11, 0.1)',
+    border: 'rgba(245, 158, 11, 0.25)'
+  };
 }
 
 async function renderNFDetail(id) {
- const currentUser = localStorage.getItem('currentUser');
- const nf = await DataClient.getEntradaNFById(id);
+  const currentUser = localStorage.getItem('currentUser');
+  const nf = await DataClient.getEntradaNFById(id);
+  
+  if (!nf) {
+    showToast('Operação concluída.', 'info');
+    renderNFAbertasList();
+    return;
+  }
 
- if (!nf) {
- showToast('Operacao concluida.', 'info');
- renderNFAbertasList();
- return;
- }
+  const client = window.supabaseClient;
+  let todasContasPagar = [];
+  if (client) {
+    const { data: cpData } = await client
+      .from('contas_pagar')
+      .select('*')
+      .eq('entrada_nf_id', id);
+    todasContasPagar = cpData || [];
+  }
 
- const itens = await fetchEntradaNFItens(id);
- const podeFinalizar = nf.tipo_lancamento === 'entrada_normal' &&
- nf.afeta_estoque !== false &&
- !nf.estoque_finalizado &&
- String(nf.status || '').toLowerCase() !== 'finalizada' &&
- itens.length > 0 &&
- itens.every(item => item.id_interno && parseDecimal(item.quantidade) > 0);
+  const parcelasFiscais = todasContasPagar.filter(cp => {
+    const t = String(cp.tipo_lancamento || cp.origem || '').toLowerCase();
+    const obs = String(cp.observacao || cp.observacoes || '');
+    return (t === 'nota_fiscal' || t === 'nf' || (!t.includes('complementar') && !cp.complementar_id && !obs.includes('[COMPLEMENTAR:')));
+  }).sort((a, b) => Number(a.numero_parcela || 1) - Number(b.numero_parcela || 1));
 
- app.innerHTML = `
- <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen">
- ${getTopBarHTML(currentUser, 'renderNFAbertasList()')}
+  const itensRaw = await fetchEntradaNFItens(id);
+  const temRecebimentosNoBanco = itensRaw.length > 0 && itensRaw.every(i => i.recebimentoPersistido);
+  const estadoConferencia = initEntradaNFConferenciaState(id, itensRaw, temRecebimentosNoBanco);
+  const compState = getEntradaNFComplementarState(id);
+  const complementaresSalvos = await DataClient.fetchComplementaresEntradaNF(id);
+  window.currentEntradaNFComplementaresSalvos = complementaresSalvos || [];
+  const duplicatasFiscaisXML = await DataClient.fetchEntradaNFDuplicatasFiscais(id);
+  const pagState = getEntradaNFPagamentoState(id, nf, parcelasFiscais, duplicatasFiscaisXML);
 
- <main class="container">
- <div style="padding: 12px 20px 40px 20px;">
- <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
- <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px;">
- <div>
- <div style="font-size: 0.6rem; color: #999; text-transform: uppercase; font-weight: 700;">NAOmero / SArie</div>
- <div style="font-size: 1.2rem; font-weight: 900; color: #101018;">${nf.numero_nf} / ${nf.serie || '1'}</div>
- </div>
- <div style="text-align: right;">
- <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 4px 12px; border-radius: 99px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">
- ${nf.status}
- </div>
- </div>
- </div>
- <div class="form-grid" style="gap: 12px;">
- <div class="input-group">
- <label style="color: #999; font-size: 0.6rem;">FORNECEDOR</label>
- <div style="font-weight: 700; color: #101018; font-size: 0.85rem;">${nf.fornecedor_nome}</div>
- </div>
- <div class="input-group">
- <label style="color: #999; font-size: 0.6rem;">VALOR TOTAL (NF)</label>
- <div style="font-weight: 800; color: var(--primary); font-size: 1rem;">${nfXmlFormatMoney(nf.valor_total)}</div>
- </div>
- </div>
+  // Calcular impacto do Complementar
+  let valorComplementar = (complementaresSalvos || []).reduce((sum, c) => sum + Number(c.valor_total || 0), 0);
+  if (compState.isMockActive) {
+    valorComplementar += compState.valorTotal;
+  }
 
- <!-- SECAO DE ITENS (PREPARACAO FASE 2) -->
- <div style="margin-top: 30px; border-top: 2px solid #f0f0f0; padding-top: 20px;">
- <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
- <h3 style="color: #101018; font-family: 'Fjalla One', sans-serif; font-size: 1.1rem;">ITENS DA NOTA</h3>
- ${podeFinalizar ? `
- <button class="btn-action" onclick="confirmarFinalizarEntradaNFAberta('${nf.id}')" style="padding: 8px 16px; font-size: 0.75rem; background: #22c55e !important;">
- <span class="material-symbols-rounded">check_circle</span> FINALIZAR ENTRADA
- </button>
- ` : ''}
- </div>
+  const valorFiscalNF = parseDecimal(nf.valor_total) || 0;
+  const totalFinanceiroPrevisto = valorFiscalNF + valorComplementar;
 
- ${itens.length ? `
- <div id="nf-items-container" style="display: flex; flex-direction: column; gap: 10px;">
- ${itens.map(item => `
- <div style="background:#f9f9f9; border:1px solid #eee; border-radius:14px; padding:12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;">
- <div style="min-width:0;">
- <div style="font-weight:800; color:#101018; font-size:0.85rem;">${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || item.id_interno || '-')}</div>
- <div style="color:#666; font-size:0.72rem; margin-top:4px;">ID: ${escapeKitAttribute(item.id_interno || '-')} | EAN: ${escapeKitAttribute(item.ean_fornecedor || item.ean_xml || '-')}</div>
- </div>
- <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; color:#333; font-size:0.74rem; font-weight:700;">
- <span>Qtd ${formatStockNumber(item.quantidade)}</span>
- <span>Custo ${getEntradaNFMoney(item.custo_real_unitario ?? item.valor_unitario)}</span>
- <span>${escapeKitAttribute(item.status_vinculo || '-')}</span>
- </div>
- </div>
- `).join('')}
- </div>
- ` : `
- <div id="nf-items-container" style="text-align: center; padding: 30px; background: #f9f9f9; border-radius: 16px; border: 1px dashed #ddd;">
- <span class="material-symbols-rounded" style="font-size: 32px; color: #ccc; margin-bottom: 10px;">inventory_2</span>
- <p style="color: #999; font-size: 0.85rem; font-weight: 500;">NENHUM ITEM ENCONTRADO</p>
- </div>
- `}
- </div>
- </div>
+  // Recalcular custos dos itens dinamicamente na UI com os complementares que incorporam ao custo
+  const totalProdutos = itensRaw.reduce((sum, i) => sum + parseDecimal(i.valor_total), 0);
 
- </div>
- </main>
- </div>
- `;
+  let totalComplementarIncorporadoNf = 0;
+  (complementaresSalvos || []).forEach(comp => {
+    if (comp.incorporar_custo) {
+      totalComplementarIncorporadoNf += Number(comp.valor_total || 0);
+    }
+  });
+
+  if (compState.isMockActive && compState.incorporarCusto) {
+    totalComplementarIncorporadoNf += compState.valorTotal;
+  }
+
+  const itens = itensRaw.map(item => {
+    const vProd = parseDecimal(item.valor_total);
+    const qCom = parseDecimal(item.quantidade);
+    const prop = totalProdutos > 0 ? vProd / totalProdutos : 0;
+    const custoBaseNota = parseDecimal(item.custo_real_unitario ?? item.valor_unitario);
+    const custoBaseTotalItem = parseDecimal(item.custo_real_total ?? (custoBaseNota * qCom));
+    
+    const complementoItem = totalComplementarIncorporadoNf * prop;
+    const custoRealTotalCalculado = custoBaseTotalItem + complementoItem;
+    const custoRealUnitarioCalculado = qCom > 0 ? custoRealTotalCalculado / qCom : custoBaseNota;
+
+    return {
+      ...item,
+      custo_real_total_ui: custoRealTotalCalculado,
+      custo_real_unitario_ui: custoRealUnitarioCalculado,
+      complemento_rateado_item: complementoItem
+    };
+  });
+
+  const custoTotalAquisicao = itens.reduce((sum, i) => sum + i.custo_real_total_ui, 0);
+
+  const isEntradaFinalizada = nf.status === 'finalizada' || !!nf.estoque_finalizado;
+
+  // VALIDAÇÃO FINANCEIRA RIGOROSA
+  const somaParcelasFiscais = parcelasFiscais.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffFinanceira = Math.abs(Math.round((valorFiscalNF - somaParcelasFiscais) * 100) / 100);
+  const financeiroValido = parcelasFiscais.length > 0 && 
+    diffFinanceira <= 0.005 && 
+    parcelasFiscais.every(p => parseDecimal(p.valor) > 0 && (p.vencimento || p.data_vencimento));
+
+  const podeFinalizar = nf.tipo_lancamento === 'entrada_normal' &&
+    nf.afeta_estoque !== false &&
+    !isEntradaFinalizada &&
+    estadoConferencia.conferenciaSalva &&
+    !estadoConferencia.dirty &&
+    !compState.isModalOpen &&
+    !pagState.isOpen &&
+    itens.length > 0 &&
+    itens.every(item => item.id_interno && parseDecimal(item.quantidade) > 0) &&
+    financeiroValido;
+
+  const headerStatus = isEntradaFinalizada 
+    ? { label: 'FINALIZADA', color: '#15803d', bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.3)' }
+    : getEntradaNFDisplayStatus(nf);
+
+  // Cálculo das parcelas do modal de complementar
+  const somaParcelasComp = compState.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasComp = Math.round((compState.valorTotal - somaParcelasComp) * 100) / 100;
+  const parcelasValidasComp = Math.abs(diffParcelasComp) <= 0.01 && compState.valorTotal > 0 && compState.parcelas.every(p => p.valor > 0 && p.vencimento);
+
+  // Cálculo das parcelas do modal de pagamento da NF
+  const somaParcelasPagModal = pagState.parcelas.reduce((sum, p) => sum + parseDecimal(p.valor), 0);
+  const diffParcelasPagModal = Math.round((valorFiscalNF - somaParcelasPagModal) * 100) / 100;
+  const parcelasValidasPagModal = Math.abs(diffParcelasPagModal) <= 0.005 && 
+    pagState.parcelas.length > 0 && 
+    pagState.parcelas.every(p => parseDecimal(p.valor) > 0 && p.vencimento);
+
+  const temItensPendentesVinculo = itensRaw.some(i => i.status_vinculo === 'pendente_vinculo' || !i.id_interno);
+
+  app.innerHTML = `
+    <div class="dashboard-screen internal fade-in nf-detail-screen entrada-nf-screen entrada-nf-detail-v2">
+      ${renderModuleHeader({
+        moduleKey: 'nf',
+        title: 'CONFERÊNCIA FÍSICA & RECEBIMENTO',
+        icon: 'nf_recebimento',
+        backAction: 'renderEntradaNFEmRecebimento()'
+      })}
+      
+      <main class="container app-page-container entrada-nf-detail-workspace" style="max-width: var(--app-page-max-width, 1280px); width: 100%; margin: 0 auto; padding: 20px 24px 40px 24px; box-sizing: border-box;">
+        
+        ${temItensPendentesVinculo ? `
+          <div style="background: #fffbebf5; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 14px; padding: 16px 20px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <strong style="color: #92400e; font-size: 0.9rem; display: block;">⚠ ESTA NOTA FISCAL POSSUI ITENS AGUARDANDO IDENTIFICAÇÃO</strong>
+              <span style="font-size: 0.8rem; color: #b45309;">Vincule todos os produtos fiscais ao Produto Mestre antes da conferência física.</span>
+            </div>
+            <button type="button" onclick="renderEntradaNFIdentificacao('${nf.id}')" style="background: #f59e0b; color: #111827; border: none; padding: 9px 16px; border-radius: 10px; font-weight: 800; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">link</span> IDENTIFICAR PRODUTOS
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- CABEÇALHO DA NF -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 16px;">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 14px;">
+            <div>
+              <span style="display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">ENTRADA DE NOTA FISCAL</span>
+              <h1 style="font-size: 1.35rem; font-weight: 900; color: #0f172a; margin: 2px 0 0 0; display: flex; align-items: center; gap: 8px;">
+                NF ${nf.numero_nf || '-'} 
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; background: rgba(100,116,139,0.08); padding: 2px 8px; border-radius: 6px;">Série ${nf.serie || '1'}</span>
+              </h1>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              ${isEntradaFinalizada ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span>
+                  ✓ ENTRADA FINALIZADA
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: ${headerStatus.bg}; color: ${headerStatus.color}; border: 1px solid ${headerStatus.border};">
+                  <span style="width: 7px; height: 7px; border-radius: 50%; background: ${headerStatus.color};"></span>
+                  ${headerStatus.label}
+                </span>
+              `}
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: center;">
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">FORNECEDOR</span>
+              <strong style="font-size: 0.88rem; color: #1e293b; text-transform: uppercase; word-break: break-word;">${nf.fornecedor_nome || 'FORNECEDOR NÃO INFORMADO'}</strong>
+            </div>
+            <div>
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">DATA DE EMISSÃO</span>
+              <strong style="font-size: 0.88rem; color: #1e293b;">${formatDateBR(nf.data_emissao || nf.created_at)}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="display: block; font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">VALOR FISCAL DA NF</span>
+              <strong style="font-size: 1.15rem; font-weight: 900; color: #2563eb;">${nfXmlFormatMoney(nf.valor_total)}</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- DOIS CARDS DE RESUMO (FINANCEIRO & CUSTO AQUISIÇÃO) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          
+          <!-- CARD 1: RESUMO FINANCEIRO -->
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
+            <div style="font-size: 0.75rem; font-weight: 800; color: #2563eb; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">payments</span> RESUMO FINANCEIRO
+            </div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 10px; font-weight: 500;">Quanto a empresa terá que pagar no total.</div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+              <span style="color: #64748b;">Valor fiscal da NF:</span>
+              <strong style="color: #0f172a;">${getEntradaNFMoney(valorFiscalNF)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 10px;">
+              <span style="color: #64748b;">Complementares:</span>
+              <strong style="color: ${valorComplementar > 0 ? '#d97706' : '#94a3b8'};">${valorComplementar > 0 ? '+ ' + getEntradaNFMoney(valorComplementar) : 'R$ 0,00'}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #0f172a; font-size: 0.88rem;">TOTAL FINANCEIRO:</strong>
+              <strong style="color: #2563eb; font-size: 1.15rem; font-weight: 900;">${getEntradaNFMoney(totalFinanceiroPrevisto)}</strong>
+            </div>
+          </div>
+
+          <!-- CARD 2: CUSTO DA AQUISIÇÃO -->
+          <div style="background: var(--bg-card, #fff); border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 18px; box-shadow: 0 4px 12px rgba(15,23,42,0.03);">
+            <div style="font-size: 0.75rem; font-weight: 800; color: #16a34a; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-rounded" style="font-size: 18px;">inventory_2</span> CUSTO DA AQUISIÇÃO
+            </div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 10px; font-weight: 500;">Quanto efetivamente compõe o custo dos produtos.</div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+              <span style="color: #64748b;">Custo base da NF:</span>
+              <strong style="color: #0f172a;">${getEntradaNFMoney(valorFiscalNF)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 10px;">
+              <span style="color: #64748b;">Complemento incorporado:</span>
+              <strong style="color: ${totalComplementarIncorporadoNf > 0 ? '#16a34a' : '#94a3b8'};">${totalComplementarIncorporadoNf > 0 ? '+ ' + getEntradaNFMoney(totalComplementarIncorporadoNf) : 'R$ 0,00'}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="color: #0f172a; font-size: 0.88rem;">CUSTO DA AQUISIÇÃO:</strong>
+              <strong style="color: #16a34a; font-size: 1.15rem; font-weight: 900;">${getEntradaNFMoney(custoTotalAquisicao)}</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- SEÇÃO: FINANCEIRO DA ENTRADA -->
+        <div style="background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03); margin-bottom: 24px;">
+          
+          <div style="margin-bottom: 16px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <h2 style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0;">FINANCEIRO DA ENTRADA</h2>
+            <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">Condição de pagamento da Nota Fiscal e lançamentos complementares.</p>
+          </div>
+
+          <!-- BLOCO 1: PARCELAS DA NOTA FISCAL -->
+          <div style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <span class="material-symbols-rounded" style="color: #2563eb; font-size: 18px;">receipt_long</span> PARCELAS DA NOTA FISCAL
+                </h3>
+                ${(() => {
+                  if (!parcelasFiscais.length) {
+                    return `<span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #d97706;">NÃO DEFINIDA</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>`;
+                  }
+                  const isAPrazo = parcelasFiscais.length > 1 || pagState.condicao === 'parcelado' || nf.tipo_condicao_financeira === 'parcelado' || nf.tipo_condicao_financeira === 'a_prazo';
+                  const forma = (parcelasFiscais[0]?.forma_pagamento || pagState.formaPagamento || '').toUpperCase();
+                  const condLabel = isAPrazo 
+                    ? `A PRAZO (${parcelasFiscais.length}x)${forma ? ` · ${forma}` : ''}`
+                    : `À VISTA${forma ? ` · ${forma}` : ''}`;
+                  return `<span style="font-size: 0.72rem; color: #64748b;">Condição: <b style="color: #2563eb;">${condLabel}</b> · Valor fiscal: <b>${nfXmlFormatMoney(valorFiscalNF)}</b></span>`;
+                })()}
+              </div>
+
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="openModalPagamentoNF('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: ${parcelasFiscais.length ? '#ffffff' : '#2563eb'}; color: ${parcelasFiscais.length ? '#2563eb' : '#ffffff'}; border: 1px solid #2563eb; padding: 7px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.15s ease; box-shadow: ${parcelasFiscais.length ? 'none' : '0 2px 8px rgba(37,99,235,0.25)'};">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">${parcelasFiscais.length ? 'edit' : 'add'}</span>
+                  ${parcelasFiscais.length ? 'REVISAR PAGAMENTO' : 'DEFINIR PAGAMENTO'}
+                </button>
+              ` : ''}
+            </div>
+            
+            ${parcelasFiscais.length ? `
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${parcelasFiscais.map((p, idx) => {
+                  const st = getContasPagarDisplayStatus(p.status);
+                  const dtVenc = getEntradaNFDate(p.vencimento || p.data_vencimento);
+                  const totalParcelas = parcelasFiscais.length;
+                  const numParcela = p.numero_parcela || (idx + 1);
+                  const labelParcela = typeof p.parcela === 'string' && p.parcela.includes('/') ? p.parcela : `${numParcela}/${totalParcelas}`;
+                  return `
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                      <div>
+                        <div style="font-weight: 800; color: #0f172a; font-size: 0.85rem;">Parcela ${labelParcela}</div>
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Vencimento: <b>${dtVenc}</b> ${p.forma_pagamento ? `· Forma: <span style="text-transform:uppercase;">${escapeKitAttribute(p.forma_pagamento)}</span>` : ''}</div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 14px;">
+                        <span style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">${getEntradaNFMoney(p.valor || nf.valor_total)}</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 14px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; background: ${st.bg}; color: ${st.color}; border: 1px solid ${st.border};">
+                          ${st.label}
+                        </span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <!-- AVISO CLARO QUANDO NÃO HÁ PARCELAS PERSISTIDAS -->
+              <div style="background: #fffbeb; border: 1px dashed #f59e0b; border-radius: 10px; padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div>
+                  <strong style="color: #92400e; font-size: 0.82rem; display: block; text-transform: uppercase;">⚠ CONDIÇÃO DE PAGAMENTO: NÃO DEFINIDA</strong>
+                  <span style="font-size: 0.75rem; color: #b45309;">Defina as parcelas da nota fiscal antes de finalizar a entrada.</span>
+                </div>
+                ${!isEntradaFinalizada ? `
+                  <button type="button" onclick="openModalPagamentoNF('${nf.id}')" style="background: #f59e0b; color: #111827; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">add_card</span> DEFINIR PAGAMENTO
+                  </button>
+                ` : ''}
+              </div>
+            `}
+          </div>
+
+          <!-- BLOCO 2: LANÇAMENTOS COMPLEMENTARES -->
+          <div style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <span class="material-symbols-rounded" style="color: #d97706; font-size: 18px;">add_card</span> LANÇAMENTOS COMPLEMENTARES
+                </h3>
+                <span style="font-size: 0.72rem; color: #64748b;">Fretes e despesas adicionais vinculadas à entrada</span>
+              </div>
+
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="openModalComplementarNF('${nf.id}')" style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; color: #d97706; border: 1px solid #d97706; padding: 7px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.15s ease;">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">add</span> + ADICIONAR COMPLEMENTAR
+                </button>
+              ` : ''}
+            </div>
+
+            ${(complementaresSalvos.length || compState.isMockActive) ? `
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${complementaresSalvos.map(comp => {
+                  const valorCompTotal = Number(comp.valor_total || comp.parcelas.reduce((s, p) => s + parseDecimal(p.valor), 0));
+                  const incCustoLabel = comp.incorporar_custo ? 'INCORPORA AO CUSTO' : 'NÃO INCORPORA AO CUSTO';
+                  const incCustoBg = comp.incorporar_custo ? 'rgba(34, 197, 94, 0.12)' : 'rgba(100, 116, 139, 0.12)';
+                  const incCustoColor = comp.incorporar_custo ? '#15803d' : '#475569';
+                  const incCustoBorder = comp.incorporar_custo ? 'rgba(34, 197, 94, 0.3)' : 'rgba(100, 116, 139, 0.3)';
+                  
+                  return `
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #d97706; border-radius: 10px; padding: 12px 14px;">
+                      
+                      <!-- CABEÇALHO DO GRUPO COMPLEMENTAR -->
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
+                        <div>
+                          <strong style="color: #0f172a; font-size: 0.85rem; display: block;">${escapeKitAttribute(comp.descricao || 'Lançamento Complementar')}</strong>
+                          <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">${comp.parcelas.length} parcela(s)</span>
+                        </div>
+                        
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            ${!isEntradaFinalizada ? `
+                              <button type="button" onclick="editarComplementarNF('${nf.id}', '${comp.complementar_id}')" style="display: inline-flex; align-items: center; gap: 4px; background: #ffffff; color: #2563eb; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
+                                <span class="material-symbols-rounded" style="font-size: 14px;">edit</span> Editar
+                              </button>
+                            ` : ''}
+                            <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(valorCompTotal)}</strong>
+                          </div>
+                          <span style="display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: ${incCustoBg}; color: ${incCustoColor}; border: 1px solid ${incCustoBorder};">
+                            ${incCustoLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- PARCELAS DO COMPLEMENTAR -->
+                      <div style="display: flex; flex-direction: column; gap: 6px;">
+                        ${comp.parcelas.map(p => {
+                          const stP = getContasPagarDisplayStatus(p.status);
+                          const dtVencP = getEntradaNFDate(p.vencimento || p.data_vencimento);
+                          return `
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+                              <div>
+                                <span style="font-weight: 700; color: #334155;">Parcela ${p.parcela || p.numero_parcela || '1'}</span>
+                                <span style="color: #64748b; margin-left: 10px;">Vencimento: <b>${dtVencP}</b></span>
+                              </div>
+                              <div style="display: flex; align-items: center; gap: 10px;">
+                                <strong style="color: #0f172a;">${getEntradaNFMoney(p.valor)}</strong>
+                                <span style="display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: ${stP.bg}; color: ${stP.color}; border: 1px solid ${stP.border};">
+                                  ${stP.label}
+                                </span>
+                              </div>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+
+                    </div>
+                  `;
+                }).join('')}
+
+                ${compState.isMockActive ? `
+                  <div style="background: #fffbebf5; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 10px; padding: 12px 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; border-bottom: 1px dashed #fef3c7; padding-bottom: 8px;">
+                      <div>
+                        <strong style="color: #92400e; font-size: 0.85rem; display: block;">[Simulação UI] ${escapeKitAttribute(compState.descricao)}</strong>
+                        <span style="font-size: 0.7rem; color: #b45309; font-weight: 500;">${compState.parcelas.length} parcelas</span>
+                      </div>
+                      <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                        <strong style="color: #d97706; font-size: 0.95rem;">+ ${getEntradaNFMoney(compState.valorTotal)}</strong>
+                        <span style="display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                          ${compState.incorporarCusto ? 'INCORPORA AO CUSTO' : 'NÃO INCORPORA AO CUSTO'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      ${compState.parcelas.map((p, idx) => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #fef3c7; border-radius: 6px; padding: 6px 10px; font-size: 0.75rem;">
+                          <div>
+                            <span style="font-weight: 700; color: #334155;">Parcela ${idx + 1}</span>
+                            <span style="color: #64748b; margin-left: 10px;">Vencimento: <b>${getEntradaNFDate(p.vencimento)}</b></span>
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <strong style="color: #0f172a;">${getEntradaNFMoney(p.valor)}</strong>
+                            <span style="display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 10px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309;">
+                              RASCUNHO | EFETIVA AO FINALIZAR
+                            </span>
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <div style="text-align: center; padding: 14px; background: #ffffff; border-radius: 10px; border: 1px dashed #e2e8f0; color: #64748b; font-size: 0.75rem; font-weight: 500;">
+                Nenhum lançamento complementar vinculado a esta entrada.
+              </div>
+            `}
+          </div>
+
+        </div>
+
+        <!-- MODAL: CONFIGURAR / REVISAR PAGAMENTO DA NOTA FISCAL -->
+        ${pagState.isOpen ? `
+          <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div style="background:white; border-radius:24px; max-width:640px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+              
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #e2e8f0; padding-bottom:14px; margin-bottom:16px;">
+                <div>
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                    <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
+                      ${pagState.isRevisao ? 'REVISAR PAGAMENTO DA NOTA' : 'CONFIGURAR PAGAMENTO DA NOTA'}
+                    </h3>
+                    ${pagState.origem === 'xml' ? `
+                      <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-size:0.72rem; font-weight:700;">
+                        <span class="material-symbols-rounded" style="font-size:14px;">description</span> Carregado do XML da NF-e
+                      </span>
+                    ` : `
+                      <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; background:#f1f5f9; border:1px solid #e2e8f0; color:#475569; font-size:0.72rem; font-weight:700;">
+                        <span class="material-symbols-rounded" style="font-size:14px;">edit_note</span> Configuração manual
+                      </span>
+                    `}
+                  </div>
+                  <span style="font-size:0.75rem; color:#64748b;">NF ${nf.numero_nf || '-'} · ${escapeKitAttribute(nf.fornecedor_nome || '')}</span>
+                  ${pagState.origem === 'xml' ? `
+                    <span style="display:block; font-size:0.72rem; color:#64748b; margin-top:2px;">
+                      As parcelas abaixo foram informadas no XML da NF-e. Você pode ajustá-las antes da finalização.
+                    </span>
+                  ` : ''}
+                </div>
+                <button type="button" onclick="closeModalPagamentoNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b; padding:4px;">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:16px;">
+                
+                <!-- SELETOR DE CONDIÇÃO -->
+                <div>
+                  <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:6px;">CONDIÇÃO DE PAGAMENTO</label>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'a_vista', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'a_vista' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'a_vista' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'a_vista' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
+                      À VISTA
+                    </button>
+                    <button type="button" onclick="setCondicaoPagamentoNF('${nf.id}', 'parcelado', ${valorFiscalNF})" style="padding:10px; border-radius:10px; border:2px solid ${pagState.condicao === 'parcelado' ? '#2563eb' : '#e2e8f0'}; background:${pagState.condicao === 'parcelado' ? 'rgba(37,99,235,0.08)' : '#ffffff'}; color:${pagState.condicao === 'parcelado' ? '#2563eb' : '#475569'}; font-weight:800; font-size:0.8rem; cursor:pointer;">
+                      A PRAZO
+                    </button>
+                  </div>
+                </div>
+
+                <!-- FORMA DE PAGAMENTO E OBSERVAÇÃO -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <div>
+                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">FORMA DE PAGAMENTO</label>
+                    <select onchange="updatePagamentoField('${nf.id}', 'formaPagamento', this.value)" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600; background:white;">
+                      <option value="boleto" ${pagState.formaPagamento === 'boleto' ? 'selected' : ''}>Boleto Bancário</option>
+                      <option value="pix" ${pagState.formaPagamento === 'pix' ? 'selected' : ''}>Pix</option>
+                      <option value="transferencia" ${pagState.formaPagamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
+                      <option value="cartao" ${pagState.formaPagamento === 'cartao' ? 'selected' : ''}>Cartão de Crédito</option>
+                      <option value="dinheiro" ${pagState.formaPagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                      <option value="outro" ${pagState.formaPagamento === 'outro' ? 'selected' : ''}>Outro</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style="display:block; font-size:0.72rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:4px;">${pagState.condicao === 'parcelado' ? 'PRIMEIRO VENCIMENTO' : 'DATA DE VENCIMENTO'}</label>
+                    <input type="date" value="${pagState.primeiroVencimento}" onchange="updatePagamentoField('${nf.id}', 'primeiroVencimento', this.value)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem; font-weight:600;">
+                  </div>
+                </div>
+
+                ${pagState.condicao === 'parcelado' ? `
+                  <!-- GERADOR DE PARCELAS -->
+                  <div style="background:#f1f5f9; border-radius:12px; padding:12px 14px; display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:flex-end;">
+                    <div>
+                      <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">Nº DE PARCELAS</label>
+                      <input type="number" min="1" max="24" value="${pagState.qtdParcelas}" onchange="updatePagamentoField('${nf.id}', 'qtdParcelas', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
+                    </div>
+                    <div>
+                      <label style="display:block; font-size:0.68rem; font-weight:800; color:#475569; text-transform:uppercase; margin-bottom:2px;">INTERVALO (DIAS)</label>
+                      <input type="number" min="1" max="90" value="${pagState.intervaloDias}" onchange="updatePagamentoField('${nf.id}', 'intervaloDias', this.value)" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:0.8rem;">
+                    </div>
+                    <div>
+                      <button type="button" onclick="gerarParcelasPagamentoNF('${nf.id}', ${valorFiscalNF})" style="background:#2563eb; color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:800; font-size:0.75rem; cursor:pointer;">
+                        GERAR PARCELAS
+                      </button>
+                    </div>
+                  </div>
+                ` : ''}
+
+                <!-- GRADE DE PARCELAS -->
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <strong style="font-size:0.8rem; color:#0f172a; text-transform:uppercase;">PARCELAS FISCAIS (${pagState.parcelas.length})</strong>
+                    <span style="font-size:0.72rem; color:#64748b;">Ajuste vencimentos e valores se necessário</span>
+                  </div>
+
+                  <div style="display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto;">
+                    ${pagState.parcelas.map((p, idx) => {
+                      const comp = getComparativoParcelaXML(pagState, idx, p);
+                      return `
+                        <div style="background:white; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; display:flex; flex-direction:column; gap:4px;">
+                          <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:center;">
+                            <span style="font-size:0.75rem; font-weight:800; color:#64748b; min-width:35px;">#${p.numero || idx + 1}</span>
+                            <input type="date" value="${p.vencimento}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
+                            <input type="number" step="0.01" value="${p.valor}" onchange="updateParcelaPagamentoField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:800; font-size:0.78rem; text-align:right;">
+                          </div>
+                          ${comp.modificado ? `
+                            <div style="font-size:0.70rem; color:#64748b; background:#f8fafc; padding:3px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:4px; border:1px dashed #cbd5e1;">
+                              <span class="material-symbols-rounded" style="font-size:12px; color:#3b82f6;">history</span>
+                              Original XML: <strong>${comp.vencimentoOrig ? comp.vencimentoOrig.split('-').reverse().join('/') : '-'}</strong> · <strong>${getEntradaNFMoney(comp.valorOrig)}</strong>
+                            </div>
+                          ` : ''}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+
+                  <!-- VALIDAÇÃO EM TEMPO REAL -->
+                  <div style="margin-top:14px; padding-top:10px; border-top:1px dashed #cbd5e1; font-size:0.78rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Valor Fiscal da NF:</span>
+                      <strong>${getEntradaNFMoney(valorFiscalNF)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Soma das Parcelas:</span>
+                      <strong style="color:${parcelasValidasPagModal ? '#16a34a' : '#ef4444'};">${getEntradaNFMoney(somaParcelasPagModal)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; color:${parcelasValidasPagModal ? '#16a34a' : '#ef4444'};">
+                      <span>Diferença:</span>
+                      <span>${getEntradaNFMoney(diffParcelasPagModal)}</span>
+                    </div>
+                    ${!parcelasValidasPagModal ? `
+                      <div style="color:#ef4444; font-weight:700; font-size:0.72rem; margin-top:6px; background:#fef2f2; padding:6px 10px; border-radius:6px;">
+                        ⚠ A soma das parcelas deve ser EXATAMENTE igual ao valor fiscal da NF (R$ ${valorFiscalNF.toFixed(2)}).
+                      </div>
+                    ` : `
+                      <div style="color:#16a34a; font-weight:700; font-size:0.72rem; margin-top:6px; background:#f0fdf4; padding:6px 10px; border-radius:6px;">
+                        ✓ Pagamento conferido. Valor fecha perfeitamente.
+                      </div>
+                    `}
+                  </div>
+                </div>
+
+                <!-- OBSERVAÇÃO OPCIONAL -->
+                <div>
+                  <label style="display:block; font-size:0.72rem; font-weight:700; color:#475569; margin-bottom:4px;">OBSERVAÇÃO FINANCEIRA (OPCIONAL)</label>
+                  <input type="text" value="${escapeKitAttribute(pagState.observacao || '')}" onchange="updatePagamentoField('${nf.id}', 'observacao', this.value)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.8rem;" placeholder="Ex: Negociação com fornecedor / prazo especial">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+                  <button type="button" 
+                          onclick="closeModalPagamentoNF('${nf.id}')" 
+                          style="padding:10px 18px; border-radius:10px; border:1px solid rgba(239,68,68,0.35); background:rgba(239,68,68,0.08); color:#dc2626; font-weight:800; font-size:0.8rem; cursor:pointer; transition:all 0.15s ease; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; outline:none;"
+                          onmouseover="this.style.background='rgba(239,68,68,0.16)'; this.style.borderColor='rgba(239,68,68,0.5)';"
+                          onmouseout="this.style.background='rgba(239,68,68,0.08)'; this.style.borderColor='rgba(239,68,68,0.35)';">
+                    CANCELAR
+                  </button>
+                  <button type="button" ${!parcelasValidasPagModal ? 'disabled' : ''} onclick="salvarPagamentoNFDoModal('${nf.id}', ${valorFiscalNF})" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasPagModal ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; font-size:0.8rem; cursor:${parcelasValidasPagModal ? 'pointer' : 'not-allowed'}; box-shadow:${parcelasValidasPagModal ? '0 4px 12px rgba(34,197,94,0.25)' : 'none'}; transition:all 0.15s ease; display:inline-flex; align-items:center; justify-content:center;">
+                    Salvar Pagamento
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- MODAL / FORMULÁRIO DE ADICIONAR COMPLEMENTAR -->
+        ${compState.isModalOpen ? `
+          <div style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div style="background:white; border-radius:24px; max-width:600px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; font-family:'Fjalla One', sans-serif; font-size:1.2rem; color:#0f172a;">
+                  ${compState.complementarId ? 'EDITAR COMPLEMENTAR / ESPECIAL' : 'NOVO COMPLEMENTAR / ESPECIAL'}
+                </h3>
+                <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="background:none; border:none; cursor:pointer; color:#64748b;">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                  <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">DESCRIÇÃO DO COMPLEMENTAR</label>
+                  <input type="text" value="${escapeKitAttribute(compState.descricao || '')}" onchange="updateComplementarField('${nf.id}', 'descricao', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:600;" placeholder="Ex: Acordo Comercial / Frete Adicional">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <div>
+                    <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px;">VALOR TOTAL (R$)</label>
+                    <input type="number" step="0.01" value="${compState.valorTotal > 0 ? compState.valorTotal : ''}" onchange="updateComplementarField('${nf.id}', 'valorTotal', this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-weight:800; color:#0f172a;" placeholder="0,00">
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px; padding-top:20px;">
+                    <input type="checkbox" id="comp-inc-custo" ${compState.incorporarCusto ? 'checked' : ''} onchange="updateComplementarField('${nf.id}', 'incorporarCusto', this.checked)">
+                    <label for="comp-inc-custo" style="font-size:0.78rem; font-weight:800; color:#1e293b; cursor:pointer;">INCORPORAR AO CUSTO DOS PRODUTOS</label>
+                  </div>
+                </div>
+
+                <!-- SEÇÃO DE PARCELAS -->
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px; padding:16px; margin-top:6px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <strong style="font-size:0.85rem; color:#0f172a;">PARCELAS DO COMPLEMENTAR</strong>
+                    <button type="button" onclick="addComplementarParcela('${nf.id}')" style="background:#2563eb; color:white; border:none; padding:4px 10px; border-radius:8px; font-weight:700; font-size:0.72rem; cursor:pointer;">
+                      + Adicionar Parcela
+                    </button>
+                  </div>
+
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    ${compState.parcelas.map((p, idx) => `
+                      <div style="display:grid; grid-template-columns:auto 1fr 1fr auto; gap:8px; align-items:center; background:white; padding:8px 12px; border-radius:10px; border:1px solid #e2e8f0;">
+                        <span style="font-size:0.75rem; font-weight:800; color:#64748b;">#${idx + 1}</span>
+                        <input type="date" value="${p.vencimento}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'vencimento', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem;">
+                        <input type="number" step="0.01" value="${p.valor > 0 ? p.valor : ''}" onchange="updateComplementarParcelaField('${nf.id}', ${idx}, 'valor', this.value)" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:0.78rem;" placeholder="0,00">
+                        ${compState.parcelas.length > 1 ? `
+                          <button type="button" onclick="removeComplementarParcela('${nf.id}', ${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer;">
+                            <span class="material-symbols-rounded" style="font-size:18px;">delete</span>
+                          </button>
+                        ` : '<div></div>'}
+                      </div>
+                    `).join('')}
+                  </div>
+
+                  <!-- VALIDAÇÃO EM TEMPO REAL -->
+                  <div style="margin-top:14px; padding-top:10px; border-top:1px dashed #cbd5e1; font-size:0.78rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Valor Total do Complementar:</span>
+                      <strong>${getEntradaNFMoney(compState.valorTotal)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                      <span>Soma das Parcelas:</span>
+                      <strong style="color:${parcelasValidasComp ? '#16a34a' : '#ef4444'};">${getEntradaNFMoney(somaParcelasComp)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; color:${parcelasValidasComp ? '#16a34a' : '#ef4444'};">
+                      <span>Diferença:</span>
+                      <span>${getEntradaNFMoney(diffParcelasComp)}</span>
+                    </div>
+                    ${!parcelasValidasComp ? `
+                      <div style="color:#ef4444; font-weight:700; font-size:0.72rem; margin-top:6px; background:#fef2f2; padding:6px 10px; border-radius:6px;">
+                        ${compState.valorTotal <= 0 
+                          ? '⚠ Informe o valor total e os valores de cada parcela.' 
+                          : '⚠ A soma das parcelas deve ser exatamente igual ao valor total do complementar.'}
+                      </div>
+                    ` : `
+                      <div style="color:#16a34a; font-weight:700; font-size:0.72rem; margin-top:6px; background:#f0fdf4; padding:6px 10px; border-radius:6px;">
+                        ✓ Soma das parcelas válida.
+                      </div>
+                    `}
+                  </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+                  <button type="button" onclick="closeModalComplementarNF('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:1px solid #cbd5e1; background:white; color:#475569; font-weight:800; cursor:pointer;">
+                    CANCELAR
+                  </button>
+                  <button type="button" ${!parcelasValidasComp ? 'disabled' : ''} onclick="salvarComplementarDoModal('${nf.id}')" style="padding:10px 18px; border-radius:10px; border:none; background:${parcelasValidasComp ? '#22c55e' : '#94a3b8'}; color:white; font-weight:800; cursor:${parcelasValidasComp ? 'pointer' : 'not-allowed'};">
+                    Salvar Complementar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- SEÇÃO DE ITENS E CONFERÊNCIA FÍSICA -->
+        <div style="margin-top: 24px; background: var(--bg-card, #fff); border-radius: 18px; padding: 20px 24px; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 4px 14px rgba(15,23,42,0.03);">
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(15,23,42,0.06); padding-bottom: 12px;">
+            <div>
+              <h3 style="color: #0f172a; font-family: 'Fjalla One', sans-serif; font-size: 1.15rem; margin: 0;">ITENS DA NOTA E CONFERÊNCIA FÍSICA</h3>
+              <p style="font-size: 0.78rem; color: #64748b; margin: 2px 0 0 0; font-weight: 500;">
+                ${isEntradaFinalizada ? 'Material recebido e registrado nesta entrada.' : 'Confira o material recebido e aloque o local de destino antes de finalizar a entrada.'}
+              </p>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              ${isEntradaFinalizada ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">verified</span>
+                  ✓ RECEBIMENTO FINALIZADO
+                </span>
+              ` : (estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(34, 197, 94, 0.12); color: #15803d; border: 1px solid rgba(34, 197, 94, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">check_circle</span>
+                  ✓ CONFERÊNCIA FÍSICA SALVA
+                </span>
+              ` : (estadoConferencia.dirty ? `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(245, 158, 11, 0.12); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">pending_actions</span>
+                  ⚠ ALTERAÇÕES PENDENTES DE SALVAMENTO
+                </span>
+              ` : `
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(100, 116, 139, 0.12); color: #475569; border: 1px solid rgba(100, 116, 139, 0.3);">
+                  <span class="material-symbols-rounded" style="font-size: 16px;">hourglass_empty</span>
+                  AGUARDANDO SALVAMENTO DA CONFERÊNCIA
+                </span>
+              `))}
+            </div>
+          </div>
+
+          ${itens.length ? `
+            <div id="nf-items-container" style="display: flex; flex-direction: column; gap: 14px;">
+              ${await (async () => {
+                const idInternos = itens.map(i => i.id_interno).filter(Boolean);
+                let produtosMap = new Map();
+                if (idInternos.length > 0 && client) {
+                  const { data: prodsData } = await client
+                    .from('produtos')
+                    .select('id_interno, descricao_completa, descricao_base, marca, ean, sku_fornecedor, url_imagem')
+                    .in('id_interno', idInternos);
+                  (prodsData || []).forEach(p => produtosMap.set(p.id_interno, p));
+                }
+
+                return itens.map(item => {
+                  const prod = item.id_interno ? produtosMap.get(item.id_interno) : null;
+                  const itemConf = estadoConferencia.itensState?.[item.id] || {
+                    quantidade_fisica: parseDecimal(item.quantidade),
+                    quantidade_aceita: parseDecimal(item.quantidade),
+                    quantidade_recusada: 0,
+                    local_destino: 'TERREO',
+                    situacao: 'CONFERE',
+                    isEditing: false,
+                    errorMsg: null
+                  };
+
+                  const sitItemCalc = calcularSituacaoRecebimentoItem(item, [{
+                    id_interno: item.id_interno,
+                    quantidade_fisica: itemConf.quantidade_fisica,
+                    quantidade_aceita: itemConf.quantidade_aceita,
+                    quantidade_recusada: itemConf.quantidade_recusada,
+                    local_destino: itemConf.local_destino
+                  }]);
+
+                  const situacaoSt = getItemSituacaoDisplayStatus(sitItemCalc);
+                  const localDisplayMap = { 'TERREO': 'TÉRREO', '1ANDAR': '1º ANDAR', 'MOSTRUARIO': 'MOSTRUÁRIO' };
+                  const localDestinoDisplay = localDisplayMap[itemConf.local_destino] || itemConf.local_destino;
+
+                  const nomeComercial = prod?.descricao_completa || prod?.descricao_base || item.descricao_produto_fornecedor || item.descricao_xml || '-';
+                  const skuStr = prod?.sku_fornecedor || item.sku_fornecedor || item.cprod_fornecedor;
+                  const eanStr = prod?.ean || item.ean_fornecedor || item.ean_xml;
+
+                  return `
+                    <div class="nf-item-card-v2" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; box-shadow: 0 2px 8px rgba(15,23,42,0.02);">
+                      
+                      <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+                        
+                        <!-- FOTO DA EMBALAGEM / PRODUTO -->
+                        <div style="width: 72px; height: 72px; min-width: 72px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                          ${prod?.url_imagem ? `
+                            <img src="${escapeKitAttribute(prod.url_imagem)}" alt="${escapeKitAttribute(item.id_interno)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'material-symbols-rounded\\' style=\\'font-size: 32px; color: #94a3b8;\\'>image</span>';">
+                          ` : `
+                            <span class="material-symbols-rounded" style="font-size: 32px; color: #94a3b8;">image</span>
+                          `}
+                        </div>
+
+                        <!-- IDENTIFICAÇÃO COMERCIAL DO PRODUTO -->
+                        <div style="flex: 1; min-width: 240px;">
+                          ${item.id_interno ? `
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+                              <span style="background: #fef08a; color: #854d0e; font-weight: 900; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #fde047;">
+                                ${escapeKitAttribute(item.id_interno)}
+                              </span>
+                              ${prod?.marca ? `<span style="font-size: 0.72rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 6px;">${escapeKitAttribute(prod.marca)}</span>` : ''}
+                            </div>
+                            <h4 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 4px 0 6px 0; line-height: 1.25;">
+                              ${escapeKitAttribute(nomeComercial)}
+                            </h4>
+                            <div style="font-size: 0.72rem; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px;">
+                              ${skuStr ? `<span>SKU: <b>${escapeKitAttribute(skuStr)}</b></span>` : ''}
+                              ${eanStr ? `<span>EAN: <b>${escapeKitAttribute(eanStr)}</b></span>` : ''}
+                            </div>
+                          ` : `
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                              <span style="background: rgba(245, 158, 11, 0.12); color: #b45309; font-weight: 800; font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3);">
+                                AGUARDANDO IDENTIFICAÇÃO
+                              </span>
+                            </div>
+                            <h4 style="font-size: 0.9rem; font-weight: 700; color: #334155; margin: 4px 0;">
+                              ${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || 'Item sem vínculo')}
+                            </h4>
+                          `}
+
+                          <div style="font-size: 0.7rem; color: #94a3b8; background: #f8fafc; padding: 4px 8px; border-radius: 6px; display: inline-block;">
+                            Descrição na NF: <span style="color: #475569; font-weight: 600;">${escapeKitAttribute(item.descricao_produto_fornecedor || item.descricao_xml || '-')}</span>
+                          </div>
+                        </div>
+
+                        <!-- DETALHES DE CONFERÊNCIA E CUSTO (DIREITA) -->
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 200px;">
+                          
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <!-- BADGE DA SITUAÇÃO DA CONFERÊNCIA -->
+                            <span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 16px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; background: ${situacaoSt.bg}; color: ${situacaoSt.color}; border: 1px solid ${situacaoSt.border};">
+                              ${situacaoSt.label}
+                            </span>
+
+                            ${!isEntradaFinalizada ? `
+                              <button type="button" onclick="toggleEditConferenciaItem('${nf.id}', '${item.id}')" style="display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; border: 1px solid ${itemConf.isEditing ? '#ef4444' : '#cbd5e1'}; background: ${itemConf.isEditing ? '#fee2e2' : '#ffffff'}; color: ${itemConf.isEditing ? '#b91c1c' : '#475569'};">
+                                <span class="material-symbols-rounded" style="font-size: 14px;">${itemConf.isEditing ? 'close' : 'tune'}</span>
+                                ${itemConf.isEditing ? 'CANCELAR' : 'CONFERIR / AJUSTAR'}
+                              </button>
+                            ` : ''}
+                          </div>
+
+                          <!-- LOCAL DE DESTINO & CUSTO UNITÁRIO -->
+                          <div style="text-align: right; font-size: 0.75rem;">
+                            <div style="color: #64748b;">Local de Destino: <b style="color: #0f172a; text-transform: uppercase;">${escapeKitAttribute(localDestinoDisplay)}</b></div>
+                            <div style="color: #64748b; margin-top: 2px;">Custo Unitário: <b style="color: #16a34a; font-size: 0.88rem;">${getEntradaNFMoney(item.custo_real_unitario_ui)}/un</b></div>
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 1px;">Custo Total: ${getEntradaNFMoney(item.custo_real_total_ui)}</div>
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      ${!itemConf.isEditing ? `
+                        <!-- BLOCO DE QUANTIDADES MODO LEITURA (XML | FÍSICO | ACEITO | RECUSADO) -->
+                        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f8fafc; border-radius: 10px; padding: 10px 14px;">
+                          
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">XML</span>
+                            <strong style="font-size: 0.95rem; color: #475569;">${formatStockNumber(item.quantidade)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">FÍSICO</span>
+                            <strong style="font-size: 0.95rem; color: #0f172a;">${formatStockNumber(itemConf.quantidade_fisica)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">ACEITO</span>
+                            <strong style="font-size: 0.95rem; color: ${itemConf.quantidade_aceita > 0 ? '#15803d' : '#64748b'};">${formatStockNumber(itemConf.quantidade_aceita)}</strong>
+                          </div>
+
+                          <div style="text-align: center;">
+                            <span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase;">RECUSADO</span>
+                            <strong style="font-size: 0.95rem; color: ${itemConf.quantidade_recusada > 0 ? '#dc2626' : '#94a3b8'};">${formatStockNumber(itemConf.quantidade_recusada)}</strong>
+                          </div>
+
+                        </div>
+                      ` : `
+                        <!-- BLOCO DE EDIÇÃO E AJUSTE DA CONFERÊNCIA DO ITEM -->
+                        <div style="margin-top: 14px; padding: 14px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; display: flex; flex-direction: column; gap: 12px;">
+                          
+                          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; align-items: flex-end;">
+                            
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE XML</label>
+                              <input type="text" value="${formatStockNumber(item.quantidade)}" readonly disabled style="width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #e2e8f0; font-weight: 800; font-size: 0.85rem; color: #475569; text-align: center;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #0f172a; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE FÍSICA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_fisica}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_fisica', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #94a3b8; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE ACEITA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_aceita}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_aceita', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #86efac; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff; color: #15803d;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #dc2626; text-transform: uppercase; margin-bottom: 2px;">QUANTIDADE RECUSADA</label>
+                              <input type="number" min="0" step="1" value="${itemConf.quantidade_recusada}" oninput="updateConferenciaItemField('${nf.id}', '${item.id}', 'quantidade_recusada', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #fca5a5; border-radius: 8px; font-weight: 800; font-size: 0.85rem; text-align: center; background: #ffffff; color: #dc2626;">
+                            </div>
+
+                            <div>
+                              <label style="display: block; font-size: 0.68rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 2px;">LOCAL DE DESTINO</label>
+                              <select onchange="updateConferenciaItemField('${nf.id}', '${item.id}', 'local_destino', this.value)" style="width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 700; font-size: 0.8rem; background: #ffffff;">
+                                <option value="TERREO" ${itemConf.local_destino === 'TERREO' ? 'selected' : ''}>TÉRREO</option>
+                                <option value="1ANDAR" ${itemConf.local_destino === '1ANDAR' ? 'selected' : ''}>1º ANDAR</option>
+                                <option value="MOSTRUARIO" ${itemConf.local_destino === 'MOSTRUARIO' ? 'selected' : ''}>MOSTRUÁRIO</option>
+                              </select>
+                            </div>
+
+                          </div>
+
+                          ${itemConf.errorMsg ? `
+                            <div style="color: #b91c1c; font-size: 0.75rem; font-weight: 700; background: #fee2e2; padding: 6px 10px; border-radius: 6px; border: 1px solid #fca5a5;">
+                              ⚠ ${escapeKitAttribute(itemConf.errorMsg)}
+                            </div>
+                          ` : ''}
+
+                          <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px;">
+                            <button type="button" onclick="cancelEditConferenciaItem('${nf.id}', '${item.id}')" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 700; font-size: 0.75rem; cursor: pointer;">
+                              CANCELAR
+                            </button>
+                            <button type="button" ${itemConf.errorMsg ? 'disabled' : ''} onclick="confirmEditConferenciaItem('${nf.id}', '${item.id}')" style="padding: 6px 16px; border-radius: 8px; border: none; background: ${itemConf.errorMsg ? '#94a3b8' : '#22c55e'}; color: #ffffff; font-weight: 800; font-size: 0.75rem; cursor: ${itemConf.errorMsg ? 'not-allowed' : 'pointer'}; box-shadow: ${itemConf.errorMsg ? 'none' : '0 2px 8px rgba(34,197,94,0.25)'};">
+                              CONFIRMAR ITEM
+                            </button>
+                          </div>
+
+                        </div>
+                      `}
+
+                    </div>
+                  `;
+                }).join('');
+              })()}
+            </div>
+
+            <!-- PAINEL DE SALVAMENTO DA CONFERÊNCIA FÍSICA -->
+            <div style="margin-top: 20px; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+              <div>
+                <strong style="display: block; font-size: 0.88rem; color: #0f172a;">
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '✓ CONFERÊNCIA FÍSICA SALVA' : (estadoConferencia.dirty ? '⚠ ALTERAÇÕES PENDENTES DE SALVAR' : 'CONFERÊNCIA PRONTA PARA SALVAR')}
+                </strong>
+                <span style="font-size: 0.75rem; color: #64748b;">
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'Os quantitativos e locais de destino estão persistidos no banco de dados.' : 'Clique no botão ao lado para gravar a conferência física e liberar a finalização da entrada.'}
+                </span>
+              </div>
+              ${!isEntradaFinalizada ? `
+                <button type="button" onclick="salvarConferenciaFisicaEntradaNF('${nf.id}')" style="background: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '#ffffff' : '#2563eb'}; color: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '#2563eb' : '#ffffff'}; border: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? '1px solid #2563eb' : 'none'}; padding: 11px 22px; border-radius: 10px; font-weight: 800; font-size: 0.82rem; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'none' : '0 4px 14px rgba(37,99,235,0.25)'};">
+                  <span class="material-symbols-rounded" style="font-size: 18px;">${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'refresh' : 'save'}</span>
+                  ${estadoConferencia.conferenciaSalva && !estadoConferencia.dirty ? 'RE-SALVAR CONFERÊNCIA' : 'SALVAR CONFERÊNCIA FÍSICA'}
+                </button>
+              ` : ''}
+            </div>
+          ` : `
+            <div id="nf-items-container" style="text-align: center; padding: 30px; background: #f8fafc; border-radius: 16px; border: 1px dashed #e2e8f0;">
+              <span class="material-symbols-rounded" style="font-size: 32px; color: #cbd5e1; margin-bottom: 10px;">inventory_2</span>
+              <p style="color: #64748b; font-size: 0.85rem; font-weight: 600;">NENHUM ITEM ENCONTRADO</p>
+            </div>
+          `}
+
+          <!-- AÇÕES DO RODAPÉ SE A ENTRADA ESTIVER ABERTA -->
+          ${!isEntradaFinalizada ? `
+            <div style="margin-top: 30px; display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding-top: 20px; border-top: 1px solid #e2e8f0; flex-wrap: wrap;">
+              ${!podeFinalizar ? `
+                <div style="font-size: 0.82rem; color: #b45309; font-weight: 700; display: flex; align-items: center; gap: 6px; background: #fef3c7; border: 1px solid #fde68a; padding: 8px 14px; border-radius: 10px;">
+                  <span class="material-symbols-rounded" style="font-size: 18px; color: #d97706;">lock</span>
+                  <span>${!financeiroValido ? 'Defina ou corrija o pagamento da nota fiscal antes de finalizar.' : (temItensPendentesVinculo ? 'Identifique todos os itens da nota antes de finalizar.' : (!estadoConferencia.conferenciaSalva ? 'Salve a conferência física dos itens antes de finalizar.' : 'Aguardando validação completa para finalizar.'))}</span>
+                </div>
+              ` : ''}
+              <button class="btn-action" ${!podeFinalizar ? 'disabled style="opacity: 0.5; cursor: not-allowed; padding: 12px 24px; font-size: 0.85rem; background: #94a3b8 !important;"' : 'style="padding: 12px 24px; font-size: 0.85rem; background: #22c55e !important; box-shadow: 0 4px 14px rgba(34,197,94,0.3); font-weight: 800; cursor: pointer;" onclick="confirmarFinalizarEntradaNFAberta(\'' + nf.id + '\')"'}>
+                <span class="material-symbols-rounded">check_circle</span> FINALIZAR ENTRADA
+              </button>
+            </div>
+          ` : ''}
+
+        </div>
+
+      </main>
+    </div>
+  `;
 }
+
 
 function renderNFPlaceholder(title) {
  const currentUser = localStorage.getItem('currentUser');
@@ -34723,7 +38028,7 @@ function renderNFPlaceholder(title) {
  app.innerHTML = `
  <div class="dashboard-screen internal fade-in nf-placeholder-screen entrada-nf-screen no-top-bar">
  ${getTopBarHTML(currentUser, 'renderNFSubMenu()')}
-
+ 
  <main class="container">
  ${getStandardScreenTitleHTML(normalizedTitle, iconHTML)}
  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 45vh;">
@@ -34745,27 +38050,27 @@ function renderNFPlaceholder(title) {
  function updateCardTransform(e) {
  const card = e.target.closest('.menu-card, .channel-card');
  if (!card) return;
-
+ 
  const rect = card.getBoundingClientRect();
-
+ 
  // Texto validado em UTF-8.
  const clientX = e.clientX || (e.touches && e.touches[0].clientX);
  const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-
+ 
  const x = clientX - rect.left;
  const y = clientY - rect.top;
-
+ 
  // Texto validado em UTF-8.
  card.style.setProperty('--mouse-x', `${x}px`);
  card.style.setProperty('--mouse-y', `${y}px`);
-
+ 
  // Texto validado em UTF-8.
  if (window.innerWidth > 768) {
  const centerX = rect.width / 2;
  const centerY = rect.height / 2;
  const rotateX = ((y - centerY) / centerY) * -6; // Max 6 graus
  const rotateY = ((x - centerX) / centerX) * 6; // Max 6 graus
-
+ 
  card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
  } else {
  // No mobile apenas um leve feedback de escala ao tocar
@@ -34776,7 +38081,7 @@ function renderNFPlaceholder(title) {
  function resetCardTransform(e) {
  const card = e.target.closest('.menu-card, .channel-card');
  if (!card) return;
-
+ 
  // Texto validado em UTF-8.
  if (e.type === 'mouseout' || e.type === 'mouseleave') {
  if (e.relatedTarget && card.contains(e.relatedTarget)) return;
