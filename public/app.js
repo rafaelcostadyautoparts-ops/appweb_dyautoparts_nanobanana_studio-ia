@@ -39298,162 +39298,164 @@ function escapeDevolucaoCSV(value) {
 }
 
 function getHistoricoDevolucoesExportData() {
- if (devolucaoHistoricoState.error) {
-  showToast('Historico indisponivel para exportar.', 'error');
-  return null;
- }
- const records = getHistoricoDevolucaoFilteredRecords();
- if (!records.length) {
-  showToast('Nenhuma devolucao encontrada no filtro atual.', 'warning');
-  return null;
- }
- const headers = [
-  'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo',
-  'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
-  'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
-  'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Classificacao financeira', 'Valor do impacto', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
- ];
- const rows = records.flatMap(record => {
-  const items = record.devolucao_itens?.length ? record.devolucao_itens : [{}];
-  return items.map(item => {
-   const rawDate = String(record.data_devolucao || '').slice(0, 10);
-   const parsedDate = rawDate ? new Date(`${rawDate}T12:00:00`) : null;
-   return [
-    parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : rawDate,
-    record.canal || '', record.pedido || '', record.remetente || '', getDevolucaoStatusLabel(record.status, record), record.motivo || '',
-    record.impactou_reputacao ? 'Sim' : 'Nao', record.reputacao_revertida ? 'Sim' : 'Nao', record.marketplace_acionado ? 'Sim' : 'Nao', record.observacao_acompanhamento || '',
-    Number(record.saldo_marketplace || 0), getDevolucaoReembolsoMarketplace(record), getDevolucaoSaldoLiquido(record),
-    item.id_interno || '', item.ean || '', item.sku || '', item.descricao || '', item.categoria || '', Number(item.quantidade || 0), item.fornecedor || '',
-    item.devolveu_correto === false ? 'Nao' : 'Sim', item.apto_venda === true ? 'Sim' : 'Nao', getDevolucaoResultadoLabel(item), getDevolucaoItemFinancialLabel(item),
-    getDevolucaoResultadoCost(item), item.destino || '', item.estoque_movimentado === true ? 'Sim' : 'Nao', item.estoque_local || '',
-    Number(item.valor_unitario || 0), Number(item.valor_unitario || 0) * Number(item.quantidade || 0), item.observacoes || ''
-   ];
-  });
- });
- return { headers, rows };
+	if (devolucaoHistoricoState.error) {
+		showToast('Historico indisponivel para exportar.', 'error');
+		return null;
+	}
+	const records = getHistoricoDevolucaoFilteredRecords();
+	if (!records.length) {
+		showToast('Nenhuma devolucao encontrada no filtro atual.', 'warning');
+		return null;
+	}
+	const headers = [
+		'Data', 'Canal', 'Pedido', 'Remetente', 'Status', 'Motivo', 'Motivo classificado',
+		'Afetou reputacao', 'Reputacao revertida', 'Marketplace acionado', 'Observacao marketplace',
+		'Saldo marketplace', 'Tarifa devolucao reembolsada', 'Saldo liquido', 'ID interno', 'EAN', 'SKU', 'Produto', 'Categoria',
+		'Quantidade', 'Marca', 'Produto correto', 'Apto venda', 'Resultado item', 'Classificacao financeira', 'Valor do impacto', 'Destino', 'Estoque movimentado', 'Local estoque', 'Custo unitario', 'Custo total', 'Observacao item'
+	];
+	const rows = records.flatMap(record => {
+		const items = record.devolucao_itens?.length ? record.devolucao_itens : [{}];
+		const motivoClassificado = String(record.observacoes || '').trim() || 'Sem motivo classificado';
+		return items.map(item => {
+			const rawDate = String(record.data_devolucao || '').slice(0, 10);
+			const parsedDate = rawDate ? new Date(`${rawDate}T12:00:00`) : null;
+			return [
+				parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : rawDate,
+				record.canal || '', record.pedido || '', record.remetente || '', getDevolucaoStatusLabel(record.status, record), record.motivo || '',
+				motivoClassificado,
+				record.impactou_reputacao ? 'Sim' : 'Nao', record.reputacao_revertida ? 'Sim' : 'Nao', record.marketplace_acionado ? 'Sim' : 'Nao', record.observacao_acompanhamento || '',
+				Number(record.saldo_marketplace || 0), getDevolucaoReembolsoMarketplace(record), getDevolucaoSaldoLiquido(record),
+				item.id_interno || '', item.ean || '', item.sku || '', item.descricao || '', item.categoria || '', Number(item.quantidade || 0), item.fornecedor || '',
+				item.devolveu_correto === false ? 'Nao' : 'Sim', item.apto_venda === true ? 'Sim' : 'Nao', getDevolucaoResultadoLabel(item), getDevolucaoItemFinancialLabel(item),
+				getDevolucaoResultadoCost(item), item.destino || '', item.estoque_movimentado === true ? 'Sim' : 'Nao', item.estoque_local || '',
+				Number(item.valor_unitario || 0), Number(item.valor_unitario || 0) * Number(item.quantidade || 0), item.observacoes || ''
+			];
+		});
+	});
+	return { headers, rows };
 }
 
 function getHistoricoDevolucoesExportFilename(extension) {
- const month = devolucaoHistoricoState.month || 'todos-os-meses';
- const selectedChannels = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
- const channel = selectedChannels.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length
-  ? 'todos-canais'
-  : selectedChannels.length === 0
-   ? 'nenhum-canal'
-   : selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
- return `devolucoes-marketplace-${month}-${channel}.${extension}`;
+	const month = devolucaoHistoricoState.month || 'todos-os-meses';
+	const selectedChannels = Array.isArray(devolucaoHistoricoState.channels) ? devolucaoHistoricoState.channels : [];
+	const channel = selectedChannels.length === DEVOLUCAO_CHANNEL_FILTER_OPTIONS.length
+		? 'todos-canais'
+		: selectedChannels.length === 0
+			? 'nenhum-canal'
+			: selectedChannels.map(value => normalizeProductSearchTerm(value).replace(/[^a-z0-9]+/g, '-')).join('_');
+	return `devolucoes-marketplace-${month}-${channel}.${extension}`;
 }
 
 function handleHistoricoDevolucoesExportChange(select) {
- const format = String(select?.value || '').toLowerCase();
- if (!format) return;
- select.value = '';
- if (format === 'xlsx') return exportHistoricoDevolucoesXLSX();
- if (format === 'csv') return exportHistoricoDevolucoesCSV();
- if (format === 'pdf') return exportHistoricoDevolucoesPDF();
- showToast('Formato de exportacao invalido.', 'error');
+	const format = String(select?.value || '').toLowerCase();
+	if (!format) return;
+	select.value = '';
+	if (format === 'xlsx') return exportHistoricoDevolucoesXLSX();
+	if (format === 'csv') return exportHistoricoDevolucoesCSV();
+	if (format === 'pdf') return exportHistoricoDevolucoesPDF();
+	showToast('Formato de exportacao invalido.', 'error');
 }
 
 function toggleHistoricoDevolucoesExportMenu(event) {
- event?.stopPropagation();
- const menu = document.getElementById('devolucao-export-options');
- const trigger = event?.currentTarget || document.querySelector('.devolucao-export-menu .devolucao-header-btn');
- if (!menu) return;
- const willOpen = menu.hidden;
- menu.hidden = !willOpen;
- trigger?.setAttribute('aria-expanded', String(willOpen));
- document.querySelector('.devolucao-export-menu')?.classList.toggle('is-open', willOpen);
+	event?.stopPropagation();
+	const menu = document.getElementById('devolucao-export-options');
+	const trigger = event?.currentTarget || document.querySelector('.devolucao-export-menu .devolucao-header-btn');
+	if (!menu) return;
+	const willOpen = menu.hidden;
+	menu.hidden = !willOpen;
+	trigger?.setAttribute('aria-expanded', String(willOpen));
+	document.querySelector('.devolucao-export-menu')?.classList.toggle('is-open', willOpen);
 }
 
 function closeHistoricoDevolucoesExportMenu() {
- const menu = document.getElementById('devolucao-export-options');
- if (menu) menu.hidden = true;
- const trigger = document.querySelector('.devolucao-export-menu .devolucao-header-btn');
- trigger?.setAttribute('aria-expanded', 'false');
- document.querySelector('.devolucao-export-menu')?.classList.remove('is-open');
+	const menu = document.getElementById('devolucao-export-options');
+	if (menu) menu.hidden = true;
+	const trigger = document.querySelector('.devolucao-export-menu .devolucao-header-btn');
+	trigger?.setAttribute('aria-expanded', 'false');
+	document.querySelector('.devolucao-export-menu')?.classList.remove('is-open');
 }
 
 function exportHistoricoDevolucoesCSV() {
- const exportData = getHistoricoDevolucoesExportData();
- if (!exportData) return;
- closeHistoricoDevolucoesExportMenu();
- const csvRows = exportData.rows.map(row => row.map((value, column) => {
-  if (value instanceof Date) return value.toLocaleDateString('pt-BR');
-  if ([10, 11, 12, 24, 28, 29].includes(column) && typeof value === 'number') return value.toFixed(2).replace('.', ',');
-  return value;
- }));
- const csv = `\ufeffsep=;\r\n${[exportData.headers, ...csvRows].map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
- downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getHistoricoDevolucoesExportFilename('csv'));
- showToast('CSV exportado com o filtro atual.', 'success');
+	const exportData = getHistoricoDevolucoesExportData();
+	if (!exportData) return;
+	closeHistoricoDevolucoesExportMenu();
+	const csvRows = exportData.rows.map(row => row.map((value, column) => {
+		if (value instanceof Date) return value.toLocaleDateString('pt-BR');
+		if ([11, 12, 13, 25, 29, 30].includes(column) && typeof value === 'number') return value.toFixed(2).replace('.', ',');
+		return value;
+	}));
+	const csv = `\ufeffsep=;\r\n${[exportData.headers, ...csvRows].map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
+	downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getHistoricoDevolucoesExportFilename('csv'));
+	showToast('CSV exportado com o filtro atual.', 'success');
 }
 
 function exportHistoricoDevolucoesXLSX() {
- const exportData = getHistoricoDevolucoesExportData();
- if (!exportData) return;
- closeHistoricoDevolucoesExportMenu();
- if (!window.XLSX?.utils) {
-  showToast('A exportacao Excel nao foi carregada. Verifique a conexao.', 'error');
-  return;
- }
- const worksheet = XLSX.utils.aoa_to_sheet([exportData.headers, ...exportData.rows], { cellDates: true });
- const workbook = XLSX.utils.book_new();
- const lastColumn = XLSX.utils.encode_col(exportData.headers.length - 1);
- worksheet['!autofilter'] = { ref: `A1:${lastColumn}${exportData.rows.length + 1}` };
- worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
- worksheet['!cols'] = exportData.headers.map((header, index) => ({ wch: index === 16 ? 46 : [5, 9, 30].includes(index) ? 34 : [0, 1, 2, 13, 14, 15, 17, 19, 23, 25, 27].includes(index) ? 18 : 15 }));
- for (let row = 2; row <= exportData.rows.length + 1; row += 1) {
-  const dateCell = worksheet[`A${row}`];
-  if (dateCell) dateCell.z = 'dd/mm/yyyy';
-  [10, 11, 12, 24, 28, 29].forEach(column => {
-   const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
-   if (cell) cell.z = 'R$ #,##0.00';
-  });
-  const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: 18 })];
-  if (quantityCell) quantityCell.z = '#,##0.00';
- }
- XLSX.utils.book_append_sheet(workbook, worksheet, 'Historico de Devolucoes');
- XLSX.writeFile(workbook, getHistoricoDevolucoesExportFilename('xlsx'), { compression: true, cellDates: true });
- showToast('Excel exportado com o filtro atual.', 'success');
+	const exportData = getHistoricoDevolucoesExportData();
+	if (!exportData) return;
+	closeHistoricoDevolucoesExportMenu();
+	if (!window.XLSX?.utils) {
+		showToast('A exportacao Excel nao foi carregada. Verifique a conexao.', 'error');
+		return;
+	}
+	const worksheet = XLSX.utils.aoa_to_sheet([exportData.headers, ...exportData.rows], { cellDates: true });
+	const workbook = XLSX.utils.book_new();
+	const lastColumn = XLSX.utils.encode_col(exportData.headers.length - 1);
+	worksheet['!autofilter'] = { ref: `A1:${lastColumn}${exportData.rows.length + 1}` };
+	worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
+	worksheet['!cols'] = exportData.headers.map((header, index) => ({ wch: index === 17 ? 46 : [5, 6, 10, 31].includes(index) ? 34 : [0, 1, 2, 14, 15, 16, 18, 20, 24, 26, 28].includes(index) ? 18 : 15 }));
+	for (let row = 2; row <= exportData.rows.length + 1; row += 1) {
+		const dateCell = worksheet[`A${row}`];
+		if (dateCell) dateCell.z = 'dd/mm/yyyy';
+		[11, 12, 13, 25, 29, 30].forEach(column => {
+			const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
+			if (cell) cell.z = 'R$ #,##0.00';
+		});
+		const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: 19 })];
+		if (quantityCell) quantityCell.z = '#,##0.00';
+	}
+	XLSX.utils.book_append_sheet(workbook, worksheet, 'Historico de Devolucoes');
+	XLSX.writeFile(workbook, getHistoricoDevolucoesExportFilename('xlsx'), { compression: true, cellDates: true });
+	showToast('Excel exportado com o filtro atual.', 'success');
 }
 async function exportHistoricoDevolucoesPDF() {
- const exportData = getHistoricoDevolucoesExportData();
- if (!exportData) return;
- closeHistoricoDevolucoesExportMenu();
- const { jsPDF } = window.jspdf || {};
- if (!jsPDF) return showToast('A exportacao PDF nao foi carregada. Verifique a conexao.', 'error');
- try {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-  const generatedAt = new Date().toLocaleString('pt-BR');
-  doc.setFontSize(15);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Historico de Devolucoes', 12, 12);
-  doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Filtro: ${devolucaoHistoricoState.month || 'todos os periodos'} | Gerado em: ${generatedAt}`, 12, 18);
-  const rows = exportData.rows.map(row => row.map((value, column) => {
-   if (value instanceof Date) return value.toLocaleDateString('pt-BR');
-   if ([10, 11, 12, 24, 28, 29].includes(column) && typeof value === 'number') return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-   return String(value ?? '');
-  }));
-  if (typeof doc.autoTable !== 'function') throw new Error('Componente de tabela PDF indisponivel.');
-  doc.autoTable({
-   head: [exportData.headers],
-   body: rows,
-   startY: 22,
-   theme: 'grid',
-   styles: { fontSize: 5.2, cellPadding: 1, overflow: 'linebreak', valign: 'middle' },
-   headStyles: { fillColor: [91, 33, 182], textColor: 255, fontStyle: 'bold' },
-   alternateRowStyles: { fillColor: [248, 250, 252] },
-   horizontalPageBreak: true,
-   horizontalPageBreakRepeat: [0, 1, 2, 3, 4, 13, 16],
-   margin: { top: 12, right: 8, bottom: 10, left: 8 }
-  });
-  doc.save(getHistoricoDevolucoesExportFilename('pdf'));
-  showToast('PDF exportado com o filtro atual.', 'success');
- } catch (error) {
-  console.error('[DEVOLUCOES] exportar PDF:', error);
-  showToast(error.message || 'Nao foi possivel gerar o PDF.', 'error');
- }
+	const exportData = getHistoricoDevolucoesExportData();
+	if (!exportData) return;
+	closeHistoricoDevolucoesExportMenu();
+	const { jsPDF } = window.jspdf || {};
+	if (!jsPDF) return showToast('A exportacao PDF nao foi carregada. Verifique a conexao.', 'error');
+	try {
+		const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+		const generatedAt = new Date().toLocaleString('pt-BR');
+		doc.setFontSize(15);
+		doc.setTextColor(51, 65, 85);
+		doc.text('Historico de Devolucoes', 12, 12);
+		doc.setFontSize(8);
+		doc.setTextColor(100, 116, 139);
+		doc.text(`Filtro: ${devolucaoHistoricoState.month || 'todos os periodos'} | Gerado em: ${generatedAt}`, 12, 18);
+		const rows = exportData.rows.map(row => row.map((value, column) => {
+			if (value instanceof Date) return value.toLocaleDateString('pt-BR');
+			if ([11, 12, 13, 25, 29, 30].includes(column) && typeof value === 'number') return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+			return String(value ?? '');
+		}));
+		if (typeof doc.autoTable !== 'function') throw new Error('Componente de tabela PDF indisponivel.');
+		doc.autoTable({
+			head: [exportData.headers],
+			body: rows,
+			startY: 22,
+			theme: 'grid',
+			styles: { fontSize: 5.2, cellPadding: 1, overflow: 'linebreak', valign: 'middle' },
+			headStyles: { fillColor: [91, 33, 182], textColor: 255, fontStyle: 'bold' },
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+			horizontalPageBreak: true,
+			horizontalPageBreakRepeat: [0, 1, 2, 3, 4, 14, 17],
+			margin: { top: 12, right: 8, bottom: 10, left: 8 }
+		});
+		doc.save(getHistoricoDevolucoesExportFilename('pdf'));
+		showToast('PDF exportado com o filtro atual.', 'success');
+	} catch (error) {
+		console.error('[DEVOLUCOES] exportar PDF:', error);
+		showToast(error.message || 'Nao foi possivel gerar o PDF.', 'error');
+	}
 }
 
 function renderHistoricoDevolucaoList() {
@@ -39894,7 +39896,6 @@ function toggleSaidaDevolucaoDemo(enabled){if(!isSaidaDevolucaoDemoAllowed()){sa
 function refreshSaidaDevolucaoReport(){saidaDevolucaoReportState.rows=(saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?buildSaidaDevolucaoDemoRows():buildSaidaDevolucaoRows(saidaDevolucaoReportState.movements,saidaDevolucaoReportState.products,saidaDevolucaoReportState.sessions,saidaDevolucaoReportState.devolucoes);const body=document.getElementById('sd-report-body');if(body)body.innerHTML=((saidaDevolucaoReportState.demo&&isSaidaDevolucaoDemoAllowed())?'<aside class="sd-demo-banner"><span class="material-symbols-rounded">science</span><div><strong>Dados de demonstracao</strong><small>Valores temporarios gerados somente nesta tela de homologacao. Nenhum dado real foi alterado.</small></div></aside>':'')+renderSaidaDevolucaoReportBody();}
 function renderSaidaDevolucaoPeriodControls(){const state=saidaDevolucaoReportState,remaining=state.mesesDisponiveis.filter(month=>!state.meses.includes(month));return `<section class="sd-period-panel"><div class="sd-period-left"><div class="sd-period-tabs" role="group" aria-label="Periodo da comparacao">${[['mes','Mes'],['bimestre','Bimestre'],['trimestre','Trimestre'],['6meses','6 meses'],['9meses','9 meses'],['12meses','12 meses']].map(([value,label])=>`<button type="button" class="${state.periodo===value?'active':''}" onclick="setSaidaDevolucaoPeriod('${value}')">${label}</button>`).join('')}<label class="sd-add-month ${state.periodo==='custom'?'active':''}" title="Adicionar mes"><span>+</span><select aria-label="Adicionar mes" onchange="addSaidaDevolucaoMonth(this.value)"><option value="">Adicionar mes</option>${remaining.map(month=>`<option value="${month}">${sdMonthLabel(month,true)}</option>`).join('')}</select></label></div></div><div class="sd-period-right"><div class="sd-selected-months"><small>Meses exibidos</small>${state.meses.map(month=>`<span>${sdMonthLabel(month)}<button type="button" onclick="removeSaidaDevolucaoMonth('${month}')" aria-label="Remover ${sdMonthLabel(month,true)}">×</button></span>`).join('')||'<em>Nenhum mes selecionado. Use + para adicionar.</em>'}</div></div></section>`;}
 function findSdDevolucaoForMovement(m,devolucoes){if(!devolucoes||!devolucoes.length)return null;const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i);if(match){const found=devolucoes.find(r=>String(r.id)===String(match[1]));if(found)return found;}const devId=String(m.execution_id||'').split(':')[1]||'';if(devId){const found=devolucoes.find(r=>String(r.id)===String(devId));if(found)return found;}return null;}
-function formatSdMotivosExport(motivos){if(!motivos||typeof motivos!=='object')return '';const entries=Object.entries(motivos).filter(([_,qty])=>Number(qty)>0).sort((a,b)=>b[1]-a[1]);if(!entries.length)return '';return entries.map(([m,q])=>`${m} (${q})`).join('; ');}
 function buildSaidaDevolucaoRows(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const channel=reportMovementChannel(m,sessions,devolucoes);if(saidaDevolucaoReportState.canal!=='todos'&&normalizeOperationalLabel(channel)!==normalizeOperationalLabel(saidaDevolucaoReportState.canal))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{},motivos:{}};row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const dev=findSdDevolucaoForMovement(m,devolucoes);const motivoLabel=String(dev?.observacoes||'').trim()||'Sem motivo classificado';row.motivos[motivoLabel]=(row.motivos[motivoLabel]||0)+qty;}map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
 function getSaidaDevolucaoFilteredRows(){const q=normalizeOperationalLabel(saidaDevolucaoReportState.busca),category=normalizeOperationalLabel(saidaDevolucaoReportState.categoria),rows=saidaDevolucaoReportState.rows.filter(r=>(!q||normalizeOperationalLabel([r.id_interno,r.descricao,r.marca,r.sku,r.cor,r.categoria].join(' ')).includes(q))&&(saidaDevolucaoReportState.categoria==='todas'||normalizeOperationalLabel(r.categoria)===category)),sorters={venda_desc:(a,b)=>b.totalSales-a.totalSales,venda_asc:(a,b)=>a.totalSales-b.totalSales,devolucao_desc:(a,b)=>b.totalReturns-a.totalReturns,percentual_desc:(a,b)=>(b.percentual??-1)-(a.percentual??-1),custo_desc:(a,b)=>(b.totalReturnCost||0)-(a.totalReturnCost||0),custo_asc:(a,b)=>(a.totalReturnCost||0)-(b.totalReturnCost||0),crescimento_desc:(a,b)=>b.growth-a.growth,queda_desc:(a,b)=>a.growth-b.growth};return rows.sort(sorters[saidaDevolucaoReportState.ordenacao]||sorters.venda_desc);}
 function renderSdSparkline(values,label,type='sales',width=150,height=32,isMini=false){const w=width,h=height,p=isMini?4:6,nums=values.map(v=>Number(v||0)),len=nums.length;if(!len)return '<span class="sd-sparkline-empty">-</span>';if(len===1){const v=nums[0],fmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<svg class="sd-sparkline sd-trend-neutral ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}: ${fmt}</title><line x1="${p}" y1="${h/2}" x2="${w-p}" y2="${h/2}" class="sd-sparkline-baseline"/><circle cx="${w/2}" cy="${h/2}" r="${isMini?2.5:3.5}"/></svg>`;}const max=Math.max(...nums,0.0001),min=Math.min(...nums,0),range=(max-min)||1,x=i=>p+i*(w-p*2)/(len-1),y=v=>h-p-((v-min)/range)*(h-p*2),first=nums[0],last=nums[len-1],avg=nums.reduce((a,b)=>a+b,0)/len,tol=Math.max(0.01,Math.abs(avg)*0.05),delta=last-first;let trend='neutral';if(type==='returns'){trend=delta<-tol?'positive':delta>tol?'negative':'neutral';}else{trend=delta>tol?'positive':delta<-tol?'negative':'neutral';}const points=nums.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');const months=saidaDevolucaoReportState.meses||[];const dotR=isMini?2.5:3;const dots=nums.map((v,i)=>{const mLabel=months[i]?sdMonthLabel(months[i],true):`Mês ${i+1}`;const valFmt=type==='returns'?(v.toFixed(1).replace('.',',')+'%'):sdFormatQty(v);return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${dotR}"><title>${escapeKitAttribute(mLabel)}: ${valFmt}</title></circle>`;}).join('');return `<svg class="sd-sparkline sd-trend-${trend} ${isMini?'sd-sparkline-mini':''}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${escapeKitAttribute(label)}"><title>${escapeKitAttribute(label)}</title><polyline class="sd-sparkline-line" points="${points}"/>${dots}</svg>`;}
@@ -39941,94 +39942,93 @@ function initializeSaidaDevolucaoScrollTop(){initializeSaidaDevolucaoReportContr
 function scrollSaidaDevolucaoToTop(){const scroller=getSaidaDevolucaoScrollContainer();if(scroller===window)window.scrollTo({top:0,behavior:'smooth'});else scroller.scrollTo({top:0,behavior:'smooth'});}
 function filterSaidaDevolucaoReport(value){saidaDevolucaoReportState.busca=value;const body=document.getElementById('sd-report-body');if(body)body.innerHTML=renderSaidaDevolucaoReportBody();document.querySelector('.sd-report-filters .search input')?.focus();}
 function getSaidaDevolucaoExportData() {
- const rows = getSaidaDevolucaoFilteredRows();
- const months = saidaDevolucaoReportState.meses || [];
- const header = ['ID interno', 'Nome do produto', 'Categoria', 'Marca', 'SKU', 'Cor', 'Motivo classificado', ...months.map(month=>`Vendas ${sdMonthLabel(month)}`), 'Total vendido', 'Media vendas', ...months.map(month=>`Devolucoes ${sdMonthLabel(month)}`), 'Total devolvido', 'Media devolucoes', 'Percentual'];
- const data = rows.map(row => [
-  row.id_interno,
-  row.descricao,
-  row.categoria,
-  row.marca,
-  row.sku,
-  row.cor,
-  formatSdMotivosExport(row.motivos),
-  ...row.sales.map(Number), Number(row.totalSales || 0), Number(row.averageSales || 0),
-  ...row.returns.map(Number), Number(row.totalReturns || 0), Number(row.averageReturns || 0),
-  row.percentual === null ? null : Number(row.percentual) / 100
- ]);
- return { header, data, mostrarMedia: true };
+	const months = saidaDevolucaoReportState.meses || [];
+	const rows = getSaidaDevolucaoFilteredRows();
+	const header = ['ID interno', 'Nome do produto', 'Categoria', 'Marca', 'SKU', 'Cor', ...months.map(month=>`Vendas ${sdMonthLabel(month)}`), 'Total vendido', 'Media vendas', ...months.map(month=>`Devolucoes ${sdMonthLabel(month)}`), 'Total devolvido', 'Media devolucoes', 'Percentual'];
+	const data = rows.map(row => [
+		row.id_interno,
+		row.descricao,
+		row.categoria,
+		row.marca,
+		row.sku,
+		row.cor,
+		...row.sales.map(Number), Number(row.totalSales || 0), Number(row.averageSales || 0),
+		...row.returns.map(Number), Number(row.totalReturns || 0), Number(row.averageReturns || 0),
+		row.percentual === null ? null : Number(row.percentual) / 100
+	]);
+	return { header, data, mostrarMedia: true };
 }
 
 function getSaidaDevolucaoExportFilename(extension) {
- const periodo = (saidaDevolucaoReportState.meses || []).join('_') || 'sem-meses';
- return `vendas-devolucoes-${periodo}.${extension}`;
+	const periodo = (saidaDevolucaoReportState.meses || []).join('_') || 'sem-meses';
+	return `vendas-devolucoes-${periodo}.${extension}`;
 }
 
 function closeSaidaDevolucaoExportMenu() {
- document.querySelector('.sd-report-export-menu')?.removeAttribute('open');
+	document.querySelector('.sd-report-export-menu')?.removeAttribute('open');
 }
 
 function downloadSaidaDevolucaoBlob(blob, filename) {
- closeSaidaDevolucaoExportMenu();
- const url = URL.createObjectURL(blob);
- const link = document.createElement('a');
- link.href = url;
- link.download = filename;
- document.body.appendChild(link);
- link.click();
- link.remove();
- setTimeout(() => URL.revokeObjectURL(url), 1000);
+	closeSaidaDevolucaoExportMenu();
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function escapeSaidaDevolucaoCSV(value) {
- let text = value === null || value === undefined ? '' : String(value);
- if (/^[=+\-@]/.test(text)) text = `'${text}`;
- return `"${text.replace(/"/g, '""')}"`;
+	let text = value === null || value === undefined ? '' : String(value);
+	if (/^[=+\-@]/.test(text)) text = `'${text}`;
+	return `"${text.replace(/"/g, '""')}"`;
 }
 
 function exportSaidaDevolucaoCSV() {
- const { header, data } = getSaidaDevolucaoExportData();
- const csvRows = [header, ...data.map(row => row.map((value, index) => {
-  if (index === header.length - 1 && typeof value === 'number') return `${(value * 100).toFixed(2).replace('.', ',')}%`;
-  return typeof value === 'number' ? String(value).replace('.', ',') : value;
- }))];
- const csv = `\uFEFFsep=;\r\n${csvRows.map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
- downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getSaidaDevolucaoExportFilename('csv'));
+	const { header, data } = getSaidaDevolucaoExportData();
+	const csvRows = [header, ...data.map(row => row.map((value, index) => {
+		if (index === header.length - 1 && typeof value === 'number') return `${(value * 100).toFixed(2).replace('.', ',')}%`;
+		return typeof value === 'number' ? String(value).replace('.', ',') : value;
+	}))];
+	const csv = `\uFEFFsep=;\r\n${csvRows.map(row => row.map(escapeSaidaDevolucaoCSV).join(';')).join('\r\n')}\r\n`;
+	downloadSaidaDevolucaoBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), getSaidaDevolucaoExportFilename('csv'));
 }
 
 function exportSaidaDevolucaoXLSX() {
- closeSaidaDevolucaoExportMenu();
- if (!window.XLSX?.utils) {
-  console.error('[RELATORIO] Biblioteca de exportacao Excel indisponivel.');
-  alert('Nao foi possivel carregar a exportacao Excel. Verifique a conexao e tente novamente.');
-  return;
- }
- const { header, data, mostrarMedia } = getSaidaDevolucaoExportData();
- const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
- const workbook = XLSX.utils.book_new();
- const lastColumn = XLSX.utils.encode_col(header.length - 1);
- worksheet['!autofilter'] = { ref: `A1:${lastColumn}${data.length + 1}` };
- worksheet['!cols'] = header.map((_,index)=>({wch:index===1?48:index===6?32:index<7?18:16}));
- worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
- const firstDataRow = 2;
- const lastDataRow = data.length + 1;
- const numericStartColumn = 7;
- const percentColumn = header.length - 1;
- for (let row = firstDataRow; row <= lastDataRow; row += 1) {
-  for (let column = numericStartColumn; column < percentColumn; column += 1) {
-   const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
-   if (cell) cell.z = '#,##0.00';
-  }
-  const percentCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: percentColumn })];
-  if (percentCell) percentCell.z = '0.00%';
- }
- XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendas e Devolucoes');
- XLSX.writeFile(workbook, getSaidaDevolucaoExportFilename('xlsx'), { compression: true });
+	closeSaidaDevolucaoExportMenu();
+	if (!window.XLSX?.utils) {
+		console.error('[RELATORIO] Biblioteca de exportacao Excel indisponivel.');
+		alert('Nao foi possivel carregar a exportacao Excel. Verifique a conexao e tente novamente.');
+		return;
+	}
+	const { header, data, mostrarMedia } = getSaidaDevolucaoExportData();
+	const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
+	const workbook = XLSX.utils.book_new();
+	const lastColumn = XLSX.utils.encode_col(header.length - 1);
+	worksheet['!autofilter'] = { ref: `A1:${lastColumn}${data.length + 1}` };
+	worksheet['!cols'] = header.map((_,index)=>({wch:index===1?48:index<6?18:16}));
+	worksheet['!views'] = [{ state: 'frozen', ySplit: 1 }];
+	const firstDataRow = 2;
+	const lastDataRow = data.length + 1;
+	const numericStartColumn = 6;
+	const percentColumn = header.length - 1;
+	for (let row = firstDataRow; row <= lastDataRow; row += 1) {
+		for (let column = numericStartColumn; column < percentColumn; column += 1) {
+			const cell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: column })];
+			if (cell) cell.z = '#,##0.00';
+		}
+		const percentCell = worksheet[XLSX.utils.encode_cell({ r: row - 1, c: percentColumn })];
+		if (percentCell) percentCell.z = '0.00%';
+	}
+	XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendas e Devolucoes');
+	XLSX.writeFile(workbook, getSaidaDevolucaoExportFilename('xlsx'), { compression: true });
 }
 
 /* Rel. Vendas / Devolucoes: contas multiplas e disponibilidade financeira real. */
 function sdGetAvailableAccounts(){return [...new Set([...(saidaDevolucaoReportState.sessions||[]).map(s=>s.canal_nome||s.canal||s.col_c),...(saidaDevolucaoReportState.devolucoes||[]).map(d=>d.conta||d.canal)].map(value=>String(value||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
-function buildSaidaDevolucaoRowsWithAccounts(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],selected=saidaDevolucaoReportState.contasSelecionadas,selectedKeys=Array.isArray(selected)?selected.map(normalizeOperationalLabel):null,productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(selectedKeys)&&(!selectedKeys.length||!selectedKeys.includes(normalizeOperationalLabel(account))))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set(),motivos:{}};row.accounts.add(account);row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const dev=findSdDevolucaoForMovement(m,devolucoes);const motivoLabel=String(dev?.observacoes||'').trim()||'Sem motivo classificado';row.motivos[motivoLabel]=(row.motivos[motivoLabel]||0)+qty;}map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,accounts:[...row.accounts],sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
+function buildSaidaDevolucaoRowsWithAccounts(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],selected=saidaDevolucaoReportState.contasSelecionadas,selectedKeys=Array.isArray(selected)?selected.map(normalizeOperationalLabel):null,productMap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').trim().toUpperCase(),p]).filter(([id])=>id));(movements||[]).forEach(m=>{const id=String(m.id_interno||'').trim(),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7);if(!id||!(qty>0)||!months.includes(month))return;const type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!sale&&!returned)return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(selectedKeys)&&(!selectedKeys.length||!selectedKeys.includes(normalizeOperationalLabel(account))))return;const p=productMap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0};if(sale)row.months[month].sales+=qty;if(returned)row.months[month].returns+=qty;map.set(id,row);});return [...map.values()].map(row=>{const sales=months.map(m=>row.months[m]?.sales||0),returns=months.map(m=>row.months[m]?.returns||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0);return {...row,accounts:[...row.accounts],sales,returns,totalSales,totalReturns,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales[sales.length-1]-sales[0]:0};});}
 function renderSdAccountsFilter(){const accounts=saidaDevolucaoReportState.contasDisponiveis||[],selected=saidaDevolucaoReportState.contasSelecionadas,isAll=!Array.isArray(selected),summary=isAll?'Todas as contas':selected.length?`${selected.length} conta${selected.length===1?'':'s'} selecionada${selected.length===1?'':'s'}`:'Nenhuma conta';return `<details class="sd-account-filter" data-sd-extra-filter><summary><small>Contas</small><strong>${summary}</strong><span class="material-symbols-rounded">expand_more</span></summary><div class="sd-account-menu"><header><button type="button" onclick="sdSelectAllAccounts()">Todas</button><button type="button" onclick="sdClearAccounts()">Limpar selecao</button></header><div>${accounts.map(account=>{const checked=isAll||selected.includes(account);return `<label><input type="checkbox" ${checked?'checked':''} onchange="sdToggleAccount('${escapeKitAttribute(account)}',this.checked)"><span>${escapeKitAttribute(account)}</span></label>`}).join('')||'<p>Nenhuma conta encontrada nos dados atuais.</p>'}</div></div></details>`}
 function sdRefreshAccountFilter(){const current=document.querySelector('.sd-account-filter');if(current)current.outerHTML=renderSdAccountsFilter();refreshSaidaDevolucaoReport()}
 function sdSelectAllAccounts(){saidaDevolucaoReportState.contasSelecionadas=null;sdRefreshAccountFilter()}
@@ -40042,8 +40042,8 @@ initializeSaidaDevolucaoReportControls=function(){initializeSaidaDevolucaoReport
 
 /* Rel. Vendas / Devolucoes: custo historico de cada devolucao. */
 function sdMoney(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function sdMovementCost(m,id,rows){const dev=findSdDevolucaoForMovement(m,rows);if(!dev)return null;const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);return qty?Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty:null}
-function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{},accounts:new Set(),motivos:{}};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const dev=findSdDevolucaoForMovement(m,devolucoes);const motivoLabel=String(dev?.observacoes||'').trim()||'Sem motivo classificado';row.motivos[motivoLabel]=(row.motivos[motivoLabel]||0)+qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
+function sdMovementCost(m,id,rows){const text=[m.execution_id,m.movimento_id,m.observacao].join(' '),match=text.match(/DEVOLU(?:CAO|ÇÃO)(?:\s+MARKETPLACE)?\s*:\s*([^\s|;]+)/i),dev=match&&(rows||[]).find(r=>String(r.id)===match[1]);if(!dev)return null;const items=(dev.devolucao_itens||dev.itens||[]).filter(i=>String(i.id_interno||i.produto_id||'').toUpperCase()===String(id).toUpperCase()&&Number(i.quantidade)>0&&Number(i.valor_unitario)>0),qty=items.reduce((s,i)=>s+Number(i.quantidade),0);return qty?Math.abs(Number(m.quantidade||0))*items.reduce((s,i)=>s+Number(i.quantidade)*Number(i.valor_unitario),0)/qty:null}
+function buildSdRowsCost(movements,products,sessions,devolucoes){const map=new Map(),months=saidaDevolucaoReportState.meses||[],chosen=saidaDevolucaoReportState.contasSelecionadas,keys=Array.isArray(chosen)?chosen.map(normalizeOperationalLabel):null,pmap=new Map((products||[]).map(p=>[String(p.id_interno||p.col_A||p.col_a||'').toUpperCase(),p]));(movements||[]).forEach(m=>{const id=String(m.id_interno||''),qty=Math.abs(Number(m.quantidade||0)),month=String(m.data_hora||m.criado_em||'').slice(0,7),type=normalizeOperationalLabel(m.tipo),origin=normalizeOperationalLabel(m.origem),ref=normalizeOperationalLabel([m.observacao,m.execution_id,m.movimento_id].join(' ')),sale=type.includes('SAIDA')&&(origin.includes('SEPARACAO')||origin.includes('CONFERENCIA')||ref.includes('SEPARACAO')),returned=type.includes('ENTRADA')&&(ref.includes('DEVOLUCAO:')||ref.includes('DEVOLUCAO MARKETPLACE'));if(!id||!qty||!months.includes(month)||(!sale&&!returned))return;const account=reportMovementChannel(m,sessions,devolucoes);if(Array.isArray(keys)&&(!keys.length||!keys.includes(normalizeOperationalLabel(account))))return;const p=pmap.get(id.toUpperCase())||{},row=map.get(id)||{id_interno:id,descricao:p.descricao_completa||p.descricao_base||p.descricao||p.nome||p.col_B||'Produto sem descricao',marca:p.marca||p.fabricante||'',sku:p.sku_fornecedor||p.sku||'',ean:p.ean||'',cor:p.cor||'',categoria:p.categoria||'Sem categoria',url_imagem:getProductImageUrl(p)||p.url_imagem||p.image_path||'',rawProduct:p,months:{},accounts:new Set()};row.accounts.add(account);row.months[month]||={sales:0,returns:0,cost:0,missing:0};if(sale)row.months[month].sales+=qty;if(returned){row.months[month].returns+=qty;const cost=sdMovementCost(m,id,devolucoes);cost===null?row.months[month].missing+=qty:row.months[month].cost+=cost}map.set(id,row)});return [...map.values()].map(r=>{const sales=months.map(m=>r.months[m]?.sales||0),returns=months.map(m=>r.months[m]?.returns||0),returnCosts=months.map(m=>r.months[m]?.cost||0),missingCosts=months.map(m=>r.months[m]?.missing||0),totalSales=sales.reduce((a,b)=>a+b,0),totalReturns=returns.reduce((a,b)=>a+b,0),totalReturnCost=returnCosts.reduce((a,b)=>a+b,0),missingCostQty=missingCosts.reduce((a,b)=>a+b,0);return {...r,accounts:[...r.accounts],sales,returns,returnCosts,missingCosts,totalSales,totalReturns,totalReturnCost,missingCostQty,averageSales:months.length?totalSales/months.length:0,averageReturns:months.length?totalReturns/months.length:0,percentual:totalSales?totalReturns/totalSales*100:null,growth:sales.length>1?sales.at(-1)-sales[0]:0}})}
 function sdDevolutionMonthCell(returnsQty,salesQty,cost,missing,mode){const rate=salesQty?(returnsQty/salesQty*100):(returnsQty?100:null),rateStr=rate===null?'-':rate.toFixed(1).replace('.',',')+'%',costStr=sdMoney(cost||0)+(missing?' · parcial':'');if(mode==='cost')return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-cost">${costStr}</span></div>`;if(mode==='combined')return `<div class="sd-cell-stat sd-cell-combined"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-rate">${rateStr}</span><span class="sd-cell-cost">${costStr}</span></div>`;return `<div class="sd-cell-stat"><span class="sd-cell-qty">${formatStockNumber(returnsQty)}</span><span class="sd-cell-sub sd-cell-rate">${rateStr}</span></div>`}
 function sdMetric(rate,cost,missing){const mode=saidaDevolucaoReportState.financeMode||'percent',pct=rate===null?'-':rate.toFixed(1).replace('.',',')+'%';if(mode==='percent')return pct;if(mode==='cost')return sdMoney(cost)+(missing?' · parcial':'');return `<div class="sd-comparative-metric"><strong class="sd-pct">${pct}</strong><small class="sd-cost">${sdMoney(cost)+(missing?' · p':'')}</small></div>`}
 function renderSdFinanceModeFilterCost(){const mode=saidaDevolucaoReportState.financeMode||'percent';return '<div class="sd-finance-filter" data-sd-extra-filter><small>Devolucoes</small><div role="group" aria-label="Visualizacao financeira">'+[['percent','%'],['cost','Valor'],['combined','% + Valor']].map(([v,l])=>'<button type="button" class="'+(mode===v?'active':'')+'" onclick="sdSetFinanceMode(\''+v+'\')">'+l+'</button>').join('')+'</div><em>Valor = custo do produto devolvido</em></div>'}
