@@ -6073,7 +6073,20 @@ async function generateOrcamentoClientePDF() {
  const pdfFont = await registerOrcamentoPDFFonts(doc);
  const logo = await loadRomaneioPDFImage(LOGO_LIGHT_BG);
  const productImages = await Promise.all(item.itens.map(row => loadOrcamentoPDFThumbnail(row.imagem)));
- const fmtDate = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
+ const fmtDate = value => {
+  if (!value) return '-';
+  const raw = String(value).trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(raw.includes('T') ? raw : `${raw}T12:00:00`);
+  return !isNaN(d.getTime()) ? d.toLocaleDateString('pt-BR') : raw;
+ };
+ const emissaoVal = item.emissao || (typeof getOrcamentoTodayISO === 'function' ? getOrcamentoTodayISO() : new Date().toISOString().slice(0, 10));
+ const validadeVal = item.validade || (typeof addOrcamentoDays === 'function' ? addOrcamentoDays(emissaoVal, 7) : (() => {
+  const d = new Date(`${emissaoVal}T12:00:00`);
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+ })());
  const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
  const safe = value => String(value || '').trim() || '-';
  const drawPageHeader = () => {
@@ -6087,8 +6100,8 @@ async function generateOrcamentoClientePDF() {
  doc.text('Rafael Costa - (11) 99008-5977 - contato@dyautoparts.com.br', margin + 44, 34);
  doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.setFontSize(15); doc.text('ORCAMENTO', pageWidth - margin - 5, 20, { align: 'right' });
  doc.setFontSize(8); doc.setTextColor(77, 91, 111); doc.text(item.numero, pageWidth - margin - 5, 26, { align: 'right' });
- doc.setFont(pdfFont, 'normal'); doc.text(`Emissao: ${fmtDate(item.emissao)}`, pageWidth - margin - 5, 31, { align: 'right' });
- doc.text(`Validade: ${fmtDate(item.validade)}`, pageWidth - margin - 5, 35.5, { align: 'right' });
+ doc.setFont(pdfFont, 'normal'); doc.text(`Emissao: ${fmtDate(emissaoVal)}`, pageWidth - margin - 5, 31, { align: 'right' });
+ doc.text(`Validade: ${fmtDate(validadeVal)}`, pageWidth - margin - 5, 35.5, { align: 'right' });
  };
  const drawFooter = () => {
  const pages = doc.getNumberOfPages();
@@ -6132,11 +6145,100 @@ async function generateOrcamentoClientePDF() {
  const summary = [['Subtotal', money(item.totais.subtotal)], [`Desconto (${Number(item.desconto || 0).toLocaleString('pt-BR')}%)`, `- ${money(item.totais.descontoValor)}`], ['Frete', money(item.totais.freteCobrado)], ['TOTAL', money(item.totais.total)]];
  summary.forEach(([label, value], index) => { const rowY = y + index * 12; doc.setFillColor(index === 3 ? 230 : 250, index === 3 ? 0 : 251, index === 3 ? 18 : 253); doc.rect(totalsX, rowY, totalsWidth, 11, 'F'); doc.setFont(pdfFont, index === 3 ? 'bold' : 'normal'); doc.setFontSize(index === 3 ? 11 : 9); doc.setTextColor(index === 3 ? 255 : 31, index === 3 ? 255 : 42, index === 3 ? 255 : 59); doc.text(label, totalsX + 4, rowY + 7); doc.text(value, totalsX + totalsWidth - 4, rowY + 7, { align: 'right' }); });
  y += 57;
- const observations = safe(item.cliente.observacoes);
- doc.setFont(pdfFont, 'bold'); doc.setFontSize(9); doc.setTextColor(76, 89, 108); doc.text('OBSERVACOES', margin, y);
- doc.setFont(pdfFont, 'normal'); doc.setTextColor(35, 47, 66); doc.text(doc.splitTextToSize(observations, contentWidth), margin, y + 5);
- doc.setFont(pdfFont, 'bold'); doc.setTextColor(24, 35, 53); doc.text(`Orcamento valido ate ${fmtDate(item.validade)}. Valores e disponibilidade sujeitos a confirmacao.`, margin, Math.min(pageHeight - 23, y + 19));
- doc.setFont(pdfFont, 'normal'); doc.setFontSize(8); doc.setTextColor(92, 104, 122); doc.text(`Para aprovar, responda ao e-mail contato@dyautoparts.com.br informando o numero ${item.numero}.`, margin, Math.min(pageHeight - 18, y + 25));
+ if (y > pageHeight - 40) {
+  doc.addPage();
+  drawPageHeader();
+  y = 50;
+  y += 6;
+ }
+
+ doc.setFont(pdfFont, 'bold');
+ doc.setFontSize(9);
+ doc.setTextColor(76, 89, 108);
+ doc.text('OBSERVACOES', margin, y);
+ y += 5;
+
+ const rawObs = String(item.cliente?.observacoes || '').trim();
+ doc.setFont(pdfFont, 'normal');
+ doc.setFontSize(8.5);
+ doc.setTextColor(35, 47, 66);
+
+ if (rawObs && rawObs !== '-') {
+  const paragraphs = rawObs.split('\n');
+  paragraphs.forEach((p, pIdx) => {
+   const trimmedP = p.trim();
+   if (!trimmedP) {
+    y += 2.5;
+    return;
+   }
+   const lines = doc.splitTextToSize(trimmedP, contentWidth);
+   lines.forEach(line => {
+    if (y > pageHeight - 32) {
+     doc.addPage();
+     drawPageHeader();
+     y = 50;
+     y += 6;
+     doc.setFont(pdfFont, 'bold');
+     doc.setFontSize(9);
+     doc.setTextColor(76, 89, 108);
+     doc.text('OBSERVACOES (CONTINUACAO)', margin, y);
+     y += 5;
+     doc.setFont(pdfFont, 'normal');
+     doc.setFontSize(8.5);
+     doc.setTextColor(35, 47, 66);
+    }
+    doc.text(line, margin, y);
+    y += 4.2;
+   });
+   if (pIdx < paragraphs.length - 1) {
+    y += 1.5;
+   }
+  });
+ }
+
+ const validadeFmt = fmtDate(validadeVal);
+ const valText = `Orcamento valido ate ${validadeFmt}. Valores e disponibilidade sujeitos a confirmacao.`;
+ const aprovText = `Para aprovar, responda ao e-mail contato@dyautoparts.com.br informando o numero ${item.numero}.`;
+
+ const valLines = doc.splitTextToSize(valText, contentWidth);
+ const aprovLines = doc.splitTextToSize(aprovText, contentWidth);
+
+ const valLineHeight = 4.2;
+ const aprovLineHeight = 3.8;
+ const gapBetweenFinals = 3.2;
+ const finalBlockDistance = (valLines.length * valLineHeight) + gapBetweenFinals + (aprovLines.length - 1) * aprovLineHeight;
+
+ const maxAprovY = pageHeight - 19.5;
+ const idealValidadeY = maxAprovY - finalBlockDistance;
+ let finalValidadeY = idealValidadeY;
+
+ if (y + 5 > idealValidadeY) {
+  finalValidadeY = y + 5;
+  if (finalValidadeY + finalBlockDistance > maxAprovY) {
+   doc.addPage();
+   drawPageHeader();
+   finalValidadeY = idealValidadeY;
+  }
+ }
+
+ doc.setFont(pdfFont, 'bold');
+ doc.setFontSize(8.5);
+ doc.setTextColor(24, 35, 53);
+ let curFinalY = finalValidadeY;
+ valLines.forEach(line => {
+  doc.text(line, margin, curFinalY);
+  curFinalY += valLineHeight;
+ });
+
+ curFinalY += gapBetweenFinals;
+
+ doc.setFont(pdfFont, 'normal');
+ doc.setFontSize(8);
+ doc.setTextColor(92, 104, 122);
+ aprovLines.forEach(line => {
+  doc.text(line, margin, curFinalY);
+  curFinalY += aprovLineHeight;
+ });
  drawFooter();
  localStorage.setItem(ORCAMENTO_CLIENTE_DRAFT_KEY, JSON.stringify(item));
  commitOrcamentoNumber(item.numero);
