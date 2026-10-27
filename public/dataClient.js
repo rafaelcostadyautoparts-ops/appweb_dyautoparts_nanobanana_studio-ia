@@ -1358,9 +1358,17 @@ const DataClient = (function () {
                     label_vinculo: 'CADASTRADO',
                     fornecedor_cnpj: fp.fornecedor_cnpj,
                     codigo_produto_fornecedor: fp.codigo_produto_fornecedor || null,
+                    descricao_produto_fornecedor: fp.descricao_produto_fornecedor || null,
                     ean_fornecedor: fp.ean_fornecedor || null,
                     ultimo_custo: fp.ultimo_custo || null,
+                    ultima_quantidade: fp.ultima_quantidade || null,
                     ultima_compra_em: fp.ultima_compra_em || null,
+                    quantidade_minima_compra: fp.quantidade_minima_compra || null,
+                    multiplo_compra: fp.multiplo_compra || null,
+                    embalagem_fornecedor: fp.embalagem_fornecedor || null,
+                    fator_conversao_estoque: fp.fator_conversao_estoque || null,
+                    lead_time_dias: fp.lead_time_dias || null,
+                    lead_time_tipo_dias: fp.lead_time_tipo_dias || 'corridos',
                     fornecedor_detalhe: det
                 });
             });
@@ -2603,6 +2611,7 @@ const DataClient = (function () {
             .from('entradas_nf')
             .select('*')
             .not('status', 'in', '("finalizada", "cancelada", "entrada_confirmada", "financeiro_lancado")')
+            .eq('estoque_finalizado', false)
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -2611,6 +2620,86 @@ const DataClient = (function () {
         }
 
         return data || [];
+    }
+
+    /**
+     * ENTRADA NF - Listar notas para visualização de pendências
+     * Retorna notas abertas OU notas finalizadas fisicamente com financeiro pendente (aguardando boletos)
+     */
+    async function listEntradasNFPendencias() {
+        const client = window.supabaseClient;
+        if (!client) return [];
+
+        try {
+            const { data, error } = await client
+                .from('entradas_nf')
+                .select('*')
+                .neq('status', 'cancelada')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('[ENTRADA_NF_PENDENCIAS] erro supabase:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (err) {
+            console.error('[ENTRADA_NF_PENDENCIAS] erro:', err);
+            return [];
+        }
+    }
+
+    /**
+     * ENTRADA NF - Marcar explicitamente como Aguardando Boletos
+     */
+    async function definirAguardandoBoletosEntradaNF(entradaId, observacao = '', usuario = null) {
+        const client = window.supabaseClient;
+        if (!client || !entradaId) return { ok: false, error: 'ID da entrada não informado' };
+
+        const currentUser = usuario || localStorage.getItem('currentUser') || 'SISTEMA';
+
+        try {
+            const { data, error } = await client.rpc('definir_aguardando_boletos_entrada_nf', {
+                p_entrada_nf_id: entradaId,
+                p_observacao: observacao || null,
+                p_usuario: currentUser
+            });
+
+            if (error) {
+                console.warn('[ENTRADA_NF] RPC definir_aguardando_boletos falhou, executando fallback:', error);
+                await client
+                    .from('contas_pagar')
+                    .delete()
+                    .eq('entrada_nf_id', entradaId)
+                    .eq('tipo_lancamento', 'nota_fiscal')
+                    .eq('status', 'rascunho');
+
+                const { error: upErr } = await client
+                    .from('entradas_nf')
+                    .update({
+                        status_financeiro: 'aguardando_boletos',
+                        tipo_condicao_financeira: 'aguardando_boletos',
+                        financeiro_lancado: false,
+                        observacao_financeira: observacao || null,
+                        financeiro_configurado_em: new Date().toISOString(),
+                        financeiro_configurado_por: currentUser,
+                        atualizado_em: new Date().toISOString()
+                    })
+                    .eq('id', entradaId);
+
+                if (upErr) throw upErr;
+                invalidateCache('nf');
+                invalidateCache('contas_pagar');
+                return { ok: true, status_financeiro: 'aguardando_boletos' };
+            }
+
+            invalidateCache('nf');
+            invalidateCache('contas_pagar');
+            return data || { ok: true };
+        } catch (err) {
+            console.error('[ENTRADA_NF] Erro ao definir aguardando boletos:', err);
+            return { ok: false, error: err.message || String(err) };
+        }
     }
 
     /**
@@ -3446,6 +3535,177 @@ const DataClient = (function () {
     }
 
     /**
+     * INVENTÁRIO V2: Salva contagem física com suporte a múltiplos endereços e validação transacional
+     */
+    async function salvarContagemInventarioItemV2Supabase(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) {
+            throw new Error('Supabase client nao encontrado');
+        }
+
+        const inventarioId = String(payload.inventario_id || payload.inventarioId || '').trim();
+        const idInterno = String(payload.id_interno || payload.idInterno || '').trim();
+        const local = String(payload.local || 'PRIMEIRO_ANDAR').trim().toUpperCase();
+        const codigoEndereco = String(payload.codigo_endereco || payload.codigoEndereco || '').trim().toUpperCase();
+        const quantidadeFisica = Number(payload.quantidade_fisica ?? payload.quantidadeFisica ?? payload.saldo_fisico ?? 0);
+        const usuario = String(payload.usuario || localStorage.getItem('currentUser') || 'Sistema').trim();
+        const valorUnitario = payload.valor_unitario != null ? Number(payload.valor_unitario) : null;
+        const enderecoId = payload.endereco_id || payload.enderecoId || null;
+
+        if (!inventarioId) throw new Error('Inventario nao informado.');
+        if (!idInterno) throw new Error('ID interno do produto nao informado.');
+        if (!codigoEndereco) throw new Error('Codigo do endereco fisico obrigatorio na contagem V2.');
+        if (quantidadeFisica < 0) throw new Error('Quantidade fisica nao pode ser negativa.');
+
+        // Validação de segurança: Não confiar em identificadores de navegador (currentUser).
+        // A RPC V2 exige sessão autenticada ativa no Supabase (auth.uid).
+        let session = null;
+        try {
+            const { data } = await client.auth.getSession();
+            session = data?.session;
+        } catch (authErr) {
+            console.warn('[INV V2] Falha ao verificar sessao do Supabase:', authErr);
+        }
+
+        if (!session?.user?.id) {
+            const authError = new Error('Operação protegida indisponível: sessão segura autenticada do Supabase não encontrada.');
+            authError.code = 'AUTH_REQUIRED';
+            authError.isAuthError = true;
+            throw authError;
+        }
+
+        const rpcPayload = {
+            p_inventario_id: inventarioId,
+            p_id_interno: idInterno,
+            p_local: local,
+            p_codigo_endereco: codigoEndereco,
+            p_quantidade_fisica: Math.floor(quantidadeFisica),
+            p_usuario: usuario,
+            p_valor_unitario: valorUnitario,
+            p_endereco_id: enderecoId
+        };
+
+        console.log('[INV V2 RPC] salvar_contagem_inventario_item_v2 payload:', rpcPayload);
+
+        const { data, error } = await client.rpc('salvar_contagem_inventario_item_v2', rpcPayload);
+        if (error) {
+            console.error('[INV V2 RPC] salvar_contagem_inventario_item_v2 erro:', error);
+            const rpcError = new Error(error.message || 'Erro ao salvar contagem V2 no Supabase');
+            rpcError.code = error.code;
+            rpcError.details = error.details;
+            rpcError.hint = error.hint;
+            rpcError.supabaseError = error;
+            throw rpcError;
+        }
+
+        invalidateCache('inventarios');
+        invalidateCache('inventarios_itens');
+        invalidateCache('inventarios_contagens_enderecos');
+        return data;
+    }
+
+    /**
+     * INVENTÁRIO V2: Consulta contagens detalhadas por endereço físico
+     */
+    async function carregarContagensEnderecosInventarioV2(inventarioId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase client nao encontrado');
+        const invId = String(inventarioId || '').trim();
+        if (!invId) return [];
+
+        try {
+            const { data, error } = await client
+                .from('inventarios_contagens_enderecos')
+                .select('*')
+                .eq('inventario_id', invId)
+                .order('auditado_em', { ascending: false });
+
+            if (error) {
+                console.warn('[INV V2] Aviso ao carregar contagens por endereco:', error);
+                return [];
+            }
+            return (data || []).map(r => ({
+                ...r,
+                quantidade_fisica: Number(r.quantidade_contada ?? r.quantidade_fisica ?? 0),
+                quantidade_contada: Number(r.quantidade_contada ?? r.quantidade_fisica ?? 0)
+            }));
+        } catch (err) {
+            console.warn('[INV V2] Falha ao consultar inventarios_contagens_enderecos:', err);
+            return [];
+        }
+    }
+
+    /**
+     * INVENTÁRIO V2: Carrega cadastro de endereços físicos para o local contábil
+     */
+    async function carregarEnderecosFisicosPorLocal(localMacro = 'PRIMEIRO_ANDAR', options = {}) {
+        const client = window.supabaseClient;
+        if (!client) return [];
+        const normLocal = String(localMacro || 'PRIMEIRO_ANDAR').trim().toUpperCase();
+
+        try {
+            let query = client
+                .from('estoque_enderecos')
+                .select('*')
+                .eq('local_macro', normLocal)
+                .eq('status', 'ATIVO');
+
+            if (options && options.corredor && String(options.corredor).trim().toUpperCase() !== 'TODOS') {
+                query = query.eq('corredor', String(options.corredor).trim().toUpperCase());
+            }
+
+            const { data, error } = await query.order('codigo_endereco');
+
+            if (!error && Array.isArray(data) && data.length > 0) {
+                return data;
+            }
+        } catch (err) {
+            console.warn('[INV V2] Falha ao consultar estoque_enderecos:', err);
+        }
+
+        try {
+            const { data: legados, error: errLeg } = await client
+                .from('vw_identificacao_enderecos_legados')
+                .select('endereco_legado, locais_com_saldo')
+                .limit(100);
+
+            if (!errLeg && Array.isArray(legados) && legados.length > 0) {
+                return legados
+                    .filter(r => !r.locais_com_saldo || r.locais_com_saldo.includes(normLocal) || r.locais_com_saldo.length === 0)
+                    .map(r => ({
+                        codigo_endereco: r.endereco_legado,
+                        local_macro: normLocal,
+                        tipo_posicao: 'PICKING',
+                        status: 'ATIVO'
+                    }));
+            }
+        } catch (e) {
+            console.warn('[INV V2] Falha ao consultar vw_identificacao_enderecos_legados:', e);
+        }
+
+        return [];
+    }
+
+    /**
+     * INVENTÁRIO V2: Aprovação formal protegida (desativada na Etapa 2B.3A)
+     */
+    async function aprovarInventarioV2Supabase(inventarioId, usuario, observacao) {
+        const error = new Error('Aprovação V2 desativada na Etapa 2B.3A: aguardando ativação de autenticação segura e testes formais.');
+        error.code = 'APROVACAO_V2_DESATIVADA';
+        throw error;
+    }
+
+    /**
+     * INVENTÁRIO V2: Finalização transacional com motor FIFO (desativada na Etapa 2B.3A)
+     * NÃO utiliza a RPC legada como fallback de inventário V2
+     */
+    async function finalizarInventarioEstoqueV2Supabase(inventarioId, usuario, executionId) {
+        const error = new Error('Finalização V2 desativada na Etapa 2B.3A.');
+        error.code = 'FINALIZACAO_V2_DESATIVADA';
+        throw error;
+    }
+
+    /**
      * Persiste ou atualiza rascunho de orçamento no Supabase
      */
     async function salvarRascunhoOrcamentoSupabase({ id = null, cliente = {}, itens = [], condicoes = {}, usuario = 'Sistema' }) {
@@ -3677,6 +3937,7 @@ const DataClient = (function () {
         cancelarItemSeparacaoFinalizadaSupabase,
         finalizePickingDraftSupabase,
         deletePickingDraftSupabase,
+        isDraftPickingSessionId,
         getCachedData,
         isModuleLoaded,
         invalidateCache,
@@ -3687,6 +3948,11 @@ const DataClient = (function () {
         registrarMovimentoEstoqueSupabase,
         finalizarInventarioEstoqueSupabase,
         salvarContagemInventarioItemSupabase,
+        salvarContagemInventarioItemV2Supabase,
+        carregarContagensEnderecosInventarioV2,
+        carregarEnderecosFisicosPorLocal,
+        aprovarInventarioV2Supabase,
+        finalizarInventarioEstoqueV2Supabase,
 
         fetchEstoqueProdutoSupabase,
         fetchEstoqueItemLocalSupabase,
@@ -3712,6 +3978,8 @@ const DataClient = (function () {
 
         // ENTRADA NF
         listEntradasNFAbertas,
+        listEntradasNFPendencias,
+        definirAguardandoBoletosEntradaNF,
         getEntradaNFById,
         listEntradaNFRecebimentos,
         saveEntradaNFRecebimentos,
@@ -3721,8 +3989,18 @@ const DataClient = (function () {
         fetchAlocacoesPedidoEntradaNF,
         salvarComplementarEntradaNFSupabase,
         fetchComplementaresEntradaNF,
+        removerComplementarEntradaNFSupabase,
         saveEntradaNFParcelasFiscais,
         fetchEntradaNFDuplicatasFiscais,
+        executarPreCadastroEntradaNF,
+        vincularEntradaNFFornecedor,
+        cadastrarFornecedorDoXML,
+        atualizarFornecedorMestre,
+        getFornecedorById,
+        getFornecedorByCnpj,
+        atualizarFornecedorComercial,
+        getFornecedorProdutos,
+        salvarFornecedorProdutoComercial,
 
         // GARANTIA
         saveGarantiaSupabase,
@@ -3730,6 +4008,7 @@ const DataClient = (function () {
         // DEVOLUCOES
         saveDevolucaoMarketplaceSupabase,
         updateDevolucaoMarketplaceSupabase,
+        updateDevolucaoItemCostSupabase,
         applyDevolucaoEstoqueSupabase,
         listDevolucoesSupabase,
         updateDevolucaoStatusSupabase,
@@ -3764,10 +4043,15 @@ const DataClient = (function () {
         listMercadoLivreItemMappings,
         getMercadoLivreItemMapping,
         saveMercadoLivreItemMappingTransacional,
+        removeMercadoLivreItemMappingTransacional,
+        anDetectMultiProductTitleIndicators,
 
         // PEDIDOS ML / MARKETPLACE & SEPARACAO
         listMercadoLivrePedidos,
+        listPedidosMulticanal,
+        getPedidosMulticanalContadores,
         getMercadoLivrePedidoById,
+        resolverSnapshotItemPedido,
         saveMercadoLivrePedidoTransacional,
         reprocessarIdentificacaoPedidoTransacional,
         enviarPedidoParaSeparacaoTransacional,
@@ -4001,7 +4285,25 @@ const DataClient = (function () {
         return data;
     }
 
-    async function saveMercadoLivreItemMappingTransacional({ itemId, variationId = null, tipoIdentificacao = 'produto', observacao = '', componentes = [], criadoPor = 'usuario', accountId }) {
+    function anDetectMultiProductTitleIndicators(title) {
+        if (!title || typeof title !== 'string') return false;
+        const cleanTitle = title.trim();
+        if (!cleanTitle) return false;
+        const wordsRegex = /\b(kit|kits|conjunto|conjuntos|combo|combos|jogo|jogos)\b/i;
+        const hasPlus = /\+/.test(cleanTitle);
+        return wordsRegex.test(cleanTitle) || hasPlus;
+    }
+
+    async function saveMercadoLivreItemMappingTransacional({
+        itemId,
+        variationId = null,
+        tipoIdentificacao = 'produto',
+        observacao = '',
+        confirmadoProdutoUnico = false,
+        componentes = [],
+        criadoPor = 'usuario',
+        accountId
+    }) {
         if (!itemId) throw new Error('item_id e obrigatorio.');
         const accIdNum = Number(accountId);
         if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
@@ -4055,18 +4357,52 @@ const DataClient = (function () {
 
         const tipoIdentificacaoEfetivo = (componentes && componentes.length >= 2) ? 'kit' : 'produto';
 
-        const { data: novaVersao, error: errNovaVersao } = await client
-            .from('mercadolivre_item_mapping_versions')
-            .insert([{
-                mapping_id: mappingId,
-                versao: proximaVersao,
-                tipo_identificacao: tipoIdentificacaoEfetivo,
-                observacao: observacao || null,
-                criado_por: criadoPor,
-                criado_em: new Date().toISOString()
-            }])
-            .select('id')
-            .single();
+        let finalObservacao = observacao || '';
+        if (confirmadoProdutoUnico && !finalObservacao.includes('CONFIRMADO_PRODUTO_UNICO')) {
+            finalObservacao = (finalObservacao ? finalObservacao + ' | ' : '') + '[CONFIRMADO_PRODUTO_UNICO]: Produto unitário confirmado pelo operador contemplando kit completo.';
+        }
+
+        const versaoPayload = {
+            mapping_id: mappingId,
+            versao: proximaVersao,
+            tipo_identificacao: tipoIdentificacaoEfetivo,
+            observacao: finalObservacao || null,
+            criado_por: criadoPor,
+            criado_em: new Date().toISOString()
+        };
+
+        let novaVersao = null;
+        let errNovaVersao = null;
+
+        if (confirmadoProdutoUnico) {
+            const resComColuna = await client
+                .from('mercadolivre_item_mapping_versions')
+                .insert([{ ...versaoPayload, confirmado_produto_unico: true }])
+                .select('id')
+                .single();
+
+            if (resComColuna.error && resComColuna.error.message && resComColuna.error.message.includes('confirmado_produto_unico')) {
+                const resFallback = await client
+                    .from('mercadolivre_item_mapping_versions')
+                    .insert([versaoPayload])
+                    .select('id')
+                    .single();
+                novaVersao = resFallback.data;
+                errNovaVersao = resFallback.error;
+            } else {
+                novaVersao = resComColuna.data;
+                errNovaVersao = resComColuna.error;
+            }
+        } else {
+            const resSimples = await client
+                .from('mercadolivre_item_mapping_versions')
+                .insert([versaoPayload])
+                .select('id')
+                .single();
+            novaVersao = resSimples.data;
+            errNovaVersao = resSimples.error;
+        }
+
         if (errNovaVersao) throw errNovaVersao;
         const versionId = novaVersao.id;
 
@@ -4101,6 +4437,66 @@ const DataClient = (function () {
         return await getMercadoLivreItemMapping(itemId, variationId, accountId);
     }
 
+    async function removeMercadoLivreItemMappingTransacional({ accountId, itemId, variationId = null, expectedCurrentVersionId = null }) {
+        if (!itemId) throw new Error('item_id e obrigatorio.');
+        const accIdNum = Number(accountId);
+        if (!Number.isInteger(accIdNum) || accIdNum <= 0) {
+            throw new Error('accountId e obrigatorio e deve ser um ID valido (inteiro positivo).');
+        }
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const varKey = (variationId && String(variationId).trim()) ? String(variationId).trim() : '__SEM_VARIACAO__';
+
+        const { data: mappingExistente, error: errMap } = await client
+            .from('mercadolivre_item_mappings')
+            .select('id, current_version_id')
+            .eq('mercadolivre_account_id', accIdNum)
+            .eq('item_id', String(itemId).trim())
+            .eq('variation_key', varKey)
+            .maybeSingle();
+
+        if (errMap) throw errMap;
+        if (!mappingExistente) {
+            throw new Error('Registro de mapeamento não encontrado no banco de dados.');
+        }
+
+        if (mappingExistente.current_version_id === null) {
+            return { success: true, alreadyRemoved: true, id: mappingExistente.id };
+        }
+
+        if (expectedCurrentVersionId !== null && expectedCurrentVersionId !== undefined) {
+            if (Number(mappingExistente.current_version_id) !== Number(expectedCurrentVersionId)) {
+                throw new Error('O mapeamento deste anúncio foi modificado por outro operador. Atualize a página e tente novamente.');
+            }
+        }
+
+        let updateQuery = client
+            .from('mercadolivre_item_mappings')
+            .update({
+                current_version_id: null,
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', mappingExistente.id)
+            .eq('mercadolivre_account_id', accIdNum)
+            .eq('item_id', String(itemId).trim())
+            .eq('variation_key', varKey);
+
+        if (expectedCurrentVersionId !== null && expectedCurrentVersionId !== undefined) {
+            updateQuery = updateQuery.eq('current_version_id', expectedCurrentVersionId);
+        }
+
+        const { data: updatedRows, error: errUpd } = await updateQuery.select('id, current_version_id');
+        if (errUpd) throw errUpd;
+
+        if (!Array.isArray(updatedRows) || updatedRows.length !== 1) {
+            throw new Error('Falha ao desvincular mapeamento: nenhum registro foi atualizado (possível concorrência).');
+        }
+
+        invalidateCache('produtos');
+        return { success: true, id: updatedRows[0].id, current_version_id: null };
+    }
+
     // IMPLEMENTACAO PEDIDOS ML / MARKETPLACE
     async function listMercadoLivrePedidos(filtro = {}) {
         const client = window.supabaseClient;
@@ -4121,6 +4517,310 @@ const DataClient = (function () {
         return data || [];
     }
 
+    // IMPLEMENTACAO PEDIDOS MULTICANAL (LEITURA INTEGRADA & QUARENTENA)
+    async function listPedidosMulticanal(options = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const page = Math.max(1, Number(options.page) || 1);
+        const pageSize = Math.max(1, Math.min(100, Number(options.pageSize) || 25));
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        // 1. Buscar pendências ativas de quarentena (pendente, em_reprocessamento)
+        const { data: quarentenasAtivas, error: qErr } = await client
+            .from('marketplace_pedidos_quarentena')
+            .select('id, marketplace, source_account_id, external_order_id, pedido_id, status, motivo_pendencia, detalhes_erro, total_recebimentos, primeiro_recebimento_em, ultimo_recebimento_em')
+            .in('status', ['pendente', 'em_reprocessamento']);
+
+        if (qErr) {
+            console.warn('[listPedidosMulticanal] Aviso ao consultar quarentenas:', qErr);
+        }
+
+        const quarentenas = quarentenasAtivas || [];
+
+        // Se solicitado estritamente apenas pedidos em quarentena e não houver nenhuma quarentena ativa
+        if (options.apenasQuarentena && quarentenas.length === 0) {
+            return {
+                data: [],
+                pagination: {
+                    page,
+                    pageSize,
+                    total: 0,
+                    totalPages: 0
+                }
+            };
+        }
+
+        // 2. Montar query base com relacionamentos reais
+        let query = client
+            .from('mercadolivre_pedidos')
+            .select(`
+                *,
+                mercadolivre_accounts!mercadolivre_account_id(
+                    id,
+                    platform,
+                    nickname,
+                    nome_operacional,
+                    source_account_id
+                ),
+                mercadolivre_pedido_itens(*)
+            `, { count: 'exact' });
+
+        // Filtro por marketplace (ex: 'mercadolibre', 'shopee', 'magalu')
+        if (options.marketplace) {
+            query = query.eq('marketplace', String(options.marketplace).trim().toLowerCase());
+        }
+
+        // Filtro por conta vendedora interna (id de mercadolivre_accounts)
+        const contaFiltro = options.contaId ?? options.accountId;
+        if (contaFiltro != null && contaFiltro !== '') {
+            query = query.eq('mercadolivre_account_id', Number(contaFiltro));
+        }
+
+        // Filtro por status de identificação (ex: 'novo', 'pronto_separacao', 'pendente_identificacao')
+        if (options.statusIdentificacao) {
+            query = query.eq('status_identificacao', String(options.statusIdentificacao).trim());
+        }
+
+        // Filtro por tipo logístico (ex: 'fulfillment', 'cross_docking', 'drop_off', 'self_service')
+        if (options.statusLogistico || options.logisticType) {
+            query = query.eq('logistic_type', String(options.statusLogistico || options.logisticType).trim());
+        }
+
+        // Filtro por status marketplace externo (ex: 'paid')
+        if (options.statusMercadoLivre) {
+            query = query.eq('status_mercadolivre', String(options.statusMercadoLivre).trim());
+        }
+
+        // Ocultação padrão de histórico de testes legados (EXT_%)
+        const ocultarLegado = options.ocultarHistoricoLegado !== false;
+        if (ocultarLegado && !options.tipoRegistro && !options.busca) {
+            query = query.not('external_order_id', 'like', 'EXT_%');
+        }
+
+        // Filtro explícito por tipo de registro
+        if (options.tipoRegistro === 'sintetico') {
+            query = query.like('external_order_id', 'TEST_SINTETICO_%');
+        } else if (options.tipoRegistro === 'historico_legado') {
+            query = query.like('external_order_id', 'EXT_%');
+        } else if (options.tipoRegistro === 'real') {
+            query = query.not('external_order_id', 'like', 'TEST_SINTETICO_%')
+                         .not('external_order_id', 'like', 'EXT_%');
+        }
+
+        // Filtro para quando apenasQuarentena for solicitado
+        if (options.apenasQuarentena) {
+            const qPedidoIds = quarentenas.map(q => q.pedido_id).filter(id => id != null);
+            const qExtIds = quarentenas.map(q => q.external_order_id).filter(Boolean);
+            const orConds = [];
+            if (qPedidoIds.length > 0) orConds.push(`id.in.(${qPedidoIds.join(',')})`);
+            if (qExtIds.length > 0) orConds.push(`external_order_id.in.(${qExtIds.map(x => `"${x}"`).join(',')})`);
+
+            if (orConds.length > 0) {
+                query = query.or(orConds.join(','));
+            }
+        }
+
+        // Busca por ID interno ou externo
+        if (options.busca) {
+            const termo = String(options.busca).trim();
+            if (/^id:\s*(\d+)$/i.test(termo)) {
+                const idExact = Number(termo.match(/^id:\s*(\d+)$/i)[1]);
+                query = query.eq('id', idExact);
+            } else if (/^\d+$/.test(termo)) {
+                query = query.or(`id.eq.${termo},external_order_id.ilike.%${termo}%`);
+            } else {
+                query = query.ilike('external_order_id', `%${termo}%`);
+            }
+        }
+
+        // Ordenação determinística com desempate estável por ID
+        query = query
+            .order('date_created', { ascending: false, nullsFirst: false })
+            .order('id', { ascending: false })
+            .range(from, to);
+
+        const { data, count, error } = await query;
+        if (error) {
+            if (error.code === 'PGRST103') {
+                const totalMatch = error.details && error.details.match(/there are only (\d+) rows/);
+                const totalCount = totalMatch ? parseInt(totalMatch[1], 10) : 0;
+                return {
+                    data: [],
+                    pagination: {
+                        page,
+                        pageSize,
+                        total: totalCount,
+                        totalPages: Math.max(1, Math.ceil(totalCount / pageSize))
+                    }
+                };
+            }
+            throw error;
+        }
+
+        // 3. Processamento, classificação e amarração de quarentena multiconta
+        const rows = data || [];
+        const processed = [];
+
+        for (const p of rows) {
+            const ext = String(p.external_order_id || '');
+            const isSintetico = ext.startsWith('TEST_SINTETICO_');
+            const isLegado = ext.startsWith('EXT_');
+            const isReal = !isSintetico && !isLegado;
+            const tipoRegistro = isSintetico ? 'sintetico' : (isLegado ? 'historico_legado' : 'real');
+
+            const conta = p.mercadolivre_accounts || null;
+
+            // Associação de quarentena com guarda estrita de isolamento multiconta
+            const qMatch = quarentenas.find(q => {
+                // 1. Vínculo inequívoco por pedido_id
+                if (q.pedido_id != null) {
+                    return String(q.pedido_id) === String(p.id);
+                }
+                // 2. Fallback rigoroso por marketplace, conta e identificador externo
+                const sameMkt = (q.marketplace || '').toLowerCase() === (p.marketplace || '').toLowerCase();
+                const sameAccount = q.source_account_id && conta?.source_account_id && String(q.source_account_id) === String(conta.source_account_id);
+                const sameExt = String(q.external_order_id) === String(p.external_order_id);
+                return sameMkt && sameAccount && sameExt;
+            }) || null;
+
+            if (options.apenasQuarentena && !qMatch) {
+                continue;
+            }
+
+            // Normalização e metadados de itens
+            const itens = Array.isArray(p.mercadolivre_pedido_itens) ? p.mercadolivre_pedido_itens : [];
+            const itensNormalizados = itens.map(item => ({
+                ...item,
+                has_mapping: !!item.mapping_id,
+                has_snapshot: Array.isArray(item.snapshot_componentes) && item.snapshot_componentes.length > 0,
+                produtos_mapeados: Array.isArray(item.snapshot_componentes) ? item.snapshot_componentes : []
+            }));
+
+            processed.push({
+                ...p,
+                mercadolivre_pedido_itens: itensNormalizados,
+                tipo_registro: tipoRegistro,
+                is_real: isReal,
+                is_sintetico: isSintetico,
+                is_historico_legado: isLegado,
+                conta_vendedora: conta,
+                em_quarentena: !!qMatch,
+                quarentena_ativa: qMatch
+            });
+        }
+
+        const total = count ?? processed.length;
+        const totalPages = Math.ceil(total / pageSize);
+
+        return {
+            data: processed,
+            pagination: {
+                page,
+                pageSize,
+                total,
+                totalPages
+            }
+        };
+    }
+
+    async function getPedidosMulticanalContadores(options = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        // 1. Quarentenas ativas
+        const { data: quarentenasAtivas, error: qErr } = await client
+            .from('marketplace_pedidos_quarentena')
+            .select('id, pedido_id, external_order_id, source_account_id, marketplace')
+            .in('status', ['pendente', 'em_reprocessamento']);
+
+        if (qErr) {
+            console.warn('[getPedidosMulticanalContadores] Erro ao consultar quarentenas:', qErr);
+        }
+
+        const quarentenas = quarentenasAtivas || [];
+
+        // 2. Pedidos operacionais (ocultando legados EXT_%)
+        let query = client
+            .from('mercadolivre_pedidos')
+            .select(`
+                id,
+                status_identificacao,
+                marketplace,
+                external_order_id,
+                mercadolivre_account_id,
+                mercadolivre_accounts!mercadolivre_account_id(
+                    id,
+                    platform,
+                    nickname,
+                    nome_operacional,
+                    source_account_id
+                )
+            `);
+
+        if (options.ocultarHistoricoLegado !== false) {
+            query = query.not('external_order_id', 'like', 'EXT_%');
+        }
+
+        const { data: pedidos, error: pErr } = await query;
+        if (pErr) throw pErr;
+
+        const rows = pedidos || [];
+
+        let countPendentes = 0;
+        let countProntos = 0;
+        let countConferencia = 0;
+        let countConferidos = 0;
+
+        let countML = 0;
+        let countShopee = 0;
+        let countMagalu = 0;
+
+        const contasMap = new Map();
+
+        for (const p of rows) {
+            const st = String(p.status_identificacao || '').toLowerCase();
+            if (st === 'pronto_separacao' || st === 'pronto') {
+                countProntos++;
+            } else if (st === 'em_separacao' || st === 'aguardando_conferencia' || st === 'em_conferencia') {
+                countConferencia++;
+            } else if (st === 'conferido' || st === 'finalizado') {
+                countConferidos++;
+            } else {
+                countPendentes++;
+            }
+
+            const mkt = String(p.marketplace || 'mercadolibre').toLowerCase();
+            if (mkt === 'shopee') countShopee++;
+            else if (mkt === 'magalu') countMagalu++;
+            else countML++;
+
+            if (p.mercadolivre_accounts) {
+                const acc = p.mercadolivre_accounts;
+                const nome = acc.nome_operacional || acc.nickname || `Conta ${acc.id}`;
+                if (!contasMap.has(String(acc.id))) {
+                    contasMap.set(String(acc.id), { id: acc.id, nome, platform: acc.platform });
+                }
+            }
+        }
+
+        return {
+            total: rows.length,
+            pendentes: countPendentes,
+            prontos: countProntos,
+            conferencia: countConferencia,
+            conferidos: countConferidos,
+            quarentena: quarentenas.length,
+            marketplaces: {
+                mercadolibre: countML,
+                shopee: countShopee,
+                magalu: countMagalu
+            },
+            contas: Array.from(contasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+        };
+    }
+
     async function getMercadoLivrePedidoById(pedidoId) {
         if (!pedidoId) return null;
         const client = window.supabaseClient;
@@ -4139,6 +4839,9 @@ const DataClient = (function () {
         if (!mapping || !mapping.current_version_id || !mapping.mercadolivre_item_mapping_versions) {
             return {
                 identificado: false,
+                status_item: 'pendente_identificacao',
+                revisao_pendente: false,
+                motivo_revisao: null,
                 mapping_id: null,
                 mapping_version_id: null,
                 snapshot_componentes: []
@@ -4147,7 +4850,85 @@ const DataClient = (function () {
 
         const version = mapping.mercadolivre_item_mapping_versions;
         const componentes = version.mercadolivre_item_mapping_componentes || [];
-        const qtdComprada = Number(item.quantidade_comprada || 1);
+        if (!componentes.length) {
+            return {
+                identificado: false,
+                status_item: 'pendente_identificacao',
+                revisao_pendente: false,
+                motivo_revisao: null,
+                mapping_id: null,
+                mapping_version_id: null,
+                snapshot_componentes: []
+            };
+        }
+
+        const adTitle = item.titulo || item.title || '';
+        const hasKitTitleIndicators = anDetectMultiProductTitleIndicators(adTitle);
+        const isConfirmedSingle = Boolean(
+            version.confirmado_produto_unico ||
+            (version.observacao && version.observacao.includes('CONFIRMADO_PRODUTO_UNICO'))
+        );
+
+        // Validação estrita de integridade dos componentes
+        let hasInvalidComponent = false;
+        let motivoInvalido = null;
+        const seenTargets = new Set();
+
+        for (const comp of componentes) {
+            const rawQtd = comp.quantidade_por_unidade !== undefined && comp.quantidade_por_unidade !== null ? comp.quantidade_por_unidade : 1;
+            const qtdUnit = Number(rawQtd);
+            if (!Number.isFinite(qtdUnit) || qtdUnit <= 0) {
+                hasInvalidComponent = true;
+                motivoInvalido = 'Componente com quantidade inválida (deve ser positiva).';
+                break;
+            }
+            const targetKey = comp.grupo_equivalencia_id ? `g:${comp.grupo_equivalencia_id}` : (comp.produto_id ? `p:${comp.produto_id}` : null);
+            if (!targetKey) {
+                hasInvalidComponent = true;
+                motivoInvalido = 'Componente sem produto_id ou grupo_equivalencia_id associado.';
+                break;
+            }
+            if (seenTargets.has(targetKey)) {
+                hasInvalidComponent = true;
+                motivoInvalido = 'Componente duplicado no kit.';
+                break;
+            }
+            seenTargets.add(targetKey);
+        }
+
+        // Validação de Kit Composto (E)
+        const isKitType = version.tipo_identificacao === 'kit' || componentes.length > 1;
+        if (!hasInvalidComponent && isKitType && (componentes.length < 2 || seenTargets.size < 2)) {
+            hasInvalidComponent = true;
+            motivoInvalido = 'Kit cadastrado com menos de 2 componentes distintos.';
+        }
+
+        if (hasInvalidComponent) {
+            return {
+                identificado: false,
+                status_item: 'pendente_revisao',
+                revisao_pendente: true,
+                motivo_revisao: motivoInvalido,
+                mapping_id: mapping.id,
+                mapping_version_id: version.id,
+                snapshot_componentes: []
+            };
+        }
+
+        // Validação de Título com suspeita de Kit com apenas 1 SKU sem confirmação expressa
+        if (componentes.length === 1 && hasKitTitleIndicators && !isConfirmedSingle) {
+            return {
+                identificado: false,
+                status_item: 'pendente_revisao',
+                revisao_pendente: true,
+                motivo_revisao: 'Título sugere kit/composição múltipla com apenas 1 SKU mapeado sem confirmação expressa.',
+                mapping_id: mapping.id,
+                mapping_version_id: version.id,
+                snapshot_componentes: []
+            };
+        }
+
+        const qtdComprada = Number(item.quantidade_comprada || item.quantidade || 1);
 
         const snapshotComponentes = await Promise.all(componentes.map(async (comp) => {
             const isGrupo = Boolean(comp.grupo_equivalencia_id);
@@ -4177,6 +4958,9 @@ const DataClient = (function () {
 
         return {
             identificado: true,
+            status_item: 'pronto_separacao',
+            revisao_pendente: false,
+            motivo_revisao: null,
             mapping_id: mapping.id,
             mapping_version_id: version.id,
             snapshot_componentes: snapshotComponentes
@@ -4228,9 +5012,15 @@ const DataClient = (function () {
         const resolvedCanal = resolveCanalFromLogisticType(logisticType, canalId);
 
         let todosIdentificados = true;
+        let temPendenteRevisao = false;
         const itensProcessados = await Promise.all(itens.map(async (item, idx) => {
             const res = await resolverSnapshotItemPedido(item, accountId);
-            if (!res.identificado) todosIdentificados = false;
+            if (!res.identificado) {
+                todosIdentificados = false;
+                if (res.revisao_pendente || res.status_item === 'pendente_revisao') {
+                    temPendenteRevisao = true;
+                }
+            }
             return {
                 source_line_number: idx + 1,
                 item_id: item.item_id,
@@ -4253,7 +5043,10 @@ const DataClient = (function () {
             };
         }));
 
-        const statusIdentificacao = todosIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+        let statusIdentificacao = todosIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
+        if (temPendenteRevisao) {
+            statusIdentificacao = 'pendente_revisao';
+        }
 
         const { data: pedExistente, error: errPedExist } = await client
             .from('mercadolivre_pedidos')
@@ -4275,34 +5068,53 @@ const DataClient = (function () {
             if (logisticType !== undefined) updatePayload.logistic_type = logisticType || null;
             if (resolvedCanal.canal_id !== undefined) updatePayload.canal_id = resolvedCanal.canal_id || null;
 
-            const { error: errUpdPed } = await client
+            let resUpd = await client
                 .from('mercadolivre_pedidos')
                 .update(updatePayload)
                 .eq('id', pedidoId);
-            if (errUpdPed) throw errUpdPed;
+
+            if (resUpd.error && statusIdentificacao === 'pendente_revisao' && resUpd.error.message?.includes('status_identificacao_check')) {
+                updatePayload.status_identificacao = 'pendente_identificacao';
+                resUpd = await client
+                    .from('mercadolivre_pedidos')
+                    .update(updatePayload)
+                    .eq('id', pedidoId);
+            }
+            if (resUpd.error) throw resUpd.error;
 
             await client.from('mercadolivre_pedido_itens').delete().eq('pedido_id', pedidoId);
         } else {
-            const { data: novoPed, error: errNovoPed } = await client
+            const insertPayload = {
+                mercadolivre_account_id: accountId,
+                external_order_id: externalOrderId,
+                status_mercadolivre: statusMercadolivre,
+                status_identificacao: statusIdentificacao,
+                date_created: dateCreated,
+                total_amount: totalAmount,
+                currency_id: currencyId,
+                shipping_id: shippingId || null,
+                logistic_type: logisticType || null,
+                canal_id: resolvedCanal.canal_id || null,
+                importado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+            };
+
+            let resNovo = await client
                 .from('mercadolivre_pedidos')
-                .insert([{
-                    mercadolivre_account_id: accountId,
-                    external_order_id: externalOrderId,
-                    status_mercadolivre: statusMercadolivre,
-                    status_identificacao: statusIdentificacao,
-                    date_created: dateCreated,
-                    total_amount: totalAmount,
-                    currency_id: currencyId,
-                    shipping_id: shippingId || null,
-                    logistic_type: logisticType || null,
-                    canal_id: resolvedCanal.canal_id || null,
-                    importado_em: new Date().toISOString(),
-                    atualizado_em: new Date().toISOString()
-                }])
+                .insert([insertPayload])
                 .select('id')
                 .single();
-            if (errNovoPed) throw errNovoPed;
-            pedidoId = novoPed.id;
+
+            if (resNovo.error && statusIdentificacao === 'pendente_revisao' && resNovo.error.message?.includes('status_identificacao_check')) {
+                insertPayload.status_identificacao = 'pendente_identificacao';
+                resNovo = await client
+                    .from('mercadolivre_pedidos')
+                    .insert([insertPayload])
+                    .select('id')
+                    .single();
+            }
+            if (resNovo.error) throw resNovo.error;
+            pedidoId = resNovo.data.id;
         }
 
         const itensPayload = itensProcessados.map(item => ({ ...item, pedido_id: pedidoId }));
@@ -4322,13 +5134,31 @@ const DataClient = (function () {
         const pedido = await getMercadoLivrePedidoById(pedidoId);
         if (!pedido) throw new Error('Pedido nao encontrado.');
 
+        // Proteção contra alteração indevida de pedidos com separação já iniciada
+        if (pedido.separacao_id || pedido.status_identificacao === 'separado') {
+            throw new Error(`Pedido ${pedido.external_order_id || pedidoId} já foi enviado para separação (separacao_id: ${pedido.separacao_id}) e não pode ser reprocessado automaticamente.`);
+        }
+
         const itens = pedido.mercadolivre_pedido_itens || [];
-        let todosIdentificados = true;
+        let todosIdentificados = itens.length > 0;
+        let temPendenteRevisao = false;
 
         for (const item of itens) {
             const res = await resolverSnapshotItemPedido(item, pedido.mercadolivre_account_id);
             if (!res.identificado) {
                 todosIdentificados = false;
+                if (res.revisao_pendente || res.status_item === 'pendente_revisao') {
+                    temPendenteRevisao = true;
+                }
+                await client
+                    .from('mercadolivre_pedido_itens')
+                    .update({
+                        mapping_id: res.mapping_id || null,
+                        mapping_version_id: res.mapping_version_id || null,
+                        snapshot_componentes: [],
+                        atualizado_em: new Date().toISOString()
+                    })
+                    .eq('id', item.id);
             } else {
                 await client
                     .from('mercadolivre_pedido_itens')
@@ -4342,8 +5172,11 @@ const DataClient = (function () {
             }
         }
 
-        const novoStatus = todosIdentificados ? 'pronto_separacao' : 'pendente_identificacao';
-        await client
+        let novoStatus = temPendenteRevisao
+            ? 'pendente_revisao'
+            : (todosIdentificados ? 'pronto_separacao' : 'aguardando_identificacao');
+
+        let updRes = await client
             .from('mercadolivre_pedidos')
             .update({
                 status_identificacao: novoStatus,
@@ -4351,6 +5184,20 @@ const DataClient = (function () {
             })
             .eq('id', pedidoId);
 
+        if (updRes.error && novoStatus === 'pendente_revisao' && updRes.error.message?.includes('status_identificacao_check')) {
+            novoStatus = 'aguardando_identificacao';
+            updRes = await client
+                .from('mercadolivre_pedidos')
+                .update({
+                    status_identificacao: novoStatus,
+                    atualizado_em: new Date().toISOString()
+                })
+                .eq('id', pedidoId);
+        }
+        if (updRes.error) throw updRes.error;
+
+        invalidateCache('pedidos');
+        invalidateCache('separacao');
         return await getMercadoLivrePedidoById(pedidoId);
     }
 
@@ -4381,6 +5228,61 @@ const DataClient = (function () {
         if (!pedidoId) throw new Error('pedidoId e obrigatorio.');
         const client = window.supabaseClient;
         if (!client) throw new Error('Cliente Supabase nao inicializado.');
+
+        const pedido = await getMercadoLivrePedidoById(pedidoId);
+        if (!pedido) throw new Error('Pedido não encontrado.');
+
+        // Proteção 1: Status de identificação deve ser pronto_separacao
+        if (pedido.status_identificacao === 'pendente_revisao') {
+            throw new Error(`BLOQUEIO OPERACIONAL: O pedido ${pedido.external_order_id || pedidoId} está pendente de revisão de composição e não pode ser liberado para separação.`);
+        }
+        if (pedido.status_identificacao !== 'pronto_separacao') {
+            throw new Error(`BLOQUEIO OPERACIONAL: O pedido ${pedido.external_order_id || pedidoId} não está pronto para separação (status atual: "${pedido.status_identificacao}").`);
+        }
+
+        // Proteção 2: Validação física estrita dos itens e componentes
+        const itens = pedido.mercadolivre_pedido_itens || [];
+        if (!itens.length) {
+            throw new Error('BLOQUEIO OPERACIONAL: Pedido não possui itens cadastrados.');
+        }
+
+        for (const item of itens) {
+            const adTitle = item.titulo || '';
+            const comps = item.snapshot_componentes || [];
+            if (!comps.length) {
+                throw new Error(`BLOQUEIO OPERACIONAL: O item "${adTitle}" não possui componentes físicos no snapshot.`);
+            }
+
+            // Se o título indica kit e há apenas 1 componente no snapshot
+            const hasKitTitle = anDetectMultiProductTitleIndicators(adTitle);
+            if (comps.length === 1 && hasKitTitle) {
+                let isConfirmed = false;
+                if (item.mapping_version_id) {
+                    const { data: vData } = await client
+                        .from('mercadolivre_item_mapping_versions')
+                        .select('confirmado_produto_unico, observacao')
+                        .eq('id', item.mapping_version_id)
+                        .maybeSingle();
+                    if (vData && (vData.confirmado_produto_unico || vData.observacao?.includes('CONFIRMADO_PRODUTO_UNICO'))) {
+                        isConfirmed = true;
+                    }
+                }
+                if (!isConfirmed) {
+                    throw new Error(`BLOQUEIO DE KIT INCOMPLETO: O item "${adTitle}" sugere composição múltipla (kit), mas possui apenas 1 componente físico sem confirmação expressa de conjunto completo.`);
+                }
+            }
+
+            // Valida que cada componente tem quantidade positiva e alvo válido
+            for (const c of comps) {
+                const qtd = Number(c.quantidade_total_calculada || c.quantidade_por_unidade || 0);
+                if (qtd <= 0) {
+                    throw new Error(`BLOQUEIO DE COMPOSIÇÃO: Quantidade inválida (${qtd}) para componente do item "${adTitle}".`);
+                }
+                if (!c.produto_id && !c.grupo_equivalencia_id) {
+                    throw new Error(`BLOQUEIO DE COMPOSIÇÃO: Componente sem produto_id ou grupo_equivalencia_id no item "${adTitle}".`);
+                }
+            }
+        }
 
         const { data, error } = await client.rpc('enviar_pedido_para_separacao', {
             p_pedido_id: Number(pedidoId),
@@ -4548,12 +5450,18 @@ const DataClient = (function () {
      * @param {string} entradaId
      * @param {Object} payload { descricao, valorTotal, incorporarCusto, parcelas, fornecedor_nome, fornecedor_cnpj, numero_nf }
      */
+    /**
+     * Salva ou atualiza lancamento complementar com suas parcelas no Supabase (contas_pagar)
+     * @param {string} entradaId
+     * @param {Object} payload { complementarId, descricao, valorTotal, incorporarCusto, parcelas, fornecedor_nome, fornecedor_cnpj, numero_nf }
+     */
     async function salvarComplementarEntradaNFSupabase(entradaId, payload = {}) {
         const client = window.supabaseClient;
         if (!client) throw new Error('Supabase Client indisponivel');
         if (!entradaId) throw new Error('entrada_nf_id e obrigatorio para salvar lancamento complementar');
 
         const {
+            complementarId: existingCompId = null,
             descricao = 'Lancamento Complementar',
             valorTotal = 0,
             incorporarCusto = false,
@@ -4565,10 +5473,23 @@ const DataClient = (function () {
 
         if (!parcelas.length) throw new Error('O lancamento complementar deve conter ao menos uma parcela.');
 
-        const complementarId = crypto.randomUUID();
+        const complementarId = existingCompId || crypto.randomUUID();
         const totalParcelas = parcelas.length;
         const incFlag = !!incorporarCusto;
         const metaTag = `[COMPLEMENTAR:${complementarId}:${incFlag ? 'INC_CUSTO=1' : 'INC_CUSTO=0'}] ${descricao}`.trim();
+
+        // Se estamos editando um complementar existente, remover parcelas anteriores dele para evitar duplicidades
+        if (existingCompId) {
+            try {
+                await client
+                    .from('contas_pagar')
+                    .delete()
+                    .eq('entrada_nf_id', entradaId)
+                    .eq('complementar_id', existingCompId);
+            } catch (delErr) {
+                console.warn('[DataClient] Aviso ao limpar parcelas anteriores do complementar:', delErr.message);
+            }
+        }
 
         const rows = parcelas.map((p, idx) => {
             const numParcela = Number(p.numeroParcela || p.parcela || idx + 1);
@@ -4589,8 +5510,8 @@ const DataClient = (function () {
                 vencimento: dtVenc,
                 data_vencimento: dtVenc,
                 descricao: descricao,
-                observacao: descricao,
-                observacoes: descricao,
+                observacao: metaTag,
+                observacoes: metaTag,
                 status: 'rascunho',
                 status_vencimento: 'em_aberto',
                 fornecedor_nome: fornecedor_nome || null,
@@ -4629,6 +5550,37 @@ const DataClient = (function () {
             complementarId,
             data: data || rows
         };
+    }
+
+    /**
+     * Remove um lancamento complementar e todas as suas parcelas de contas_pagar
+     * @param {string} entradaId
+     * @param {string} complementarId
+     */
+    async function removerComplementarEntradaNFSupabase(entradaId, complementarId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponivel');
+        if (!entradaId || !complementarId) throw new Error('IDs obrigatorios para remover complementar');
+
+        let res;
+        if (complementarId.startsWith('legacy_')) {
+            const rowId = complementarId.replace('legacy_', '');
+            res = await client
+                .from('contas_pagar')
+                .delete()
+                .eq('id', rowId)
+                .eq('entrada_nf_id', entradaId);
+        } else {
+            res = await client
+                .from('contas_pagar')
+                .delete()
+                .eq('complementar_id', complementarId)
+                .eq('entrada_nf_id', entradaId);
+        }
+
+        if (res.error) throw res.error;
+        invalidateCache('nf');
+        return { success: true };
     }
 
     /**
@@ -4739,20 +5691,91 @@ const DataClient = (function () {
             p_usuario: currentUser
         };
 
-        const { data, error } = await client.rpc('salvar_parcelas_fiscais_entrada_nf', rpcParams);
+        try {
+            const { data, error } = await client.rpc('salvar_parcelas_fiscais_entrada_nf', rpcParams);
 
-        if (error) {
-            console.error('[DataClient] Erro na RPC salvar_parcelas_fiscais_entrada_nf:', error);
-            throw new Error(error.message || 'Falha ao salvar parcelas fiscais da nota fiscal.');
+            if (!error) {
+                invalidateCache('nf');
+                invalidateCache('contas_pagar');
+                return {
+                    success: true,
+                    data: data
+                };
+            }
+
+            console.warn('[DataClient] RPC salvar_parcelas_fiscais_entrada_nf retornou erro, aplicando fallback seguro:', error);
+            
+            // Fallback transacional no cliente
+            const entrada = await getEntradaNFById(entradaId);
+            if (!entrada) throw new Error('Entrada não encontrada.');
+
+            const somaParcelas = parcelasPayload.reduce((s, p) => s + Number(p.valor || 0), 0);
+            const valorFiscal = Number(entrada.valor_total || 0);
+            if (Math.abs(somaParcelas - valorFiscal) > 0.005) {
+                throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não confere com o valor fiscal da NF (R$ ${valorFiscal.toFixed(2)}).`);
+            }
+
+            const isFinalizada = entrada.estoque_finalizado || String(entrada.status || '').toLowerCase() === 'finalizada';
+            const statusConta = isFinalizada ? 'pendente' : 'rascunho';
+
+            // Deletar rascunhos anteriores
+            await client
+                .from('contas_pagar')
+                .delete()
+                .eq('entrada_nf_id', entradaId)
+                .eq('tipo_lancamento', 'nota_fiscal')
+                .in('status', ['rascunho', 'pendente']);
+
+            // Inserir novas parcelas
+            const rowsToInsert = parcelasPayload.map((p, idx) => ({
+                entrada_nf_id: entradaId,
+                nf_id: entradaId,
+                numero_nf: entrada.numero_nf,
+                fornecedor_id: entrada.fornecedor_id || null,
+                fornecedor_cnpj: entrada.fornecedor_cnpj || entrada.cnpj_fornecedor || null,
+                cnpj_fornecedor: entrada.cnpj_fornecedor || entrada.fornecedor_cnpj || null,
+                fornecedor_nome: entrada.fornecedor_nome || null,
+                parcela: `${p.numero_parcela}/${parcelasPayload.length}`,
+                numero_parcela: p.numero_parcela,
+                descricao: `Parcela ${String(p.numero_parcela).padStart(3, '0')} - NF ${entrada.numero_nf || ''}`,
+                tipo_lancamento: 'nota_fiscal',
+                origem: 'nota_fiscal',
+                vencimento: p.vencimento,
+                data_vencimento: p.vencimento,
+                valor: p.valor,
+                forma_pagamento: formaPagamento || 'boleto',
+                observacoes: observacao || null,
+                observacao: observacao || null,
+                status: statusConta,
+                status_vencimento: 'em_aberto',
+                criado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+            }));
+
+            const { error: insertErr } = await client.from('contas_pagar').insert(rowsToInsert);
+            if (insertErr) throw insertErr;
+
+            await client.from('entradas_nf').update({
+                tipo_condicao_financeira: (condicao === 'parcelado' || condicao === 'a_prazo') ? 'parcelado' : 'a_vista',
+                status_financeiro: 'gerado',
+                financeiro_lancado: (statusConta === 'pendente'),
+                financeiro_configurado_em: new Date().toISOString(),
+                financeiro_configurado_por: currentUser,
+                observacao_financeira: observacao || null,
+                atualizado_em: new Date().toISOString()
+            }).eq('id', entradaId);
+
+            invalidateCache('nf');
+            invalidateCache('contas_pagar');
+
+            return {
+                success: true,
+                data: { ok: true, count: rowsToInsert.length, valor_total: valorFiscal, soma_parcelas: somaParcelas, status_conta: statusConta }
+            };
+        } catch (err) {
+            console.error('[DataClient] Falha ao salvar parcelas fiscais:', err);
+            throw err;
         }
-
-        invalidateCache('nf');
-        invalidateCache('contas_pagar');
-
-        return {
-            success: true,
-            data: data
-        };
     }
 
     /**
@@ -4780,6 +5803,802 @@ const DataClient = (function () {
         } catch (err) {
             console.warn('[DataClient] Falha ao carregar duplicatas fiscais:', err);
             return [];
+        }
+    }
+
+    /**
+     * ENTRADA NF V2 - Fundação do Pré-Cadastro Unificado
+     * Executa a normalização, validação de unicidade, snapshot fiscal do emitente,
+     * identificação de produtos (matriz cruzada), duplicatas fiscais e pré-cadastro no Supabase.
+     * NÃO movimenta estoque, NÃO cria FIFO, NÃO executa finalização.
+     * @param {Object} normalizedNFe
+     * @param {Object} options { origem_importacao: 'MANUAL_UPLOAD' | 'AUTOMACAO_PASTA' }
+     * @returns {Promise<Object>}
+     */
+    
+    /**
+     * Vincula a Entrada NF a um fornecedor existente no cadastro mestre
+     * @param {string} entradaId
+     * @param {string} fornecedorId
+     * @param {string} fornecedorNome
+     * @param {string} fornecedorCnpj
+     */
+    async function vincularEntradaNFFornecedor(entradaId, fornecedorId, fornecedorNome, fornecedorCnpj) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!entradaId || !fornecedorId) throw new Error('Parâmetros obrigatórios ausentes.');
+
+        const cleanCnpj = String(fornecedorCnpj || '').replace(/\D/g, '');
+
+        // 1. Atualizar entradas_nf
+        const { error: nfErr } = await client
+            .from('entradas_nf')
+            .update({
+                fornecedor_id: fornecedorId,
+                fornecedor_nome: fornecedorNome,
+                fornecedor_cnpj: cleanCnpj,
+                cnpj_fornecedor: cleanCnpj
+            })
+            .eq('id', entradaId);
+
+        if (nfErr) throw nfErr;
+
+        // 2. Atualizar contas_pagar preliminares se existirem
+        await client
+            .from('contas_pagar')
+            .update({
+                fornecedor_id: fornecedorId,
+                fornecedor_nome: fornecedorNome,
+                fornecedor_cnpj: cleanCnpj,
+                cnpj_fornecedor: cleanCnpj
+            })
+            .eq('entrada_nf_id', entradaId);
+
+        invalidateCache('nf');
+        invalidateCache('contas_pagar');
+        return { success: true };
+    }
+
+    /**
+     * Cadastra um novo fornecedor mestre a partir do snapshot fiscal do XML e vincula à Entrada NF
+     * @param {string} entradaId
+     * @param {Object} emitenteSnapshot
+     */
+    async function cadastrarFornecedorDoXML(entradaId, emitenteSnapshot = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+
+        let snap = emitenteSnapshot || {};
+        if (typeof snap === 'string') {
+            try { snap = JSON.parse(snap); } catch (e) { snap = {}; }
+        }
+        if (typeof snap !== 'object' || snap === null) {
+            snap = {};
+        }
+
+        const cleanCnpj = String(snap.cnpj || snap.CNPJ || '').replace(/\D/g, '');
+        if (!cleanCnpj) throw new Error('CNPJ do fornecedor não informado.');
+
+        const razaoSocial = String(snap.razao_social || snap.razaoSocial || snap.xNome || snap.nome || snap.razao || 'FORNECEDOR XML').trim();
+        const nomeFantasia = String(snap.nome_fantasia || snap.nomeFantasia || snap.xFant || snap.fantasia || razaoSocial).trim();
+        
+        let ufClean = null;
+        if (snap.uf) ufClean = String(snap.uf).trim().toUpperCase();
+        else if (snap.UF) ufClean = String(snap.UF).trim().toUpperCase();
+        else if (snap.estado) ufClean = String(snap.estado).trim().toUpperCase();
+        else if (snap.endereco?.uf) ufClean = String(snap.endereco.uf).trim().toUpperCase();
+        else if (snap.enderEmit?.UF) ufClean = String(snap.enderEmit.UF).trim().toUpperCase();
+
+        const rawCep = snap.cep || snap.CEP || snap.endereco?.cep || snap.endereco?.CEP || snap.enderEmit?.CEP || null;
+        const cepClean = rawCep ? String(rawCep).replace(/\D/g, '') : null;
+
+        // 1. Verificar se o CNPJ já existe no cadastro mestre
+        const { data: existingForn, error: searchErr } = await client
+            .from('fornecedores')
+            .select('*')
+            .eq('cnpj', cleanCnpj)
+            .maybeSingle();
+
+        if (existingForn) {
+            // Já existe: NÃO duplicar e NÃO sobrescrever cadastro mestre
+            if (entradaId && existingForn.id) {
+                await vincularEntradaNFFornecedor(
+                    entradaId,
+                    existingForn.id,
+                    existingForn.razao_social || razaoSocial,
+                    cleanCnpj
+                );
+            }
+            invalidateCache('fornecedores');
+            invalidateCache('nf');
+            return {
+                ...existingForn,
+                isExisting: true
+            };
+        }
+
+        // 2. Inserir fornecedor no cadastro mestre
+        const insertPayload = {
+            cnpj: cleanCnpj,
+            razao_social: razaoSocial,
+            nome_fantasia: nomeFantasia,
+            inscricao_estadual: emitenteSnapshot.inscricao_estadual || emitenteSnapshot.inscricaoEstadual || null,
+            endereco: typeof emitenteSnapshot.endereco === 'string' ? emitenteSnapshot.endereco : (emitenteSnapshot.endereco?.logradouro || null),
+            numero: emitenteSnapshot.numero || null,
+            complemento: emitenteSnapshot.complemento || null,
+            bairro: emitenteSnapshot.bairro || null,
+            cidade: emitenteSnapshot.cidade || null,
+            uf: ufClean,
+            estado: emitenteSnapshot.estado || ufClean,
+            cep: cepClean,
+            telefone: emitenteSnapshot.telefone || null,
+            whatsapp: emitenteSnapshot.whatsapp || null,
+            email: emitenteSnapshot.email || null,
+            contato_comercial: emitenteSnapshot.contato_comercial || null,
+            observacoes: emitenteSnapshot.observacoes || null,
+            status: 'ativo',
+
+            // Condições Comerciais e Contato Financeiro (Fase 5B / 5C)
+            pedido_minimo_valor: emitenteSnapshot.pedido_minimo_valor !== undefined && emitenteSnapshot.pedido_minimo_valor !== null && emitenteSnapshot.pedido_minimo_valor !== '' ? Math.max(0, Number(emitenteSnapshot.pedido_minimo_valor)) : null,
+            lead_time_padrao_dias: emitenteSnapshot.lead_time_padrao_dias !== undefined && emitenteSnapshot.lead_time_padrao_dias !== null && emitenteSnapshot.lead_time_padrao_dias !== '' ? Math.max(0, parseInt(emitenteSnapshot.lead_time_padrao_dias, 10)) : null,
+            lead_time_tipo_dias: emitenteSnapshot.lead_time_tipo_dias ? (['uteis', 'corridos'].includes(String(emitenteSnapshot.lead_time_tipo_dias).toLowerCase()) ? String(emitenteSnapshot.lead_time_tipo_dias).toLowerCase() : 'corridos') : 'corridos',
+            tipo_frete_padrao: emitenteSnapshot.tipo_frete_padrao ? (['CIF', 'FOB', 'A_COMBINAR'].includes(String(emitenteSnapshot.tipo_frete_padrao).toUpperCase()) ? String(emitenteSnapshot.tipo_frete_padrao).toUpperCase() : null) : null,
+            condicao_pagamento_padrao: emitenteSnapshot.condicao_pagamento_padrao ? String(emitenteSnapshot.condicao_pagamento_padrao).trim() : null,
+            forma_pagamento_padrao: emitenteSnapshot.forma_pagamento_padrao ? String(emitenteSnapshot.forma_pagamento_padrao).trim() : null,
+            contato_financeiro_nome: emitenteSnapshot.contato_financeiro_nome ? String(emitenteSnapshot.contato_financeiro_nome).trim() : null,
+            contato_financeiro_email: emitenteSnapshot.contato_financeiro_email ? String(emitenteSnapshot.contato_financeiro_email).trim() : null,
+            contato_financeiro_telefone: emitenteSnapshot.contato_financeiro_telefone ? String(emitenteSnapshot.contato_financeiro_telefone).trim() : null,
+            chave_pix_padrao: emitenteSnapshot.chave_pix_padrao ? String(emitenteSnapshot.chave_pix_padrao).trim() : null
+        };
+
+        let fornData = null;
+        const { data: inserted, error: fornErr } = await client
+            .from('fornecedores')
+            .insert([insertPayload])
+            .select()
+            .single();
+
+        if (fornErr) {
+            // Proteção contra concorrência se outro processo inseriu
+            if (fornErr.code === '23505' || String(fornErr.message || '').includes('duplicate') || String(fornErr.message || '').includes('unique')) {
+                const { data: retryForn } = await client.from('fornecedores').select('*').eq('cnpj', cleanCnpj).maybeSingle();
+                if (retryForn) {
+                    if (entradaId) {
+                        await vincularEntradaNFFornecedor(entradaId, retryForn.id, retryForn.razao_social, cleanCnpj);
+                    }
+                    invalidateCache('fornecedores');
+                    invalidateCache('nf');
+                    return { ...retryForn, isExisting: true };
+                }
+            }
+
+            // Fallback para caso colunas opcionais não existam
+            if (fornErr.code === '42703' || String(fornErr.message || '').includes('column')) {
+                const safePayload = {
+                    cnpj: cleanCnpj,
+                    razao_social: razaoSocial,
+                    nome_fantasia: nomeFantasia,
+                    inscricao_estadual: emitenteSnapshot.inscricao_estadual || emitenteSnapshot.inscricaoEstadual || null,
+                    endereco: typeof emitenteSnapshot.endereco === 'string' ? emitenteSnapshot.endereco : (emitenteSnapshot.endereco?.logradouro || null),
+                    numero: emitenteSnapshot.numero || null,
+                    bairro: emitenteSnapshot.bairro || null,
+                    cidade: emitenteSnapshot.cidade || null,
+                    uf: ufClean,
+                    cep: cepClean,
+                    telefone: emitenteSnapshot.telefone || null,
+                    email: emitenteSnapshot.email || null,
+                    status: 'ativo'
+                };
+                const { data: retryInserted, error: retryErr } = await client
+                    .from('fornecedores')
+                    .insert([safePayload])
+                    .select()
+                    .single();
+                if (retryErr) throw retryErr;
+                fornData = retryInserted;
+            } else {
+                throw fornErr;
+            }
+        } else {
+            fornData = inserted;
+        }
+
+        if (entradaId && fornData?.id) {
+            await vincularEntradaNFFornecedor(entradaId, fornData.id, razaoSocial, cleanCnpj);
+        }
+
+        invalidateCache('fornecedores');
+        invalidateCache('nf');
+        return {
+            ...fornData,
+            isExisting: false
+        };
+    }
+
+    /**
+     * Atualiza dados de contato/endereço do fornecedor mestre
+     * @param {string} fornecedorId
+     * @param {Object} dadosAtualizados
+     */
+    async function atualizarFornecedorMestre(fornecedorId, dadosAtualizados = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!fornecedorId) throw new Error('ID do fornecedor não informado.');
+
+        const { error } = await client
+            .from('fornecedores')
+            .update(dadosAtualizados)
+            .eq('id', fornecedorId);
+
+        if (error) throw error;
+        return { success: true };
+    }
+
+    /**
+     * Busca fornecedor mestre por ID
+     * @param {string} fornecedorId
+     */
+    async function getFornecedorById(fornecedorId) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!fornecedorId) return null;
+
+        const { data, error } = await client
+            .from('fornecedores')
+            .select('*')
+            .eq('id', fornecedorId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[FORNECEDORES] erro ao buscar por ID:', error);
+            throw error;
+        }
+        return data || null;
+    }
+
+    /**
+     * Busca fornecedor mestre por CNPJ (apenas dígitos)
+     * @param {string} cnpj
+     */
+    async function getFornecedorByCnpj(cnpj) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        const cleanCnpj = String(cnpj || '').replace(/\D/g, '');
+        if (!cleanCnpj) return null;
+
+        const { data, error } = await client
+            .from('fornecedores')
+            .select('*')
+            .eq('cnpj', cleanCnpj)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[FORNECEDORES] erro ao buscar por CNPJ:', error);
+            throw error;
+        }
+        return data || null;
+    }
+
+    /**
+     * Atualiza dados cadastrais, comerciais e de contato do fornecedor mestre
+     * @param {string} fornecedorId
+     * @param {Object} dados
+     */
+    async function atualizarFornecedorComercial(fornecedorId, dados = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!fornecedorId) throw new Error('ID do fornecedor não informado.');
+
+        const payload = {
+            atualizado_em: new Date().toISOString()
+        };
+
+        if (dados.razao_social !== undefined) payload.razao_social = dados.razao_social ? String(dados.razao_social).trim() : null;
+        if (dados.nome_fantasia !== undefined) payload.nome_fantasia = dados.nome_fantasia ? String(dados.nome_fantasia).trim() : null;
+        if (dados.inscricao_estadual !== undefined) payload.inscricao_estadual = dados.inscricao_estadual ? String(dados.inscricao_estadual).trim() : null;
+        if (dados.telefone !== undefined) payload.telefone = dados.telefone ? String(dados.telefone).trim() : null;
+        if (dados.whatsapp !== undefined) payload.whatsapp = dados.whatsapp ? String(dados.whatsapp).trim() : null;
+        if (dados.email !== undefined) payload.email = dados.email ? String(dados.email).trim() : null;
+        if (dados.contato_comercial !== undefined) payload.contato_comercial = dados.contato_comercial ? String(dados.contato_comercial).trim() : null;
+        if (dados.observacoes !== undefined) payload.observacoes = dados.observacoes ? String(dados.observacoes).trim() : null;
+        if (dados.status !== undefined) payload.status = dados.status ? String(dados.status).trim() : 'ativo';
+
+        // Campos Comerciais e Financeiros (Fase 5B)
+        if (dados.pedido_minimo_valor !== undefined) {
+            payload.pedido_minimo_valor = dados.pedido_minimo_valor === null || dados.pedido_minimo_valor === '' ? null : Math.max(0, Number(dados.pedido_minimo_valor));
+        }
+        if (dados.lead_time_padrao_dias !== undefined) {
+            payload.lead_time_padrao_dias = dados.lead_time_padrao_dias === null || dados.lead_time_padrao_dias === '' ? null : Math.max(0, parseInt(dados.lead_time_padrao_dias, 10));
+        }
+        if (dados.lead_time_tipo_dias !== undefined) {
+            const tipo = String(dados.lead_time_tipo_dias || '').trim().toLowerCase();
+            payload.lead_time_tipo_dias = ['uteis', 'corridos'].includes(tipo) ? tipo : 'corridos';
+        }
+        if (dados.tipo_frete_padrao !== undefined) {
+            const frete = String(dados.tipo_frete_padrao || '').trim().toUpperCase();
+            payload.tipo_frete_padrao = ['CIF', 'FOB', 'A_COMBINAR'].includes(frete) ? frete : null;
+        }
+        if (dados.condicao_pagamento_padrao !== undefined) {
+            payload.condicao_pagamento_padrao = dados.condicao_pagamento_padrao ? String(dados.condicao_pagamento_padrao).trim() : null;
+        }
+        if (dados.forma_pagamento_padrao !== undefined) {
+            payload.forma_pagamento_padrao = dados.forma_pagamento_padrao ? String(dados.forma_pagamento_padrao).trim() : null;
+        }
+        if (dados.contato_financeiro_nome !== undefined) {
+            payload.contato_financeiro_nome = dados.contato_financeiro_nome ? String(dados.contato_financeiro_nome).trim() : null;
+        }
+        if (dados.contato_financeiro_email !== undefined) {
+            payload.contato_financeiro_email = dados.contato_financeiro_email ? String(dados.contato_financeiro_email).trim() : null;
+        }
+        if (dados.contato_financeiro_telefone !== undefined) {
+            payload.contato_financeiro_telefone = dados.contato_financeiro_telefone ? String(dados.contato_financeiro_telefone).trim() : null;
+        }
+        if (dados.chave_pix_padrao !== undefined) {
+            payload.chave_pix_padrao = dados.chave_pix_padrao ? String(dados.chave_pix_padrao).trim() : null;
+        }
+
+        const { data, error } = await client
+            .from('fornecedores')
+            .update(payload)
+            .eq('id', fornecedorId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[FORNECEDORES] erro ao atualizar dados comerciais:', error);
+            throw error;
+        }
+
+        invalidateCache('fornecedores');
+        return data;
+    }
+
+    /**
+     * Consulta vínculos de produtos de fornecedores por id_interno e/ou fornecedor_cnpj
+     * @param {string} idInterno
+     * @param {string} fornecedorCnpj
+     */
+    async function getFornecedorProdutos(idInterno, fornecedorCnpj) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+
+        let query = client.from('fornecedor_produtos').select('*');
+
+        const cleanId = String(idInterno || '').trim();
+        const cleanCnpj = String(fornecedorCnpj || '').replace(/\D/g, '');
+
+        if (cleanId) {
+            query = query.eq('id_interno', cleanId);
+        }
+        if (cleanCnpj) {
+            query = query.eq('fornecedor_cnpj', cleanCnpj);
+        }
+
+        const { data, error } = await query.order('atualizado_em', { ascending: false });
+        if (error) {
+            console.error('[FORNECEDOR_PRODUTOS] erro ao consultar vínculos:', error);
+            throw error;
+        }
+        return data || [];
+    }
+
+    /**
+     * Salva ou atualiza um vínculo fornecedor x produto preservando a chave única e novos campos comerciais
+     * @param {Object} payload
+     */
+    async function salvarFornecedorProdutoComercial(payload = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+
+        const cleanCnpj = String(payload.fornecedor_cnpj || '').replace(/\D/g, '');
+        const cProd = String(payload.codigo_produto_fornecedor || '').trim();
+
+        if (!cleanCnpj || !cProd) {
+            throw new Error('fornecedor_cnpj e codigo_produto_fornecedor são obrigatórios.');
+        }
+
+        const upsertData = {
+            fornecedor_cnpj: cleanCnpj,
+            codigo_produto_fornecedor: cProd,
+            atualizado_em: new Date().toISOString()
+        };
+
+        if (payload.id_interno !== undefined) upsertData.id_interno = String(payload.id_interno || '').trim() || null;
+        if (payload.produto_id !== undefined) upsertData.produto_id = payload.produto_id || null;
+        if (payload.fornecedor_id !== undefined) upsertData.fornecedor_id = payload.fornecedor_id || null;
+        if (payload.descricao_produto_fornecedor !== undefined) upsertData.descricao_produto_fornecedor = payload.descricao_produto_fornecedor || null;
+        if (payload.ean_fornecedor !== undefined) upsertData.ean_fornecedor = payload.ean_fornecedor || null;
+        if (payload.ultimo_custo !== undefined) upsertData.ultimo_custo = payload.ultimo_custo !== null && payload.ultimo_custo !== '' ? Number(payload.ultimo_custo) : null;
+        if (payload.ultima_quantidade !== undefined) upsertData.ultima_quantidade = payload.ultima_quantidade !== null && payload.ultima_quantidade !== '' ? Number(payload.ultima_quantidade) : null;
+        if (payload.ultima_compra_em !== undefined) upsertData.ultima_compra_em = payload.ultima_compra_em || null;
+        if (payload.ean_divergente !== undefined) upsertData.ean_divergente = Boolean(payload.ean_divergente);
+        if (payload.observacoes !== undefined) upsertData.observacoes = payload.observacoes || null;
+
+        // Campos Comerciais e Prazos (Fase 5B)
+        if (payload.quantidade_minima_compra !== undefined) {
+            upsertData.quantidade_minima_compra = payload.quantidade_minima_compra === null || payload.quantidade_minima_compra === '' ? null : Math.max(0, Number(payload.quantidade_minima_compra));
+        }
+        if (payload.multiplo_compra !== undefined) {
+            upsertData.multiplo_compra = payload.multiplo_compra === null || payload.multiplo_compra === '' ? null : Math.max(0.001, Number(payload.multiplo_compra));
+        }
+        if (payload.embalagem_fornecedor !== undefined) {
+            upsertData.embalagem_fornecedor = payload.embalagem_fornecedor ? String(payload.embalagem_fornecedor).trim() : null;
+        }
+        if (payload.fator_conversao_estoque !== undefined) {
+            upsertData.fator_conversao_estoque = payload.fator_conversao_estoque === null || payload.fator_conversao_estoque === '' ? null : Math.max(0.0001, Number(payload.fator_conversao_estoque));
+        }
+        if (payload.lead_time_dias !== undefined) {
+            upsertData.lead_time_dias = payload.lead_time_dias === null || payload.lead_time_dias === '' ? null : Math.max(0, parseInt(payload.lead_time_dias, 10));
+        }
+        if (payload.lead_time_tipo_dias !== undefined) {
+            const tipo = String(payload.lead_time_tipo_dias || '').trim().toLowerCase();
+            upsertData.lead_time_tipo_dias = ['uteis', 'corridos'].includes(tipo) ? tipo : 'corridos';
+        }
+
+        const { data, error } = await client
+            .from('fornecedor_produtos')
+            .upsert(upsertData, { onConflict: 'fornecedor_cnpj,codigo_produto_fornecedor' })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[FORNECEDOR_PRODUTOS] erro ao salvar vínculo comercial:', error);
+            throw error;
+        }
+
+        invalidateCache('fornecedor_produtos');
+        return data;
+    }
+
+    async function executarPreCadastroEntradaNF(normalizedNFe, options = {}) {
+        const client = window.supabaseClient;
+        if (!client) throw new Error('Supabase Client indisponível');
+        if (!normalizedNFe || !normalizedNFe.chave_acesso) throw new Error('Chave de acesso da NF-e não informada ou inválida.');
+
+        const chave = String(normalizedNFe.chave_acesso).trim();
+        if (chave.length !== 44) throw new Error(`Chave de acesso inválida (${chave.length} dígitos, esperado 44).`);
+
+        // 1. Idempotência / Checagem de Duplicidade
+        const { data: existingNF, error: checkErr } = await client
+            .from('entradas_nf')
+            .select('id, numero_nf, status')
+            .eq('chave_acesso', chave)
+            .maybeSingle();
+
+        if (checkErr) {
+            console.error('[PRÉ-CADASTRO V2] Erro ao verificar duplicidade de chave:', checkErr);
+            throw checkErr;
+        }
+
+        if (existingNF) {
+            return {
+                ok: false,
+                isDuplicate: true,
+                entradaId: existingNF.id,
+                numeroNFe: existingNF.numero_nf,
+                message: `Nota fiscal ${existingNF.numero_nf || ''} (Chave: ${chave}) já cadastrada no sistema.`
+            };
+        }
+
+        const pendencias = [];
+
+        // 2. Resolução de Fornecedor
+        const emitente = normalizedNFe.fornecedor || normalizedNFe.emitente || {};
+        const cnpjLimpo = String(emitente.cnpj || '').replace(/\D/g, '');
+        let fornecedorId = null;
+        let fornecedorNome = emitente.razao_social || emitente.nome_fantasia || 'FORNECEDOR NOVO';
+
+        if (cnpjLimpo) {
+            const { data: fornData } = await client
+                .from('fornecedores')
+                .select('id, razao_social, nome_fantasia')
+                .eq('cnpj', cnpjLimpo)
+                .maybeSingle();
+
+            if (fornData?.id) {
+                fornecedorId = fornData.id;
+                fornecedorNome = fornData.razao_social || fornData.nome_fantasia || fornecedorNome;
+            } else {
+                pendencias.push('FORNECEDOR_NOVO');
+            }
+        } else {
+            pendencias.push('FORNECEDOR_NOVO');
+        }
+
+        // 3. Snapshot Fiscal do Emitente
+        const emitenteSnapshot = {
+            cnpj: cnpjLimpo,
+            razao_social: emitente.razao_social || '',
+            nome_fantasia: emitente.nome_fantasia || '',
+            inscricao_estadual: emitente.inscricao_estadual || '',
+            endereco: emitente.endereco || emitente.logradouro || '',
+            numero: emitente.numero || '',
+            complemento: emitente.complemento || '',
+            bairro: emitente.bairro || '',
+            cidade: emitente.cidade || emitente.municipio || '',
+            uf: emitente.uf || '',
+            cep: String(emitente.cep || '').replace(/\D/g, ''),
+            telefone: emitente.telefone || '',
+            email: emitente.email || ''
+        };
+
+        // 4. Buscar histórico de vínculos e catálogo de produtos para Matriz Cruzada
+        let vinculosFornecedor = [];
+        if (cnpjLimpo) {
+            const { data: vData } = await client
+                .from('fornecedor_produtos')
+                .select('*')
+                .eq('fornecedor_cnpj', cnpjLimpo);
+            vinculosFornecedor = vData || [];
+        }
+
+        const itensRaw = normalizedNFe.itens || [];
+        const eansRaw = itensRaw.map(i => String(i.ean_fornecedor || i.ean_xml || i.ean || '').replace(/\D/g, '')).filter(e => e.length >= 7 && e.length <= 14);
+        
+        let produtosCatalogo = [];
+        if (eansRaw.length > 0) {
+            const { data: pData } = await client
+                .from('produtos')
+                .select('id, id_interno, ean, descricao_completa, status, ativo')
+                .in('ean', eansRaw);
+            produtosCatalogo = pData || [];
+        }
+
+        // 5. Inserir Cabeçalho em entradas_nf
+        const headerPayload = {
+            numero_nf: String(normalizedNFe.numero_nf || ''),
+            chave_acesso: chave,
+            serie: String(normalizedNFe.serie || '1'),
+            data_emissao: normalizedNFe.data_emissao || new Date().toISOString().split('T')[0],
+            data_recebimento: new Date().toISOString().split('T')[0],
+            fornecedor_id: fornecedorId,
+            fornecedor_cnpj: cnpjLimpo,
+            cnpj_fornecedor: cnpjLimpo,
+            fornecedor_nome: fornecedorNome,
+            valor_produtos: Number(normalizedNFe.totais?.valor_produtos || 0),
+            valor_icms: Number(normalizedNFe.totais?.valor_icms || 0),
+            valor_st: Number(normalizedNFe.totais?.valor_st || 0),
+            valor_ipi: Number(normalizedNFe.totais?.valor_ipi || 0),
+            valor_total: Number(normalizedNFe.totais?.valor_total || 0),
+            origem: 'xml',
+            origem_importacao: options.origem_importacao || 'MANUAL_UPLOAD',
+            emitente_snapshot: emitenteSnapshot,
+            status: 'importada',
+            tipo_lancamento: 'entrada_normal',
+            afeta_estoque: true,
+            afeta_financeiro: true,
+            estoque_finalizado: false,
+            financeiro_lancado: false,
+            status_financeiro: 'gerado',
+            fatura_xml_numero: normalizedNFe.cobranca?.fatura?.numeroFatura || normalizedNFe.fatura_xml_numero || null,
+            fatura_xml_valor_orig: normalizedNFe.cobranca?.fatura?.valorOriginal ?? normalizedNFe.fatura_xml_valor_orig ?? null,
+            fatura_xml_valor_desc: normalizedNFe.cobranca?.fatura?.valorDesconto ?? normalizedNFe.fatura_xml_valor_desc ?? null,
+            fatura_xml_valor_liq: normalizedNFe.cobranca?.fatura?.valorLiquido ?? normalizedNFe.fatura_xml_valor_liq ?? null,
+            pagamentos_xml: (normalizedNFe.pagamentos && normalizedNFe.pagamentos.length > 0) ? normalizedNFe.pagamentos : (normalizedNFe.pagamentos_xml || null),
+            tipo_vinculo_pedido: normalizedNFe.tipo_vinculo_pedido || 'SEM_PEDIDO'
+        };
+
+        const { data: entradaSalva, error: entradaErr } = await client
+            .from('entradas_nf')
+            .insert([headerPayload])
+            .select()
+            .single();
+
+        if (entradaErr) {
+            console.error('[PRÉ-CADASTRO V2] Erro ao inserir entradas_nf:', entradaErr);
+            throw entradaErr;
+        }
+
+        const entradaId = entradaSalva.id;
+
+        try {
+            // 6. Itens com Matriz Cruzada de Identificação
+            let qtdVinculados = 0;
+            let qtdPendentes = 0;
+            let qtdConflitos = 0;
+            let qtdInativos = 0;
+
+            const itensPayload = itensRaw.map((item, idx) => {
+                const cProd = String(item.codigo_produto_fornecedor || item.cProd || '').trim();
+                const vinculo = vinculosFornecedor.find(v => String(v.codigo_produto_fornecedor || '').trim() === cProd);
+
+                // Candidato A: fornecedor_cnpj + cProd
+                let candA = null;
+                if (vinculo?.id_interno) {
+                    candA = { id_interno: vinculo.id_interno, produto_id: vinculo.produto_id || null, status: 'ativo' };
+                }
+
+                // Candidato B: EAN no catálogo
+                const rawEan = String(item.ean_fornecedor || item.ean_xml || item.ean || '').trim();
+                const isEanValido = rawEan && !['SEMGTIN', 'SEM GTIN', 'ISENTO'].includes(rawEan.toUpperCase()) && rawEan.replace(/\D/g, '').length >= 7;
+                const eanClean = isEanValido ? rawEan.replace(/\D/g, '') : '';
+                let candB = null;
+                if (eanClean) {
+                    const foundProd = produtosCatalogo.find(p => String(p.ean || '').replace(/\D/g, '') === eanClean);
+                    if (foundProd) {
+                        candB = { id_interno: foundProd.id_interno, produto_id: foundProd.id, status: foundProd.status, ativo: foundProd.ativo };
+                    }
+                }
+
+                let statusVinculo = 'pendente_vinculo';
+                let idInterno = null;
+                let produtoId = null;
+                let conflitoVinculo = false;
+                let obsItem = null;
+
+                // Matriz Cruzada
+                if (candA && candB) {
+                    if (String(candA.id_interno).trim() === String(candB.id_interno).trim()) {
+                        statusVinculo = 'vinculado';
+                        idInterno = candA.id_interno;
+                        produtoId = candA.produto_id || candB.produto_id;
+                    } else {
+                        statusVinculo = 'conflito_vinculo';
+                        conflitoVinculo = true;
+                        obsItem = `[CONFLITO_VINCULO:forn=${candA.id_interno};ean=${candB.id_interno}]`;
+                        qtdConflitos++;
+                    }
+                } else if (candA && !candB) {
+                    statusVinculo = 'vinculado';
+                    idInterno = candA.id_interno;
+                    produtoId = candA.produto_id;
+                } else if (!candA && candB) {
+                    statusVinculo = 'vinculado';
+                    idInterno = candB.id_interno;
+                    produtoId = candB.produto_id;
+                } else {
+                    statusVinculo = 'pendente_vinculo';
+                }
+
+                // Checagem de inativo
+                const prodRef = candB || candA;
+                const isInactive = prodRef && (String(prodRef.status || '').toLowerCase() === 'inativo' || prodRef.ativo === false);
+                if (isInactive && statusVinculo === 'vinculado') {
+                    statusVinculo = 'produto_inativo';
+                    obsItem = '[PRODUTO_INATIVO]';
+                    qtdInativos++;
+                }
+
+                if (statusVinculo === 'vinculado') {
+                    qtdVinculados++;
+                } else {
+                    qtdPendentes++;
+                }
+
+                const qtdNf = Number(item.quantidade_nf_original ?? item.quantidade ?? item.qCom ?? 0);
+                const valUn = Number(item.custo_unitario_nf ?? item.valor_unitario ?? item.vUnCom ?? 0);
+                const valTot = Number(item.valor_total ?? item.vProd ?? (qtdNf * valUn));
+
+                return {
+                    nf_id: entradaId,
+                    entrada_nf_id: entradaId,
+                    numero_item: Number(item.numero_item || item.numItem || idx + 1),
+                    codigo_produto_fornecedor: cProd,
+                    descricao_produto_fornecedor: String(item.descricao_produto_fornecedor || item.xProd || ''),
+                    descricao_xml: String(item.descricao_xml || item.descricao_produto_fornecedor || item.xProd || ''),
+                    ean_fornecedor: rawEan || null,
+                    ean_xml: rawEan || null,
+                    ncm: item.ncm ? String(item.ncm) : null,
+                    cfop: item.cfop ? String(item.cfop) : null,
+                    unidade: item.unidade || item.uCom || 'UN',
+                    unidade_nf: item.unidade_nf || item.unidade || item.uCom || 'UN',
+                    fator_conversao_usado: Number(item.fator_conversao_usado || 1),
+                    quantidade_nf_original: qtdNf,
+                    quantidade: qtdNf,
+                    quantidade_estoque_calculada: qtdNf * Number(item.fator_conversao_usado || 1),
+                    custo_unitario_nf: valUn,
+                    valor_unitario: valUn,
+                    custo_nota_unitario: valUn,
+                    custo_nota_total: valTot,
+                    valor_total: valTot,
+                    valor_ipi: Number(item.valor_ipi || item.valorIPI || 0),
+                    valor_icms: Number(item.valor_icms || 0),
+                    valor_icms_st: Number(item.valor_icms_st || item.valorICMSST || 0),
+                    valor_frete_rateado: Number(item.valor_frete_rateado || item.valorFreteRateado || 0),
+                    valor_seguro_rateado: Number(item.valor_seguro_rateado || item.valorSeguroRateado || 0),
+                    valor_outras_despesas_rateado: Number(item.valor_outras_despesas_rateado || item.valorOutrasDespesasRateado || 0),
+                    valor_desconto_rateado: Number(item.valor_desconto_rateado || item.valorDescontoRateado || 0),
+                    custo_real_unitario: Number(item.custo_real_unitario || item.custoRealUnitario || valUn),
+                    custo_real_total: Number(item.custo_real_total || item.custoRealTotal || valTot),
+                    custo_unitario_estoque: Number(item.custo_unitario_estoque || item.custo_real_unitario || item.custoRealUnitario || valUn),
+                    custo_total_real_item: Number(item.custo_total_real_item || item.custo_real_total || item.custoRealTotal || valTot),
+                    id_interno: idInterno,
+                    produto_id_interno: idInterno,
+                    produto_id: produtoId,
+                    status_vinculo: statusVinculo,
+                    observacoes: obsItem,
+                    ean_divergente: !!item.ean_divergente,
+                    atualizado_em: getDataHoraBrasil()
+                };
+            });
+
+            if (qtdConflitos > 0) pendencias.push('CONFLITO_PRODUTO');
+            if (qtdInativos > 0) pendencias.push('PRODUTO_INATIVO');
+            if (qtdPendentes > (qtdConflitos + qtdInativos)) pendencias.push('PRODUTO_NAO_IDENTIFICADO');
+
+            const { error: itensErr } = await client
+                .from('entradas_nf_itens')
+                .insert(itensPayload);
+
+            if (itensErr) {
+                console.error('[PRÉ-CADASTRO V2] Erro ao inserir entradas_nf_itens:', itensErr);
+                throw itensErr;
+            }
+
+            // 7. Persistir Duplicatas Fiscais Imutáveis
+            const duplicatasRaw = normalizedNFe.duplicatas || normalizedNFe.cobranca?.duplicatas || [];
+            if (duplicatasRaw.length > 0) {
+                const dupPayload = duplicatasRaw.map((dup, idx) => ({
+                    entrada_nf_id: entradaId,
+                    numero_duplicata: String(dup.parcela || dup.numero_duplicata || dup.numeroParcela || idx + 1),
+                    vencimento_xml: dup.vencimento || dup.vencimento_xml || dup.dataVencimento || null,
+                    valor_xml: Number(dup.valor || dup.valor_xml || dup.valorParcela || 0)
+                }));
+
+                const { error: dupErr } = await client
+                    .from('entrada_nf_duplicatas_fiscais')
+                    .insert(dupPayload);
+
+                if (dupErr) console.warn('[PRÉ-CADASTRO V2] Aviso ao salvar duplicatas fiscais:', dupErr);
+
+                // Criar parcelas preliminares em contas_pagar (status = 'rascunho')
+                const contasPayload = dupPayload.map(d => ({
+                    entrada_nf_id: entradaId,
+                    fornecedor_id: fornecedorId,
+                    fornecedor_nome: fornecedorNome,
+                    numero_documento: `NF ${headerPayload.numero_nf}`,
+                    numero_parcela: Number(d.numero_duplicata.replace(/\D/g, '') || 1),
+                    vencimento: d.vencimento_xml || new Date().toISOString().split('T')[0],
+                    valor: d.valor_xml,
+                    status: 'rascunho',
+                    status_vencimento: 'em_aberto',
+                    tipo_lancamento: 'nota_fiscal',
+                    origem: 'nota_fiscal',
+                    descricao: `Parcela ${d.numero_duplicata} - NF ${headerPayload.numero_nf}`
+                }));
+
+                const { error: cpErr } = await client
+                    .from('contas_pagar')
+                    .insert(contasPayload);
+
+                if (cpErr) console.warn('[PRÉ-CADASTRO V2] Aviso ao criar parcelas rascunho em contas_pagar:', cpErr);
+            } else {
+                pendencias.push('FINANCEIRO_SEM_DUPLICATAS');
+            }
+
+            // 8. Ajustar status final da entrada caso haja pendências
+            const finalStatus = (qtdPendentes > 0 || !fornecedorId) ? 'pendente_vinculo' : 'importada';
+            if (finalStatus !== 'importada') {
+                await client
+                    .from('entradas_nf')
+                    .update({ status: finalStatus })
+                    .eq('id', entradaId);
+            }
+
+            invalidateCache('nf');
+            invalidateCache('contas_pagar');
+
+            return {
+                ok: true,
+                entradaId,
+                numeroNFe: headerPayload.numero_nf,
+                chaveAcesso: chave,
+                status: finalStatus,
+                totalItens: itensPayload.length,
+                qtdVinculados,
+                qtdPendentes,
+                qtdDuplicatas: duplicatasRaw.length,
+                pendencias,
+                fornecedorConhecido: !!fornecedorId
+            };
+
+        } catch (err) {
+            console.error(`[PRÉ-CADASTRO V2 ROLLBACK] Falha ao processar itens da NF ${chave}. Limpando entrada ${entradaId}:`, err);
+            await client.from('entrada_nf_duplicatas_fiscais').delete().eq('entrada_nf_id', entradaId);
+            await client.from('contas_pagar').delete().eq('entrada_nf_id', entradaId);
+            await client.from('entradas_nf_itens').delete().eq('entrada_nf_id', entradaId);
+            await client.from('entradas_nf').delete().eq('id', entradaId);
+            throw err;
         }
     }
 

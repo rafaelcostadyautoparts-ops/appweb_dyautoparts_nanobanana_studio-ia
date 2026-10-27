@@ -111,4 +111,14 @@
     window.formatDateTimeBR = formatDateTimeBR;
     window.formatDateBR = formatDateBR;
     window.formatTimeBR = formatTimeBR;
+
+    if (typeof globalThis !== 'undefined') {
+        globalThis.BR_TIME_ZONE = BR_TIME_ZONE;
+        globalThis.getDataHoraBrasil = getDataHoraBrasil;
+        globalThis.getDataBrasilISO = getDataBrasilISO;
+        globalThis.formatDateTimeBR = formatDateTimeBR;
+        globalThis.formatDateBR = formatDateBR;
+        globalThis.formatTimeBR = formatTimeBR;
+    }
 })();
+
